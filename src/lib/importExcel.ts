@@ -73,11 +73,15 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
+  let importes = 0;
   if (payloads.length) {
-    const { error } = await supabase.from('candidats').upsert(payloads, { onConflict: 'external_id' });
+    // ignoreDuplicates : n'insère que les NOUVEAUX (ne réécrit pas les existants)
+    const { data, error } = await supabase.from('candidats')
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: true }).select('id');
     if (error) throw new Error(error.message);
+    importes = data?.length ?? 0;
   }
-  return { lus: rows.length, importes: payloads.length };
+  return { lus: rows.length, importes };
 }
 
 /** Importe des prospects depuis un fichier ; commentaires conservés en notes. */
@@ -112,9 +116,13 @@ export async function importProspectsFile(file: File, ownerId: string | null): P
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
+  let importes = 0;
   if (payloads.length) {
-    const { error } = await supabase.from('contacts').upsert(payloads, { onConflict: 'external_id' });
+    // ignoreDuplicates : préserve les affectations déjà faites lors des ré-imports
+    const { data, error } = await supabase.from('contacts')
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: true }).select('id');
     if (error) throw new Error(error.message);
+    importes = data?.length ?? 0;
   }
-  return { lus: rows.length, importes: payloads.length };
+  return { lus: rows.length, importes };
 }

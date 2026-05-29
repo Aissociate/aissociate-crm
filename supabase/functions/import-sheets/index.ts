@@ -47,7 +47,6 @@ Deno.serve(async (req: Request) => {
   try {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const source: string = body.source ?? "all";
-    const ownerId: string | null = body.owner_id ?? null;
 
     const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -104,11 +103,12 @@ Deno.serve(async (req: Request) => {
 
       let imported = 0;
       if (payloads.length) {
-        const { error, count } = await sb
+        const { data: ins, error } = await sb
           .from("candidats")
-          .upsert(payloads, { onConflict: "external_id", count: "exact" });
+          .upsert(payloads, { onConflict: "external_id", ignoreDuplicates: true })
+          .select("id");
         if (error) throw new Error(`candidats: ${error.message}`);
-        imported = count ?? payloads.length;
+        imported = ins?.length ?? 0;
       }
       result.candidats = { lus: rows.length, importes: imported };
     }
@@ -137,17 +137,18 @@ Deno.serve(async (req: Request) => {
             email: r.email || null,
             telephone: r.phone || null,
             notes: notes || null,
-            owner_id: ownerId,
+            owner_id: null, // « non affecté » : à attribuer par un admin
           };
         });
 
       let imported = 0;
       if (payloads.length) {
-        const { error, count } = await sb
+        const { data: ins, error } = await sb
           .from("contacts")
-          .upsert(payloads, { onConflict: "external_id", count: "exact" });
+          .upsert(payloads, { onConflict: "external_id", ignoreDuplicates: true })
+          .select("id");
         if (error) throw new Error(`contacts: ${error.message}`);
-        imported = count ?? payloads.length;
+        imported = ins?.length ?? 0;
       }
       result.prospects = { lus: rows.length, importes: imported };
     }
