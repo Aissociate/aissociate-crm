@@ -39,9 +39,10 @@ export default function Kanban() {
 
   const addCarte = async () => {
     if (!target || !titre.trim()) return;
-    const { data } = await supabase.from('kanban_cartes')
+    const { data, error } = await supabase.from('kanban_cartes')
       .insert({ colonne_id: target, titre: titre.trim(), description: desc || null, echeance: echeance || null, ordre: cartes.length })
       .select().single();
+    if (error) { alert(error.message); return; }
     if (data) setCartes((p) => [...p, data]);
     setOpen(false);
   };
@@ -50,12 +51,14 @@ export default function Kanban() {
     const idx = colonnes.findIndex((c) => c.id === carte.colonne_id);
     const next = colonnes[idx + dir];
     if (!next) return;
+    const { error } = await supabase.from('kanban_cartes').update({ colonne_id: next.id }).eq('id', carte.id);
+    if (error) { alert(error.message); void load(); return; }
     setCartes((p) => p.map((c) => (c.id === carte.id ? { ...c, colonne_id: next.id } : c)));
-    await supabase.from('kanban_cartes').update({ colonne_id: next.id }).eq('id', carte.id);
   };
 
   const removeCarte = async (carte: KanbanCarte) => {
-    await supabase.from('kanban_cartes').delete().eq('id', carte.id);
+    const { error } = await supabase.from('kanban_cartes').delete().eq('id', carte.id);
+    if (error) { alert(error.message); return; }
     setCartes((p) => p.filter((c) => c.id !== carte.id));
   };
 

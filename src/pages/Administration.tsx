@@ -26,11 +26,13 @@ export default function Administration() {
   const setF = (k: keyof Financeur, v: unknown) => setFinForm((f) => ({ ...f, [k]: v }));
 
   const changeRole = async (p: Profile, role: UserRole) => {
-    await supabase.from('profiles').update({ role }).eq('id', p.id);
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', p.id);
+    if (error) { alert(error.message); return; }
     profiles.refresh();
   };
   const toggleActif = async (p: Profile) => {
-    await supabase.from('profiles').update({ actif: !p.actif }).eq('id', p.id);
+    const { error } = await supabase.from('profiles').update({ actif: !p.actif }).eq('id', p.id);
+    if (error) { alert(error.message); return; }
     profiles.refresh();
   };
 
@@ -45,7 +47,8 @@ export default function Administration() {
   };
   const removeFin = async (f: Financeur) => {
     if (!confirm(`Supprimer le financeur ${f.nom} ?`)) return;
-    await supabase.from('financeurs').delete().eq('id', f.id);
+    const { error } = await supabase.from('financeurs').delete().eq('id', f.id);
+    if (error) { alert(error.message); return; }
     financeurs.refresh();
   };
 

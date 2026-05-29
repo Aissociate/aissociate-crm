@@ -57,22 +57,25 @@ export default function DossierDetail() {
   const patch = async (changes: Partial<Dossier>) => {
     if (!dossier) return;
     setDossier({ ...dossier, ...changes });
-    await supabase.from('dossiers').update(changes).eq('id', dossier.id);
+    const { error } = await supabase.from('dossiers').update(changes).eq('id', dossier.id);
+    if (error) { alert(error.message); void load(); }
   };
 
   const saveMeta = async () => {
     if (!dossier) return;
     setSaving(true);
-    await supabase.from('dossiers').update({
+    const { error } = await supabase.from('dossiers').update({
       montant_accorde: Number(dossier.montant_accorde ?? 0),
       notes: dossier.notes,
     }).eq('id', dossier.id);
     setSaving(false);
+    if (error) alert(error.message);
   };
 
   const setPieceStatut = async (p: DossierPiece, statut: PieceStatut) => {
     setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, statut } : x)));
-    await supabase.from('dossier_pieces').update({ statut }).eq('id', p.id);
+    const { error } = await supabase.from('dossier_pieces').update({ statut }).eq('id', p.id);
+    if (error) { alert(error.message); void load(); }
   };
 
   // Associe (ou retire) un fichier à une pièce. Un nouvel upload remplaçant un
@@ -80,14 +83,16 @@ export default function DossierDetail() {
   const setPieceFichier = async (p: DossierPiece, fichier_url: string | null) => {
     const remplace = Boolean(fichier_url && p.fichier_url);
     if (remplace) {
-      await supabase.from('piece_versions').insert({
+      const { error: vErr } = await supabase.from('piece_versions').insert({
         piece_id: p.id, version: p.version, fichier_url: p.fichier_url, created_by: session?.user.id,
       });
+      if (vErr) { alert(vErr.message); return; }
     }
     const version = remplace ? p.version + 1 : p.version;
     const statut: PieceStatut = fichier_url ? (p.statut === 'manquante' ? 'recue' : p.statut) : p.statut;
+    const { error } = await supabase.from('dossier_pieces').update({ fichier_url, statut, version }).eq('id', p.id);
+    if (error) { alert(error.message); void load(); return; }
     setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, fichier_url, statut, version } : x)));
-    await supabase.from('dossier_pieces').update({ fichier_url, statut, version }).eq('id', p.id);
   };
 
   const openHistory = async (p: DossierPiece) => {
@@ -107,7 +112,8 @@ export default function DossierDetail() {
   };
 
   const removePiece = async (p: DossierPiece) => {
-    await supabase.from('dossier_pieces').delete().eq('id', p.id);
+    const { error } = await supabase.from('dossier_pieces').delete().eq('id', p.id);
+    if (error) { alert(error.message); return; }
     setPieces((prev) => prev.filter((x) => x.id !== p.id));
   };
 

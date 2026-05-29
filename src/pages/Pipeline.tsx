@@ -48,13 +48,15 @@ export default function Pipeline() {
     const idx = OPP_STAGE_ORDER.indexOf(o.stage);
     const next = OPP_STAGE_ORDER[idx + dir];
     if (!next) return;
-    await supabase.from('opportunites').update({ stage: next }).eq('id', o.id);
+    const { error } = await supabase.from('opportunites').update({ stage: next }).eq('id', o.id);
+    if (error) { alert(error.message); return; }
     refresh();
   };
 
   const remove = async (o: Opportunite) => {
     if (!confirm(`Supprimer l'opportunité « ${o.titre} » ?`)) return;
-    await supabase.from('opportunites').delete().eq('id', o.id);
+    const { error } = await supabase.from('opportunites').delete().eq('id', o.id);
+    if (error) { alert(error.message); return; }
     refresh();
   };
 

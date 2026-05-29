@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Briefcase, Trash2, UserPlus, Pencil, DownloadCloud } from 'lucide-react';
+import { Plus, Briefcase, Trash2, UserPlus, Pencil, CloudDownload as DownloadCloud } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -55,7 +55,8 @@ export default function Recrutement() {
 
   const removeOffre = async (o: OffreRecrutement) => {
     if (!confirm(`Supprimer l'offre « ${o.titre} » ?`)) return;
-    await supabase.from('offres_recrutement').delete().eq('id', o.id);
+    const { error } = await supabase.from('offres_recrutement').delete().eq('id', o.id);
+    if (error) { alert(error.message); return; }
     offres.refresh();
   };
 
@@ -76,13 +77,15 @@ export default function Recrutement() {
   };
 
   const setCandStatut = async (c: Candidat, statut: CandidatStatut) => {
-    await supabase.from('candidats').update({ statut }).eq('id', c.id);
+    const { error } = await supabase.from('candidats').update({ statut }).eq('id', c.id);
+    if (error) { alert(error.message); return; }
     candidats.refresh();
   };
 
   const removeCand = async (c: Candidat) => {
     if (!confirm('Supprimer ce candidat ?')) return;
-    await supabase.from('candidats').delete().eq('id', c.id);
+    const { error } = await supabase.from('candidats').delete().eq('id', c.id);
+    if (error) { alert(error.message); return; }
     candidats.refresh();
   };
 

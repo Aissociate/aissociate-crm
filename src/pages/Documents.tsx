@@ -48,17 +48,19 @@ export default function Documents() {
 
   // Nouvelle version : duplique le document en incrementant la version (4.5)
   const newVersion = async (d: Document) => {
-    await supabase.from('documents').insert({
+    const { error } = await supabase.from('documents').insert({
       titre: d.titre, categorie: d.categorie, description: d.description,
       fichier_url: d.fichier_url, version: d.version + 1, statut: 'actif',
       parent_id: d.parent_id ?? d.id, tags: d.tags, owner_id: session?.user.id,
     });
+    if (error) { alert(error.message); return; }
     refresh();
   };
 
   const remove = async (d: Document) => {
     if (!confirm(`Supprimer « ${d.titre} » ?`)) return;
-    await supabase.from('documents').delete().eq('id', d.id);
+    const { error } = await supabase.from('documents').delete().eq('id', d.id);
+    if (error) { alert(error.message); return; }
     refresh();
   };
 

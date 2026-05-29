@@ -61,7 +61,8 @@ export default function Messagerie() {
 
   const remove = async (e: Email) => {
     if (!confirm('Supprimer ce message ?')) return;
-    await supabase.from('emails').delete().eq('id', e.id);
+    const { error } = await supabase.from('emails').delete().eq('id', e.id);
+    if (error) { alert(error.message); return; }
     refresh();
   };
 
@@ -133,7 +134,7 @@ export default function Messagerie() {
                   <p className="truncate font-medium text-fg">{e.sujet}</p>
                   {e.direction === 'sortant'
                     ? <Badge className={e.statut === 'envoye' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{e.statut}</Badge>
-                    : <Badge className="bg-indigo-100 text-indigo-700">reçu</Badge>}
+                    : <Badge className="bg-sky-100 text-sky-700">reçu</Badge>}
                 </div>
                 <p className="text-xs text-muted">
                   {e.direction === 'entrant'
