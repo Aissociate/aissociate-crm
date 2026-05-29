@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Briefcase, Trash2, UserPlus, Pencil, CloudDownload as DownloadCloud } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Briefcase, Trash2, UserPlus, Pencil, CloudDownload as DownloadCloud, FileSpreadsheet } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -7,6 +7,7 @@ import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import { CANDIDAT_STATUT_LABELS } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
+import { importCandidatsFile } from '@/lib/importExcel';
 import type { OffreRecrutement, Candidat, CandidatStatut } from '@/lib/database.types';
 
 const STATUTS: CandidatStatut[] = ['recu', 'preselection', 'entretien', 'retenu', 'refuse', 'onboarding'];
@@ -23,6 +24,25 @@ export default function Recrutement() {
   const [candForm, setCandForm] = useState<Partial<Candidat>>({});
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Import des candidatures depuis un fichier Excel/CSV (parse navigateur, insert via session)
+  const importFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const r = await importCandidatsFile(file);
+      offres.refresh();
+      candidats.refresh();
+      alert(`${r.importes} candidature(s) importée(s) sur ${r.lus} ligne(s).`);
+    } catch (err) {
+      alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // Import des candidatures depuis le Google Sheet (Edge Function import-sheets)
   const importCandidatures = async () => {
@@ -100,9 +120,13 @@ export default function Recrutement() {
         subtitle="Offres et suivi des candidats — chargés de formation (4.4)"
         actions={
           <>
-            <Button variant="secondary" onClick={importCandidatures} disabled={importing}>
-              <DownloadCloud className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
-              {importing ? 'Import…' : 'Importer candidatures'}
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importFile} />
+            <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
+              {importing ? 'Import…' : 'Importer Excel/CSV'}
+            </Button>
+            <Button variant="secondary" onClick={importCandidatures} disabled={importing} title="Depuis le Google Sheet configuré">
+              <DownloadCloud className="h-4 w-4" /> Sheets
             </Button>
             <Button onClick={() => { setOffreForm({ statut: 'ouverte' }); setOffreOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle offre</Button>
           </>

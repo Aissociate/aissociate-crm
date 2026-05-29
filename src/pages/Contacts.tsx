@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, DownloadCloud } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, DownloadCloud, FileSpreadsheet } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState } from '@/components/ui';
 import { CONTACT_TYPE_LABELS } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
+import { importProspectsFile } from '@/lib/importExcel';
 import type { Contact, ContactType, Entreprise, Financeur } from '@/lib/database.types';
 
 const TYPES: ContactType[] = ['prospect', 'apprenant', 'contact_entreprise', 'contact_financeur'];
@@ -29,6 +30,24 @@ export default function Contacts() {
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Import des prospects depuis un fichier Excel/CSV (parse navigateur, insert via session)
+  const importFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const r = await importProspectsFile(file, session?.user.id ?? null);
+      refresh();
+      alert(`${r.importes} prospect(s) importé(s) sur ${r.lus} ligne(s) (commentaires en notes).`);
+    } catch (err) {
+      alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // Import des prospects depuis le Google Sheet (Edge Function import-sheets)
   const importProspects = async () => {
@@ -82,9 +101,13 @@ export default function Contacts() {
         subtitle="Prospects, apprenants et interlocuteurs (CRM 4.1)"
         actions={
           <>
-            <Button variant="secondary" onClick={importProspects} disabled={importing}>
-              <DownloadCloud className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
-              {importing ? 'Import…' : 'Importer prospects'}
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importFile} />
+            <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
+              {importing ? 'Import…' : 'Importer Excel/CSV'}
+            </Button>
+            <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
+              <DownloadCloud className="h-4 w-4" /> Sheets
             </Button>
             <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>
           </>
