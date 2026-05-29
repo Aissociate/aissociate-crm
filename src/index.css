@@ -2,30 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Thèmes : tokens sémantiques (RGB séparés par espaces pour <alpha-value>) ── */
+/* ── Thèmes : tokens sémantiques ── */
 :root {
-  --app: 241 245 249;        /* slate-100  */
-  --surface: 255 255 255;    /* white      */
-  --surface-2: 248 250 252;  /* slate-50   */
-  --fg: 15 23 42;            /* slate-900  */
-  --muted: 100 116 139;      /* slate-500  */
-  --line: 226 232 240;       /* slate-200  */
+  --app: 241 245 249;
+  --surface: 255 255 255;
+  --surface-2: 248 250 252;
+  --fg: 15 23 42;
+  --muted: 100 116 139;
+  --line: 226 232 240;
   color-scheme: light;
 }
 
 .dark {
-  --app: 8 12 24;            /* near-black navy */
-  --surface: 17 24 39;       /* slate-900  */
-  --surface-2: 30 41 59;     /* slate-800  */
-  --fg: 241 245 249;         /* slate-100  */
-  --muted: 148 163 184;      /* slate-400  */
-  --line: 39 51 73;          /* slate-700-ish */
+  --app: 8 12 24;
+  --surface: 17 24 39;
+  --surface-2: 30 41 59;
+  --fg: 241 245 249;
+  --muted: 148 163 184;
+  --line: 39 51 73;
   color-scheme: dark;
 }
 
-html,
-body,
-#root {
+html, body, #root {
   height: 100%;
 }
 
@@ -38,93 +36,119 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* ── Composants réutilisables ── */
-/* On évite @apply avec les tokens CSS-variable pour compatibilité PostCSS maximale */
+/* ── Composants — CSS pur pour compatibilité PostCSS maximale ── */
 
 .input {
-  @apply w-full rounded-lg border px-3 py-2 text-sm shadow-sm outline-none transition;
-  border-color: rgb(var(--line));
+  display: block;
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--line));
   background-color: rgb(var(--surface));
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
   color: rgb(var(--fg));
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.input::placeholder {
-  color: rgb(var(--muted) / 0.7);
-}
+.input::placeholder { color: rgb(var(--muted) / 0.7); }
 .input:focus {
   border-color: #f97316;
   box-shadow: 0 0 0 3px rgb(249 115 22 / 0.3);
 }
-.input:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
+.input:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .label {
-  @apply mb-1 block text-sm font-medium;
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   color: rgb(var(--fg));
 }
 
+/* Base commune aux boutons */
 .btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
   outline: none;
+  cursor: pointer;
+  border: none;
 }
-.btn:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px currentColor;
-}
-.btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
+.btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-primary {
-  @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-500;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none;
+  background-color: #ea6a1e;
+  color: #ffffff;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-primary:focus {
-  box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(249 115 22 / 0.4);
-}
+.btn-primary:hover { background-color: #f97316; }
+.btn-primary:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(249 115 22 / 0.4); }
+.btn-primary:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-secondary {
-  @apply btn;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer;
   border: 1px solid rgb(var(--line));
   background-color: rgb(var(--surface));
   color: rgb(var(--fg));
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-secondary:hover {
-  background-color: rgb(var(--surface-2));
-}
-.btn-secondary:focus {
-  box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(249 115 22 / 0.3);
-}
+.btn-secondary:hover { background-color: rgb(var(--surface-2)); }
+.btn-secondary:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(249 115 22 / 0.3); }
+.btn-secondary:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-danger {
-  @apply btn bg-red-600 text-white hover:bg-red-500;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none;
+  background-color: #dc2626;
+  color: #ffffff;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-danger:focus {
-  box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(239 68 68 / 0.4);
-}
+.btn-danger:hover { background-color: #ef4444; }
+.btn-danger:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(239 68 68 / 0.4); }
+.btn-danger:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-ghost {
-  @apply btn;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none;
+  background-color: transparent;
   color: rgb(var(--muted));
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.btn-ghost:hover {
-  background-color: rgb(var(--surface-2));
-  color: rgb(var(--fg));
-}
+.btn-ghost:hover { background-color: rgb(var(--surface-2)); color: rgb(var(--fg)); }
+.btn-ghost:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .card {
-  @apply rounded-xl shadow-soft;
+  border-radius: 0.75rem;
   border: 1px solid rgb(var(--line));
   background-color: rgb(var(--surface));
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06);
 }
 
-/* Classe utilitaire bg-app */
-.bg-app {
-  background-color: rgb(var(--app));
-}
+/* Helpers sémantiques */
+.bg-app    { background-color: rgb(var(--app)); }
+.bg-surface  { background-color: rgb(var(--surface)); }
+.bg-surface-2 { background-color: rgb(var(--surface-2)); }
+.text-fg   { color: rgb(var(--fg)); }
+.text-muted { color: rgb(var(--muted)); }
+.border-line { border-color: rgb(var(--line)); }
 
-/* Dégradé de marque réutilisable (logo, accents) */
+/* Dégradé de marque */
 .brand-gradient {
   background-image: linear-gradient(135deg, #f7a823 0%, #ea3c2a 100%);
 }
@@ -136,9 +160,6 @@ body {
 }
 
 /* Scrollbars discrètes */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--line)) transparent;
-}
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 9999px; }
