@@ -1,14 +1,7 @@
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-
-// Répertoire de ce fichier, en slashs avant (compatible globs fast-glob),
-// pour que le scan de contenu fonctionne quel que soit le cwd du serveur.
-const here = path.dirname(fileURLToPath(import.meta.url)).replace(/\\/g, '/');
-
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: [`${here}/index.html`, `${here}/src/**/*.{js,ts,jsx,tsx}`],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
