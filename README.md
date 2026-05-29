@@ -110,6 +110,30 @@ Chaque pièce d'un dossier conserve son historique : téléverser un fichier rem
 existant archive l'ancien dans `piece_versions` (migration 10) et incrémente `dossier_pieces.version`.
 L'historique est consultable depuis la fiche dossier (bouton `vN` à côté de la pièce).
 
+## Import Google Sheets (candidatures & prospects)
+
+`supabase/functions/import-sheets/index.ts` importe deux Google Sheets publiés
+(« toute personne avec le lien ») dans Supabase, de façon **idempotente**
+(déduplication via `external_id`) :
+
+- **Candidatures « Chargé de formation »** (export Meta Lead Ads) → table `candidats`,
+  rattachées à l'offre *Chargé de formation*. Les réponses libres (motivation,
+  expérience, etc.) sont consignées en notes.
+- **Prospects en cours** → table `contacts` (type *prospect*). Entreprise, ville,
+  questionnaire **et commentaires** (colonnes de suivi) sont conservés en **notes**.
+
+Déclenchement :
+- **Manuel** — boutons « Importer candidatures » (Recrutement) et « Importer prospects » (Contacts).
+- **Automatique** — migration `…195605_cron_import.sql` (toutes les heures via `pg_cron`).
+
+```bash
+supabase functions deploy import-sheets
+# IDs surchargeables si besoin :
+supabase secrets set SHEET_CANDIDATS_ID=… SHEET_PROSPECTS_ID=…
+```
+
+Les IDs des deux feuilles fournies sont les valeurs par défaut intégrées à la fonction.
+
 ## Points d'extension (CDC v2 / Lot 4)
 
 - Connecteurs financeurs (EDOF…) et signature électronique → intégrations externes.

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Briefcase, Trash2, UserPlus, Pencil } from 'lucide-react';
+import { Plus, Briefcase, Trash2, UserPlus, Pencil, DownloadCloud } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -22,6 +22,22 @@ export default function Recrutement() {
   const [candOpen, setCandOpen] = useState(false);
   const [candForm, setCandForm] = useState<Partial<Candidat>>({});
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  // Import des candidatures depuis le Google Sheet (Edge Function import-sheets)
+  const importCandidatures = async () => {
+    setImporting(true);
+    const { data, error } = await supabase.functions.invoke('import-sheets', { body: { source: 'candidats' } });
+    setImporting(false);
+    if (error) {
+      alert("Import indisponible : déployez l'Edge Function « import-sheets ».");
+      return;
+    }
+    const c = (data as { candidats?: { importes?: number } })?.candidats;
+    offres.refresh();
+    candidats.refresh();
+    alert(`${c?.importes ?? 0} candidature(s) importée(s) depuis Google Sheets.`);
+  };
 
   const activeOffre = selected ?? offres.data[0]?.id ?? null;
 
@@ -79,7 +95,15 @@ export default function Recrutement() {
       <PageHeader
         title="Recrutement"
         subtitle="Offres et suivi des candidats — chargés de formation (4.4)"
-        actions={<Button onClick={() => { setOffreForm({ statut: 'ouverte' }); setOffreOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle offre</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={importCandidatures} disabled={importing}>
+              <DownloadCloud className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
+              {importing ? 'Import…' : 'Importer candidatures'}
+            </Button>
+            <Button onClick={() => { setOffreForm({ statut: 'ouverte' }); setOffreOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle offre</Button>
+          </>
+        }
       />
 
       {offres.loading ? (

@@ -42,7 +42,7 @@ export type Contact = Timestamps & {
   id: string; type: ContactType; civilite: string | null; nom: string; prenom: string | null;
   email: string | null; telephone: string | null; fonction: string | null;
   entreprise_id: string | null; financeur_id: string | null; owner_id: string | null;
-  rgpd_consent: boolean; notes: string | null;
+  rgpd_consent: boolean; notes: string | null; external_id: string | null;
 };
 export type Opportunite = Timestamps & {
   id: string; titre: string; contact_id: string | null; entreprise_id: string | null;
@@ -112,7 +112,7 @@ export type OffreRecrutement = Timestamps & {
 export type Candidat = Timestamps & {
   id: string; offre_id: string | null; nom: string; prenom: string | null; email: string | null;
   telephone: string | null; cv_url: string | null; statut: CandidatStatut;
-  score: number | null; notes: string | null; rgpd_consent: boolean;
+  score: number | null; notes: string | null; rgpd_consent: boolean; external_id: string | null;
 };
 export type AuditLog = {
   id: string; user_id: string | null; action: string; entite: string;

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, DownloadCloud } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -28,6 +28,21 @@ export default function Contacts() {
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
+  const [importing, setImporting] = useState(false);
+
+  // Import des prospects depuis le Google Sheet (Edge Function import-sheets)
+  const importProspects = async () => {
+    setImporting(true);
+    const { data: res, error } = await supabase.functions.invoke('import-sheets', { body: { source: 'prospects' } });
+    setImporting(false);
+    if (error) {
+      alert("Import indisponible : déployez l'Edge Function « import-sheets ».");
+      return;
+    }
+    const p = (res as { prospects?: { importes?: number } })?.prospects;
+    refresh();
+    alert(`${p?.importes ?? 0} prospect(s) importé(s) depuis Google Sheets (commentaires en notes).`);
+  };
 
   const openNew = () => { setForm(empty()); setOpen(true); };
   const openEdit = (c: Contact) => { setForm(c); setOpen(true); };
@@ -65,7 +80,15 @@ export default function Contacts() {
       <PageHeader
         title="Contacts"
         subtitle="Prospects, apprenants et interlocuteurs (CRM 4.1)"
-        actions={<Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={importProspects} disabled={importing}>
+              <DownloadCloud className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
+              {importing ? 'Import…' : 'Importer prospects'}
+            </Button>
+            <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>
+          </>
+        }
       />
 
       <div className="mb-4 flex flex-wrap gap-3">
