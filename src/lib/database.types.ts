@@ -94,10 +94,16 @@ export type KanbanCarte = Timestamps & {
   id: string; colonne_id: string; titre: string; description: string | null;
   assignee_id: string | null; dossier_id: string | null; ordre: number; echeance: string | null;
 };
+export type EmailDirection = 'sortant' | 'entrant';
 export type Email = {
   id: string; dossier_id: string | null; contact_id: string | null; expediteur: string | null;
   destinataires: string[]; sujet: string; corps: string | null; statut: string;
   sent_at: string | null; owner_id: string | null; created_at: string;
+  direction: EmailDirection; message_id: string | null; lu: boolean;
+};
+export type PieceVersion = {
+  id: string; piece_id: string; version: number; fichier_url: string | null;
+  commentaire: string | null; created_by: string | null; created_at: string;
 };
 export type OffreRecrutement = Timestamps & {
   id: string; titre: string; description: string | null; profil: string | null;
@@ -145,6 +151,7 @@ export type Database = {
       kanban_colonnes: TableShape<KanbanColonne>;
       kanban_cartes: TableShape<KanbanCarte>;
       emails: TableShape<Email>;
+      piece_versions: TableShape<PieceVersion>;
       offres_recrutement: TableShape<OffreRecrutement>;
       candidats: TableShape<Candidat>;
       audit_log: TableShape<AuditLog>;

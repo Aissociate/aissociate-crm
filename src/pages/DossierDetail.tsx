@@ -1,15 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2 } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Card, Spinner, Badge, Field } from '@/components/ui';
+import { useAuth } from '@/contexts/AuthContext';
+import { PageHeader, Button, Card, Spinner, Badge, Field, Modal } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import {
   DOSSIER_STATUT_COLORS, DOSSIER_STATUT_LABELS, PIECE_STATUT_COLORS, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
-import { formatMoney } from '@/lib/utils';
+import { formatMoney, formatDate } from '@/lib/utils';
 import type {
-  Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur,
+  Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
 } from '@/lib/database.types';
 
 const STATUTS: DossierStatut[] = [
@@ -20,6 +21,7 @@ const PIECE_STATUTS: PieceStatut[] = ['manquante', 'recue', 'validee', 'rejetee'
 export default function DossierDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [etapes, setEtapes] = useState<WorkflowEtape[]>([]);
   const [pieces, setPieces] = useState<DossierPiece[]>([]);
@@ -27,6 +29,8 @@ export default function DossierDetail() {
   const [loading, setLoading] = useState(true);
   const [newPiece, setNewPiece] = useState('');
   const [saving, setSaving] = useState(false);
+  const [histPiece, setHistPiece] = useState<DossierPiece | null>(null);
+  const [versions, setVersions] = useState<PieceVersion[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -71,11 +75,26 @@ export default function DossierDetail() {
     await supabase.from('dossier_pieces').update({ statut }).eq('id', p.id);
   };
 
-  // Associe (ou retire) un fichier téléversé à une pièce ; reçue par défaut.
+  // Associe (ou retire) un fichier à une pièce. Un nouvel upload remplaçant un
+  // fichier existant archive l'ancien dans piece_versions et incrémente la version.
   const setPieceFichier = async (p: DossierPiece, fichier_url: string | null) => {
+    const remplace = Boolean(fichier_url && p.fichier_url);
+    if (remplace) {
+      await supabase.from('piece_versions').insert({
+        piece_id: p.id, version: p.version, fichier_url: p.fichier_url, created_by: session?.user.id,
+      });
+    }
+    const version = remplace ? p.version + 1 : p.version;
     const statut: PieceStatut = fichier_url ? (p.statut === 'manquante' ? 'recue' : p.statut) : p.statut;
-    setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, fichier_url, statut } : x)));
-    await supabase.from('dossier_pieces').update({ fichier_url, statut }).eq('id', p.id);
+    setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, fichier_url, statut, version } : x)));
+    await supabase.from('dossier_pieces').update({ fichier_url, statut, version }).eq('id', p.id);
+  };
+
+  const openHistory = async (p: DossierPiece) => {
+    const { data } = await supabase.from('piece_versions').select('*')
+      .eq('piece_id', p.id).order('version', { ascending: false });
+    setVersions(data ?? []);
+    setHistPiece(p);
   };
 
   const addPiece = async () => {
@@ -157,7 +176,16 @@ export default function DossierDetail() {
                   <FileCheck2 className="h-4 w-4 shrink-0 text-slate-400" />
                   <span className="flex-1 text-sm text-slate-700">{p.libelle}{p.obligatoire && <span className="text-red-400"> *</span>}</span>
                   {p.fichier_url
-                    ? <FileLink bucket="pieces" value={p.fichier_url} onClear={() => setPieceFichier(p, null)} />
+                    ? <span className="inline-flex items-center gap-2">
+                        <FileLink bucket="pieces" value={p.fichier_url} onClear={() => setPieceFichier(p, null)} />
+                        <FileUpload bucket="pieces" label="Nouvelle version" onUploaded={(v) => setPieceFichier(p, v)} />
+                        {p.version > 1 && (
+                          <button onClick={() => openHistory(p)} title="Historique des versions"
+                            className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200">
+                            <History className="h-3.5 w-3.5" /> v{p.version}
+                          </button>
+                        )}
+                      </span>
                     : <FileUpload bucket="pieces" label="Joindre" onUploaded={(v) => setPieceFichier(p, v)} />}
                   <select
                     className={`rounded-md border-0 px-2 py-1 text-xs font-medium ${PIECE_STATUT_COLORS[p.statut]}`}
@@ -205,6 +233,28 @@ export default function DossierDetail() {
           </Card>
         </div>
       </div>
+
+      <Modal
+        open={!!histPiece} onClose={() => setHistPiece(null)}
+        title={`Historique — ${histPiece?.libelle ?? ''}`}
+        footer={<Button variant="secondary" onClick={() => setHistPiece(null)}>Fermer</Button>}
+      >
+        {histPiece && (
+          <ul className="space-y-2">
+            <li className="flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
+              <span className="text-sm font-medium text-slate-800">Version {histPiece.version} (actuelle)</span>
+              {histPiece.fichier_url && <FileLink bucket="pieces" value={histPiece.fichier_url} />}
+            </li>
+            {versions.map((v) => (
+              <li key={v.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                <span className="text-sm text-slate-600">Version {v.version} · {formatDate(v.created_at, 'dd/MM/yyyy HH:mm')}</span>
+                {v.fichier_url && <FileLink bucket="pieces" value={v.fichier_url} />}
+              </li>
+            ))}
+            {versions.length === 0 && <p className="py-4 text-center text-sm text-slate-400">Aucune version antérieure.</p>}
+          </ul>
+        )}
+      </Modal>
     </div>
   );
 }

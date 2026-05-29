@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Plus, Mail, Send, Trash2, Info } from 'lucide-react';
+import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
-import type { Email, Contact, Dossier } from '@/lib/database.types';
+import type { Email, Contact, Dossier, EmailDirection } from '@/lib/database.types';
 
 export default function Messagerie() {
   const { session, profile } = useAuth();
@@ -15,6 +15,8 @@ export default function Messagerie() {
   const contacts = useCollection<Contact>('contacts');
   const dossiers = useCollection<Dossier>('dossiers');
 
+  const [tab, setTab] = useState<EmailDirection>('sortant');
+  const [syncing, setSyncing] = useState(false);
   const [open, setOpen] = useState(false);
   const [dest, setDest] = useState('');
   const [sujet, setSujet] = useState('');
@@ -63,40 +65,81 @@ export default function Messagerie() {
     refresh();
   };
 
+  // Synchronise la boîte de réception via l'Edge Function IMAP fetch-emails.
+  const syncInbox = async () => {
+    setSyncing(true);
+    const { data: res, error } = await supabase.functions.invoke('fetch-emails');
+    setSyncing(false);
+    if (error) {
+      alert('Réception IMAP indisponible (Edge Function "fetch-emails" non déployée ou secrets IMAP manquants).');
+      return;
+    }
+    const n = (res as { imported?: number })?.imported ?? 0;
+    setTab('entrant');
+    refresh();
+    alert(`${n} nouveau(x) message(s) importé(s).`);
+  };
+
+  const messages = data.filter((e) => e.direction === tab);
+
   return (
     <div>
       <PageHeader
         title="Messagerie"
         subtitle="Communications liées aux dossiers et contacts (4.7)"
-        actions={<Button onClick={compose}><Plus className="h-4 w-4" /> Nouveau message</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={syncInbox} disabled={syncing}>
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> Synchroniser
+            </Button>
+            <Button onClick={compose}><Plus className="h-4 w-4" /> Nouveau message</Button>
+          </>
+        }
       />
 
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          L'envoi utilise l'Edge Function <strong>send-email</strong> (CDC 4.7). Déployez-la
-          (<code>supabase functions deploy send-email</code>) et renseignez les secrets SMTP
-          (<code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USERNAME</code>,
-          <code>SMTP_PASSWORD</code>, <code>SMTP_FROM</code>). Sans cela, le message est conservé
-          en brouillon.
+          Envoi via l'Edge Function <strong>send-email</strong> (SMTP) et réception via
+          <strong> fetch-emails</strong> (IMAP). Déployez-les et renseignez les secrets
+          (<code>SMTP_*</code> / <code>IMAP_*</code>). Sans déploiement, l'envoi reste en brouillon
+          et la synchronisation est indisponible.
         </p>
+      </div>
+
+      <div className="mb-4 flex gap-1 border-b border-slate-200">
+        {([['sortant', 'Envoyés', Send], ['entrant', 'Reçus', Inbox]] as const).map(([key, label, Icon]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+            <Icon className="h-4 w-4" /> {label}
+            <span className="rounded-full bg-slate-100 px-1.5 text-xs text-slate-500">{data.filter((e) => e.direction === key).length}</span>
+          </button>
+        ))}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
-      ) : data.length === 0 ? (
-        <EmptyState title="Aucun message" />
+      ) : messages.length === 0 ? (
+        <EmptyState title={tab === 'entrant' ? 'Aucun message reçu' : 'Aucun message envoyé'} message={tab === 'entrant' ? 'Cliquez sur « Synchroniser » pour relever la boîte IMAP.' : undefined} />
       ) : (
         <div className="space-y-2">
-          {data.map((e) => (
+          {messages.map((e) => (
             <div key={e.id} className="card flex items-start gap-3 p-4">
-              <div className="rounded-lg bg-brand-50 p-2 text-brand-600"><Mail className="h-5 w-5" /></div>
+              <div className="rounded-lg bg-brand-50 p-2 text-brand-600">
+                {e.direction === 'entrant' ? <Inbox className="h-5 w-5" /> : <Mail className="h-5 w-5" />}
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="truncate font-medium text-slate-900">{e.sujet}</p>
-                  <Badge className={e.statut === 'envoye' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}>{e.statut}</Badge>
+                  {e.direction === 'sortant'
+                    ? <Badge className={e.statut === 'envoye' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}>{e.statut}</Badge>
+                    : <Badge className="bg-indigo-100 text-indigo-700">reçu</Badge>}
                 </div>
-                <p className="text-xs text-slate-400">À : {e.destinataires.join(', ') || '—'} · {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}</p>
+                <p className="text-xs text-slate-400">
+                  {e.direction === 'entrant'
+                    ? `De : ${e.expediteur ?? '—'}`
+                    : `À : ${e.destinataires.join(', ') || '—'}`} · {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
+                </p>
                 {e.corps && <p className="mt-1 line-clamp-2 text-sm text-slate-600">{e.corps}</p>}
               </div>
               <button onClick={() => remove(e)} className="rounded p-1.5 text-slate-300 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>

@@ -82,8 +82,27 @@ supabase secrets set SMTP_HOST=… SMTP_PORT=587 SMTP_USERNAME=… SMTP_PASSWORD
 
 Sans déploiement/secrets, l'envoi échoue proprement et le message est conservé en brouillon.
 
+### Réception IMAP
+
+`supabase/functions/fetch-emails/index.ts` (imapflow + mailparser). Le bouton **Synchroniser**
+de la Messagerie (onglet **Reçus**) appelle cette fonction ; elle relève les messages non lus de
+la boîte INBOX, les insère (`direction = 'entrant'`, dédoublonnés sur `message_id`) et les marque
+lus côté serveur.
+
+```bash
+supabase functions deploy fetch-emails
+supabase secrets set IMAP_HOST=… IMAP_PORT=993 IMAP_USERNAME=… IMAP_PASSWORD=…
+```
+
+Pour une relève automatique, planifier l'appel via `pg_cron` (Supabase → Database → Cron).
+
+## Versioning des pièces justificatives
+
+Chaque pièce d'un dossier conserve son historique : téléverser un fichier remplaçant un fichier
+existant archive l'ancien dans `piece_versions` (migration 10) et incrémente `dossier_pieces.version`.
+L'historique est consultable depuis la fiche dossier (bouton `vN` à côté de la pièce).
+
 ## Points d'extension (CDC v2 / Lot 4)
 
-- Réception e-mail (IMAP) et synchronisation → Edge Function dédiée.
 - Connecteurs financeurs (EDOF…) et signature électronique → intégrations externes.
 - Régénération des types : `npx supabase gen types typescript` → `src/lib/database.types.ts`.
