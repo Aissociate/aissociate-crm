@@ -47,6 +47,7 @@ Deno.serve(async (req: Request) => {
   try {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const source: string = body.source ?? "all";
+    const ownerId: string | null = body.owner_id ?? null;
 
     const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -136,6 +137,7 @@ Deno.serve(async (req: Request) => {
             email: r.email || null,
             telephone: r.phone || null,
             notes: notes || null,
+            owner_id: ownerId,
           };
         });
 

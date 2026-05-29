@@ -33,7 +33,7 @@ export default function Contacts() {
   // Import des prospects depuis le Google Sheet (Edge Function import-sheets)
   const importProspects = async () => {
     setImporting(true);
-    const { data: res, error } = await supabase.functions.invoke('import-sheets', { body: { source: 'prospects' } });
+    const { data: res, error } = await supabase.functions.invoke('import-sheets', { body: { source: 'prospects', owner_id: session?.user.id } });
     setImporting(false);
     if (error) {
       alert("Import indisponible : déployez l'Edge Function « import-sheets ».");
