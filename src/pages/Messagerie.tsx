@@ -27,11 +27,28 @@ export default function Messagerie() {
   const send = async (statut: 'brouillon' | 'envoye') => {
     setSaving(true);
     const destinataires = dest.split(',').map((d) => d.trim()).filter(Boolean);
+    let finalStatut = statut;
+
+    // Envoi réel via l'Edge Function SMTP (CDC 4.7). En cas d'échec (fonction non
+    // déployée / SMTP non configuré), on conserve le message en brouillon.
+    if (statut === 'envoye') {
+      const { error: fnError } = await supabase.functions.invoke('send-email', {
+        body: { to: destinataires, subject: sujet, html: (corps ?? '').replace(/\n/g, '<br>'), text: corps },
+      });
+      if (fnError) {
+        finalStatut = 'brouillon';
+        alert(
+          'Envoi SMTP indisponible (Edge Function "send-email" non déployée ou secrets SMTP manquants).\n' +
+          'Le message a été enregistré en brouillon.',
+        );
+      }
+    }
+
     const { error } = await supabase.from('emails').insert({
-      destinataires, sujet, corps, statut,
+      destinataires, sujet, corps, statut: finalStatut,
       expediteur: profile?.email ?? null,
       dossier_id: dossierId || null,
-      sent_at: statut === 'envoye' ? new Date().toISOString() : null,
+      sent_at: finalStatut === 'envoye' ? new Date().toISOString() : null,
       owner_id: session?.user.id,
     });
     setSaving(false);
@@ -57,9 +74,11 @@ export default function Messagerie() {
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          L'envoi SMTP réel (CDC 4.7) s'effectue via une <strong>Supabase Edge Function</strong> à
-          configurer avec les identifiants SMTP (Paramètres). Ici, les messages sont journalisés et
-          marqués « envoyé » côté CRM.
+          L'envoi utilise l'Edge Function <strong>send-email</strong> (CDC 4.7). Déployez-la
+          (<code>supabase functions deploy send-email</code>) et renseignez les secrets SMTP
+          (<code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USERNAME</code>,
+          <code>SMTP_PASSWORD</code>, <code>SMTP_FROM</code>). Sans cela, le message est conservé
+          en brouillon.
         </p>
       </div>
 

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Card, Spinner, Badge, Field } from '@/components/ui';
+import { FileUpload, FileLink } from '@/components/FileUpload';
 import {
   DOSSIER_STATUT_COLORS, DOSSIER_STATUT_LABELS, PIECE_STATUT_COLORS, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
@@ -68,6 +69,13 @@ export default function DossierDetail() {
   const setPieceStatut = async (p: DossierPiece, statut: PieceStatut) => {
     setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, statut } : x)));
     await supabase.from('dossier_pieces').update({ statut }).eq('id', p.id);
+  };
+
+  // Associe (ou retire) un fichier téléversé à une pièce ; reçue par défaut.
+  const setPieceFichier = async (p: DossierPiece, fichier_url: string | null) => {
+    const statut: PieceStatut = fichier_url ? (p.statut === 'manquante' ? 'recue' : p.statut) : p.statut;
+    setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, fichier_url, statut } : x)));
+    await supabase.from('dossier_pieces').update({ fichier_url, statut }).eq('id', p.id);
   };
 
   const addPiece = async () => {
@@ -145,9 +153,12 @@ export default function DossierDetail() {
             </div>
             <ul className="space-y-2">
               {pieces.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2">
+                <li key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-100 px-3 py-2">
                   <FileCheck2 className="h-4 w-4 shrink-0 text-slate-400" />
                   <span className="flex-1 text-sm text-slate-700">{p.libelle}{p.obligatoire && <span className="text-red-400"> *</span>}</span>
+                  {p.fichier_url
+                    ? <FileLink bucket="pieces" value={p.fichier_url} onClear={() => setPieceFichier(p, null)} />
+                    : <FileUpload bucket="pieces" label="Joindre" onUploaded={(v) => setPieceFichier(p, v)} />}
                   <select
                     className={`rounded-md border-0 px-2 py-1 text-xs font-medium ${PIECE_STATUT_COLORS[p.statut]}`}
                     value={p.statut} onChange={(e) => setPieceStatut(p, e.target.value as PieceStatut)}

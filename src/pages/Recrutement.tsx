@@ -4,6 +4,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/components/ui';
+import { FileUpload, FileLink } from '@/components/FileUpload';
 import { CANDIDAT_STATUT_LABELS } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
 import type { OffreRecrutement, Candidat, CandidatStatut } from '@/lib/database.types';
@@ -159,7 +160,12 @@ export default function Recrutement() {
           <Field label="Nom" required><input className="input" value={candForm.nom ?? ''} onChange={(e) => setC('nom', e.target.value)} /></Field>
           <Field label="E-mail"><input className="input" type="email" value={candForm.email ?? ''} onChange={(e) => setC('email', e.target.value)} /></Field>
           <Field label="Téléphone"><input className="input" value={candForm.telephone ?? ''} onChange={(e) => setC('telephone', e.target.value)} /></Field>
-          <Field label="URL du CV"><input className="input" value={candForm.cv_url ?? ''} onChange={(e) => setC('cv_url', e.target.value)} /></Field>
+          <Field label="CV">
+            <div className="flex items-center gap-3">
+              <FileUpload bucket="cv" label="Téléverser le CV" onUploaded={(v) => setC('cv_url', v)} />
+              {candForm.cv_url && <FileLink bucket="cv" value={candForm.cv_url} onClear={() => setC('cv_url', '')} />}
+            </div>
+          </Field>
           <Field label="Score (0-100)"><input className="input" type="number" value={candForm.score ?? ''} onChange={(e) => setC('score', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={candForm.notes ?? ''} onChange={(e) => setC('notes', e.target.value)} /></Field></div>
           <label className="col-span-2 flex items-center gap-2 text-sm text-slate-600">

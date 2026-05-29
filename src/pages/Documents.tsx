@@ -4,6 +4,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { FileUpload, FileLink } from '@/components/FileUpload';
 import { formatDate } from '@/lib/utils';
 import type { Document } from '@/lib/database.types';
 
@@ -111,7 +112,7 @@ export default function Documents() {
               <td className="px-4 py-3 text-slate-500">{formatDate(d.updated_at)}</td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
-                  {d.fichier_url && <a href={d.fichier_url} target="_blank" rel="noreferrer" className="rounded p-1.5 text-slate-400 hover:text-brand-600"><ExternalLink className="h-4 w-4" /></a>}
+                  {d.fichier_url && <FileLink bucket="documents" value={d.fichier_url} />}
                   {isManager && <>
                     <button onClick={() => newVersion(d)} title="Nouvelle version" className="rounded px-1.5 text-xs font-medium text-slate-400 hover:text-brand-600">+v</button>
                     <button onClick={() => openEdit(d)} className="rounded p-1.5 text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
@@ -141,7 +142,15 @@ export default function Documents() {
           </select></Field>
           <Field label="Version"><input className="input" type="number" value={form.version ?? 1} onChange={(e) => set('version', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Description"><textarea className="input" rows={2} value={form.description ?? ''} onChange={(e) => set('description', e.target.value)} /></Field></div>
-          <div className="col-span-2"><Field label="URL du fichier" hint="Lien Supabase Storage ou externe"><input className="input" value={form.fichier_url ?? ''} onChange={(e) => set('fichier_url', e.target.value)} /></Field></div>
+          <div className="col-span-2">
+            <Field label="Fichier" hint="Téléversez un fichier ou collez une URL externe">
+              <div className="flex items-center gap-3">
+                <FileUpload bucket="documents" onUploaded={(v) => set('fichier_url', v)} />
+                {form.fichier_url && <FileLink bucket="documents" value={form.fichier_url} onClear={() => set('fichier_url', '')} />}
+              </div>
+              <input className="input mt-2" placeholder="https://…" value={form.fichier_url ?? ''} onChange={(e) => set('fichier_url', e.target.value)} />
+            </Field>
+          </div>
           <div className="col-span-2"><Field label="Tags (séparés par des virgules)"><input className="input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} /></Field></div>
         </div>
       </Modal>

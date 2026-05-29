@@ -63,9 +63,27 @@ Voir `supabase/migrations/` (7 fichiers ordonnés) : enums + socle, CRM, formati
 documents/kanban/mail/recrutement, audit/paramètres, **policies RLS**, et **seed** des
 financeurs, workflows, formations et tableau Kanban par défaut.
 
+## Stockage de fichiers (Supabase Storage)
+
+Migration `supabase/migrations/20250101000008_storage.sql` : buckets `documents` (public),
+`pieces` (privé), `cv` (privé) + policies pour utilisateurs authentifiés. L'upload est câblé
+dans **Dossiers › pièces justificatives**, **Espace documentaire** et **Recrutement › CV**.
+Les buckets privés sont ouverts via des **URL signées** (`createSignedUrl`).
+
+## Envoi d'e-mails (Edge Function SMTP)
+
+`supabase/functions/send-email/index.ts` (Deno + denomailer). La page **Messagerie** l'appelle
+via `supabase.functions.invoke('send-email', …)`.
+
+```bash
+supabase functions deploy send-email
+supabase secrets set SMTP_HOST=… SMTP_PORT=587 SMTP_USERNAME=… SMTP_PASSWORD=… SMTP_FROM=…
+```
+
+Sans déploiement/secrets, l'envoi échoue proprement et le message est conservé en brouillon.
+
 ## Points d'extension (CDC v2 / Lot 4)
 
-- Envoi SMTP réel et réception IMAP → **Supabase Edge Functions** + secrets.
-- Upload de fichiers (pièces, CV, documents) → **Supabase Storage** (buckets + policies).
+- Réception e-mail (IMAP) et synchronisation → Edge Function dédiée.
 - Connecteurs financeurs (EDOF…) et signature électronique → intégrations externes.
 - Régénération des types : `npx supabase gen types typescript` → `src/lib/database.types.ts`.
