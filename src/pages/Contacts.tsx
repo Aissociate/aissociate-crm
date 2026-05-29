@@ -70,7 +70,7 @@ export default function Contacts() {
 
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
           <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <select className="input max-w-[220px]" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
@@ -94,21 +94,21 @@ export default function Contacts() {
           </tr>
         }>
           {filtered.map((c) => (
-            <tr key={c.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-medium text-slate-900">
+            <tr key={c.id} className="hover:bg-surface-2">
+              <td className="px-4 py-3 font-medium text-fg">
                 {fullName(c.prenom, c.nom)}
-                {c.fonction && <span className="block text-xs font-normal text-slate-400">{c.fonction}</span>}
+                {c.fonction && <span className="block text-xs font-normal text-muted">{c.fonction}</span>}
               </td>
               <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{CONTACT_TYPE_LABELS[c.type]}</Badge></td>
-              <td className="px-4 py-3 text-slate-600">{entName(c.entreprise_id)}</td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 text-muted">{entName(c.entreprise_id)}</td>
+              <td className="px-4 py-3 text-muted">
                 {c.email && <span className="flex items-center gap-1 text-xs"><Mail className="h-3 w-3" />{c.email}</span>}
                 {c.telephone && <span className="flex items-center gap-1 text-xs"><Phone className="h-3 w-3" />{c.telephone}</span>}
               </td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
-                  <button onClick={() => openEdit(c)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(c)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => openEdit(c)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => remove(c)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </td>
             </tr>
@@ -147,7 +147,7 @@ export default function Contacts() {
           <div className="col-span-2">
             <Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field>
           </div>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-slate-600">
+          <label className="col-span-2 flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={!!form.rgpd_consent} onChange={(e) => set('rgpd_consent', e.target.checked)} />
             Consentement RGPD recueilli
           </label>

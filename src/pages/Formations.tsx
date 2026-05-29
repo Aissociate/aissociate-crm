@@ -55,7 +55,7 @@ export default function Formations() {
         subtitle={isManager ? 'Gestion du catalogue (4.3)' : 'Consultation du catalogue (lecture seule)'}
         actions={isManager
           ? <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouvelle formation</Button>
-          : <Badge className="bg-slate-100 text-slate-500"><Lock className="mr-1 h-3 w-3" /> Lecture seule</Badge>}
+          : <Badge className="bg-surface-2 text-muted"><Lock className="mr-1 h-3 w-3" /> Lecture seule</Badge>}
       />
 
       {loading ? (
@@ -67,18 +67,18 @@ export default function Formations() {
           {data.map((f) => (
             <div key={f.id} className="card flex flex-col p-5">
               <div className="mb-2 flex items-start justify-between">
-                <h3 className="font-semibold text-slate-900">{f.intitule}</h3>
+                <h3 className="font-semibold text-fg">{f.intitule}</h3>
                 {isManager && (
                   <div className="flex gap-1">
-                    <button onClick={() => openEdit(f)} className="rounded p-1.5 text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(f)} className="rounded p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => openEdit(f)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => remove(f)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 )}
               </div>
-              {f.objectifs && <p className="mb-3 text-sm text-slate-500 line-clamp-2">{f.objectifs}</p>}
-              <div className="mt-auto flex flex-wrap gap-3 text-sm text-slate-600">
-                <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-slate-400" />{f.duree_heures} h</span>
-                <span className="flex items-center gap-1"><Euro className="h-4 w-4 text-slate-400" />{formatMoney(f.prix)}</span>
+              {f.objectifs && <p className="mb-3 text-sm text-muted line-clamp-2">{f.objectifs}</p>}
+              <div className="mt-auto flex flex-wrap gap-3 text-sm text-muted">
+                <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-muted" />{f.duree_heures} h</span>
+                <span className="flex items-center gap-1"><Euro className="h-4 w-4 text-muted" />{formatMoney(f.prix)}</span>
                 <Badge className="bg-brand-50 text-brand-700">{f.modalite}</Badge>
                 {!f.actif && <Badge className="bg-red-50 text-red-600">Inactif</Badge>}
               </div>
@@ -108,7 +108,7 @@ export default function Formations() {
           </select></Field>
           <Field label="Public visé"><input className="input" value={form.public_vise ?? ''} onChange={(e) => set('public_vise', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Prérequis"><input className="input" value={form.prerequis ?? ''} onChange={(e) => set('prerequis', e.target.value)} /></Field></div>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-slate-600">
+          <label className="col-span-2 flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={!!form.actif} onChange={(e) => set('actif', e.target.checked)} /> Formation active
           </label>
         </div>

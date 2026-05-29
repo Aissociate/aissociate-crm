@@ -10,7 +10,8 @@ import {
 import { formatMoney } from '@/lib/utils';
 import type { Dossier, Opportunite, Financeur, DossierStatut } from '@/lib/database.types';
 
-const COLORS = ['#3375f5', '#10b981', '#f59e0b', '#6366f1', '#ef4444', '#14b8a6', '#8b5cf6', '#64748b'];
+const COLORS = ['#ea6a1e', '#f59e0b', '#10b981', '#6366f1', '#ef4444', '#14b8a6', '#8b5cf6', '#64748b'];
+const GRID = 'rgb(148 163 184 / 0.2)';
 
 export default function Statistiques() {
   const { isManager } = useAuth();
@@ -55,8 +56,8 @@ export default function Statistiques() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-4 font-semibold text-slate-900">Dossiers par statut</h2>
-          {parStatut.length === 0 ? <p className="py-10 text-center text-sm text-slate-400">Aucune donnée</p> : (
+          <h2 className="mb-4 font-semibold text-fg">Dossiers par statut</h2>
+          {parStatut.length === 0 ? <p className="py-10 text-center text-sm text-muted">Aucune donnée</p> : (
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie data={parStatut} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
@@ -69,25 +70,25 @@ export default function Statistiques() {
         </Card>
 
         <Card>
-          <h2 className="mb-4 font-semibold text-slate-900">Montants par financeur</h2>
-          {parFinanceur.length === 0 ? <p className="py-10 text-center text-sm text-slate-400">Aucune donnée</p> : (
+          <h2 className="mb-4 font-semibold text-fg">Montants par financeur</h2>
+          {parFinanceur.length === 0 ? <p className="py-10 text-center text-sm text-muted">Aucune donnée</p> : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={parFinanceur}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis fontSize={12} />
                 <Tooltip formatter={(v: number) => formatMoney(v)} />
-                <Bar dataKey="montant" fill="#3375f5" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="montant" fill="#ea6a1e" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </Card>
 
         <Card className="lg:col-span-2">
-          <h2 className="mb-4 font-semibold text-slate-900">Pipeline commercial par étape</h2>
+          <h2 className="mb-4 font-semibold text-fg">Pipeline commercial par étape</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={parStage}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
               <XAxis dataKey="name" fontSize={12} />
               <YAxis fontSize={12} allowDecimals={false} />
               <Tooltip />

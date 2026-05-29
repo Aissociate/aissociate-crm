@@ -59,10 +59,10 @@ export default function Administration() {
     <div>
       <PageHeader title="Administration" subtitle="Gestion des utilisateurs, financeurs et traçabilité (4.9)" />
 
-      <div className="mb-5 flex gap-1 border-b border-slate-200">
+      <div className="mb-5 flex gap-1 border-b border-line">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-muted hover:text-fg'}`}>
             <t.icon className="h-4 w-4" /> {t.label}
           </button>
         ))}
@@ -79,13 +79,13 @@ export default function Administration() {
             </tr>
           }>
             {profiles.data.map((p) => (
-              <tr key={p.id} className="hover:bg-slate-50">
+              <tr key={p.id} className="hover:bg-surface-2">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">{initials(p.nom, p.prenom)}</span>
                     <div>
-                      <p className="font-medium text-slate-900">{fullName(p.prenom, p.nom)}</p>
-                      <p className="text-xs text-slate-400">{p.email}</p>
+                      <p className="font-medium text-fg">{fullName(p.prenom, p.nom)}</p>
+                      <p className="text-xs text-muted">{p.email}</p>
                     </div>
                   </div>
                 </td>
@@ -99,7 +99,7 @@ export default function Administration() {
                     <Badge className={p.actif ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>{p.actif ? 'Actif' : 'Désactivé'}</Badge>
                   </button>
                 </td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(p.created_at)}</td>
+                <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
               </tr>
             ))}
           </Table>
@@ -121,14 +121,14 @@ export default function Administration() {
               </tr>
             }>
               {financeurs.data.map((f) => (
-                <tr key={f.id} className="hover:bg-slate-50">
+                <tr key={f.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{f.code}</Badge></td>
-                  <td className="px-4 py-3 font-medium text-slate-900">{f.nom}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{f.specificites}</td>
+                  <td className="px-4 py-3 font-medium text-fg">{f.nom}</td>
+                  <td className="px-4 py-3 text-xs text-muted">{f.specificites}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
-                      <button onClick={() => { setFinForm(f); setFinOpen(true); }} className="rounded p-1.5 text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => removeFin(f)} className="rounded p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => { setFinForm(f); setFinOpen(true); }} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => removeFin(f)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -141,14 +141,14 @@ export default function Administration() {
       {tab === 'audit' && (
         audit.loading ? <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div> :
         audit.data.length === 0 ? (
-          <Card><p className="py-6 text-center text-sm text-slate-400">Aucune entrée d'audit. Les actions tracées via <code>log_audit()</code> apparaîtront ici.</p></Card>
+          <Card><p className="py-6 text-center text-sm text-muted">Aucune entrée d'audit. Les actions tracées via <code>log_audit()</code> apparaîtront ici.</p></Card>
         ) : (
           <Table head={<tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Action</th><th className="px-4 py-3">Entité</th></tr>}>
             {audit.data.map((a) => (
-              <tr key={a.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-slate-500">{formatDate(a.created_at, 'dd/MM/yyyy HH:mm')}</td>
-                <td className="px-4 py-3 font-medium text-slate-800">{a.action}</td>
-                <td className="px-4 py-3 text-slate-600">{a.entite}</td>
+              <tr key={a.id} className="hover:bg-surface-2">
+                <td className="px-4 py-3 text-muted">{formatDate(a.created_at, 'dd/MM/yyyy HH:mm')}</td>
+                <td className="px-4 py-3 font-medium text-fg">{a.action}</td>
+                <td className="px-4 py-3 text-muted">{a.entite}</td>
               </tr>
             ))}
           </Table>

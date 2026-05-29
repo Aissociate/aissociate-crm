@@ -88,7 +88,7 @@ export default function Dossiers() {
 
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
           <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <select className="input max-w-[220px]" value={statutFilter} onChange={(e) => setStatutFilter(e.target.value)}>
@@ -113,13 +113,13 @@ export default function Dossiers() {
           </tr>
         }>
           {filtered.map((d) => (
-            <tr key={d.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/dossiers/${d.id}`)}>
-              <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.reference}</td>
-              <td className="px-4 py-3 font-medium text-slate-900">{d.intitule}</td>
-              <td className="px-4 py-3 text-slate-600">{finName(d.financeur_id)}</td>
-              <td className="px-4 py-3 text-slate-600">{formatMoney(d.montant_accorde || d.montant_demande)}</td>
+            <tr key={d.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/dossiers/${d.id}`)}>
+              <td className="px-4 py-3 font-mono text-xs text-muted">{d.reference}</td>
+              <td className="px-4 py-3 font-medium text-fg">{d.intitule}</td>
+              <td className="px-4 py-3 text-muted">{finName(d.financeur_id)}</td>
+              <td className="px-4 py-3 text-muted">{formatMoney(d.montant_accorde || d.montant_demande)}</td>
               <td className="px-4 py-3"><Badge className={DOSSIER_STATUT_COLORS[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge></td>
-              <td className="px-4 py-3 text-right"><ChevronRight className="ml-auto h-4 w-4 text-slate-300" /></td>
+              <td className="px-4 py-3 text-right"><ChevronRight className="ml-auto h-4 w-4 text-muted" /></td>
             </tr>
           ))}
         </Table>
@@ -157,7 +157,7 @@ export default function Dossiers() {
           <Field label="Date de début"><input className="input" type="date" value={form.date_debut ?? ''} onChange={(e) => set('date_debut', e.target.value || null)} /></Field>
           <Field label="Date de fin"><input className="input" type="date" value={form.date_fin ?? ''} onChange={(e) => set('date_fin', e.target.value || null)} /></Field>
         </div>
-        <p className="mt-3 text-xs text-slate-400">Une checklist de pièces justificatives sera générée automatiquement.</p>
+        <p className="mt-3 text-xs text-muted">Une checklist de pièces justificatives sera générée automatiquement.</p>
       </Modal>
     </div>
   );

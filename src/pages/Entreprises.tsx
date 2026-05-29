@@ -59,7 +59,7 @@ export default function Entreprises() {
       />
 
       <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
         <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
@@ -75,17 +75,17 @@ export default function Entreprises() {
                 <div className="flex items-center gap-2">
                   <div className="rounded-lg bg-brand-50 p-2 text-brand-600"><Building2 className="h-5 w-5" /></div>
                   <div>
-                    <p className="font-semibold text-slate-900">{e.raison_sociale}</p>
-                    <p className="text-xs text-slate-400">{e.ville || '—'}{e.secteur ? ` · ${e.secteur}` : ''}</p>
+                    <p className="font-semibold text-fg">{e.raison_sociale}</p>
+                    <p className="text-xs text-muted">{e.ville || '—'}{e.secteur ? ` · ${e.secteur}` : ''}</p>
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => { setForm(e); setOpen(true); }} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(e)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => { setForm(e); setOpen(true); }} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => remove(e)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
-              <dl className="mt-2 space-y-1 text-sm text-slate-600">
-                {e.siret && <div>SIRET : <span className="text-slate-800">{e.siret}</span></div>}
+              <dl className="mt-2 space-y-1 text-sm text-muted">
+                {e.siret && <div>SIRET : <span className="text-fg">{e.siret}</span></div>}
                 {e.email && <div>{e.email}</div>}
                 {e.telephone && <div>{e.telephone}</div>}
                 {e.effectif != null && <div>{e.effectif} salariés</div>}

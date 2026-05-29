@@ -45,21 +45,21 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Derniers dossiers</h2>
+            <h2 className="font-semibold text-fg">Derniers dossiers</h2>
             <Link to="/dossiers" className="flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700">
               Tout voir <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
           {dossiers.data.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">Aucun dossier pour l'instant.</p>
+            <p className="py-8 text-center text-sm text-muted">Aucun dossier pour l'instant.</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line">
               {dossiers.data.slice(0, 6).map((d) => (
                 <li key={d.id}>
                   <Link to={`/dossiers/${d.id}`} className="flex items-center justify-between gap-3 py-3 hover:opacity-80">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">{d.intitule}</p>
-                      <p className="text-xs text-slate-400">{d.reference} · {formatDate(d.created_at)}</p>
+                      <p className="truncate text-sm font-medium text-fg">{d.intitule}</p>
+                      <p className="text-xs text-muted">{d.reference} · {formatDate(d.created_at)}</p>
                     </div>
                     <Badge className={DOSSIER_STATUT_COLORS[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
                   </Link>
@@ -72,24 +72,24 @@ export default function Dashboard() {
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <h2 className="font-semibold text-slate-900">À traiter</h2>
+            <h2 className="font-semibold text-fg">À traiter</h2>
           </div>
           {aTraiter.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">Rien à traiter, bravo !</p>
+            <p className="py-8 text-center text-sm text-muted">Rien à traiter, bravo !</p>
           ) : (
             <ul className="space-y-2">
               {aTraiter.slice(0, 7).map((d) => (
                 <li key={d.id}>
-                  <Link to={`/dossiers/${d.id}`} className="block rounded-lg border border-slate-100 px-3 py-2 hover:bg-slate-50">
-                    <p className="truncate text-sm font-medium text-slate-800">{d.intitule}</p>
-                    <p className="text-xs text-slate-400">{DOSSIER_STATUT_LABELS[d.statut]}</p>
+                  <Link to={`/dossiers/${d.id}`} className="block rounded-lg border border-line px-3 py-2 hover:bg-surface-2">
+                    <p className="truncate text-sm font-medium text-fg">{d.intitule}</p>
+                    <p className="text-xs text-muted">{DOSSIER_STATUT_LABELS[d.statut]}</p>
                   </Link>
                 </li>
               ))}
             </ul>
           )}
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Pipeline par étape</p>
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="mb-2 text-xs font-semibold uppercase text-muted">Pipeline par étape</p>
             {Object.entries(
               opps.data.reduce<Record<string, number>>((acc, o) => {
                 acc[o.stage] = (acc[o.stage] ?? 0) + 1;
@@ -97,8 +97,8 @@ export default function Dashboard() {
               }, {}),
             ).map(([stage, n]) => (
               <div key={stage} className="flex items-center justify-between py-1 text-sm">
-                <span className="text-slate-600">{OPP_STAGE_LABELS[stage as keyof typeof OPP_STAGE_LABELS]}</span>
-                <span className="font-medium text-slate-900">{n}</span>
+                <span className="text-muted">{OPP_STAGE_LABELS[stage as keyof typeof OPP_STAGE_LABELS]}</span>
+                <span className="font-medium text-fg">{n}</span>
               </div>
             ))}
           </div>

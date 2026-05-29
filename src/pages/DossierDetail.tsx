@@ -112,13 +112,13 @@ export default function DossierDetail() {
   };
 
   if (loading) return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
-  if (!dossier) return <div className="py-20 text-center text-slate-500">Dossier introuvable.</div>;
+  if (!dossier) return <div className="py-20 text-center text-muted">Dossier introuvable.</div>;
 
   const piecesOk = pieces.filter((p) => p.statut === 'validee').length;
 
   return (
     <div>
-      <button onClick={() => navigate('/dossiers')} className="mb-3 flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+      <button onClick={() => navigate('/dossiers')} className="mb-3 flex items-center gap-1 text-sm text-muted hover:text-fg">
         <ArrowLeft className="h-4 w-4" /> Retour aux dossiers
       </button>
       <PageHeader
@@ -131,9 +131,9 @@ export default function DossierDetail() {
         <div className="space-y-6 lg:col-span-2">
           {/* Workflow */}
           <Card>
-            <h2 className="mb-4 font-semibold text-slate-900">Workflow du financeur</h2>
+            <h2 className="mb-4 font-semibold text-fg">Workflow du financeur</h2>
             {etapes.length === 0 ? (
-              <p className="text-sm text-slate-400">Aucun workflow associé (sélectionnez un financeur).</p>
+              <p className="text-sm text-muted">Aucun workflow associé (sélectionnez un financeur).</p>
             ) : (
               <ol className="space-y-2">
                 {etapes.map((e) => {
@@ -144,17 +144,17 @@ export default function DossierDetail() {
                       <button
                         onClick={() => patch({ etape_courante: e.ordre })}
                         className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
-                          current ? 'border-brand-500 bg-brand-50' : done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'
+                          current ? 'border-brand-500 bg-brand-50' : done ? 'border-emerald-200 bg-emerald-50' : 'border-line hover:bg-surface-2'
                         }`}
                       >
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                          done ? 'bg-emerald-500 text-white' : current ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600'
+                          done ? 'bg-emerald-500 text-white' : current ? 'bg-brand-600 text-white' : 'bg-surface-2 text-muted'
                         }`}>
                           {done ? <Check className="h-3.5 w-3.5" /> : e.ordre}
                         </span>
                         <div>
-                          <p className="text-sm font-medium text-slate-800">{e.libelle}</p>
-                          {e.description && <p className="text-xs text-slate-400">{e.description}</p>}
+                          <p className="text-sm font-medium text-fg">{e.libelle}</p>
+                          {e.description && <p className="text-xs text-muted">{e.description}</p>}
                         </div>
                       </button>
                     </li>
@@ -167,21 +167,21 @@ export default function DossierDetail() {
           {/* Pieces */}
           <Card>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-900">Pièces justificatives</h2>
-              <Badge className="bg-slate-100 text-slate-600">{piecesOk}/{pieces.length} validées</Badge>
+              <h2 className="font-semibold text-fg">Pièces justificatives</h2>
+              <Badge className="bg-surface-2 text-muted">{piecesOk}/{pieces.length} validées</Badge>
             </div>
             <ul className="space-y-2">
               {pieces.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-100 px-3 py-2">
-                  <FileCheck2 className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span className="flex-1 text-sm text-slate-700">{p.libelle}{p.obligatoire && <span className="text-red-400"> *</span>}</span>
+                <li key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
+                  <FileCheck2 className="h-4 w-4 shrink-0 text-muted" />
+                  <span className="flex-1 text-sm text-fg">{p.libelle}{p.obligatoire && <span className="text-red-400"> *</span>}</span>
                   {p.fichier_url
                     ? <span className="inline-flex items-center gap-2">
                         <FileLink bucket="pieces" value={p.fichier_url} onClear={() => setPieceFichier(p, null)} />
                         <FileUpload bucket="pieces" label="Nouvelle version" onUploaded={(v) => setPieceFichier(p, v)} />
                         {p.version > 1 && (
                           <button onClick={() => openHistory(p)} title="Historique des versions"
-                            className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200">
+                            className="inline-flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-xs font-medium text-muted hover:bg-surface-2">
                             <History className="h-3.5 w-3.5" /> v{p.version}
                           </button>
                         )}
@@ -193,7 +193,7 @@ export default function DossierDetail() {
                   >
                     {PIECE_STATUTS.map((s) => <option key={s} value={s}>{PIECE_STATUT_LABELS[s]}</option>)}
                   </select>
-                  <button onClick={() => removePiece(p)} className="rounded p-1 text-slate-300 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => removePiece(p)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </li>
               ))}
             </ul>
@@ -208,7 +208,7 @@ export default function DossierDetail() {
         {/* Side panel */}
         <div className="space-y-6">
           <Card>
-            <h2 className="mb-4 font-semibold text-slate-900">Statut & financement</h2>
+            <h2 className="mb-4 font-semibold text-fg">Statut & financement</h2>
             <div className="space-y-4">
               <Field label="Statut du dossier">
                 <select className="input" value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })}>
@@ -216,7 +216,7 @@ export default function DossierDetail() {
                 </select>
               </Field>
               <Field label="Montant demandé">
-                <div className="input bg-slate-50">{formatMoney(dossier.montant_demande)}</div>
+                <div className="input bg-surface-2">{formatMoney(dossier.montant_demande)}</div>
               </Field>
               <Field label="Montant accordé">
                 <input className="input" type="number" value={dossier.montant_accorde ?? 0}
@@ -242,16 +242,16 @@ export default function DossierDetail() {
         {histPiece && (
           <ul className="space-y-2">
             <li className="flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
-              <span className="text-sm font-medium text-slate-800">Version {histPiece.version} (actuelle)</span>
+              <span className="text-sm font-medium text-fg">Version {histPiece.version} (actuelle)</span>
               {histPiece.fichier_url && <FileLink bucket="pieces" value={histPiece.fichier_url} />}
             </li>
             {versions.map((v) => (
-              <li key={v.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                <span className="text-sm text-slate-600">Version {v.version} · {formatDate(v.created_at, 'dd/MM/yyyy HH:mm')}</span>
+              <li key={v.id} className="flex items-center justify-between rounded-lg border border-line px-3 py-2">
+                <span className="text-sm text-muted">Version {v.version} · {formatDate(v.created_at, 'dd/MM/yyyy HH:mm')}</span>
                 {v.fichier_url && <FileLink bucket="pieces" value={v.fichier_url} />}
               </li>
             ))}
-            {versions.length === 0 && <p className="py-4 text-center text-sm text-slate-400">Aucune version antérieure.</p>}
+            {versions.length === 0 && <p className="py-4 text-center text-sm text-muted">Aucune version antérieure.</p>}
           </ul>
         )}
       </Modal>

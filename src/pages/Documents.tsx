@@ -73,12 +73,12 @@ export default function Documents() {
         subtitle="Procédures, modèles et documents Qualiopi versionnés (4.5)"
         actions={isManager
           ? <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau document</Button>
-          : <Badge className="bg-slate-100 text-slate-500"><Lock className="mr-1 h-3 w-3" /> Lecture seule</Badge>}
+          : <Badge className="bg-surface-2 text-muted"><Lock className="mr-1 h-3 w-3" /> Lecture seule</Badge>}
       />
 
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
           <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <select className="input max-w-[220px]" value={cat} onChange={(e) => setCat(e.target.value)}>
@@ -102,21 +102,21 @@ export default function Documents() {
           </tr>
         }>
           {filtered.map((d) => (
-            <tr key={d.id} className="hover:bg-slate-50">
+            <tr key={d.id} className="hover:bg-surface-2">
               <td className="px-4 py-3">
-                <span className="flex items-center gap-2 font-medium text-slate-900"><FileText className="h-4 w-4 text-brand-500" />{d.titre}</span>
-                {(d.tags ?? []).length > 0 && <span className="mt-0.5 flex flex-wrap gap-1">{d.tags.map((t) => <Badge key={t} className="bg-slate-100 text-slate-500">{t}</Badge>)}</span>}
+                <span className="flex items-center gap-2 font-medium text-fg"><FileText className="h-4 w-4 text-brand-500" />{d.titre}</span>
+                {(d.tags ?? []).length > 0 && <span className="mt-0.5 flex flex-wrap gap-1">{d.tags.map((t) => <Badge key={t} className="bg-surface-2 text-muted">{t}</Badge>)}</span>}
               </td>
               <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{d.categorie}</Badge></td>
-              <td className="px-4 py-3 text-slate-600">v{d.version}</td>
-              <td className="px-4 py-3 text-slate-500">{formatDate(d.updated_at)}</td>
+              <td className="px-4 py-3 text-muted">v{d.version}</td>
+              <td className="px-4 py-3 text-muted">{formatDate(d.updated_at)}</td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
                   {d.fichier_url && <FileLink bucket="documents" value={d.fichier_url} />}
                   {isManager && <>
-                    <button onClick={() => newVersion(d)} title="Nouvelle version" className="rounded px-1.5 text-xs font-medium text-slate-400 hover:text-brand-600">+v</button>
-                    <button onClick={() => openEdit(d)} className="rounded p-1.5 text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(d)} className="rounded p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => newVersion(d)} title="Nouvelle version" className="rounded px-1.5 text-xs font-medium text-muted hover:text-brand-600">+v</button>
+                    <button onClick={() => openEdit(d)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => remove(d)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </>}
                 </div>
               </td>

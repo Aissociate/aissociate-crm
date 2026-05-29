@@ -107,12 +107,12 @@ export default function Messagerie() {
         </p>
       </div>
 
-      <div className="mb-4 flex gap-1 border-b border-slate-200">
+      <div className="mb-4 flex gap-1 border-b border-line">
         {([['sortant', 'Envoyés', Send], ['entrant', 'Reçus', Inbox]] as const).map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-muted hover:text-fg'}`}>
             <Icon className="h-4 w-4" /> {label}
-            <span className="rounded-full bg-slate-100 px-1.5 text-xs text-slate-500">{data.filter((e) => e.direction === key).length}</span>
+            <span className="rounded-full bg-surface-2 px-1.5 text-xs text-muted">{data.filter((e) => e.direction === key).length}</span>
           </button>
         ))}
       </div>
@@ -130,19 +130,19 @@ export default function Messagerie() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate font-medium text-slate-900">{e.sujet}</p>
+                  <p className="truncate font-medium text-fg">{e.sujet}</p>
                   {e.direction === 'sortant'
-                    ? <Badge className={e.statut === 'envoye' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}>{e.statut}</Badge>
+                    ? <Badge className={e.statut === 'envoye' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{e.statut}</Badge>
                     : <Badge className="bg-indigo-100 text-indigo-700">reçu</Badge>}
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted">
                   {e.direction === 'entrant'
                     ? `De : ${e.expediteur ?? '—'}`
                     : `À : ${e.destinataires.join(', ') || '—'}`} · {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
                 </p>
-                {e.corps && <p className="mt-1 line-clamp-2 text-sm text-slate-600">{e.corps}</p>}
+                {e.corps && <p className="mt-1 line-clamp-2 text-sm text-muted">{e.corps}</p>}
               </div>
-              <button onClick={() => remove(e)} className="rounded p-1.5 text-slate-300 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+              <button onClick={() => remove(e)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
         </div>

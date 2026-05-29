@@ -43,7 +43,7 @@ export default function Parametres() {
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <Building2 className="h-5 w-5 text-brand-600" />
-            <h2 className="font-semibold text-slate-900">Organisme de formation</h2>
+            <h2 className="font-semibold text-fg">Organisme de formation</h2>
           </div>
           <div className="space-y-4">
             <Field label="Nom"><input className="input" value={organisme.nom ?? ''} onChange={(e) => setOrganisme({ ...organisme, nom: e.target.value })} /></Field>
@@ -63,7 +63,7 @@ export default function Parametres() {
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <Mail className="h-5 w-5 text-brand-600" />
-            <h2 className="font-semibold text-slate-900">Serveur SMTP sortant</h2>
+            <h2 className="font-semibold text-fg">Serveur SMTP sortant</h2>
           </div>
           <div className="space-y-4">
             <Field label="Hôte SMTP" hint="ex. smtp.gmail.com"><input className="input" value={smtp.host ?? ''} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} /></Field>
@@ -72,10 +72,10 @@ export default function Parametres() {
               <Field label="Adresse d'expédition"><input className="input" value={smtp.from ?? ''} onChange={(e) => setSmtp({ ...smtp, from: e.target.value })} /></Field>
             </div>
             <Field label="Utilisateur"><input className="input" value={smtp.user ?? ''} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} /></Field>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-muted">
               <input type="checkbox" checked={!!smtp.secure} onChange={(e) => setSmtp({ ...smtp, secure: e.target.checked })} /> Connexion sécurisée (TLS/SSL)
             </label>
-            <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+            <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">
               Le mot de passe SMTP ne se stocke pas ici : ajoutez-le comme <strong>secret Supabase</strong>
               et envoyez les e-mails via une <strong>Edge Function</strong> (CDC 4.7).
             </p>

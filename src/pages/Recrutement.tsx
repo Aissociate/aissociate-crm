@@ -92,16 +92,16 @@ export default function Recrutement() {
           <div className="space-y-2">
             {offres.data.map((o) => (
               <button key={o.id} onClick={() => setSelected(o.id)}
-                className={`w-full rounded-xl border p-4 text-left transition ${activeOffre === o.id ? 'border-brand-500 bg-brand-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                className={`w-full rounded-xl border p-4 text-left transition ${activeOffre === o.id ? 'border-brand-500 bg-brand-50' : 'border-line bg-surface hover:bg-surface-2'}`}>
                 <div className="flex items-start justify-between">
-                  <span className="flex items-center gap-2 font-medium text-slate-900"><Briefcase className="h-4 w-4 text-brand-500" />{o.titre}</span>
-                  <Badge className={o.statut === 'ouverte' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}>{o.statut}</Badge>
+                  <span className="flex items-center gap-2 font-medium text-fg"><Briefcase className="h-4 w-4 text-brand-500" />{o.titre}</span>
+                  <Badge className={o.statut === 'ouverte' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{o.statut}</Badge>
                 </div>
-                {o.lieu && <p className="mt-1 text-xs text-slate-400">{o.lieu}</p>}
-                <p className="mt-1 text-xs text-slate-400">{candidats.data.filter((c) => c.offre_id === o.id).length} candidat(s)</p>
+                {o.lieu && <p className="mt-1 text-xs text-muted">{o.lieu}</p>}
+                <p className="mt-1 text-xs text-muted">{candidats.data.filter((c) => c.offre_id === o.id).length} candidat(s)</p>
                 <div className="mt-2 flex gap-1">
-                  <span onClick={(e) => { e.stopPropagation(); setOffreForm(o); setOffreOpen(true); }} className="cursor-pointer rounded p-1 text-slate-400 hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></span>
-                  <span onClick={(e) => { e.stopPropagation(); removeOffre(o); }} className="cursor-pointer rounded p-1 text-slate-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></span>
+                  <span onClick={(e) => { e.stopPropagation(); setOffreForm(o); setOffreOpen(true); }} className="cursor-pointer rounded p-1 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></span>
+                  <span onClick={(e) => { e.stopPropagation(); removeOffre(o); }} className="cursor-pointer rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></span>
                 </div>
               </button>
             ))}
@@ -110,7 +110,7 @@ export default function Recrutement() {
           {/* Candidats */}
           <div className="lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold text-slate-900">Candidats</h2>
+              <h2 className="font-semibold text-fg">Candidats</h2>
               <Button variant="secondary" onClick={() => { setCandForm({ statut: 'recu' }); setCandOpen(true); }} disabled={!activeOffre}>
                 <UserPlus className="h-4 w-4" /> Ajouter un candidat
               </Button>
@@ -122,14 +122,14 @@ export default function Recrutement() {
                 {offreCandidats.map((c) => (
                   <div key={c.id} className="card flex items-center gap-3 p-4">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">{fullName(c.prenom, c.nom)}</p>
-                      <p className="text-xs text-slate-400">{c.email}{c.telephone ? ` · ${c.telephone}` : ''}{c.score != null ? ` · score ${c.score}` : ''}</p>
+                      <p className="font-medium text-fg">{fullName(c.prenom, c.nom)}</p>
+                      <p className="text-xs text-muted">{c.email}{c.telephone ? ` · ${c.telephone}` : ''}{c.score != null ? ` · score ${c.score}` : ''}</p>
                     </div>
                     <select className="input max-w-[160px]" value={c.statut} onChange={(e) => setCandStatut(c, e.target.value as CandidatStatut)}>
                       {STATUTS.map((s) => <option key={s} value={s}>{CANDIDAT_STATUT_LABELS[s]}</option>)}
                     </select>
-                    <button onClick={() => { setCandForm(c); setCandOpen(true); }} className="rounded p-1.5 text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => removeCand(c)} className="rounded p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => { setCandForm(c); setCandOpen(true); }} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => removeCand(c)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -168,7 +168,7 @@ export default function Recrutement() {
           </Field>
           <Field label="Score (0-100)"><input className="input" type="number" value={candForm.score ?? ''} onChange={(e) => setC('score', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={candForm.notes ?? ''} onChange={(e) => setC('notes', e.target.value)} /></Field></div>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-slate-600">
+          <label className="col-span-2 flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={!!candForm.rgpd_consent} onChange={(e) => setC('rgpd_consent', e.target.checked)} /> Consentement RGPD recueilli
           </label>
         </div>

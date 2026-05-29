@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
-import { initials } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { initials, cn } from '@/lib/utils';
+import { Logo } from '@/components/Logo';
+import ThemeToggle from '@/components/ThemeToggle';
 
 interface NavItem {
   to: string;
@@ -78,20 +79,14 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-line bg-surface transition-transform lg:static lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <GraduationCap className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-bold leading-tight text-slate-900">CRM Formation</p>
-            <p className="text-xs text-slate-400">AIssociate · Qualiopi</p>
-          </div>
-          <button className="ml-auto lg:hidden" onClick={() => setOpen(false)}>
-            <X className="h-5 w-5 text-slate-400" />
+        <div className="flex items-center justify-between border-b border-line px-4 py-4">
+          <Logo size="md" tagline />
+          <button className="lg:hidden" onClick={() => setOpen(false)}>
+            <X className="h-5 w-5 text-muted" />
           </button>
         </div>
 
@@ -101,7 +96,7 @@ export default function Layout() {
             if (items.length === 0) return null;
             return (
               <div key={section.title}>
-                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted/70">
                   {section.title}
                 </p>
                 <div className="space-y-0.5">
@@ -113,10 +108,10 @@ export default function Layout() {
                       onClick={() => setOpen(false)}
                       className={({ isActive }) =>
                         cn(
-                          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                          'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
                           isActive
-                            ? 'bg-brand-50 text-brand-700'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                            : 'text-muted hover:bg-surface-2 hover:text-fg',
                         )
                       }
                     >
@@ -130,21 +125,22 @@ export default function Layout() {
           })}
         </nav>
 
-        <div className="border-t border-slate-200 p-3">
+        <div className="border-t border-line p-3">
           <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500/15 text-sm font-semibold text-brand-600 dark:text-brand-400">
               {initials(profile?.nom, profile?.prenom)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-900">
+              <p className="truncate text-sm font-medium text-fg">
                 {profile?.prenom} {profile?.nom}
               </p>
-              <p className="truncate text-xs text-slate-400">{role ? ROLE_LABELS[role] : ''}</p>
+              <p className="truncate text-xs text-muted">{role ? ROLE_LABELS[role] : ''}</p>
             </div>
+            <ThemeToggle />
             <button
               onClick={handleSignOut}
               title="Se déconnecter"
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600"
+              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-red-500"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -153,16 +149,17 @@ export default function Layout() {
       </aside>
 
       {open && (
-        <div className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setOpen(false)} />
       )}
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
-          <button onClick={() => setOpen(true)} className="rounded-lg p-1.5 hover:bg-slate-100">
-            <Menu className="h-5 w-5 text-slate-600" />
+        <header className="flex items-center gap-3 border-b border-line bg-surface px-4 py-3 lg:hidden">
+          <button onClick={() => setOpen(true)} className="rounded-lg p-1.5 hover:bg-surface-2">
+            <Menu className="h-5 w-5 text-fg" />
           </button>
-          <span className="font-semibold text-slate-900">CRM Formation</span>
+          <Logo size="sm" />
+          <ThemeToggle className="ml-auto" />
         </header>
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />

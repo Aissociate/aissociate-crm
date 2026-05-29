@@ -94,18 +94,18 @@ export default function PlansFormation() {
           </tr>
         }>
           {data.map((p) => (
-            <tr key={p.id} className="hover:bg-slate-50">
+            <tr key={p.id} className="hover:bg-surface-2">
               <td className="px-4 py-3">
-                <span className="flex items-center gap-2 font-medium text-slate-900"><FileText className="h-4 w-4 text-brand-500" />{p.nom}</span>
-                <span className="text-xs text-slate-400">v{p.version} · {p.contenu?.length ?? 0} modules</span>
+                <span className="flex items-center gap-2 font-medium text-fg"><FileText className="h-4 w-4 text-brand-500" />{p.nom}</span>
+                <span className="text-xs text-muted">v{p.version} · {p.contenu?.length ?? 0} modules</span>
               </td>
-              <td className="px-4 py-3 text-slate-600">{p.duree_heures} h · {p.modalite}</td>
+              <td className="px-4 py-3 text-muted">{p.duree_heures} h · {p.modalite}</td>
               <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{PLAN_STATUT_LABELS[p.statut]}</Badge></td>
-              <td className="px-4 py-3 text-slate-500">{formatDate(p.created_at)}</td>
+              <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
-                  <button onClick={() => openEdit(p)} className="rounded p-1.5 text-slate-400 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(p)} className="rounded p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => openEdit(p)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => remove(p)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </td>
             </tr>
