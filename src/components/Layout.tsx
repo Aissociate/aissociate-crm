@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText,
-  FolderKanban, KanbanSquare, FolderArchive, Mail, UserPlus, BarChart3,
+  FolderKanban, FolderArchive, Mail, UserPlus, BarChart3,
   Settings, ShieldCheck, LogOut, Menu, X,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,7 +46,6 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Suivi & collaboration',
     items: [
-      { to: '/kanban', label: 'Kanban', icon: KanbanSquare },
       { to: '/documents', label: 'Espace documentaire', icon: FolderArchive },
       { to: '/messagerie', label: 'Messagerie', icon: Mail },
       { to: '/recrutement', label: 'Recrutement', icon: UserPlus, managerOnly: true },

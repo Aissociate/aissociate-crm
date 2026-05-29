@@ -13,7 +13,6 @@ import Formations from '@/pages/Formations';
 import PlansFormation from '@/pages/PlansFormation';
 import Dossiers from '@/pages/Dossiers';
 import DossierDetail from '@/pages/DossierDetail';
-import Kanban from '@/pages/Kanban';
 import Documents from '@/pages/Documents';
 import Messagerie from '@/pages/Messagerie';
 import Recrutement from '@/pages/Recrutement';
@@ -43,7 +42,6 @@ export default function App() {
         <Route path="/plans" element={<PlansFormation />} />
         <Route path="/dossiers" element={<Dossiers />} />
         <Route path="/dossiers/:id" element={<DossierDetail />} />
-        <Route path="/kanban" element={<Kanban />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/messagerie" element={<Messagerie />} />
         <Route
