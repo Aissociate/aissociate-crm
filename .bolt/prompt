@@ -1,0 +1,14 @@
+Projet : CRM metier de gestion des dossiers de formation pour l'organisme AIssociate (Qualiopi).
+
+Stack imposee (100% compatible Bolt / WebContainer) :
+- Vite + React 18 + TypeScript
+- Tailwind CSS 3
+- Supabase (Postgres + Auth + RLS) via @supabase/supabase-js
+- react-router-dom, react-hook-form + zod, recharts, lucide-react, date-fns
+
+Regles :
+- Aucune dependance native ou serveur Node persistant : tout doit tourner en WebContainer.
+- Toute la persistance passe par Supabase (jamais de SQLite / Prisma / fichiers locaux).
+- Les droits (RBAC : admin / directeur_commercial / conseiller) sont appliques cote base via les policies RLS, ET cote UI.
+- Les migrations SQL vivent dans supabase/migrations/ et doivent etre idempotentes quand c'est possible.
+- Conserver le francais pour l'UI et les libelles metier.
