@@ -15,19 +15,29 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const host = Deno.env.get("IMAP_HOST");
-    const port = Number(Deno.env.get("IMAP_PORT") ?? "993");
-    const user = Deno.env.get("IMAP_USERNAME");
-    const pass = Deno.env.get("IMAP_PASSWORD");
-
-    if (!host || !user || !pass) {
-      return json({ error: "Configuration IMAP incomplète (secrets manquants)" }, 500);
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Secrets Supabase d'abord, puis table parametres (cle='imap') en repli
+    let host = Deno.env.get("IMAP_HOST");
+    let port = Number(Deno.env.get("IMAP_PORT") ?? "0");
+    let user = Deno.env.get("IMAP_USERNAME");
+    let pass = Deno.env.get("IMAP_PASSWORD");
+    if (!host || !user || !pass) {
+      const { data } = await supabase.from("parametres").select("valeur").eq("cle", "imap").maybeSingle();
+      const c = (data?.valeur ?? {}) as Record<string, unknown>;
+      host = host || (c.host as string);
+      user = user || (c.user as string);
+      pass = pass || (c.password as string);
+      port = port || Number(c.port);
+    }
+    port = port || 993;
+
+    if (!host || !user || !pass) {
+      return json({ error: "Configuration IMAP incomplète (secrets Supabase ou Paramètres)" }, 500);
+    }
 
     const client = new ImapFlow({
       host,

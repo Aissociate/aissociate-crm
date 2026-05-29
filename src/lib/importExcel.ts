@@ -84,11 +84,22 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
   return { lus: rows.length, importes };
 }
 
-/** Importe des prospects depuis un fichier ; commentaires conservés en notes. */
-export async function importProspectsFile(file: File, ownerId: string | null): Promise<ImportResult> {
+/**
+ * Importe des prospects depuis un fichier.
+ * - commentaires conservés en notes ;
+ * - affectation **round-robin** sur les conseillers actifs ;
+ * - si aucun conseiller : « non affecté » (owner null) -> attribution manuelle admin.
+ */
+export async function importProspectsFile(file: File): Promise<ImportResult> {
   const rows = await parseSpreadsheet(file);
   const skip = new Set(['full_name', 'company_name', 'phone', '', 'email', 'ville', 'lead_status']);
 
+  // Conseillers actifs pour la répartition round-robin
+  const { data: cons } = await supabase.from('profiles')
+    .select('id').eq('role', 'conseiller').eq('actif', true);
+  const conseillers = (cons ?? []).map((c) => c.id);
+
+  let rr = 0; // index round-robin
   const payloads = rows
     .map((r) => {
       const fullName = pick(r, 'full_name', 'nom complet', 'name', 'nom');
@@ -104,6 +115,7 @@ export async function importProspectsFile(file: File, ownerId: string | null): P
       const email = pick(r, 'email');
       const phone = pick(r, 'phone', 'telephone', 'téléphone');
       const key = (email || phone || fullName).toLowerCase().trim();
+      const owner = conseillers.length ? conseillers[rr++ % conseillers.length] : null;
       return {
         external_id: `pros:${key}`,
         type: 'prospect' as const,
@@ -111,7 +123,7 @@ export async function importProspectsFile(file: File, ownerId: string | null): P
         email: email || null,
         telephone: phone || null,
         notes: notes || null,
-        owner_id: ownerId,
+        owner_id: owner,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);

@@ -117,6 +117,12 @@ Deno.serve(async (req: Request) => {
       const id = Deno.env.get("SHEET_PROSPECTS_ID") ?? DEFAULT_PROSPECTS;
       const rows = await fetchSheet(id);
 
+      // Conseillers actifs pour la répartition round-robin
+      const { data: cons } = await sb.from("profiles")
+        .select("id").eq("role", "conseiller").eq("actif", true);
+      const conseillers = (cons ?? []).map((c: { id: string }) => c.id);
+      let rr = 0;
+
       const skip = new Set(["full_name", "company_name", "phone", "", "email", "ville", "lead_status"]);
 
       const payloads = rows
@@ -137,7 +143,8 @@ Deno.serve(async (req: Request) => {
             email: r.email || null,
             telephone: r.phone || null,
             notes: notes || null,
-            owner_id: null, // « non affecté » : à attribuer par un admin
+            // round-robin sur les conseillers ; sinon « non affecté » (admin)
+            owner_id: conseillers.length ? conseillers[rr++ % conseillers.length] : null,
           };
         });
 

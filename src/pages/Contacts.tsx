@@ -42,11 +42,28 @@ export default function Contacts() {
     return () => clearInterval(t);
   }, [refresh]);
 
+  const [distributing, setDistributing] = useState(false);
+
   // Affectation d'un prospect à un conseiller (managers uniquement)
   const assign = async (c: Contact, ownerId: string) => {
     const { error } = await supabase.from('contacts').update({ owner_id: ownerId || null }).eq('id', c.id);
     if (error) { alert(error.message); return; }
     refresh();
+  };
+
+  // Répartition round-robin des prospects non affectés sur les conseillers actifs
+  const distribute = async () => {
+    const ids = profiles.data.filter((p) => p.role === 'conseiller' && p.actif).map((p) => p.id);
+    if (!ids.length) { alert('Aucun conseiller actif : affectez les prospects manuellement.'); return; }
+    const targets = data.filter((c) => c.type === 'prospect' && !c.owner_id);
+    if (!targets.length) { alert('Aucun prospect non affecté.'); return; }
+    setDistributing(true);
+    for (let i = 0; i < targets.length; i++) {
+      await supabase.from('contacts').update({ owner_id: ids[i % ids.length] }).eq('id', targets[i].id);
+    }
+    setDistributing(false);
+    refresh();
+    alert(`${targets.length} prospect(s) répartis sur ${ids.length} conseiller(s) (round-robin).`);
   };
 
   const ownerName = (id: string | null) => {
@@ -62,10 +79,10 @@ export default function Contacts() {
     if (!file) return;
     setImporting(true);
     try {
-      // Importés « non affectés » (owner vide) : visibles par les admins pour attribution
-      const r = await importProspectsFile(file, null);
+      // Round-robin sur les conseillers actifs ; si aucun -> non affecté (manuel)
+      const r = await importProspectsFile(file);
       refresh();
-      alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s), en « non affecté ».`);
+      alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s) — répartis en round-robin.`);
     } catch (err) {
       alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -139,13 +156,14 @@ export default function Contacts() {
       />
 
       {isManager && nonAffectes > 0 && (
-        <button
-          onClick={() => { setAffFilter('non'); setTypeFilter('prospect'); }}
-          className="mb-4 flex w-full items-center gap-2 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-left text-sm text-brand-700 hover:bg-brand-500/20 dark:text-brand-300"
-        >
-          <UserCheck className="h-4 w-4" />
-          <strong>{nonAffectes}</strong> prospect(s) non affecté(s) — cliquez pour les afficher et les attribuer.
-        </button>
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-sm text-brand-700 dark:text-brand-300">
+          <UserCheck className="h-4 w-4 shrink-0" />
+          <span className="flex-1"><strong>{nonAffectes}</strong> prospect(s) non affecté(s).</span>
+          <button onClick={() => { setAffFilter('non'); setTypeFilter('prospect'); }} className="font-medium underline-offset-2 hover:underline">Afficher</button>
+          <Button variant="secondary" onClick={distribute} disabled={distributing}>
+            <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Répartir (round-robin)'}
+          </Button>
+        </div>
       )}
 
       <div className="mb-4 flex flex-wrap gap-3">

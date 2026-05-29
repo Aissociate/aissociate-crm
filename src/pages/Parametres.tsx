@@ -1,24 +1,41 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 
 type Organisme = { nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string };
-type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string };
+type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
+type Imap = { host?: string; port?: number; user?: string; password?: string };
+
+function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 py-2">
+      {ok
+        ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+        : <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />}
+      <div>
+        <p className="text-sm font-medium text-fg">{label}</p>
+        <p className="text-xs text-muted">{detail}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Parametres() {
   const [organisme, setOrganisme] = useState<Organisme>({});
   const [smtp, setSmtp] = useState<Smtp>({});
+  const [imap, setImap] = useState<Imap>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
+        if (row.cle === 'imap') setImap((row.valeur as Imap) ?? {});
       }
       setLoading(false);
     })();
@@ -35,11 +52,36 @@ export default function Parametres() {
 
   if (loading) return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
 
+  const smtpOk = !!(smtp.host && smtp.user && smtp.password && smtp.from);
+  const imapOk = !!(imap.host && imap.user && imap.password);
+
   return (
     <div>
-      <PageHeader title="Paramètres" subtitle="Configuration de l'organisme et de la messagerie (4.9 / 4.7)" />
+      <PageHeader title="Paramètres" subtitle="Organisme, messagerie et secrets d'intégration (4.7 / 4.9)" />
+
+      {/* Statut des intégrations / secrets requis */}
+      <Card className="mb-6">
+        <div className="mb-3 flex items-center gap-2">
+          <ShieldAlert className="h-5 w-5 text-brand-600" />
+          <h2 className="font-semibold text-fg">Intégrations & secrets requis</h2>
+        </div>
+        <div className="divide-y divide-line">
+          <StatusRow ok={smtpOk} label="SMTP (envoi d'e-mails)"
+            detail={smtpOk ? 'Configuré ci-dessous.' : 'Hôte, utilisateur, mot de passe et adresse d\'expédition requis.'} />
+          <StatusRow ok={imapOk} label="IMAP (réception d'e-mails)"
+            detail={imapOk ? 'Configuré ci-dessous.' : 'Hôte, utilisateur et mot de passe requis.'} />
+          <StatusRow ok={false} label="Import auto & cron (Supabase Vault)"
+            detail="À définir dans Supabase → Vault : secrets project_url et service_role_key (pour pg_cron). Non vérifiable depuis l'app." />
+        </div>
+        <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">
+          Les Edge Functions lisent d'abord les <strong>secrets Supabase</strong> ; à défaut, elles
+          utilisent la configuration SMTP/IMAP enregistrée ici. Pour une sécurité maximale, préférez
+          les secrets Supabase pour les mots de passe.
+        </p>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Organisme */}
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <Building2 className="h-5 w-5 text-brand-600" />
@@ -60,6 +102,7 @@ export default function Parametres() {
           </div>
         </Card>
 
+        {/* SMTP */}
         <Card>
           <div className="mb-4 flex items-center gap-2">
             <Mail className="h-5 w-5 text-brand-600" />
@@ -72,18 +115,35 @@ export default function Parametres() {
               <Field label="Adresse d'expédition"><input className="input" value={smtp.from ?? ''} onChange={(e) => setSmtp({ ...smtp, from: e.target.value })} /></Field>
             </div>
             <Field label="Utilisateur"><input className="input" value={smtp.user ?? ''} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} /></Field>
+            <Field label="Mot de passe" hint="Stocké chiffré côté Supabase (table protégée admin)"><input className="input" type="password" value={smtp.password ?? ''} onChange={(e) => setSmtp({ ...smtp, password: e.target.value })} autoComplete="new-password" /></Field>
             <label className="flex items-center gap-2 text-sm text-muted">
-              <input type="checkbox" checked={!!smtp.secure} onChange={(e) => setSmtp({ ...smtp, secure: e.target.checked })} /> Connexion sécurisée (TLS/SSL)
+              <input type="checkbox" checked={!!smtp.secure} onChange={(e) => setSmtp({ ...smtp, secure: e.target.checked })} /> Connexion sécurisée (TLS/SSL, port 465)
             </label>
-            <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">
-              Le mot de passe SMTP ne se stocke pas ici : ajoutez-le comme <strong>secret Supabase</strong>
-              et envoyez les e-mails via une <strong>Edge Function</strong> (CDC 4.7).
-            </p>
             <div className="flex items-center gap-3">
               <Button onClick={() => persist('smtp', smtp)} disabled={saving === 'smtp'}>
                 <Save className="h-4 w-4" /> {saving === 'smtp' ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
               {savedMsg === 'smtp' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+            </div>
+          </div>
+        </Card>
+
+        {/* IMAP */}
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Serveur IMAP (réception)</h2>
+          </div>
+          <div className="space-y-4">
+            <Field label="Hôte IMAP" hint="ex. imap.gmail.com"><input className="input" value={imap.host ?? ''} onChange={(e) => setImap({ ...imap, host: e.target.value })} /></Field>
+            <Field label="Port" hint="993 (SSL)"><input className="input" type="number" value={imap.port ?? 993} onChange={(e) => setImap({ ...imap, port: Number(e.target.value) })} /></Field>
+            <Field label="Utilisateur"><input className="input" value={imap.user ?? ''} onChange={(e) => setImap({ ...imap, user: e.target.value })} /></Field>
+            <Field label="Mot de passe"><input className="input" type="password" value={imap.password ?? ''} onChange={(e) => setImap({ ...imap, password: e.target.value })} autoComplete="new-password" /></Field>
+            <div className="flex items-center gap-3">
+              <Button onClick={() => persist('imap', imap)} disabled={saving === 'imap'}>
+                <Save className="h-4 w-4" /> {saving === 'imap' ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              {savedMsg === 'imap' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
             </div>
           </div>
         </Card>
