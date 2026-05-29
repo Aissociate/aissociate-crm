@@ -94,7 +94,15 @@ supabase functions deploy fetch-emails
 supabase secrets set IMAP_HOST=… IMAP_PORT=993 IMAP_USERNAME=… IMAP_PASSWORD=…
 ```
 
-Pour une relève automatique, planifier l'appel via `pg_cron` (Supabase → Database → Cron).
+**Relève automatique** : la migration `…195603_cron_imap.sql` planifie un appel à `fetch-emails`
+toutes les 15 min via `pg_cron` + `pg_net`. Prérequis — créer deux secrets dans **Supabase → Vault** :
+`project_url` (= `https://<ref>.supabase.co`) et `service_role_key`. Si absents, la migration ne
+plante pas (NOTICE) ; rejouez-la après avoir ajouté les secrets.
+
+## Intégration continue (GitHub Actions)
+
+`.github/workflows/ci.yml` exécute `npm ci` + `npm run build` (typecheck Vite/tsc) à chaque push
+et pull request sur `main`.
 
 ## Versioning des pièces justificatives
 
