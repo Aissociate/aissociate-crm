@@ -43,6 +43,7 @@ export type Contact = Timestamps & {
   email: string | null; telephone: string | null; fonction: string | null;
   entreprise_id: string | null; financeur_id: string | null; owner_id: string | null;
   rgpd_consent: boolean; notes: string | null; external_id: string | null;
+  metadata: Record<string, string> | null;
 };
 export type Opportunite = Timestamps & {
   id: string; titre: string; contact_id: string | null; entreprise_id: string | null;

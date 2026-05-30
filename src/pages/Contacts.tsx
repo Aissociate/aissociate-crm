@@ -7,6 +7,7 @@ import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState } f
 import { CONTACT_TYPE_LABELS } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
 import { importProspectsFile } from '@/lib/importExcel';
+import ContactFiche from '@/components/ContactFiche';
 import type { Contact, ContactType, Entreprise, Financeur, Profile } from '@/lib/database.types';
 
 const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
@@ -32,8 +33,9 @@ export default function Contacts() {
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
-  const [affFilter, setAffFilter] = useState<string>(''); // '', 'non', ou un owner_id
+  const [affFilter, setAffFilter] = useState<string>('');
   const [importing, setImporting] = useState(false);
+  const [fiche, setFiche] = useState<Contact | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Rafraîchissement automatique toutes les 5 min (nouveaux prospects non affectés)
@@ -199,7 +201,11 @@ export default function Contacts() {
           </tr>
         }>
           {filtered.map((c) => (
-            <tr key={c.id} className="hover:bg-surface-2">
+            <tr
+              key={c.id}
+              className="cursor-pointer hover:bg-surface-2"
+              onClick={() => setFiche(c)}
+            >
               <td className="px-4 py-3 font-medium text-fg">
                 {fullName(c.prenom, c.nom)}
                 {c.fonction && <span className="block text-xs font-normal text-muted">{c.fonction}</span>}
@@ -215,7 +221,8 @@ export default function Contacts() {
                   <select
                     className={`input max-w-[180px] py-1 text-xs ${!c.owner_id ? 'border-brand-500/50 text-brand-700 dark:text-brand-300' : ''}`}
                     value={c.owner_id ?? ''}
-                    onChange={(e) => assign(c, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => { e.stopPropagation(); assign(c, e.target.value); }}
                   >
                     <option value="">Non affecté</option>
                     {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
@@ -225,7 +232,7 @@ export default function Contacts() {
                 )}
               </td>
               <td className="px-4 py-3">
-                <div className="flex justify-end gap-1">
+                <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => openEdit(c)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(c)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
@@ -272,6 +279,17 @@ export default function Contacts() {
           </label>
         </div>
       </Modal>
+
+      {fiche && (
+        <ContactFiche
+          contact={fiche}
+          entreprises={entreprises.data}
+          financeurs={financeurs.data}
+          profiles={profiles.data}
+          onClose={() => setFiche(null)}
+          onEdit={(c) => { setFiche(null); openEdit(c); }}
+        />
+      )}
     </div>
   );
 }

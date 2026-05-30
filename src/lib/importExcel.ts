@@ -160,6 +160,7 @@ export async function importProspectsFile(file: File, forcedOwnerId?: string): P
         telephone: phone || null,
         notes: notes || null,
         owner_id: owner,
+        metadata: r,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
@@ -167,7 +168,7 @@ export async function importProspectsFile(file: File, forcedOwnerId?: string): P
   let importes = 0;
   if (payloads.length) {
     const { data, error } = await supabase.from('contacts')
-      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: true }).select('id');
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id');
     if (error) throw new Error(error.message);
     importes = data?.length ?? 0;
   }

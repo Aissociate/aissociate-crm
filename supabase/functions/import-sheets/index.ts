@@ -145,6 +145,7 @@ Deno.serve(async (req: Request) => {
             notes: notes || null,
             // round-robin sur les conseillers ; sinon « non affecté » (admin)
             owner_id: conseillers.length ? conseillers[rr++ % conseillers.length] : null,
+            metadata: r,
           };
         });
 
