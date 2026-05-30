@@ -288,6 +288,7 @@ export default function Contacts() {
           profiles={profiles.data}
           onClose={() => setFiche(null)}
           onEdit={(c) => { setFiche(null); openEdit(c); }}
+          onUpdated={refresh}
         />
       )}
     </div>

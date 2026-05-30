@@ -1,6 +1,8 @@
-import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties } from 'lucide-react';
+import { useState } from 'react';
+import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { supabase } from '@/lib/supabase';
 import { cn, fullName, initials, formatDate } from '@/lib/utils';
 import { CONTACT_TYPE_LABELS } from '@/lib/constants';
 import { Badge } from '@/components/ui';
@@ -32,12 +34,26 @@ interface Props {
   profiles: Profile[];
   onClose: () => void;
   onEdit: (c: Contact) => void;
+  onUpdated: () => void;
 }
 
-export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit }: Props) {
+export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit, onUpdated }: Props) {
   const entreprise = entreprises.find((e) => e.id === c.entreprise_id);
   const financeur = financeurs.find((f) => f.id === c.financeur_id);
   const owner = profiles.find((p) => p.id === c.owner_id);
+
+  // ── Notes éditable ────────────────────────────────────────────────────────────
+  const [notesValue, setNotesValue] = useState(c.notes ?? '');
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+
+  const handleNotesSave = async () => {
+    setNotesSaving(true);
+    await supabase.from('contacts').update({ notes: notesValue || null }).eq('id', c.id);
+    setNotesSaving(false);
+    setNotesDirty(false);
+    onUpdated();
+  };
 
   // Entrées metadata à afficher (exclut les doublons avec les champs principaux)
   const metaEntries = c.metadata
@@ -206,13 +222,54 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               </p>
             </section>
           )}
+
+          {/* Notes conseiller */}
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <NotebookPen className="h-4 w-4 text-muted" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Notes conseiller</h3>
+              </div>
+              {notesDirty && (
+                <button
+                  onClick={handleNotesSave}
+                  disabled={notesSaving}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/20 dark:text-brand-400"
+                >
+                  <Save className="h-3 w-3" />
+                  {notesSaving ? 'Sauvegarde…' : 'Sauvegarder'}
+                </button>
+              )}
+            </div>
+            <textarea
+              className="input min-h-[88px] resize-y text-sm"
+              placeholder="Observations, rappels, informations de suivi…"
+              value={notesValue}
+              onChange={(e) => { setNotesValue(e.target.value); setNotesDirty(true); }}
+            />
+            {!notesDirty && (
+              <p className="mt-1 text-xs text-muted">Modifiez pour sauvegarder</p>
+            )}
+          </section>
         </div>
 
         {/* Pied */}
-        <div className="border-t border-line px-5 py-3 flex justify-end">
+        <div className="border-t border-line px-5 py-3 flex items-center justify-between gap-2">
+          <div>
+            {notesDirty && (
+              <button
+                onClick={handleNotesSave}
+                disabled={notesSaving}
+                className="btn-primary text-sm py-2"
+              >
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                {notesSaving ? 'Sauvegarde…' : 'Sauvegarder les notes'}
+              </button>
+            )}
+          </div>
           <button
             onClick={() => { onClose(); onEdit(c); }}
-            className="btn-primary text-sm"
+            className="btn-secondary text-sm"
           >
             <Pencil className="mr-1.5 h-3.5 w-3.5" /> Modifier ce contact
           </button>
