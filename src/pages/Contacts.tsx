@@ -80,7 +80,7 @@ export default function Contacts() {
     setImporting(true);
     try {
       // Round-robin sur les conseillers actifs ; si aucun -> non affecté (manuel)
-      const r = await importProspectsFile(file);
+      const r = await importProspectsFile(file, session?.user.id);
       refresh();
       alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s) — répartis en round-robin.`);
     } catch (err) {

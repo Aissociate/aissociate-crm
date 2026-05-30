@@ -122,13 +122,18 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
   return { lus: rows.length, importes };
 }
 
-export async function importProspectsFile(file: File): Promise<ImportResult> {
+export async function importProspectsFile(file: File, forcedOwnerId?: string): Promise<ImportResult> {
   const rows = await parseSpreadsheet(file);
   const skip = new Set(['full_name', 'company_name', 'phone', '', 'email', 'ville', 'lead_status']);
 
-  const { data: cons } = await supabase.from('profiles')
-    .select('id').eq('role', 'conseiller').eq('actif', true);
-  const conseillers = (cons ?? []).map((c) => c.id);
+  // Si forcedOwnerId (import manuel depuis l'UI), tous les prospects vont à cet utilisateur.
+  // Sinon (import auto/cron), répartition round-robin sur les conseillers actifs.
+  let conseillers: string[] = [];
+  if (!forcedOwnerId) {
+    const { data: cons } = await supabase.from('profiles')
+      .select('id').eq('role', 'conseiller').eq('actif', true);
+    conseillers = (cons ?? []).map((c) => c.id);
+  }
 
   let rr = 0;
   const payloads = rows
@@ -146,7 +151,7 @@ export async function importProspectsFile(file: File): Promise<ImportResult> {
       const email = pick(r, 'email');
       const phone = pick(r, 'phone', 'telephone', 'téléphone');
       const key = (email || phone || fullName).toLowerCase().trim();
-      const owner = conseillers.length ? conseillers[rr++ % conseillers.length] : null;
+      const owner = forcedOwnerId ?? (conseillers.length ? conseillers[rr++ % conseillers.length] : null);
       return {
         external_id: `pros:${key}`,
         type: 'prospect' as const,
