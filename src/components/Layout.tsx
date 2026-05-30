@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText,
-  FolderKanban, FolderArchive, Mail, UserPlus, BarChart3,
-  Settings, ShieldCheck, LogOut, Menu, X,
-} from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, UserPlus, ChartBar as BarChart3, LayoutGrid, Settings, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn } from '@/lib/utils';
@@ -47,6 +43,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Suivi & collaboration',
     items: [
       { to: '/documents', label: 'Espace documentaire', icon: FolderArchive },
+      { to: '/kanban', label: 'Tableau Kanban', icon: LayoutGrid },
       { to: '/messagerie', label: 'Messagerie', icon: Mail },
       { to: '/recrutement', label: 'Recrutement', icon: UserPlus, managerOnly: true },
     ],

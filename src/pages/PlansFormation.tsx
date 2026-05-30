@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Wand2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Wand as Wand2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -67,7 +67,8 @@ export default function PlansFormation() {
 
   const remove = async (p: PlanFormation) => {
     if (!confirm(`Supprimer le plan « ${p.nom} » ?`)) return;
-    await supabase.from('plans_formation').delete().eq('id', p.id);
+    const { error } = await supabase.from('plans_formation').delete().eq('id', p.id);
+    if (error) { alert(error.message); return; }
     refresh();
   };
 

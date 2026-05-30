@@ -44,7 +44,8 @@ export default function Formations() {
 
   const remove = async (f: Formation) => {
     if (!confirm(`Supprimer « ${f.intitule} » ?`)) return;
-    await supabase.from('formations').delete().eq('id', f.id);
+    const { error } = await supabase.from('formations').delete().eq('id', f.id);
+    if (error) { alert(error.message); return; }
     refresh();
   };
 
