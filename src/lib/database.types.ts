@@ -132,7 +132,7 @@ export type TicketPriorite = 'faible' | 'normale' | 'haute' | 'critique';
 export type Ticket = Timestamps & {
   id: string; type: TicketType; titre: string; description: string;
   statut: TicketStatut; priorite: TicketPriorite | null;
-  created_by: string; admin_note: string | null;
+  created_by: string; admin_note: string | null; screenshot_url: string | null;
 };
 export type TicketVote = {
   ticket_id: string; user_id: string; created_at: string;

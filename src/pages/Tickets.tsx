@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Bug, Lightbulb, Plus, ThumbsUp, ChevronRight, TriangleAlert as AlertTriangle, Clock, CircleCheck as CheckCircle2, Circle as XCircle, Loader as Loader2 } from 'lucide-react';
+import { Bug, Lightbulb, Plus, ThumbsUp, ChevronRight, TriangleAlert as AlertTriangle, Clock, CircleCheck as CheckCircle2, Circle as XCircle, Loader as Loader2, Image as ImageIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -225,6 +225,21 @@ function DetailModal({
           <p className="whitespace-pre-wrap text-sm text-fg leading-relaxed">{ticket.description}</p>
         </div>
 
+        {/* Capture d'écran */}
+        {ticket.screenshot_url && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Capture d'écran</p>
+            <a href={ticket.screenshot_url} target="_blank" rel="noopener noreferrer">
+              <img
+                src={ticket.screenshot_url}
+                alt="Capture"
+                className="w-full rounded-lg border border-line object-contain max-h-64 bg-surface-2 hover:opacity-90 transition cursor-zoom-in"
+              />
+            </a>
+            <p className="mt-1 text-xs text-muted">Cliquer pour agrandir</p>
+          </div>
+        )}
+
         {/* Votes (propositions) */}
         {ticket.type === 'proposition' && (
           <div className="flex items-center gap-3">
@@ -302,6 +317,11 @@ function TicketCard({
             {ticket.priorite && <PrioriteBadge priorite={ticket.priorite} />}
             {ticket.admin_note && (
               <Badge className="bg-brand-500/10 text-brand-600 dark:text-brand-400">Réponse</Badge>
+            )}
+            {ticket.screenshot_url && (
+              <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <ImageIcon className="h-2.5 w-2.5" />capture
+              </Badge>
             )}
           </div>
           <p className="font-medium text-fg group-hover:text-brand-600 dark:group-hover:text-brand-400 transition">

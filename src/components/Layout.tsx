@@ -6,6 +6,7 @@ import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
+import BugReporter from '@/components/BugReporter';
 
 interface NavItem {
   to: string;
@@ -163,6 +164,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      <BugReporter />
     </div>
   );
 }
