@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, DownloadCloud, FileSpreadsheet, UserCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -142,10 +142,10 @@ export default function Contacts() {
         subtitle="Prospects, apprenants et interlocuteurs (CRM 4.1)"
         actions={
           <>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importFile} />
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importFile} />
             <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
               <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
-              {importing ? 'Import…' : 'Importer Excel/CSV'}
+              {importing ? 'Import…' : 'Importer CSV'}
             </Button>
             <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
               <DownloadCloud className="h-4 w-4" /> Sheets

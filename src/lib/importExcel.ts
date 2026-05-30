@@ -1,13 +1,56 @@
-import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
 
 type Row = Record<string, string>;
 
+/**
+ * Parse un fichier CSV (virgule, point-virgule ou tabulation) en tableau de lignes-objet.
+ * Gère les champs entre guillemets et les séparateurs multiples.
+ */
 export async function parseSpreadsheet(file: File): Promise<Row[]> {
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<Row>(ws, { defval: '', raw: false });
+  const text = await file.text();
+  return parseCsv(text);
+}
+
+function parseCsv(text: string): Row[] {
+  // Normalise les fins de ligne, supprime les lignes vides en fin
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd().split('\n');
+  if (lines.length < 2) return [];
+
+  // Détecte le séparateur dominant sur la 1re ligne
+  const firstLine = lines[0];
+  const sep = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ',';
+
+  const headers = splitLine(firstLine, sep).map((h) => h.trim());
+
+  return lines.slice(1).reduce<Row[]>((acc, line) => {
+    if (!line.trim()) return acc;
+    const cells = splitLine(line, sep);
+    const row: Row = {};
+    headers.forEach((h, i) => { row[h] = (cells[i] ?? '').trim(); });
+    acc.push(row);
+    return acc;
+  }, []);
+}
+
+// Découpe une ligne CSV en tenant compte des champs entre guillemets
+function splitLine(line: string, sep: string): string[] {
+  const result: string[] = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; } // guillemet escapé
+      else inQuote = !inQuote;
+    } else if (ch === sep && !inQuote) {
+      result.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
 }
 
 function splitName(full: string): { prenom: string | null; nom: string } {
@@ -23,7 +66,6 @@ function notesFrom(row: Row, skip: Set<string>): string {
     .join('\n');
 }
 
-// Récupère une valeur quel que soit le libellé exact de colonne (tolérant).
 function pick(row: Row, ...keys: string[]): string {
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
   const wanted = keys.map(norm);
@@ -35,7 +77,6 @@ function pick(row: Row, ...keys: string[]): string {
 
 export interface ImportResult { lus: number; importes: number }
 
-/** Importe des candidatures (« Chargé de formation ») depuis un fichier. */
 export async function importCandidatsFile(file: File): Promise<ImportResult> {
   const rows = await parseSpreadsheet(file);
 
@@ -73,7 +114,6 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
 
   let importes = 0;
   if (payloads.length) {
-    // ignoreDuplicates : n'insère que les NOUVEAUX (ne réécrit pas les existants)
     const { data, error } = await supabase.from('candidats')
       .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: true }).select('id');
     if (error) throw new Error(error.message);
@@ -82,22 +122,15 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
   return { lus: rows.length, importes };
 }
 
-/**
- * Importe des prospects depuis un fichier.
- * - commentaires conservés en notes ;
- * - affectation **round-robin** sur les conseillers actifs ;
- * - si aucun conseiller : « non affecté » (owner null) -> attribution manuelle admin.
- */
 export async function importProspectsFile(file: File): Promise<ImportResult> {
   const rows = await parseSpreadsheet(file);
   const skip = new Set(['full_name', 'company_name', 'phone', '', 'email', 'ville', 'lead_status']);
 
-  // Conseillers actifs pour la répartition round-robin
   const { data: cons } = await supabase.from('profiles')
     .select('id').eq('role', 'conseiller').eq('actif', true);
   const conseillers = (cons ?? []).map((c) => c.id);
 
-  let rr = 0; // index round-robin
+  let rr = 0;
   const payloads = rows
     .map((r) => {
       const fullName = pick(r, 'full_name', 'nom complet', 'name', 'nom');
@@ -128,7 +161,6 @@ export async function importProspectsFile(file: File): Promise<ImportResult> {
 
   let importes = 0;
   if (payloads.length) {
-    // ignoreDuplicates : préserve les affectations déjà faites lors des ré-imports
     const { data, error } = await supabase.from('contacts')
       .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: true }).select('id');
     if (error) throw new Error(error.message);

@@ -120,7 +120,7 @@ export default function Recrutement() {
         subtitle="Offres et suivi des candidats — chargés de formation (4.4)"
         actions={
           <>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importFile} />
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importFile} />
             <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
               <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
               {importing ? 'Import…' : 'Importer Excel/CSV'}
