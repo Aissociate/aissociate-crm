@@ -124,6 +124,19 @@ export type SessionParticipant = {
   id: string; session_id: string; contact_id: string | null; nom: string; prenom: string | null;
   email: string | null; statut: ParticipantStatut; created_at: string;
 };
+export type TicketType = 'bug' | 'proposition';
+export type TicketStatut = 'ouvert' | 'en_cours' | 'resolu' | 'refuse';
+export type TicketPriorite = 'faible' | 'normale' | 'haute' | 'critique';
+
+export type Ticket = Timestamps & {
+  id: string; type: TicketType; titre: string; description: string;
+  statut: TicketStatut; priorite: TicketPriorite | null;
+  created_by: string; admin_note: string | null;
+};
+export type TicketVote = {
+  ticket_id: string; user_id: string; created_at: string;
+};
+
 export type AuditLog = {
   id: string; user_id: string | null; action: string; entite: string;
   entite_id: string | null; details: Record<string, unknown> | null; created_at: string;
@@ -166,6 +179,8 @@ export type Database = {
       candidats: TableShape<Candidat>;
       sessions_formation: TableShape<SessionFormation>;
       session_participants: TableShape<SessionParticipant>;
+      tickets: TableShape<Ticket>;
+      ticket_votes: TableShape<TicketVote>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
     };

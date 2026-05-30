@@ -21,6 +21,7 @@ import Recrutement from '@/pages/Recrutement';
 import Statistiques from '@/pages/Statistiques';
 import Administration from '@/pages/Administration';
 import Parametres from '@/pages/Parametres';
+import Tickets from '@/pages/Tickets';
 
 export default function App() {
   const { configured } = useAuth();
@@ -73,6 +74,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/tickets" element={<Tickets />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

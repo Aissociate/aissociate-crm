@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, UserPlus, ChartBar as BarChart3, LayoutGrid, CalendarDays, Settings, ShieldCheck, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, UserPlus, ChartBar as BarChart3, LayoutGrid, CalendarDays, Settings, ShieldCheck, LogOut, Menu, X, Bug } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn } from '@/lib/utils';
@@ -54,6 +54,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/administration', label: 'Administration', icon: ShieldCheck, adminOnly: true },
       { to: '/parametres', label: 'Paramètres', icon: Settings, adminOnly: true },
+      { to: '/tickets', label: 'Développement', icon: Bug },
     ],
   },
 ];
