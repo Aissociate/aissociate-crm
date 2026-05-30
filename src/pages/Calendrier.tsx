@@ -14,7 +14,7 @@ import { PageHeader, Button, Modal, Field, Spinner } from '@/components/ui';
 import { MODALITES } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
 import type {
-  SessionFormation, SessionParticipant, ParticipantStatut, Formation, Contact,
+  SessionFormation, SessionParticipant, ParticipantStatut, Formation, Contact, Formateur,
 } from '@/lib/database.types';
 
 const COULEURS = ['#ea6a1e', '#10b981', '#6366f1', '#ef4444', '#0ea5e9', '#a855f7', '#64748b'];
@@ -28,11 +28,12 @@ const toInput = (iso: string | null | undefined) =>
   iso ? format(parseISO(iso), "yyyy-MM-dd'T'HH:mm") : '';
 
 type Form = {
-  id?: string; titre: string; formation_id: string | null; debut: string; fin: string;
-  lieu: string; modalite: string; formateur: string; couleur: string; notes: string;
+  id?: string; titre: string; formation_id: string | null; formateur_id: string | null;
+  debut: string; fin: string; lieu: string; modalite: string; formateur: string;
+  couleur: string; notes: string;
 };
 const emptyForm = (day?: Date): Form => ({
-  titre: '', formation_id: null,
+  titre: '', formation_id: null, formateur_id: null,
   debut: day ? `${format(day, 'yyyy-MM-dd')}T09:00` : '',
   fin: day ? `${format(day, 'yyyy-MM-dd')}T17:00` : '',
   lieu: '', modalite: 'presentiel', formateur: '', couleur: COULEURS[0], notes: '',
@@ -46,6 +47,7 @@ export default function Calendrier() {
   });
   const formations = useCollection<Formation>('formations');
   const contacts = useCollection<Contact>('contacts');
+  const formateurs = useCollection<Formateur>('formateurs', { orderBy: { column: 'nom' } });
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>(emptyForm());
@@ -69,7 +71,7 @@ export default function Calendrier() {
   const openNew = (day?: Date) => { setForm(emptyForm(day)); setParticipants([]); setOpen(true); };
   const openEdit = async (s: SessionFormation) => {
     setForm({
-      id: s.id, titre: s.titre, formation_id: s.formation_id,
+      id: s.id, titre: s.titre, formation_id: s.formation_id, formateur_id: s.formateur_id ?? null,
       debut: toInput(s.date_debut), fin: toInput(s.date_fin),
       lieu: s.lieu ?? '', modalite: s.modalite, formateur: s.formateur ?? '',
       couleur: s.couleur, notes: s.notes ?? '',
@@ -81,11 +83,14 @@ export default function Calendrier() {
   const save = async () => {
     if (!form.titre || !form.debut) return;
     setSaving(true);
+    const formateurNom = form.formateur_id
+      ? (() => { const f = formateurs.data.find((x) => x.id === form.formateur_id); return f ? fullName(f.prenom, f.nom) : form.formateur; })()
+      : form.formateur;
     const payload = {
-      titre: form.titre, formation_id: form.formation_id || null,
+      titre: form.titre, formation_id: form.formation_id || null, formateur_id: form.formateur_id || null,
       date_debut: new Date(form.debut).toISOString(),
       date_fin: form.fin ? new Date(form.fin).toISOString() : null,
-      lieu: form.lieu || null, modalite: form.modalite, formateur: form.formateur || null,
+      lieu: form.lieu || null, modalite: form.modalite, formateur: formateurNom || null,
       couleur: form.couleur, notes: form.notes || null,
     };
     if (form.id) {
@@ -228,7 +233,10 @@ export default function Calendrier() {
             {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
           </select></Field>
           <Field label="Lieu"><input className="input" value={form.lieu} onChange={(e) => set('lieu', e.target.value)} /></Field>
-          <Field label="Formateur"><input className="input" value={form.formateur} onChange={(e) => set('formateur', e.target.value)} /></Field>
+          <Field label="Formateur"><select className="input" value={form.formateur_id ?? ''} onChange={(e) => set('formateur_id', e.target.value || null)}>
+            <option value="">— Non affecté —</option>
+            {formateurs.data.map((f) => <option key={f.id} value={f.id}>{fullName(f.prenom, f.nom)}</option>)}
+          </select></Field>
           <div className="col-span-2">
             <Field label="Couleur">
               <div className="flex gap-2">

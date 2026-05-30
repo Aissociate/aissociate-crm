@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type Bucket = 'documents' | 'pieces' | 'cv';
+export type Bucket = 'documents' | 'pieces' | 'cv' | 'formateurs';
 
 const PUBLIC_BUCKETS: Bucket[] = ['documents'];
 

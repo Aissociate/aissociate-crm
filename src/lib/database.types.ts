@@ -116,10 +116,19 @@ export type Candidat = Timestamps & {
   score: number | null; notes: string | null; rgpd_consent: boolean; external_id: string | null;
   metadata: Record<string, string> | null;
 };
+export type Formateur = Timestamps & {
+  id: string; nom: string; prenom: string | null; email: string | null; telephone: string | null;
+  specialites: string | null; statut: string; notes: string | null;
+};
+export type FormateurDocument = {
+  id: string; formateur_id: string; titre: string; categorie: string;
+  fichier_url: string | null; version: number; created_by: string | null; created_at: string;
+};
 export type SessionFormation = Timestamps & {
   id: string; titre: string; formation_id: string | null; dossier_id: string | null;
   date_debut: string; date_fin: string | null; lieu: string | null; modalite: string;
-  formateur: string | null; couleur: string; notes: string | null; created_by: string | null;
+  formateur: string | null; formateur_id: string | null; couleur: string; notes: string | null;
+  created_by: string | null;
 };
 export type ParticipantStatut = 'inscrit' | 'present' | 'absent' | 'annule';
 export type SessionParticipant = {
@@ -183,6 +192,8 @@ export type Database = {
       session_participants: TableShape<SessionParticipant>;
       tickets: TableShape<Ticket>;
       ticket_votes: TableShape<TicketVote>;
+      formateurs: TableShape<Formateur>;
+      formateur_documents: TableShape<FormateurDocument>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
     };
