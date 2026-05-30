@@ -114,6 +114,16 @@ export type Candidat = Timestamps & {
   telephone: string | null; cv_url: string | null; statut: CandidatStatut;
   score: number | null; notes: string | null; rgpd_consent: boolean; external_id: string | null;
 };
+export type SessionFormation = Timestamps & {
+  id: string; titre: string; formation_id: string | null; dossier_id: string | null;
+  date_debut: string; date_fin: string | null; lieu: string | null; modalite: string;
+  formateur: string | null; couleur: string; notes: string | null; created_by: string | null;
+};
+export type ParticipantStatut = 'inscrit' | 'present' | 'absent' | 'annule';
+export type SessionParticipant = {
+  id: string; session_id: string; contact_id: string | null; nom: string; prenom: string | null;
+  email: string | null; statut: ParticipantStatut; created_at: string;
+};
 export type AuditLog = {
   id: string; user_id: string | null; action: string; entite: string;
   entite_id: string | null; details: Record<string, unknown> | null; created_at: string;
@@ -154,6 +164,8 @@ export type Database = {
       piece_versions: TableShape<PieceVersion>;
       offres_recrutement: TableShape<OffreRecrutement>;
       candidats: TableShape<Candidat>;
+      sessions_formation: TableShape<SessionFormation>;
+      session_participants: TableShape<SessionParticipant>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
     };
