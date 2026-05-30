@@ -1,11 +1,9 @@
+import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
 
 type Row = Record<string, string>;
 
-/** Lit la 1re feuille d'un fichier .xlsx / .xls / .csv en lignes objet.
- *  xlsx est chargé dynamiquement pour ne pas alourdir le bundle initial. */
 export async function parseSpreadsheet(file: File): Promise<Row[]> {
-  const XLSX = await import('xlsx');
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
