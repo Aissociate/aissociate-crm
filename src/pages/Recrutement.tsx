@@ -8,6 +8,7 @@ import { FileUpload, FileLink } from '@/components/FileUpload';
 import { CANDIDAT_STATUT_LABELS } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
 import { importCandidatsFile } from '@/lib/importExcel';
+import CandidatFiche from '@/components/CandidatFiche';
 import type { OffreRecrutement, Candidat, CandidatStatut } from '@/lib/database.types';
 
 const STATUTS: CandidatStatut[] = ['recu', 'preselection', 'entretien', 'retenu', 'refuse', 'onboarding'];
@@ -22,6 +23,7 @@ export default function Recrutement() {
   const [offreForm, setOffreForm] = useState<Partial<OffreRecrutement>>({});
   const [candOpen, setCandOpen] = useState(false);
   const [candForm, setCandForm] = useState<Partial<Candidat>>({});
+  const [fiche, setFiche] = useState<Candidat | null>(null);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -171,16 +173,35 @@ export default function Recrutement() {
             ) : (
               <div className="space-y-2">
                 {offreCandidats.map((c) => (
-                  <div key={c.id} className="card flex items-center gap-3 p-4">
+                  <div
+                    key={c.id}
+                    className="card flex cursor-pointer items-center gap-3 p-4 transition hover:border-brand-400"
+                    onClick={() => setFiche(c)}
+                  >
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-fg">{fullName(c.prenom, c.nom)}</p>
                       <p className="text-xs text-muted">{c.email}{c.telephone ? ` · ${c.telephone}` : ''}{c.score != null ? ` · score ${c.score}` : ''}</p>
                     </div>
-                    <select className="input max-w-[160px]" value={c.statut} onChange={(e) => setCandStatut(c, e.target.value as CandidatStatut)}>
+                    <select
+                      className="input max-w-[160px]"
+                      value={c.statut}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); setCandStatut(c, e.target.value as CandidatStatut); }}
+                    >
                       {STATUTS.map((s) => <option key={s} value={s}>{CANDIDAT_STATUT_LABELS[s]}</option>)}
                     </select>
-                    <button onClick={() => { setCandForm(c); setCandOpen(true); }} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => removeCand(c)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCandForm(c); setCandOpen(true); }}
+                      className="rounded p-1.5 text-muted hover:text-brand-600"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeCand(c); }}
+                      className="rounded p-1.5 text-muted hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -224,6 +245,16 @@ export default function Recrutement() {
           </label>
         </div>
       </Modal>
+
+      {fiche && (
+        <CandidatFiche
+          candidat={fiche}
+          offres={offres.data}
+          onClose={() => setFiche(null)}
+          onEdit={(c) => { setFiche(null); setCandForm(c); setCandOpen(true); }}
+          onUpdated={() => { candidats.refresh(); setFiche((prev) => prev ? { ...prev } : null); }}
+        />
+      )}
     </div>
   );
 }

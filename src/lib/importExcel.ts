@@ -108,6 +108,7 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
         telephone: pick(r, 'phone_number', 'phone', 'telephone') || null,
         statut: 'recu' as const,
         notes: notesFrom(r, skip) || null,
+        metadata: r,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
@@ -115,7 +116,7 @@ export async function importCandidatsFile(file: File): Promise<ImportResult> {
   let importes = 0;
   if (payloads.length) {
     const { data, error } = await supabase.from('candidats')
-      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: true }).select('id');
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id');
     if (error) throw new Error(error.message);
     importes = data?.length ?? 0;
   }

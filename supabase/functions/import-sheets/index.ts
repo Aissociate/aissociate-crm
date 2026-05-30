@@ -98,6 +98,7 @@ Deno.serve(async (req: Request) => {
             telephone: r.phone_number || null,
             statut: "recu" as const,
             notes: notesFrom(r, skip) || null,
+            metadata: r,
           };
         });
 

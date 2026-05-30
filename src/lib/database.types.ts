@@ -114,6 +114,7 @@ export type Candidat = Timestamps & {
   id: string; offre_id: string | null; nom: string; prenom: string | null; email: string | null;
   telephone: string | null; cv_url: string | null; statut: CandidatStatut;
   score: number | null; notes: string | null; rgpd_consent: boolean; external_id: string | null;
+  metadata: Record<string, string> | null;
 };
 export type SessionFormation = Timestamps & {
   id: string; titre: string; formation_id: string | null; dossier_id: string | null;
