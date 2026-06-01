@@ -17,6 +17,7 @@ interface ImapConfig {
 }
 
 // Priorité : table parametres (cle='imap'), puis secrets Supabase en repli.
+// Port 993 → SSL/TLS (secure=true) ; port 143 → STARTTLS (secure=false).
 async function loadImap(sb: ReturnType<typeof createClient>): Promise<ImapConfig | null> {
   const { data } = await sb.from("parametres").select("valeur").eq("cle", "imap").maybeSingle();
   const c = (data?.valeur ?? {}) as Record<string, unknown>;

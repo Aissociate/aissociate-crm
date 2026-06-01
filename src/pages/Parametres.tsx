@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 
@@ -37,7 +37,7 @@ export default function Parametres() {
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
-        if (row.cle === 'imap') setImap((row.valeur as Imap) ?? {});
+        if (row.cle === 'imap') setImap({ port: 993, ...((row.valeur as Imap) ?? {}) });
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
       }
       setLoading(false);
