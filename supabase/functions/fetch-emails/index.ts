@@ -26,7 +26,7 @@ async function loadImap(sb: ReturnType<typeof createClient>): Promise<ImapCfg | 
 // Using Deno.connectTls ensures async DNS + TLS so setTimeout always fires.
 class DenoImap {
   private enc = new TextEncoder();
-  private dec = new TextDecoder("binary");
+  private dec = new TextDecoder("latin1");
   private buf = new Uint8Array(0);
   private tagN = 0;
 
