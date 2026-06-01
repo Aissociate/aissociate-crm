@@ -115,6 +115,14 @@ export type Candidat = Timestamps & {
   telephone: string | null; cv_url: string | null; statut: CandidatStatut;
   score: number | null; notes: string | null; rgpd_consent: boolean; external_id: string | null;
   metadata: Record<string, string> | null;
+  // Processus de recrutement (grille métier)
+  ville: string | null; statut_entreprise: string | null; siret: string | null;
+  document_identite: boolean; profil_details: string | null;
+  historique: string | null; prochaine_action: string | null; date_prochaine_action: string | null;
+  note_experience: number | null; note_conversation: number | null; note_autonomie: number | null;
+  note_comprehension: number | null; note_motivation: number | null; score_total: number;
+  avis: string | null;
+  contract_etape1: boolean; contract_etape2: boolean; contract_etape3: boolean; contract_etape4: boolean;
 };
 export type Formateur = Timestamps & {
   id: string; nom: string; prenom: string | null; email: string | null; telephone: string | null;

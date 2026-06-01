@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Mail, Phone, FileText, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Star, TableProperties, NotebookPen, Save, ExternalLink } from 'lucide-react';
+import { X, Mail, Phone, FileText, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Star, TableProperties, NotebookPen, Save, ExternalLink, Building2, ClipboardList, SlidersHorizontal, FileSignature } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,23 @@ const META_SKIP = new Set([
   'ad_id', 'ad_name', 'adset_id', 'adset_name', 'campaign_id',
   'campaign_name', 'form_id', 'form_name', 'is_organic', 'platform', '',
 ]);
+
+// Grille de validation (critères notés sur 5) — d'après la feuille de suivi métier
+const CRITERES = [
+  { key: 'note_experience', label: 'Expérience' },
+  { key: 'note_conversation', label: 'Conversation' },
+  { key: 'note_autonomie', label: 'Autonomie' },
+  { key: 'note_comprehension', label: 'Compréhension' },
+  { key: 'note_motivation', label: 'Motivation' },
+] as const;
+const AVIS_OPTIONS = ['', 'favorable', 'réservé', 'défavorable'];
+// Étapes de contractualisation
+const CONTRACT_STEPS = [
+  { key: 'contract_etape1', label: 'Proposition envoyée' },
+  { key: 'contract_etape2', label: 'Contrat envoyé' },
+  { key: 'contract_etape3', label: 'Contrat signé' },
+  { key: 'contract_etape4', label: 'Démarrage / onboarding' },
+] as const;
 
 const STATUT_COLORS: Record<CandidatStatut, string> = {
   recu:         'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
@@ -91,6 +108,32 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
     await supabase.from('candidats').update({ statut: s }).eq('id', c.id);
     onUpdated();
   };
+
+  // ── Processus de recrutement (grille métier) ─────────────────────────────────
+  const [proc, setProc] = useState({
+    statut_entreprise: c.statut_entreprise ?? '', siret: c.siret ?? '',
+    document_identite: c.document_identite, profil_details: c.profil_details ?? '',
+    historique: c.historique ?? '', prochaine_action: c.prochaine_action ?? '',
+    date_prochaine_action: c.date_prochaine_action ?? '',
+    note_experience: c.note_experience ?? 0, note_conversation: c.note_conversation ?? 0,
+    note_autonomie: c.note_autonomie ?? 0, note_comprehension: c.note_comprehension ?? 0,
+    note_motivation: c.note_motivation ?? 0, avis: c.avis ?? '',
+  });
+  const setP = (k: string, v: unknown) => setProc((p) => ({ ...p, [k]: v }));
+  const [savingSec, setSavingSec] = useState<string | null>(null);
+  const saveSection = async (key: string, fields: Partial<Candidat>) => {
+    setSavingSec(key);
+    await supabase.from('candidats').update(fields).eq('id', c.id);
+    setSavingSec(null);
+    onUpdated();
+  };
+  const total5 = CRITERES.reduce((s, cr) => s + (Number((proc as Record<string, unknown>)[cr.key]) || 0), 0);
+  const score100 = Math.round((total5 / 25) * 100);
+  const toggleContract = async (key: keyof Candidat, val: boolean) => {
+    await supabase.from('candidats').update({ [key]: !val } as Partial<Candidat>).eq('id', c.id);
+    onUpdated();
+  };
+  const contractDone = CONTRACT_STEPS.filter((s) => c[s.key]).length;
 
   // ── Questionnaire ─────────────────────────────────────────────────────────────
   const metaEntries = c.metadata
@@ -212,6 +255,41 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
             </div>
           </section>
 
+          {/* Profil administratif */}
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Profil administratif</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Statut entreprise</label><input className="input" value={proc.statut_entreprise} onChange={(e) => setP('statut_entreprise', e.target.value)} /></div>
+              <div><label className="label">SIRET</label><input className="input" value={proc.siret} onChange={(e) => setP('siret', e.target.value)} /></div>
+              <label className="col-span-2 flex items-center gap-2 text-sm text-fg">
+                <input type="checkbox" checked={proc.document_identite} onChange={(e) => setP('document_identite', e.target.checked)} /> Document d'identité fourni
+              </label>
+              <div className="col-span-2"><label className="label">Détails</label><textarea className="input" rows={2} value={proc.profil_details} onChange={(e) => setP('profil_details', e.target.value)} /></div>
+            </div>
+            <button onClick={() => saveSection('profil', { statut_entreprise: proc.statut_entreprise || null, siret: proc.siret || null, document_identite: proc.document_identite, profil_details: proc.profil_details || null })}
+              disabled={savingSec === 'profil'} className="btn-secondary mt-2 text-sm py-1.5"><Save className="h-3.5 w-3.5" /> {savingSec === 'profil' ? '…' : 'Enregistrer'}</button>
+          </section>
+
+          {/* Suivi recrutement */}
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-muted" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Suivi recrutement</h3>
+            </div>
+            <div className="space-y-3">
+              <div><label className="label">Historique</label><textarea className="input" rows={2} value={proc.historique} onChange={(e) => setP('historique', e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">Prochaine action</label><input className="input" value={proc.prochaine_action} onChange={(e) => setP('prochaine_action', e.target.value)} /></div>
+                <div><label className="label">Date</label><input className="input" type="date" value={proc.date_prochaine_action ?? ''} onChange={(e) => setP('date_prochaine_action', e.target.value)} /></div>
+              </div>
+            </div>
+            <button onClick={() => saveSection('suivi', { historique: proc.historique || null, prochaine_action: proc.prochaine_action || null, date_prochaine_action: proc.date_prochaine_action || null })}
+              disabled={savingSec === 'suivi'} className="btn-secondary mt-2 text-sm py-1.5"><Save className="h-3.5 w-3.5" /> {savingSec === 'suivi' ? '…' : 'Enregistrer'}</button>
+          </section>
+
           {/* Questionnaire */}
           {hasQuestionnaire && (
             <section>
@@ -243,6 +321,74 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
               )}
             </section>
           )}
+
+          {/* Grille de validation */}
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-muted" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Grille de validation</h3>
+            </div>
+            <div className="space-y-2">
+              {CRITERES.map((cr) => {
+                const val = Number((proc as Record<string, unknown>)[cr.key]) || 0;
+                return (
+                  <div key={cr.key} className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-fg">{cr.label}</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button key={n} onClick={() => setP(cr.key, n)}
+                          className="p-0.5" title={`${n}/5`}>
+                          <Star className={cn('h-4 w-4', n <= val ? 'fill-amber-400 text-amber-400' : 'text-muted')} />
+                        </button>
+                      ))}
+                      <button onClick={() => setP(cr.key, 0)} className="ml-1 text-xs text-muted hover:text-fg" title="Réinitialiser">×</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
+              <span className="text-sm font-medium text-fg">Score total</span>
+              <span className="text-sm font-bold text-brand-600 dark:text-brand-400">{total5} / 25 · {score100}/100</span>
+            </div>
+            <div className="mt-2">
+              <label className="label">Avis</label>
+              <select className="input" value={proc.avis} onChange={(e) => setP('avis', e.target.value)}>
+                {AVIS_OPTIONS.map((a) => <option key={a} value={a}>{a ? a.charAt(0).toUpperCase() + a.slice(1) : '—'}</option>)}
+              </select>
+            </div>
+            <button
+              onClick={() => saveSection('grille', {
+                note_experience: proc.note_experience, note_conversation: proc.note_conversation,
+                note_autonomie: proc.note_autonomie, note_comprehension: proc.note_comprehension,
+                note_motivation: proc.note_motivation, score_total: total5, score: score100, avis: proc.avis || null,
+              })}
+              disabled={savingSec === 'grille'} className="btn-secondary mt-2 text-sm py-1.5">
+              <Save className="h-3.5 w-3.5" /> {savingSec === 'grille' ? '…' : 'Enregistrer l\'évaluation'}
+            </button>
+          </section>
+
+          {/* Contractualisation */}
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSignature className="h-4 w-4 text-muted" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Contractualisation</h3>
+              </div>
+              <span className="text-xs text-muted">{contractDone}/4</span>
+            </div>
+            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(contractDone / 4) * 100}%` }} />
+            </div>
+            <div className="space-y-1.5">
+              {CONTRACT_STEPS.map((s) => (
+                <label key={s.key} className="flex items-center gap-2 text-sm text-fg">
+                  <input type="checkbox" checked={c[s.key]} onChange={() => toggleContract(s.key, c[s.key])} />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+          </section>
 
           {/* Notes du recruteur */}
           <section>
