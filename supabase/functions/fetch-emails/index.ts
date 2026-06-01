@@ -45,13 +45,25 @@ Deno.serve(async (req: Request) => {
       secure: port === 993,
       auth: { user, pass },
       logger: false,
+      // Time-outs pour éviter une synchro bloquée à l'infini
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
+      disableAutoIdle: true,
     });
-    await client.connect();
+    // Garde-fou : abandonne la connexion si elle dépasse 20 s
+    await Promise.race([
+      client.connect(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("Connexion IMAP : délai dépassé (hôte/port/identifiants ?)")), 20000)),
+    ]);
 
+    const MAX = 30; // messages traités par exécution (les plus récents non lus)
     let imported = 0;
     const lock = await client.getMailboxLock("INBOX");
     try {
-      for await (const msg of client.fetch({ seen: false }, { envelope: true, source: true })) {
+      // On borne le travail : recherche des non lus, puis seulement les MAX derniers
+      const uids = (await client.search({ seen: false }, { uid: true })) || [];
+      const recent = uids.slice(-MAX);
+      for await (const msg of (recent.length ? client.fetch(recent, { envelope: true, source: true }, { uid: true }) : [])) {
         const parsed = await simpleParser(msg.source as Uint8Array);
         const messageId = parsed.messageId ?? `imap-${msg.uid}`;
         const from = parsed.from?.text ?? msg.envelope?.from?.[0]?.address ?? null;

@@ -103,16 +103,23 @@ export default function Messagerie() {
   // Synchronise la boîte de réception via l'Edge Function IMAP fetch-emails.
   const syncInbox = async () => {
     setSyncing(true);
-    const { data: res, error } = await supabase.functions.invoke('fetch-emails');
+    // Garde-fou : la synchro ne peut pas rester infinie (timeout 90 s)
+    const timeout = new Promise<{ data: null; error: { message: string } }>(
+      (resolve) => setTimeout(() => resolve({ data: null, error: { message: '__timeout__' } }), 90000),
+    );
+    const result = await Promise.race([supabase.functions.invoke('fetch-emails'), timeout]) as { data: unknown; error: { message: string } | null };
     setSyncing(false);
-    if (error) {
-      alert('Réception IMAP indisponible (Edge Function "fetch-emails" non déployée ou secrets IMAP manquants).');
+    if (result.error) {
+      alert(result.error.message === '__timeout__'
+        ? "La synchronisation a expiré (90 s). Vérifiez la configuration IMAP (hôte/port/identifiants) dans Paramètres et le déploiement de « fetch-emails »."
+        : "Réception indisponible : déployez « fetch-emails » et configurez l'IMAP (Paramètres ou secrets).");
       return;
     }
-    const n = (res as { imported?: number })?.imported ?? 0;
+    const n = (result.data as { imported?: number; error?: string } | null);
+    if (n?.error) { alert(`Réception : ${n.error}`); return; }
     setTab('entrant');
     refresh();
-    alert(`${n} nouveau(x) message(s) importé(s).`);
+    alert(`${n?.imported ?? 0} nouveau(x) message(s) importé(s).`);
   };
 
   const messages = data.filter((e) =>
