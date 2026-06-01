@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
 
     const cfg = await loadImap(sb);
     if (!cfg) {
-      return json({ error: "Configuration IMAP incomplète (Paramètres → Serveur IMAP)" }, 500);
+      return json({ ok: false, error: "Configuration IMAP incomplète (Paramètres → Serveur IMAP)" });
     }
 
     // Connexion TLS native Deno — DNS et TLS sont entièrement async, les timeouts fonctionnent.
@@ -193,7 +193,7 @@ Deno.serve(async (req: Request) => {
       throw err;
     }
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    return json({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 });
 
