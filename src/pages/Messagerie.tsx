@@ -1,22 +1,46 @@
 import { useState, useEffect } from 'react';
-import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw, CircleCheck as CheckCircle2 } from 'lucide-react';
+import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw, CircleCheck as CheckCircle2, UserCog } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/components/ui';
-import { formatDate } from '@/lib/utils';
-import type { Email, Contact, Dossier, EmailDirection } from '@/lib/database.types';
+import { formatDate, fullName } from '@/lib/utils';
+import type { Email, Contact, Dossier, EmailDirection, Profile } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
 
 export default function Messagerie() {
-  const { session, profile } = useAuth();
+  const { session, profile, isManager } = useAuth();
   const { data, loading, refresh } = useCollection<Email>('emails', {
     orderBy: { column: 'created_at', ascending: false },
   });
   const contacts = useCollection<Contact>('contacts');
   const dossiers = useCollection<Dossier>('dossiers');
+  const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
   const [smtpOk, setSmtpOk] = useState<boolean | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState(''); // '', 'none' (direction), ou un owner_id
+
+  const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
+  const contactName = (id: string | null) => { const c = contacts.data.find((x) => x.id === id); return c ? fullName(c.prenom, c.nom) : null; };
+
+  // ── Affectation d'un e-mail (ou de toute la conversation) à un contact ──
+  const [assignTarget, setAssignTarget] = useState<Email | null>(null);
+  const [assignContact, setAssignContact] = useState('');
+  const [assignWhole, setAssignWhole] = useState(true);
+  const openAssign = (e: Email) => { setAssignTarget(e); setAssignContact(e.contact_id ?? ''); setAssignWhole(true); };
+  const doAssign = async () => {
+    if (!assignTarget) return;
+    const c = contacts.data.find((x) => x.id === assignContact);
+    const owner = c ? (c.responsable_id ?? c.owner_id ?? null) : null; // pas de contact -> direction
+    const fields = { contact_id: assignContact || null, owner_id: owner };
+    const q = supabase.from('emails').update(fields);
+    const { error } = assignWhole && assignTarget.expediteur
+      ? await q.eq('expediteur', assignTarget.expediteur)
+      : await q.eq('id', assignTarget.id);
+    if (error) { alert(error.message); return; }
+    setAssignTarget(null);
+    refresh();
+  };
 
   useEffect(() => {
     supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle().then(({ data }) => {
@@ -91,7 +115,9 @@ export default function Messagerie() {
     alert(`${n} nouveau(x) message(s) importé(s).`);
   };
 
-  const messages = data.filter((e) => e.direction === tab);
+  const messages = data.filter((e) =>
+    e.direction === tab &&
+    (!ownerFilter || (ownerFilter === 'none' ? !e.owner_id : e.owner_id === ownerFilter)));
 
   return (
     <div>
@@ -124,14 +150,23 @@ export default function Messagerie() {
         </div>
       )}
 
-      <div className="mb-4 flex gap-1 border-b border-line">
-        {([['sortant', 'Envoyés', Send], ['entrant', 'Reçus', Inbox]] as const).map(([key, label, Icon]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-muted hover:text-fg'}`}>
-            <Icon className="h-4 w-4" /> {label}
-            <span className="rounded-full bg-surface-2 px-1.5 text-xs text-muted">{data.filter((e) => e.direction === key).length}</span>
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-line">
+        <div className="flex gap-1">
+          {([['sortant', 'Envoyés', Send], ['entrant', 'Reçus', Inbox]] as const).map(([key, label, Icon]) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-muted hover:text-fg'}`}>
+              <Icon className="h-4 w-4" /> {label}
+              <span className="rounded-full bg-surface-2 px-1.5 text-xs text-muted">{data.filter((e) => e.direction === key).length}</span>
+            </button>
+          ))}
+        </div>
+        {isManager && (
+          <select className="input mb-1 max-w-[220px] py-1 text-sm" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+            <option value="">Tous les conseillers</option>
+            <option value="none">Direction (non affectés)</option>
+            {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+          </select>
+        )}
       </div>
 
       {loading ? (
@@ -158,8 +193,17 @@ export default function Messagerie() {
                     : `À : ${e.destinataires.join(', ') || '—'}`} · {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
                 </p>
                 {e.corps && <p className="mt-1 line-clamp-2 text-sm text-muted">{e.corps}</p>}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                  {e.contact_id && <Badge className="bg-brand-50 text-brand-700">{contactName(e.contact_id) ?? 'Contact'}</Badge>}
+                  <Badge className={e.owner_id ? 'bg-surface-2 text-muted' : 'bg-amber-100 text-amber-700'}>
+                    {e.owner_id ? (ownerName(e.owner_id) ?? 'Conseiller') : 'Direction'}
+                  </Badge>
+                </div>
               </div>
-              <button onClick={() => remove(e)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <button onClick={() => openAssign(e)} title="Affecter à un contact/conseiller" className="rounded p-1.5 text-muted hover:text-brand-600"><UserCog className="h-4 w-4" /></button>
+                <button onClick={() => remove(e)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+              </div>
             </div>
           ))}
         </div>
@@ -187,6 +231,28 @@ export default function Messagerie() {
           </select></Field>
           <Field label="Sujet" required><input className="input" value={sujet} onChange={(e) => setSujet(e.target.value)} /></Field>
           <Field label="Message"><textarea className="input" rows={6} value={corps} onChange={(e) => setCorps(e.target.value)} /></Field>
+        </div>
+      </Modal>
+
+      {/* Affectation d'un e-mail / d'une conversation à un contact (et son conseiller) */}
+      <Modal
+        open={!!assignTarget} onClose={() => setAssignTarget(null)} title="Affecter l'e-mail"
+        footer={<><Button variant="secondary" onClick={() => setAssignTarget(null)}>Annuler</Button><Button onClick={doAssign}>Affecter</Button></>}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            De : <strong className="text-fg">{assignTarget?.expediteur ?? '—'}</strong>
+          </p>
+          <Field label="Apprenant / prospect" hint="L'e-mail sera visible par le conseiller affecté à ce contact ; sinon par la direction">
+            <select className="input" value={assignContact} onChange={(e) => setAssignContact(e.target.value)}>
+              <option value="">— Direction (non affecté) —</option>
+              {contacts.data.map((c) => <option key={c.id} value={c.id}>{fullName(c.prenom, c.nom)}{c.email ? ` · ${c.email}` : ''}</option>)}
+            </select>
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-fg">
+            <input type="checkbox" checked={assignWhole} onChange={(e) => setAssignWhole(e.target.checked)} />
+            Appliquer à toute la conversation (tous les e-mails de cet expéditeur)
+          </label>
         </div>
       </Modal>
     </div>

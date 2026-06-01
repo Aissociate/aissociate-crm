@@ -55,13 +55,29 @@ Deno.serve(async (req: Request) => {
         const parsed = await simpleParser(msg.source as Uint8Array);
         const messageId = parsed.messageId ?? `imap-${msg.uid}`;
         const from = parsed.from?.text ?? msg.envelope?.from?.[0]?.address ?? null;
+        const fromAddr = parsed.from?.value?.[0]?.address ?? msg.envelope?.from?.[0]?.address ?? null;
         const to = (parsed.to?.value ?? []).map((a: { address?: string }) => a.address).filter(Boolean);
+
+        // Affectation : si l'expéditeur correspond à un contact, rattacher l'e-mail
+        // au contact et au conseiller affecté. Sinon owner_id = null -> direction.
+        let contactId: string | null = null;
+        let ownerId: string | null = null;
+        if (fromAddr) {
+          const { data: contact } = await supabase.from("contacts")
+            .select("id, owner_id, responsable_id").ilike("email", fromAddr).limit(1).maybeSingle();
+          if (contact) {
+            contactId = contact.id;
+            ownerId = contact.responsable_id ?? contact.owner_id ?? null;
+          }
+        }
 
         const { error } = await supabase.from("emails").insert({
           direction: "entrant",
           message_id: messageId,
           expediteur: from,
           destinataires: to,
+          contact_id: contactId,
+          owner_id: ownerId,
           sujet: parsed.subject ?? "(sans objet)",
           corps: parsed.text ?? parsed.html ?? "",
           statut: "recu",
