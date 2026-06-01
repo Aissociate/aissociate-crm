@@ -169,19 +169,23 @@ Deno.serve(async (req: Request) => {
             if (contact) { contactId = contact.id; ownerId = contact.owner_id ?? null; }
           }
 
-          const { error } = await sb.from("emails").insert({
-            direction: "entrant", message_id: messageId, expediteur: from,
-            destinataires: to, contact_id: contactId, owner_id: ownerId,
-            sujet: parsed.subject ?? "(sans objet)", corps: parsed.text ?? parsed.html ?? "",
-            statut: "recu", lu: false,
-            sent_at: parsed.date ? new Date(parsed.date).toISOString() : null,
-          });
+          const { error, data: rows } = await sb.from("emails").upsert(
+            {
+              direction: "entrant", message_id: messageId, expediteur: from,
+              destinataires: to, contact_id: contactId, owner_id: ownerId,
+              sujet: parsed.subject ?? "(sans objet)", corps: parsed.text ?? parsed.html ?? "",
+              statut: "recu", lu: false,
+              sent_at: parsed.date ? new Date(parsed.date).toISOString() : null,
+            },
+            { onConflict: "message_id", ignoreDuplicates: true },
+          ).select("id");
 
-          if (!error) {
-            imported++;
+          if (error) {
+            console.error("upsert error", error.message);
+          } else {
+            // rows is empty when the row was a duplicate (ignoreDuplicates)
+            if (rows && rows.length > 0) imported++;
             await imap.cmd(`UID STORE ${uid} +FLAGS (\\Seen)`);
-          } else if ((error as { code?: string }).code !== "23505") {
-            console.error("insert error", error.message);
           }
         }
       }
