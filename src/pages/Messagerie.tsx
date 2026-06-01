@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw } from 'lucide-react';
+import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw, X } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +23,8 @@ export default function Messagerie() {
   const [corps, setCorps] = useState('');
   const [dossierId, setDossierId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showInfo, setShowInfo] = useState(() => localStorage.getItem('msg_info_hidden') !== '1');
+  const dismissInfo = () => { setShowInfo(false); localStorage.setItem('msg_info_hidden', '1'); };
 
   const compose = () => { setDest(''); setSujet(''); setCorps(''); setDossierId(''); setOpen(true); };
 
@@ -40,8 +42,8 @@ export default function Messagerie() {
       if (fnError) {
         finalStatut = 'brouillon';
         alert(
-          'Envoi SMTP indisponible (Edge Function "send-email" non déployée ou secrets SMTP manquants).\n' +
-          'Le message a été enregistré en brouillon.',
+          "Envoi indisponible : déployez l'Edge Function « send-email » et configurez le SMTP " +
+          "(Paramètres › SMTP ou secrets Supabase). Le message a été enregistré en brouillon.",
         );
       }
     }
@@ -72,7 +74,7 @@ export default function Messagerie() {
     const { data: res, error } = await supabase.functions.invoke('fetch-emails');
     setSyncing(false);
     if (error) {
-      alert('Réception IMAP indisponible (Edge Function "fetch-emails" non déployée ou secrets IMAP manquants).');
+      alert("Réception indisponible : déployez l'Edge Function « fetch-emails » et configurez l'IMAP (Paramètres › IMAP ou secrets Supabase).");
       return;
     }
     const n = (res as { imported?: number })?.imported ?? 0;
@@ -98,15 +100,22 @@ export default function Messagerie() {
         }
       />
 
-      <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Envoi via l'Edge Function <strong>send-email</strong> (SMTP) et réception via
-          <strong> fetch-emails</strong> (IMAP). Déployez-les et renseignez les secrets
-          (<code>SMTP_*</code> / <code>IMAP_*</code>). Sans déploiement, l'envoi reste en brouillon
-          et la synchronisation est indisponible.
-        </p>
-      </div>
+      {showInfo && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+          <p className="flex-1">
+            Envoi (<strong>send-email</strong>) et réception (<strong>fetch-emails</strong>) passent par des
+            Edge Functions. La configuration SMTP/IMAP est lue depuis <strong>Paramètres</strong> (ou les
+            secrets Supabase). Dernière étape côté Supabase : déployer les fonctions —
+            <code className="mx-1">supabase functions deploy send-email</code> et
+            <code className="mx-1">fetch-emails</code>. Tant qu'elles ne sont pas déployées, l'envoi reste
+            en brouillon et la synchronisation renvoie une erreur.
+          </p>
+          <button onClick={dismissInfo} className="rounded p-0.5 text-muted hover:bg-surface hover:text-fg" title="Masquer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 flex gap-1 border-b border-line">
         {([['sortant', 'Envoyés', Send], ['entrant', 'Reçus', Inbox]] as const).map(([key, label, Icon]) => (
