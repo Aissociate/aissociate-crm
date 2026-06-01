@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 
 type Organisme = { nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
+type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
 
 function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
   return (
@@ -25,17 +26,19 @@ export default function Parametres() {
   const [organisme, setOrganisme] = useState<Organisme>({});
   const [smtp, setSmtp] = useState<Smtp>({});
   const [imap, setImap] = useState<Imap>({});
+  const [ai, setAi] = useState<Ai>({ model: 'anthropic/claude-opus-4.8' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
         if (row.cle === 'imap') setImap((row.valeur as Imap) ?? {});
+        if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
       }
       setLoading(false);
     })();
@@ -54,6 +57,7 @@ export default function Parametres() {
 
   const smtpOk = !!(smtp.host && smtp.user && smtp.password && smtp.from);
   const imapOk = !!(imap.host && imap.user && imap.password);
+  const aiOk = !!ai.openrouter_key;
 
   return (
     <div>
@@ -70,6 +74,8 @@ export default function Parametres() {
             detail={smtpOk ? 'Configuré ci-dessous.' : 'Hôte, utilisateur, mot de passe et adresse d\'expédition requis.'} />
           <StatusRow ok={imapOk} label="IMAP (réception d'e-mails)"
             detail={imapOk ? 'Configuré ci-dessous.' : 'Hôte, utilisateur et mot de passe requis.'} />
+          <StatusRow ok={aiOk} label="IA — génération de plans (OpenRouter)"
+            detail={aiOk ? 'Clé configurée (lue uniquement côté serveur).' : 'Clé OpenRouter requise (secret OPENROUTER_API_KEY ou ci-dessous).'} />
           <StatusRow ok={false} label="Import auto & cron (Supabase Vault)"
             detail="À définir dans Supabase → Vault : secrets project_url et service_role_key (pour pg_cron). Non vérifiable depuis l'app." />
         </div>
@@ -145,6 +151,38 @@ export default function Parametres() {
               </Button>
               {savedMsg === 'imap' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
             </div>
+          </div>
+        </Card>
+
+        {/* IA — génération de plans */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">IA — génération de plans (OpenRouter)</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Field label="Modèle" hint="ex. anthropic/claude-opus-4.8">
+              <input className="input" value={ai.model ?? ''} onChange={(e) => setAi({ ...ai, model: e.target.value })} />
+            </Field>
+            <Field label="Clé API OpenRouter" hint="Lue uniquement côté serveur (jamais envoyée au navigateur)">
+              <input className="input" type="password" value={ai.openrouter_key ?? ''} onChange={(e) => setAi({ ...ai, openrouter_key: e.target.value })} autoComplete="new-password" placeholder="sk-or-…" />
+            </Field>
+            <div className="lg:col-span-2">
+              <Field label="Prompt de génération (configurable)" hint="Doit demander une réponse JSON {titre, sections:[{titre,contenu}]}">
+                <textarea className="input" rows={6} value={ai.plan_prompt ?? ''} onChange={(e) => setAi({ ...ai, plan_prompt: e.target.value })} />
+              </Field>
+            </div>
+          </div>
+          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">
+            <strong>Sécurité :</strong> la clé est stockée dans une table à lecture <strong>réservée aux admins</strong> et
+            n'est utilisée que par l'Edge Function <code>generate-plan</code> (jamais exposée au navigateur).
+            Pour une sécurité maximale, définissez plutôt le secret Supabase <code>OPENROUTER_API_KEY</code> (prioritaire).
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={() => persist('ai', { provider: 'openrouter', ...ai })} disabled={saving === 'ai'}>
+              <Save className="h-4 w-4" /> {saving === 'ai' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+            {savedMsg === 'ai' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
           </div>
         </Card>
       </div>

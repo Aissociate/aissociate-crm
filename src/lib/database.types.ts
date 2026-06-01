@@ -130,6 +130,10 @@ export type SessionFormation = Timestamps & {
   formateur: string | null; formateur_id: string | null; couleur: string; notes: string | null;
   created_by: string | null;
 };
+export type PlanPdf = {
+  id: string; plan_id: string | null; titre: string; apprenant: string | null;
+  organisme: string | null; fichier_url: string | null; created_by: string | null; created_at: string;
+};
 export type ParticipantStatut = 'inscrit' | 'present' | 'absent' | 'annule';
 export type SessionParticipant = {
   id: string; session_id: string; contact_id: string | null; nom: string; prenom: string | null;
@@ -194,6 +198,7 @@ export type Database = {
       ticket_votes: TableShape<TicketVote>;
       formateurs: TableShape<Formateur>;
       formateur_documents: TableShape<FormateurDocument>;
+      plan_pdfs: TableShape<PlanPdf>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
     };

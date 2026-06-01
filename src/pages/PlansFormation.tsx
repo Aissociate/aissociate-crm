@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Wand as Wand2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Wand as Wand2, Sparkles } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { FileLink } from '@/components/FileUpload';
 import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
-import { formatDate } from '@/lib/utils';
-import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur } from '@/lib/database.types';
+import { formatDate, fullName } from '@/lib/utils';
+import { generatePlanPdf } from '@/lib/generatePlanPdf';
+import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur, PlanPdf } from '@/lib/database.types';
 
 const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
 const empty = (): Partial<PlanFormation> => ({
@@ -23,12 +25,49 @@ export default function PlansFormation() {
   const contacts = useCollection<Contact>('contacts');
   const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
+  const pdfs = useCollection<PlanPdf>('plan_pdfs', { orderBy: { column: 'created_at', ascending: false } });
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<PlanFormation>>(empty());
   const [contenuText, setContenuText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [genId, setGenId] = useState<string | null>(null); // plan en cours de génération
   const set = (k: keyof PlanFormation, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+
+  const cName = (id: string | null) => { const c = contacts.data.find((x) => x.id === id); return c ? fullName(c.prenom, c.nom) : ''; };
+  const eName = (id: string | null) => entreprises.data.find((x) => x.id === id)?.raison_sociale ?? '';
+  const fName = (id: string | null) => financeurs.data.find((x) => x.id === id)?.nom ?? '';
+  const formName = (id: string | null) => formations.data.find((x) => x.id === id)?.intitule ?? '';
+
+  // Génère un PDF structuré via l'IA (OpenRouter, côté serveur) à présenter au partenaire
+  const generatePdf = async (p: PlanFormation) => {
+    setGenId(p.id);
+    try {
+      const contexte = {
+        nom: p.nom, objectifs: p.objectifs, contenu: p.contenu, duree_heures: p.duree_heures,
+        modalite: p.modalite, formation: formName(p.formation_id),
+        apprenant: cName(p.contact_id), organisme: eName(p.entreprise_id), financeur: fName(p.financeur_id),
+      };
+      await generatePlanPdf({
+        planId: p.id, contexte,
+        apprenant: cName(p.contact_id),
+        organismePartenaire: eName(p.entreprise_id) || fName(p.financeur_id),
+        userId: session?.user.id ?? null,
+      });
+      pdfs.refresh();
+      alert('PDF généré et enregistré.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGenId(null);
+    }
+  };
+
+  const removePdf = async (d: PlanPdf) => {
+    if (!confirm(`Supprimer le PDF « ${d.titre} » ?`)) return;
+    await supabase.from('plan_pdfs').delete().eq('id', d.id);
+    pdfs.refresh();
+  };
 
   const openNew = () => { setForm(empty()); setContenuText(''); setOpen(true); };
   const openEdit = (p: PlanFormation) => { setForm(p); setContenuText((p.contenu ?? []).join('\n')); setOpen(true); };
@@ -105,6 +144,9 @@ export default function PlansFormation() {
               <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
+                  <Button variant="secondary" onClick={() => generatePdf(p)} disabled={genId === p.id} title="Générer un PDF structuré (IA)">
+                    <Sparkles className={`h-4 w-4 ${genId === p.id ? 'animate-pulse' : ''}`} /> {genId === p.id ? 'Génération…' : 'PDF'}
+                  </Button>
                   <button onClick={() => openEdit(p)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(p)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
@@ -113,6 +155,41 @@ export default function PlansFormation() {
           ))}
         </Table>
       )}
+
+      {/* PDF générés — listés par date, titre, apprenant, organisme */}
+      <div className="mt-8">
+        <h2 className="mb-3 flex items-center gap-2 font-semibold text-fg"><Sparkles className="h-4 w-4 text-brand-500" /> Plans PDF générés ({pdfs.data.length})</h2>
+        {pdfs.loading ? (
+          <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
+        ) : pdfs.data.length === 0 ? (
+          <EmptyState title="Aucun PDF généré" message="Cliquez sur « PDF » sur un plan pour générer un document à présenter au partenaire." />
+        ) : (
+          <Table head={
+            <tr>
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Titre</th>
+              <th className="px-4 py-3">Apprenant</th>
+              <th className="px-4 py-3">Organisme</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          }>
+            {pdfs.data.map((d) => (
+              <tr key={d.id} className="hover:bg-surface-2">
+                <td className="px-4 py-3 text-muted">{formatDate(d.created_at, 'dd/MM/yyyy HH:mm')}</td>
+                <td className="px-4 py-3 font-medium text-fg">{d.titre}</td>
+                <td className="px-4 py-3 text-muted">{d.apprenant || '—'}</td>
+                <td className="px-4 py-3 text-muted">{d.organisme || '—'}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-2">
+                    {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
+                    <button onClick={() => removePdf(d)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </div>
 
       <Modal
         open={open} onClose={() => setOpen(false)} wide
