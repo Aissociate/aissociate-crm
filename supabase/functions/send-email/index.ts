@@ -23,6 +23,7 @@ interface SmtpConfig {
 }
 
 // Secrets Supabase d'abord, puis table parametres (cle='smtp') en repli.
+// Port 465 → SSL/TLS (secure=true) ; port 587 → STARTTLS (secure=false).
 async function loadSmtp(): Promise<SmtpConfig> {
   const env = {
     host: Deno.env.get("SMTP_HOST"),
@@ -32,19 +33,22 @@ async function loadSmtp(): Promise<SmtpConfig> {
     from: Deno.env.get("SMTP_FROM"),
   };
   if (env.host && env.user && env.pass) {
-    return { ...env, from: env.from ?? env.user, port: env.port ?? 587, secure: env.port === 465 };
+    const port = env.port ?? 587;
+    return { ...env, from: env.from ?? env.user, port, secure: port === 465 };
   }
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data } = await sb.from("parametres").select("valeur").eq("cle", "smtp").maybeSingle();
   const c = (data?.valeur ?? {}) as Record<string, unknown>;
-  const port = Number(c.port) || (c.secure ? 465 : 587);
+  const port = Number(c.port) || 587;
+  // secure déduit du port : 465 = SSL, tout autre = STARTTLS
+  const secure = port === 465;
   return {
-    host: env.host ?? (c.host as string),
-    user: env.user ?? (c.user as string),
-    pass: env.pass ?? (c.password as string),
-    from: env.from ?? (c.from as string) ?? (c.user as string),
+    host: c.host as string,
+    user: c.user as string,
+    pass: c.password as string,
+    from: (c.from as string) ?? (c.user as string),
     port,
-    secure: Boolean(c.secure) || port === 465,
+    secure,
   };
 }
 

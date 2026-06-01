@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Mail, Send, Trash2, Info, Inbox, RefreshCw, CircleCheck as CheckCircle2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
 import type { Email, Contact, Dossier, EmailDirection } from '@/lib/database.types';
+
+type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
 
 export default function Messagerie() {
   const { session, profile } = useAuth();
@@ -14,6 +16,14 @@ export default function Messagerie() {
   });
   const contacts = useCollection<Contact>('contacts');
   const dossiers = useCollection<Dossier>('dossiers');
+  const [smtpOk, setSmtpOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle().then(({ data }) => {
+      const c = (data?.valeur ?? {}) as SmtpCfg;
+      setSmtpOk(!!(c.host && c.user && c.password && c.from));
+    });
+  }, []);
 
   const [tab, setTab] = useState<EmailDirection>('sortant');
   const [syncing, setSyncing] = useState(false);
@@ -40,7 +50,7 @@ export default function Messagerie() {
       if (fnError) {
         finalStatut = 'brouillon';
         alert(
-          'Envoi SMTP indisponible (Edge Function "send-email" non déployée ou secrets SMTP manquants).\n' +
+          'Envoi SMTP échoué. Vérifiez la configuration SMTP dans Paramètres (hôte, port, identifiants).\n' +
           'Le message a été enregistré en brouillon.',
         );
       }
@@ -98,15 +108,21 @@ export default function Messagerie() {
         }
       />
 
-      <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Envoi via l'Edge Function <strong>send-email</strong> (SMTP) et réception via
-          <strong> fetch-emails</strong> (IMAP). Déployez-les et renseignez les secrets
-          (<code>SMTP_*</code> / <code>IMAP_*</code>). Sans déploiement, l'envoi reste en brouillon
-          et la synchronisation est indisponible.
-        </p>
-      </div>
+      {smtpOk === false && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Configuration SMTP incomplète. Renseignez l'hôte, l'utilisateur, le mot de passe et
+            l'adresse d'expédition dans <strong>Paramètres → Serveur SMTP sortant</strong>.
+          </p>
+        </div>
+      )}
+      {smtpOk === true && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>SMTP configuré — l'envoi d'e-mails est opérationnel.</p>
+        </div>
+      )}
 
       <div className="mb-4 flex gap-1 border-b border-line">
         {([['sortant', 'Envoyés', Send], ['entrant', 'Reçus', Inbox]] as const).map(([key, label, Icon]) => (
