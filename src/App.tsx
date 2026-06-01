@@ -20,6 +20,7 @@ import Documents from '@/pages/Documents';
 import Messagerie from '@/pages/Messagerie';
 import Recrutement from '@/pages/Recrutement';
 import Statistiques from '@/pages/Statistiques';
+import ActionsAFaire from '@/pages/ActionsAFaire';
 import Administration from '@/pages/Administration';
 import Parametres from '@/pages/Parametres';
 import Tickets from '@/pages/Tickets';
@@ -60,6 +61,7 @@ export default function App() {
           }
         />
         <Route path="/statistiques" element={<Statistiques />} />
+        <Route path="/actions" element={<ActionsAFaire />} />
         <Route
           path="/administration"
           element={

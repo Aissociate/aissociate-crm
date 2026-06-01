@@ -4,11 +4,16 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState } from '@/components/ui';
-import { CONTACT_TYPE_LABELS } from '@/lib/constants';
-import { fullName } from '@/lib/utils';
+import { CONTACT_TYPE_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
+import { fullName, formatDate } from '@/lib/utils';
 import { importProspectsFile } from '@/lib/importExcel';
 import ContactFiche from '@/components/ContactFiche';
-import type { Contact, ContactType, Entreprise, Financeur, Profile } from '@/lib/database.types';
+import type {
+  Contact, ContactType, Entreprise, Financeur, Profile,
+  ContactAction, Opportunite, SessionParticipant, SessionFormation,
+} from '@/lib/database.types';
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
 
@@ -27,6 +32,28 @@ export default function Contacts() {
   const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
+  // Données de pilotage (prochaine action, pipeline, sessions)
+  const actionsCol = useCollection<ContactAction>('contact_actions', { orderBy: { column: 'date_action' } });
+  const oppsCol = useCollection<Opportunite>('opportunites');
+  const partsCol = useCollection<SessionParticipant>('session_participants');
+  const sessCol = useCollection<SessionFormation>('sessions_formation');
+
+  // Maps contact_id -> info de pilotage
+  const nextAction: Record<string, ContactAction> = {};
+  for (const a of actionsCol.data) if (!a.faite && !nextAction[a.contact_id]) nextAction[a.contact_id] = a;
+  const stageOf: Record<string, Opportunite['stage']> = {};
+  for (const o of oppsCol.data) if (o.contact_id && !['gagne', 'perdu'].includes(o.stage) && !stageOf[o.contact_id]) stageOf[o.contact_id] = o.stage;
+  const sessById = Object.fromEntries(sessCol.data.map((s) => [s.id, s]));
+  const nextSession: Record<string, SessionFormation> = {};
+  for (const p of partsCol.data) {
+    if (!p.contact_id) continue;
+    const s = sessById[p.session_id]; if (!s) continue;
+    const cur = nextSession[p.contact_id];
+    const better = !cur
+      || (s.date_debut >= TODAY && (cur.date_debut < TODAY || s.date_debut < cur.date_debut))
+      || (s.date_debut < TODAY && cur.date_debut < TODAY && s.date_debut > cur.date_debut);
+    if (better) nextSession[p.contact_id] = s;
+  }
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Contact>>(empty());
@@ -197,6 +224,7 @@ export default function Contacts() {
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Coordonnées</th>
             <th className="px-4 py-3">Affectation</th>
+            <th className="px-4 py-3">Pilotage</th>
             <th className="px-4 py-3 text-right">Actions</th>
           </tr>
         }>
@@ -230,6 +258,25 @@ export default function Contacts() {
                 ) : (
                   <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge className="bg-amber-100 text-amber-700">Non affecté</Badge>}</span>
                 )}
+              </td>
+              <td className="px-4 py-3 text-xs">
+                <div className="flex flex-col gap-1">
+                  {nextAction[c.id] ? (
+                    <span className={`flex items-center gap-1 ${nextAction[c.id].date_action < TODAY ? 'text-red-600 dark:text-red-400' : 'text-muted'}`}
+                      title={nextAction[c.id].description}>
+                      <span className="rounded bg-amber-500/15 px-1 text-amber-700 dark:text-amber-300">{formatDate(nextAction[c.id].date_action, 'dd/MM')}</span>
+                      <span className="max-w-[140px] truncate">{nextAction[c.id].description}</span>
+                    </span>
+                  ) : <span className="text-muted/60">—</span>}
+                  <div className="flex flex-wrap gap-1">
+                    {stageOf[c.id] && <Badge className="bg-brand-50 text-brand-700">{OPP_STAGE_LABELS[stageOf[c.id]]}</Badge>}
+                    {nextSession[c.id] && (
+                      <Badge className={nextSession[c.id].date_debut >= TODAY ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}>
+                        {nextSession[c.id].date_debut >= TODAY ? 'Session ' : 'Réalisée '}{formatDate(nextSession[c.id].date_debut, 'dd/MM')}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               </td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
