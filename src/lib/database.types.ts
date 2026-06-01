@@ -44,6 +44,18 @@ export type Contact = Timestamps & {
   entreprise_id: string | null; financeur_id: string | null; owner_id: string | null;
   rgpd_consent: boolean; notes: string | null; external_id: string | null;
   metadata: Record<string, string> | null;
+  // Fiche de suivi (qualification / commercial / conformité / commissions)
+  statut_entreprise: string | null; ville: string | null; autres: string | null; effectif: string | null;
+  besoin_resume: string | null; formation_envisagee: string | null; financement_envisage: string | null; interet: string | null;
+  statut_prospect: string | null; responsable_id: string | null;
+  date_fixee: string | null; eligibilite_verifiee: boolean; financement_demande: boolean;
+  financement_valide: boolean; inscription_validee: boolean;
+  date_formation: string | null; assiette_commission: number | null;
+  commission_validee: boolean; commission_payee: boolean;
+};
+export type ContactAction = {
+  id: string; contact_id: string; date_action: string; type: string; description: string;
+  faite: boolean; auteur_id: string | null; created_at: string;
 };
 export type Opportunite = Timestamps & {
   id: string; titre: string; contact_id: string | null; entreprise_id: string | null;
@@ -207,6 +219,7 @@ export type Database = {
       formateurs: TableShape<Formateur>;
       formateur_documents: TableShape<FormateurDocument>;
       plan_pdfs: TableShape<PlanPdf>;
+      contact_actions: TableShape<ContactAction>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
     };

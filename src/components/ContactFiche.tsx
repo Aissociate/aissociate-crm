@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
-import { cn, fullName, initials, formatDate } from '@/lib/utils';
-import { CONTACT_TYPE_LABELS } from '@/lib/constants';
+import { cn, fullName, initials, formatDate, formatMoney } from '@/lib/utils';
+import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_COLORS, OPP_STAGE_LABELS } from '@/lib/constants';
 import { Badge } from '@/components/ui';
-import type { Contact, Entreprise, Financeur, Profile } from '@/lib/database.types';
+import type { Contact, Entreprise, Financeur, Profile, ContactAction, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
+
+const STATUTS_PROSPECT = ['', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
+const ACTION_TYPES = ['appel', 'email', 'rdv', 'relance', 'note', 'autre'];
 
 // Colonnes déjà affichées dans les champs principaux — on les masque dans metadata
 const META_SKIP = new Set([
@@ -55,6 +58,82 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     onUpdated();
   };
 
+  // ── Statut transverse (pipeline / dossiers / sessions) ───────────────────────
+  const [opps, setOpps] = useState<Opportunite[]>([]);
+  const [dossiers, setDossiers] = useState<Dossier[]>([]);
+  const [sessions, setSessions] = useState<SessionFormation[]>([]);
+  const [actions, setActions] = useState<ContactAction[]>([]);
+
+  const loadRefs = useCallback(async () => {
+    const [o, d, sp, a] = await Promise.all([
+      supabase.from('opportunites').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
+      supabase.from('dossiers').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
+      supabase.from('session_participants').select('session_id').eq('contact_id', c.id),
+      supabase.from('contact_actions').select('*').eq('contact_id', c.id).order('date_action', { ascending: false }),
+    ]);
+    setOpps(o.data ?? []); setDossiers(d.data ?? []); setActions(a.data ?? []);
+    const ids = ((sp.data ?? []) as Pick<SessionParticipant, 'session_id'>[]).map((x) => x.session_id);
+    if (ids.length) {
+      const s = await supabase.from('sessions_formation').select('*').in('id', ids).order('date_debut', { ascending: false });
+      setSessions(s.data ?? []);
+    } else setSessions([]);
+  }, [c.id]);
+  useEffect(() => { void loadRefs(); }, [loadRefs]);
+
+  // ── Champs de suivi éditables ───────────────────────────────────────────────
+  const [form, setForm] = useState({
+    statut_entreprise: c.statut_entreprise ?? '', ville: c.ville ?? '', effectif: c.effectif ?? '',
+    besoin_resume: c.besoin_resume ?? '', formation_envisagee: c.formation_envisagee ?? '',
+    financement_envisage: c.financement_envisage ?? '', interet: c.interet ?? '',
+    responsable_id: c.responsable_id ?? '', date_formation: c.date_formation ?? '',
+    assiette_commission: c.assiette_commission ?? '',
+  });
+  const setFf = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const [savingSec, setSavingSec] = useState<string | null>(null);
+  const saveSection = async (key: string, fields: Partial<Contact>) => {
+    setSavingSec(key);
+    await supabase.from('contacts').update(fields).eq('id', c.id);
+    setSavingSec(null);
+    onUpdated();
+  };
+  // Miroir local optimiste (la prop `c` reste figée tant que la liste n'est pas rechargée)
+  const [over, setOver] = useState<Partial<Contact>>({});
+  useEffect(() => { setOver({}); }, [c.id]);
+  const cc = { ...c, ...over } as Contact;
+  const patch = async (fields: Partial<Contact>) => {
+    setOver((o) => ({ ...o, ...fields }));
+    await supabase.from('contacts').update(fields).eq('id', c.id);
+    onUpdated();
+  };
+
+  // ── Journal d'actions ───────────────────────────────────────────────────────
+  const [na, setNa] = useState({ date_action: new Date().toISOString().slice(0, 10), type: 'appel', description: '', faite: true });
+  const addAction = async () => {
+    if (!na.description.trim()) return;
+    const { data } = await supabase.from('contact_actions')
+      .insert({ contact_id: c.id, date_action: na.date_action, type: na.type, description: na.description.trim(), faite: na.faite })
+      .select().single();
+    if (data) setActions((p) => [data, ...p].sort((x, y) => y.date_action.localeCompare(x.date_action)));
+    setNa({ ...na, description: '' });
+  };
+  const toggleAction = async (a: ContactAction) => {
+    setActions((p) => p.map((x) => (x.id === a.id ? { ...x, faite: !x.faite } : x)));
+    await supabase.from('contact_actions').update({ faite: !a.faite }).eq('id', a.id);
+  };
+  const removeAction = async (a: ContactAction) => {
+    await supabase.from('contact_actions').delete().eq('id', a.id);
+    setActions((p) => p.filter((x) => x.id !== a.id));
+  };
+  const derniere = actions.find((a) => a.faite);
+  const prochaine = [...actions].reverse().find((a) => !a.faite);
+  const now = new Date();
+  const CHECKLIST: { key: keyof Contact; label: string }[] = [
+    { key: 'eligibilite_verifiee', label: 'Éligibilité vérifiée' },
+    { key: 'financement_demande', label: 'Financement demandé' },
+    { key: 'financement_valide', label: 'Financement validé' },
+    { key: 'inscription_validee', label: 'Inscription validée' },
+  ];
+
   // Entrées metadata à afficher (exclut les doublons avec les champs principaux)
   const metaEntries = c.metadata
     ? Object.entries(c.metadata).filter(([k, v]) => k && !META_SKIP.has(k.toLowerCase().trim()) && v && String(v).trim())
@@ -85,7 +164,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
       />
 
       {/* Panel */}
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-surface shadow-2xl animate-slide-in-right">
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col bg-surface shadow-2xl animate-slide-in-right">
 
         {/* Header */}
         <div className="flex items-start justify-between border-b border-line p-5">
@@ -168,6 +247,128 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               </div>
             </section>
           )}
+
+          {/* Qualification */}
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2"><Target className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Qualification</h3></div>
+              <select value={cc.statut_prospect ?? ''} onChange={(e) => patch({ statut_prospect: e.target.value || null })}
+                className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg">
+                {STATUTS_PROSPECT.map((s) => <option key={s} value={s}>{s || '— statut —'}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => setFf('besoin_resume', e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => setFf('formation_envisagee', e.target.value)} /></div>
+                <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => setFf('financement_envisage', e.target.value)} /></div>
+                <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => setFf('interet', e.target.value)} /></div>
+                <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => setFf('effectif', e.target.value)} /></div>
+              </div>
+              <button onClick={() => saveSection('quali', { besoin_resume: form.besoin_resume || null, formation_envisagee: form.formation_envisagee || null, financement_envisage: form.financement_envisage || null, interet: form.interet || null, effectif: form.effectif || null })}
+                disabled={savingSec === 'quali'} className="btn-secondary py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> {savingSec === 'quali' ? '…' : 'Enregistrer'}</button>
+            </div>
+          </section>
+
+          {/* Suivi des actions */}
+          <section>
+            <div className="mb-3 flex items-center gap-2"><ClipboardList className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Suivi des actions</h3></div>
+            {(derniere || prochaine) && (
+              <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg bg-surface-2 p-2"><p className="text-muted">Dernière action</p><p className="font-medium text-fg">{derniere ? `${derniere.description} · ${formatDate(derniere.date_action)}` : '—'}</p></div>
+                <div className="rounded-lg bg-amber-500/10 p-2"><p className="text-amber-700 dark:text-amber-400">Prochaine action</p><p className="font-medium text-fg">{prochaine ? `${prochaine.description} · ${formatDate(prochaine.date_action)}` : '—'}</p></div>
+              </div>
+            )}
+            <ul className="space-y-1.5">
+              {actions.map((a) => (
+                <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <button onClick={() => toggleAction(a)} title={a.faite ? 'Faite' : 'À faire'}
+                    className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', a.faite ? 'bg-emerald-500 text-white' : 'border border-line text-transparent')}>
+                    <CheckCircle2 className="h-3 w-3" />
+                  </button>
+                  <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
+                  <span className="flex-1 text-fg">{a.description}</span>
+                  <span className="text-xs text-muted">{formatDate(a.date_action)}</span>
+                  <button onClick={() => removeAction(a)} className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                </li>
+              ))}
+              {actions.length === 0 && <li className="text-sm text-muted">Aucune action enregistrée.</li>}
+            </ul>
+            <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
+              <select className="input w-[90px] py-1.5" value={na.type} onChange={(e) => setNa({ ...na, type: e.target.value })}>{ACTION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+              <input className="input min-w-[140px] flex-1 py-1.5" placeholder="Description…" value={na.description} onChange={(e) => setNa({ ...na, description: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addAction()} />
+              <input className="input w-[140px] py-1.5" type="date" value={na.date_action} onChange={(e) => setNa({ ...na, date_action: e.target.value })} />
+              <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={na.faite} onChange={(e) => setNa({ ...na, faite: e.target.checked })} /> Réalisée</label>
+              <button onClick={addAction} disabled={!na.description.trim()} className="btn-secondary py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
+            </div>
+          </section>
+
+          {/* Pipeline */}
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Pipeline</h3></div><span className="text-xs text-muted">{opps.length}</span></div>
+            {opps.length === 0 ? <p className="text-sm text-muted">Aucune opportunité.</p> : (
+              <ul className="space-y-1.5">{opps.map((o) => (
+                <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <span className="text-fg">{o.titre}</span>
+                  <span className="flex items-center gap-2"><Badge className="bg-brand-50 text-brand-700">{OPP_STAGE_LABELS[o.stage]}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
+                </li>))}
+              </ul>
+            )}
+          </section>
+
+          {/* Dossiers */}
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><span className="text-xs text-muted">{dossiers.length}</span></div>
+            {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
+              <ul className="space-y-1.5">{dossiers.map((d) => (
+                <li key={d.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <span className="text-fg">{d.intitule}</span>
+                  <Badge className={DOSSIER_STATUT_COLORS[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                </li>))}
+              </ul>
+            )}
+          </section>
+
+          {/* Sessions */}
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><span className="text-xs text-muted">{sessions.length}</span></div>
+            {sessions.length === 0 ? <p className="text-sm text-muted">Aucune session.</p> : (
+              <ul className="space-y-1.5">{sessions.map((s) => {
+                const passee = new Date(s.date_debut) < now;
+                return (
+                  <li key={s.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                    <span className="flex items-center gap-2 text-fg"><span className="h-2.5 w-2.5 rounded-full" style={{ background: s.couleur }} />{s.titre}</span>
+                    <span className="flex items-center gap-2"><span className="text-xs text-muted">{formatDate(s.date_debut, 'dd/MM/yyyy')}</span><Badge className={passee ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{passee ? 'Réalisée' : 'Programmée'}</Badge></span>
+                  </li>);
+              })}</ul>
+            )}
+          </section>
+
+          {/* Checklist conformité */}
+          <section>
+            <div className="mb-3 flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Checklist conformité dossier</h3></div>
+            <div className="mb-2"><label className="label">Date fixée</label><input className="input" type="date" value={cc.date_fixee ?? ''} onChange={(e) => patch({ date_fixee: e.target.value || null })} /></div>
+            <div className="space-y-1.5">{CHECKLIST.map((item) => (
+              <label key={String(item.key)} className="flex items-center gap-2 text-sm text-fg">
+                <input type="checkbox" checked={Boolean(cc[item.key])} onChange={() => patch({ [item.key]: !cc[item.key] } as Partial<Contact>)} /> {item.label}
+              </label>))}
+            </div>
+          </section>
+
+          {/* Commissions */}
+          <section>
+            <div className="mb-3 flex items-center gap-2"><Coins className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Commissions</h3></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className="label">Date formation</label><input className="input" type="date" value={form.date_formation ?? ''} onChange={(e) => setFf('date_formation', e.target.value)} /></div>
+              <div><label className="label">Assiette (€)</label><input className="input" type="number" value={form.assiette_commission ?? ''} onChange={(e) => setFf('assiette_commission', e.target.value)} /></div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={cc.commission_validee} onChange={() => patch({ commission_validee: !cc.commission_validee })} /> Validée</label>
+              <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={cc.commission_payee} onChange={() => patch({ commission_payee: !cc.commission_payee })} /> Payée</label>
+            </div>
+            <button onClick={() => saveSection('comm', { date_formation: form.date_formation || null, assiette_commission: form.assiette_commission ? Number(form.assiette_commission) : null })}
+              disabled={savingSec === 'comm'} className="btn-secondary mt-2 py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> {savingSec === 'comm' ? '…' : 'Enregistrer'}</button>
+          </section>
 
           {/* RGPD + dates */}
           <section>
