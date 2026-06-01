@@ -9,81 +9,94 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+interface ImapConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+}
+
+// Priorité : table parametres (cle='imap'), puis secrets Supabase en repli.
+async function loadImap(sb: ReturnType<typeof createClient>): Promise<ImapConfig | null> {
+  const { data } = await sb.from("parametres").select("valeur").eq("cle", "imap").maybeSingle();
+  const c = (data?.valeur ?? {}) as Record<string, unknown>;
+
+  const host = (c.host as string) || Deno.env.get("IMAP_HOST");
+  const user = (c.user as string) || Deno.env.get("IMAP_USERNAME");
+  const pass = (c.password as string) || Deno.env.get("IMAP_PASSWORD");
+  const port = Number(c.port) || Number(Deno.env.get("IMAP_PORT") ?? "0") || 993;
+
+  if (!host || !user || !pass) return null;
+  return { host, user, pass, port };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const supabase = createClient(
+    const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Secrets Supabase d'abord, puis table parametres (cle='imap') en repli
-    let host = Deno.env.get("IMAP_HOST");
-    let port = Number(Deno.env.get("IMAP_PORT") ?? "0");
-    let user = Deno.env.get("IMAP_USERNAME");
-    let pass = Deno.env.get("IMAP_PASSWORD");
-    if (!host || !user || !pass) {
-      const { data } = await supabase.from("parametres").select("valeur").eq("cle", "imap").maybeSingle();
-      const c = (data?.valeur ?? {}) as Record<string, unknown>;
-      host = host || (c.host as string);
-      user = user || (c.user as string);
-      pass = pass || (c.password as string);
-      port = port || Number(c.port);
-    }
-    port = port || 993;
-
-    if (!host || !user || !pass) {
-      return json({ error: "Configuration IMAP incomplète (secrets Supabase ou Paramètres)" }, 500);
+    const cfg = await loadImap(sb);
+    if (!cfg) {
+      return json({ error: "Configuration IMAP incomplète (Paramètres → Serveur IMAP)" }, 500);
     }
 
     const client = new ImapFlow({
-      host,
-      port,
-      secure: port === 993,
-      auth: { user, pass },
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.port === 993,
+      auth: { user: cfg.user, pass: cfg.pass },
       logger: false,
-      // Time-outs pour éviter une synchro bloquée à l'infini
       greetingTimeout: 10000,
       socketTimeout: 30000,
       disableAutoIdle: true,
     });
-    // Garde-fou : abandonne la connexion si elle dépasse 20 s
+
     await Promise.race([
       client.connect(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("Connexion IMAP : délai dépassé (hôte/port/identifiants ?)")), 20000)),
+      new Promise((_, rej) =>
+        setTimeout(() => rej(new Error("Connexion IMAP : délai dépassé (hôte/port/identifiants ?)")), 20000)
+      ),
     ]);
 
-    const MAX = 30; // messages traités par exécution (les plus récents non lus)
+    const MAX = 30;
     let imported = 0;
     const lock = await client.getMailboxLock("INBOX");
     try {
-      // On borne le travail : recherche des non lus, puis seulement les MAX derniers
       const uids = (await client.search({ seen: false }, { uid: true })) || [];
       const recent = uids.slice(-MAX);
-      for await (const msg of (recent.length ? client.fetch(recent, { envelope: true, source: true }, { uid: true }) : [])) {
+      for await (const msg of (recent.length
+        ? client.fetch(recent, { envelope: true, source: true }, { uid: true })
+        : [])) {
         const parsed = await simpleParser(msg.source as Uint8Array);
         const messageId = parsed.messageId ?? `imap-${msg.uid}`;
         const from = parsed.from?.text ?? msg.envelope?.from?.[0]?.address ?? null;
         const fromAddr = parsed.from?.value?.[0]?.address ?? msg.envelope?.from?.[0]?.address ?? null;
-        const to = (parsed.to?.value ?? []).map((a: { address?: string }) => a.address).filter(Boolean);
+        const to = (parsed.to?.value ?? [])
+          .map((a: { address?: string }) => a.address)
+          .filter(Boolean);
 
-        // Affectation : si l'expéditeur correspond à un contact, rattacher l'e-mail
-        // au contact et au conseiller affecté. Sinon owner_id = null -> direction.
         let contactId: string | null = null;
         let ownerId: string | null = null;
         if (fromAddr) {
-          const { data: contact } = await supabase.from("contacts")
-            .select("id, owner_id, responsable_id").ilike("email", fromAddr).limit(1).maybeSingle();
+          const { data: contact } = await sb
+            .from("contacts")
+            .select("id, owner_id")
+            .ilike("email", fromAddr)
+            .limit(1)
+            .maybeSingle();
           if (contact) {
             contactId = contact.id;
-            ownerId = contact.responsable_id ?? contact.owner_id ?? null;
+            ownerId = contact.owner_id ?? null;
           }
         }
 
-        const { error } = await supabase.from("emails").insert({
+        const { error } = await sb.from("emails").insert({
           direction: "entrant",
           message_id: messageId,
           expediteur: from,
