@@ -130,18 +130,30 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "Configuration IMAP incomplète (Paramètres → Serveur IMAP)" });
     }
 
-    // Collect all known contact emails for sender filtering
-    const { data: contactRows } = await sb.from("contacts").select("id, owner_id, email").not("email", "is", null);
+    // Expéditeurs connus : contacts (avec conseiller affecté), formateurs, candidats.
+    const { data: contactRows } = await sb.from("contacts").select("id, owner_id, responsable_id, email").not("email", "is", null);
     const contactMap = new Map<string, { id: string; owner_id: string | null }>();
     for (const c of (contactRows ?? [])) {
-      if (c.email) contactMap.set(c.email.toLowerCase(), { id: c.id, owner_id: c.owner_id ?? null });
+      if (c.email) contactMap.set((c.email as string).toLowerCase(), { id: c.id as string, owner_id: (c.responsable_id ?? c.owner_id ?? null) as string | null });
     }
+    const knownExtra = new Set<string>();
+    const { data: formateurRows } = await sb.from("formateurs").select("email").not("email", "is", null);
+    for (const f of (formateurRows ?? [])) if (f.email) knownExtra.add((f.email as string).toLowerCase());
+    const { data: candidatRows } = await sb.from("candidats").select("email").not("email", "is", null);
+    for (const k of (candidatRows ?? [])) if (k.email) knownExtra.add((k.email as string).toLowerCase());
 
-    // Date cutoff: most recent email in DB, or today if empty
-    const { data: lastRow } = await sb.from("emails").select("sent_at").order("sent_at", { ascending: false }).limit(1).maybeSingle();
-    const sinceDate = lastRow?.sent_at ? new Date(lastRow.sent_at) : new Date();
-    // Go back 1 day from the cutoff to avoid missing same-day messages
-    sinceDate.setDate(sinceDate.getDate() - 1);
+    // Date de coupure : paramètre `email_sync_since` prioritaire (réglé au flush),
+    // sinon repli sur le dernier e-mail connu (- 1 jour) ou aujourd'hui.
+    const { data: sinceParam } = await sb.from("parametres").select("valeur").eq("cle", "email_sync_since").maybeSingle();
+    const sinceCfg = (sinceParam?.valeur as { date?: string } | null)?.date;
+    let sinceDate: Date;
+    if (sinceCfg) {
+      sinceDate = new Date(`${sinceCfg}T00:00:00`);
+    } else {
+      const { data: lastRow } = await sb.from("emails").select("sent_at").order("sent_at", { ascending: false }).limit(1).maybeSingle();
+      sinceDate = lastRow?.sent_at ? new Date(lastRow.sent_at) : new Date();
+      sinceDate.setDate(sinceDate.getDate() - 1); // marge même-jour
+    }
     const sinceStr = imapDate(sinceDate);
 
     // TLS connection with timeout
@@ -180,13 +192,14 @@ Deno.serve(async (req: Request) => {
           const parsed = await simpleParser(Buffer.from(raw));
           const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() ?? null;
 
-          // Only import emails from known contacts
-          if (!fromAddr || !contactMap.has(fromAddr)) {
+          // On n'ingère que les expéditeurs connus (contact, formateur ou candidat).
+          const contact = fromAddr ? contactMap.get(fromAddr) : undefined;
+          const known = !!contact || (fromAddr ? knownExtra.has(fromAddr) : false);
+          if (!known) {
             skipped++;
             continue;
           }
 
-          const contact = contactMap.get(fromAddr)!;
           const messageId = parsed.messageId ?? `imap-${uid}`;
           const from = parsed.from?.text ?? null;
           const to = (parsed.to?.value ?? []).map((a: { address?: string }) => a.address).filter(Boolean);
@@ -197,8 +210,8 @@ Deno.serve(async (req: Request) => {
               message_id: messageId,
               expediteur: from,
               destinataires: to,
-              contact_id: contact.id,
-              owner_id: contact.owner_id,
+              contact_id: contact?.id ?? null,
+              owner_id: contact?.owner_id ?? null,
               sujet: parsed.subject ?? "(sans objet)",
               corps: parsed.text ?? parsed.html ?? "",
               statut: "recu",
