@@ -16,6 +16,8 @@ interface EmailPayload {
   subject: string;
   html?: string;
   text?: string;
+  // Pièces jointes issues de l'espace documentaire : { nom de fichier, URL publique }.
+  attachments?: { filename: string; url: string }[];
 }
 
 interface SmtpConfig {
@@ -56,9 +58,14 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
   try {
-    const { to, subject, html, text } = (await req.json()) as EmailPayload;
+    const { to, subject, html, text, attachments } = (await req.json()) as EmailPayload;
     const recipients = Array.isArray(to) ? to : [to];
     if (!recipients.length || !subject) return json({ error: 'Champs "to" et "subject" requis' }, 400);
+
+    // Nodemailer récupère chaque pièce jointe depuis son URL (path).
+    const mailAttachments = (attachments ?? [])
+      .filter((a) => a?.url)
+      .map((a) => ({ filename: a.filename || "piece-jointe", path: a.url }));
 
     const cfg = await loadSmtp();
     if (!cfg.host || !cfg.user || !cfg.pass || !cfg.from) {
@@ -78,6 +85,7 @@ Deno.serve(async (req: Request) => {
       subject,
       text: text ?? "",
       html: html ?? text ?? "",
+      attachments: mailAttachments,
     });
 
     return json({ ok: true, messageId: info.messageId, sent: recipients.length });
