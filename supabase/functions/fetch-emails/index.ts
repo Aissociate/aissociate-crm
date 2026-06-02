@@ -23,7 +23,6 @@ async function loadImap(sb: ReturnType<typeof createClient>): Promise<ImapCfg | 
 }
 
 // Minimal IMAP client — Deno-native TLS, no Node.js compat layer.
-// Using Deno.connectTls ensures async DNS + TLS so setTimeout always fires.
 class DenoImap {
   private enc = new TextEncoder();
   private dec = new TextDecoder("latin1");
@@ -109,6 +108,12 @@ function imapStr(s: string): string {
   return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
+// Format date as DD-Mon-YYYY for IMAP SINCE command
+function imapDate(d: Date): string {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -125,7 +130,21 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "Configuration IMAP incomplète (Paramètres → Serveur IMAP)" });
     }
 
-    // Connexion TLS native Deno — DNS et TLS sont entièrement async, les timeouts fonctionnent.
+    // Collect all known contact emails for sender filtering
+    const { data: contactRows } = await sb.from("contacts").select("id, owner_id, email").not("email", "is", null);
+    const contactMap = new Map<string, { id: string; owner_id: string | null }>();
+    for (const c of (contactRows ?? [])) {
+      if (c.email) contactMap.set(c.email.toLowerCase(), { id: c.id, owner_id: c.owner_id ?? null });
+    }
+
+    // Date cutoff: most recent email in DB, or today if empty
+    const { data: lastRow } = await sb.from("emails").select("sent_at").order("sent_at", { ascending: false }).limit(1).maybeSingle();
+    const sinceDate = lastRow?.sent_at ? new Date(lastRow.sent_at) : new Date();
+    // Go back 1 day from the cutoff to avoid missing same-day messages
+    sinceDate.setDate(sinceDate.getDate() - 1);
+    const sinceStr = imapDate(sinceDate);
+
+    // TLS connection with timeout
     const conn = await Promise.race([
       Deno.connectTls({ hostname: cfg.host, port: cfg.port }),
       new Promise<never>((_, rej) =>
@@ -146,35 +165,44 @@ Deno.serve(async (req: Request) => {
       const selRes = await imap.cmd("SELECT INBOX");
       if (!selRes.ok) throw new Error("Impossible d'ouvrir INBOX");
 
-      const searchRes = await imap.cmd("UID SEARCH UNSEEN");
+      // Search unseen messages since the cutoff date
+      const searchRes = await imap.cmd(`UID SEARCH UNSEEN SINCE ${sinceStr}`);
       const searchLine = searchRes.lines.find((l) => /^\* SEARCH/i.test(l)) ?? "";
       const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number).filter(Boolean);
-      const recent = uids.slice(-30);
+      const recent = uids.slice(-50);
 
       let imported = 0;
+      let skipped = 0;
+
       if (recent.length > 0) {
         const rawMap = await imap.fetchRaw(recent);
         for (const [uid, raw] of rawMap) {
           const parsed = await simpleParser(Buffer.from(raw));
+          const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() ?? null;
+
+          // Only import emails from known contacts
+          if (!fromAddr || !contactMap.has(fromAddr)) {
+            skipped++;
+            continue;
+          }
+
+          const contact = contactMap.get(fromAddr)!;
           const messageId = parsed.messageId ?? `imap-${uid}`;
           const from = parsed.from?.text ?? null;
-          const fromAddr = parsed.from?.value?.[0]?.address ?? null;
           const to = (parsed.to?.value ?? []).map((a: { address?: string }) => a.address).filter(Boolean);
-
-          let contactId: string | null = null;
-          let ownerId: string | null = null;
-          if (fromAddr) {
-            const { data: contact } = await sb.from("contacts").select("id, owner_id")
-              .ilike("email", fromAddr).limit(1).maybeSingle();
-            if (contact) { contactId = contact.id; ownerId = contact.owner_id ?? null; }
-          }
 
           const { error, data: rows } = await sb.from("emails").upsert(
             {
-              direction: "entrant", message_id: messageId, expediteur: from,
-              destinataires: to, contact_id: contactId, owner_id: ownerId,
-              sujet: parsed.subject ?? "(sans objet)", corps: parsed.text ?? parsed.html ?? "",
-              statut: "recu", lu: false,
+              direction: "entrant",
+              message_id: messageId,
+              expediteur: from,
+              destinataires: to,
+              contact_id: contact.id,
+              owner_id: contact.owner_id,
+              sujet: parsed.subject ?? "(sans objet)",
+              corps: parsed.text ?? parsed.html ?? "",
+              statut: "recu",
+              lu: false,
               sent_at: parsed.date ? new Date(parsed.date).toISOString() : null,
             },
             { onConflict: "message_id", ignoreDuplicates: true },
@@ -183,7 +211,6 @@ Deno.serve(async (req: Request) => {
           if (error) {
             console.error("upsert error", error.message);
           } else {
-            // rows is empty when the row was a duplicate (ignoreDuplicates)
             if (rows && rows.length > 0) imported++;
             await imap.cmd(`UID STORE ${uid} +FLAGS (\\Seen)`);
           }
@@ -191,7 +218,7 @@ Deno.serve(async (req: Request) => {
       }
 
       await imap.close();
-      return json({ ok: true, imported });
+      return json({ ok: true, imported, skipped, since: sinceStr, total_unseen: uids.length });
     } catch (err) {
       try { await imap.close(); } catch { /**/ }
       throw err;
