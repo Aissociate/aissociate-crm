@@ -42,25 +42,25 @@ import SiteAides from '@/site/pages/AidesFormation';
 import SiteContact from '@/site/pages/Contact';
 import SiteFormulaire from '@/site/pages/Formulaire';
 
-const site = (el: JSX.Element) => <SiteFrame>{el}</SiteFrame>;
-
 export default function App() {
   const { configured } = useAuth();
 
   return (
     <Routes>
-      {/* ── Site vitrine public ── */}
-      <Route path="/" element={site(<OrganismHome />)} />
-      <Route path="/formations" element={site(<SiteFormationsList />)} />
-      <Route path="/formations/closer-ia-cpf" element={site(<SiteFormationDetail />)} />
-      <Route path="/formations/:id" element={site(<SiteFormationDetailPage />)} />
-      <Route path="/assistance" element={site(<SiteAssistance />)} />
-      <Route path="/developpement" element={site(<SiteDevelopment />)} />
-      <Route path="/blog" element={site(<SiteBlog />)} />
-      <Route path="/blog/:slug" element={site(<SiteBlogArticle />)} />
-      <Route path="/aides-formation" element={site(<SiteAides />)} />
-      <Route path="/contact" element={site(<SiteContact />)} />
-      <Route path="/formulaire" element={site(<SiteFormulaire />)} />
+      {/* ── Site vitrine public (layout SiteFrame = AuthProvider du site + bouton Admin) ── */}
+      <Route element={<SiteFrame />}>
+        <Route path="/" element={<OrganismHome />} />
+        <Route path="/formations" element={<SiteFormationsList />} />
+        <Route path="/formations/closer-ia-cpf" element={<SiteFormationDetail />} />
+        <Route path="/formations/:id" element={<SiteFormationDetailPage />} />
+        <Route path="/assistance" element={<SiteAssistance />} />
+        <Route path="/developpement" element={<SiteDevelopment />} />
+        <Route path="/blog" element={<SiteBlog />} />
+        <Route path="/blog/:slug" element={<SiteBlogArticle />} />
+        <Route path="/aides-formation" element={<SiteAides />} />
+        <Route path="/contact" element={<SiteContact />} />
+        <Route path="/formulaire" element={<SiteFormulaire />} />
+      </Route>
 
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
