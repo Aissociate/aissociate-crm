@@ -3,7 +3,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import SupabaseNotice from '@/components/SupabaseNotice';
 import Layout from '@/components/Layout';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import SiteFrame from '@/components/SiteFrame';
 
+// ── CRM (back-office, derrière /login) ──
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Contacts from '@/pages/Contacts';
@@ -27,25 +29,49 @@ import Administration from '@/pages/Administration';
 import Parametres from '@/pages/Parametres';
 import Tickets from '@/pages/Tickets';
 
+// ── Site vitrine public (vendorisé depuis Aissociate_OF, sous src/site) ──
+import OrganismHome from '@/site/pages/OrganismHome';
+import SiteFormationsList from '@/site/pages/FormationsList';
+import SiteFormationDetail from '@/site/pages/FormationDetail';
+import SiteFormationDetailPage from '@/site/pages/FormationDetailPage';
+import SiteAssistance from '@/site/pages/Assistance';
+import SiteDevelopment from '@/site/pages/Development';
+import SiteBlog from '@/site/pages/Blog';
+import SiteBlogArticle from '@/site/pages/BlogArticle';
+import SiteAides from '@/site/pages/AidesFormation';
+import SiteContact from '@/site/pages/Contact';
+import SiteFormulaire from '@/site/pages/Formulaire';
+
+const site = (el: JSX.Element) => <SiteFrame>{el}</SiteFrame>;
+
 export default function App() {
   const { configured } = useAuth();
-  if (!configured) return <SupabaseNotice />;
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      {/* ── Site vitrine public ── */}
+      <Route path="/" element={site(<OrganismHome />)} />
+      <Route path="/formations" element={site(<SiteFormationsList />)} />
+      <Route path="/formations/closer-ia-cpf" element={site(<SiteFormationDetail />)} />
+      <Route path="/formations/:id" element={site(<SiteFormationDetailPage />)} />
+      <Route path="/assistance" element={site(<SiteAssistance />)} />
+      <Route path="/developpement" element={site(<SiteDevelopment />)} />
+      <Route path="/blog" element={site(<SiteBlog />)} />
+      <Route path="/blog/:slug" element={site(<SiteBlogArticle />)} />
+      <Route path="/aides-formation" element={site(<SiteAides />)} />
+      <Route path="/contact" element={site(<SiteContact />)} />
+      <Route path="/formulaire" element={site(<SiteFormulaire />)} />
+
+      {/* ── CRM Aissociate (accès Admin) ── */}
+      <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
       <Route
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
+        element={configured ? <ProtectedRoute><Layout /></ProtectedRoute> : <SupabaseNotice />}
       >
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/entreprises" element={<Entreprises />} />
         <Route path="/pipeline" element={<Pipeline />} />
-        <Route path="/formations" element={<Formations />} />
+        <Route path="/catalogue" element={<Formations />} />
         <Route path="/plans" element={<PlansFormation />} />
         <Route path="/devis" element={<Devis />} />
         <Route path="/dossiers" element={<Dossiers />} />
@@ -58,32 +84,21 @@ export default function App() {
         <Route path="/assistant" element={<Assistant />} />
         <Route
           path="/recrutement"
-          element={
-            <ProtectedRoute managerOnly>
-              <Recrutement />
-            </ProtectedRoute>
-          }
+          element={<ProtectedRoute managerOnly><Recrutement /></ProtectedRoute>}
         />
         <Route path="/statistiques" element={<Statistiques />} />
         <Route path="/actions" element={<ActionsAFaire />} />
         <Route
           path="/administration"
-          element={
-            <ProtectedRoute adminOnly>
-              <Administration />
-            </ProtectedRoute>
-          }
+          element={<ProtectedRoute adminOnly><Administration /></ProtectedRoute>}
         />
         <Route
           path="/parametres"
-          element={
-            <ProtectedRoute adminOnly>
-              <Parametres />
-            </ProtectedRoute>
-          }
+          element={<ProtectedRoute adminOnly><Parametres /></ProtectedRoute>}
         />
         <Route path="/tickets" element={<Tickets />} />
       </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

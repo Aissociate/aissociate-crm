@@ -1,0 +1,74 @@
+# robots.txt pour Formation IA Générative
+# Optimisé pour le référencement Google et l'indexation par les IA
+
+User-agent: *
+Allow: /
+
+# Pages principales accessibles
+Allow: /formation
+Allow: /blog
+Allow: /contact
+Allow: /formations
+
+# Bloquer les pages d'administration et de connexion
+Disallow: /admin
+Disallow: /login
+Disallow: /dashboard
+Disallow: /onboarding
+Disallow: /qualiopi
+
+# Permettre l'accès aux ressources statiques
+Allow: /*.css$
+Allow: /*.js$
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.png$
+Allow: /*.gif$
+Allow: /*.svg$
+Allow: /*.webp$
+
+# Crawlers spécifiques pour les IA
+User-agent: GPTBot
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+User-agent: CCBot
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+User-agent: Google-Extended
+Allow: /
+
+# Bots de recherche principaux
+User-agent: Googlebot
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+
+# Délai entre les requêtes (en secondes)
+Crawl-delay: 1
+
+# Sitemap
+Sitemap: https://votre-domaine.fr/sitemap.xml

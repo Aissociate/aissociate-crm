@@ -16,7 +16,7 @@ export default function Login() {
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (session) return <Navigate to="/" replace />;
+  if (session) return <Navigate to="/dashboard" replace />;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
