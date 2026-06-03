@@ -18,6 +18,7 @@ import Formateurs from '@/pages/Formateurs';
 import Kanban from '@/pages/Kanban';
 import Documents from '@/pages/Documents';
 import Messagerie from '@/pages/Messagerie';
+import Assistant from '@/pages/Assistant';
 import Recrutement from '@/pages/Recrutement';
 import Statistiques from '@/pages/Statistiques';
 import ActionsAFaire from '@/pages/ActionsAFaire';
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/kanban" element={<Kanban />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/messagerie" element={<Messagerie />} />
+        <Route path="/assistant" element={<Assistant />} />
         <Route
           path="/recrutement"
           element={

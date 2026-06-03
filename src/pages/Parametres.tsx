@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 
@@ -7,6 +7,17 @@ type Organisme = { nom?: string; qualiopi?: string; email?: string; telephone?: 
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
 type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
+type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
+type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
+
+const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
+  { key: 'documents', label: 'Base documentaire' },
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'dossiers', label: 'Dossiers' },
+  { key: 'formations', label: 'Catalogue formations' },
+  { key: 'recrutement', label: 'Recrutement' },
+  { key: 'finances', label: 'Informations financières' },
+];
 
 function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
   return (
@@ -27,18 +38,20 @@ export default function Parametres() {
   const [smtp, setSmtp] = useState<Smtp>({});
   const [imap, setImap] = useState<Imap>({});
   const [ai, setAi] = useState<Ai>({ model: 'anthropic/claude-opus-4.8' });
+  const [chatbot, setChatbot] = useState<Chatbot>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
         if (row.cle === 'imap') setImap({ port: 993, ...((row.valeur as Imap) ?? {}) });
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
+        if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
       }
       setLoading(false);
     })();
@@ -183,6 +196,62 @@ export default function Parametres() {
               <Save className="h-4 w-4" /> {saving === 'ai' ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
             {savedMsg === 'ai' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+          </div>
+        </Card>
+
+        {/* Chatbot interne — prompts maîtres + droits de contexte */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <Bot className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Assistant IA interne (chatbot)</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Field label="Prompt maître — Direction" hint="Périmètre complet (toutes les données)">
+              <textarea className="input" rows={6} value={chatbot.prompt_direction ?? ''} onChange={(e) => setChatbot({ ...chatbot, prompt_direction: e.target.value })} />
+            </Field>
+            <Field label="Prompt maître — Conseiller" hint="Périmètre restreint selon les droits ci-dessous">
+              <textarea className="input" rows={6} value={chatbot.prompt_conseiller ?? ''} onChange={(e) => setChatbot({ ...chatbot, prompt_conseiller: e.target.value })} />
+            </Field>
+          </div>
+
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-medium text-fg">Droits de contexte des conseillers</p>
+            <p className="mb-3 text-xs text-muted">Sélectionnez les données que l'assistant peut consulter pour répondre à un conseiller. La direction a accès à l'ensemble.</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {DROIT_LABELS.map(({ key, label }) => {
+                const cons = chatbot.droits?.conseiller ?? {};
+                const checked = cons[key] === true;
+                return (
+                  <label key={key} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-fg">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => setChatbot({ ...chatbot, droits: { ...chatbot.droits, conseiller: { ...cons, [key]: e.target.checked } } })}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-sm text-fg">
+              <input
+                type="checkbox"
+                checked={(chatbot.droits?.conseiller?.scope ?? 'assigned') === 'all'}
+                onChange={(e) => setChatbot({ ...chatbot, droits: { ...chatbot.droits, conseiller: { ...(chatbot.droits?.conseiller ?? {}), scope: e.target.checked ? 'all' : 'assigned' } } })}
+              />
+              Accès à <strong>tous</strong> les contacts/dossiers (sinon uniquement ceux qui lui sont affectés)
+            </label>
+          </div>
+
+          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">
+            L'assistant utilise la clé OpenRouter ci-dessus. Les réponses citent les documents sources.
+            Déployez l'Edge Function <code>chatbot</code> pour activer l'assistant.
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={() => persist('chatbot', { ...chatbot })} disabled={saving === 'chatbot'}>
+              <Save className="h-4 w-4" /> {saving === 'chatbot' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+            {savedMsg === 'chatbot' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
           </div>
         </Card>
       </div>
