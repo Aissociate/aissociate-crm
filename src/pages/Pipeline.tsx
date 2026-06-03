@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner } from '@/components/ui';
+import ContactFiche from '@/components/ContactFiche';
 import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
-import { formatMoney } from '@/lib/utils';
-import type { Opportunite, OpportuniteStage, Contact, Entreprise, Financeur } from '@/lib/database.types';
+import { formatMoney, fullName } from '@/lib/utils';
+import type { Opportunite, OpportuniteStage, Contact, Entreprise, Financeur, Profile } from '@/lib/database.types';
 
 const empty = (): Partial<Opportunite> => ({
   titre: '', montant: 0, stage: 'nouveau', probabilite: 10,
@@ -15,17 +17,25 @@ const empty = (): Partial<Opportunite> => ({
 
 export default function Pipeline() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const { data, loading, refresh } = useCollection<Opportunite>('opportunites', {
     orderBy: { column: 'created_at', ascending: false },
   });
   const contacts = useCollection<Contact>('contacts');
   const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
+  const profiles = useCollection<Profile>('profiles');
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Opportunite>>(empty());
   const [saving, setSaving] = useState(false);
+  const [ficheContact, setFicheContact] = useState<Contact | null>(null);
   const set = (k: keyof Opportunite, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+
+  const openFiche = (contactId: string | null) => {
+    const c = contactId ? contacts.data.find((x) => x.id === contactId) : null;
+    if (c) setFicheContact(c);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -85,18 +95,26 @@ export default function Pipeline() {
                 <div className="flex-1 space-y-2 rounded-xl bg-surface-2 p-2">
                   {items.map((o) => {
                     const idx = OPP_STAGE_ORDER.indexOf(o.stage);
+                    const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
+                    const entreprise = entreprises.data.find((x) => x.id === (o.entreprise_id ?? contact?.entreprise_id));
+                    const title = contact ? fullName(contact.prenom, contact.nom) : o.titre;
                     return (
-                      <div key={o.id} className="card p-3">
+                      <div key={o.id} onClick={() => openFiche(o.contact_id)} className={`card p-3 ${o.contact_id ? 'cursor-pointer hover:border-brand-300' : ''}`} title={o.contact_id ? 'Ouvrir la fiche client' : undefined}>
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium text-fg">{o.titre}</p>
-                          <div className="flex gap-0.5">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-fg">{title}</p>
+                            {entreprise && <p className="truncate text-xs text-muted">{entreprise.raison_sociale}</p>}
+                          </div>
+                          <div className="flex shrink-0 gap-0.5" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => { setForm(o); setOpen(true); }} className="rounded p-1 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
                             <button onClick={() => remove(o)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
+                        {contact?.telephone && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><Phone className="h-3 w-3" /> {contact.telephone}</p>}
+                        {contact && o.titre && <p className="mt-1 truncate text-xs text-muted">{o.titre}</p>}
                         <p className="mt-1 text-sm font-semibold text-brand-700">{formatMoney(Number(o.montant))}</p>
                         <p className="text-xs text-muted">{o.probabilite}% de probabilité</p>
-                        <div className="mt-2 flex justify-between">
+                        <div className="mt-2 flex justify-between" onClick={(e) => e.stopPropagation()}>
                           <button disabled={idx === 0} onClick={() => move(o, -1)} className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
                           <button disabled={idx === OPP_STAGE_ORDER.length - 1} onClick={() => move(o, 1)} className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
                         </div>
@@ -144,6 +162,18 @@ export default function Pipeline() {
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field></div>
         </div>
       </Modal>
+
+      {ficheContact && (
+        <ContactFiche
+          contact={ficheContact}
+          entreprises={entreprises.data}
+          financeurs={financeurs.data}
+          profiles={profiles.data}
+          onClose={() => setFicheContact(null)}
+          onEdit={() => { setFicheContact(null); navigate('/contacts'); }}
+          onUpdated={() => contacts.refresh()}
+        />
+      )}
     </div>
   );
 }
