@@ -101,7 +101,11 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: systemPrompt },
+          {
+            role: "system",
+            content: systemPrompt +
+              " Mets en forme le champ 'contenu' de chaque section en Markdown : sous-titres avec ## , listes à puces avec - , listes numérotées avec 1. , **gras** pour les points clés, et une ligne vide entre les paragraphes.",
+          },
           { role: "user", content: userContent },
         ],
         temperature: 0.4,
@@ -111,60 +115,100 @@ Deno.serve(async (req: Request) => {
     const data = await resp.json();
     const { titre, sections } = parseContent(data?.choices?.[0]?.message?.content ?? "");
 
-    // 2) Rendu PDF (pdf-lib, pur JS)
+    // 2) Rendu PDF (pdf-lib) — moteur Markdown + mise en page soignée
     const pdf = await PDFDocument.create();
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const A4: [number, number] = [595.28, 841.89];
-    const M = 48;
+    const W = A4[0], H = A4[1], M = 50;
     const brand = rgb(0.917, 0.416, 0.118);
+    const ink = rgb(0.13, 0.13, 0.18);
+    const muted = rgb(0.42, 0.42, 0.47);
+    const ruleCol = rgb(0.88, 0.88, 0.9);
+
     let page = pdf.addPage(A4);
-    let y = A4[1] - M;
+    let y = H - M;
+    const needSpace = (h: number) => { if (y - h < M + 26) { page = pdf.addPage(A4); y = H - M; } };
 
-    const wrap = (text: string, f: typeof font, size: number, maxW: number): string[] => {
-      const out: string[] = [];
-      for (const para of clean(text).split("\n")) {
-        const words = para.split(/\s+/); let line = "";
-        for (const w of words) {
-          const test = line ? line + " " + w : w;
-          if (f.widthOfTextAtSize(test, size) > maxW && line) { out.push(line); line = w; }
-          else line = test;
-        }
-        out.push(line);
-      }
-      return out;
+    type RichOpts = { size: number; color?: ReturnType<typeof rgb>; indent?: number; gap?: number; allBold?: boolean };
+    // Dessine une ligne avec gras en ligne (**...**), retour à la ligne et indentation.
+    const drawRich = (raw: string, o: RichOpts) => {
+      const size = o.size, color = o.color ?? ink, indent = o.indent ?? 0;
+      const x0 = M + indent, maxW = W - M - x0;
+      const runs: { text: string; bold: boolean }[] = [];
+      let b = false;
+      for (const part of clean(raw).split("**")) { if (part) runs.push({ text: part, bold: o.allBold ? true : b }); b = !b; }
+      const words: { t: string; bold: boolean; sp: boolean }[] = [];
+      for (const r of runs) for (const seg of r.text.split(/(\s+)/)) if (seg) words.push({ t: seg, bold: r.bold, sp: /^\s+$/.test(seg) });
+      let cur: typeof words = [], curW = 0;
+      const flush = () => {
+        if (y - size < M + 24) { page = pdf.addPage(A4); y = H - M; }
+        while (cur.length && cur[0].sp) cur.shift();
+        while (cur.length && cur[cur.length - 1].sp) cur.pop();
+        let x = x0;
+        for (const w of cur) { const f = w.bold ? bold : font; page.drawText(w.t, { x, y, size, font: f, color }); x += f.widthOfTextAtSize(w.t, size); }
+        y -= size * 1.45; cur = []; curW = 0;
+      };
+      for (const w of words) { const f = w.bold ? bold : font; const ww = f.widthOfTextAtSize(w.t, size); if (!w.sp && curW + ww > maxW && cur.length) flush(); cur.push(w); curW += ww; }
+      if (cur.length) flush();
+      if (o.gap) y -= o.gap;
     };
-    const draw = (text: string, opts: { f: typeof font; size: number; color?: ReturnType<typeof rgb>; gap?: number }) => {
-      const maxW = A4[0] - 2 * M;
-      for (const line of wrap(text, opts.f, opts.size, maxW)) {
-        if (y < M + opts.size) { page = pdf.addPage(A4); y = A4[1] - M; }
-        page.drawText(line, { x: M, y, size: opts.size, font: opts.f, color: opts.color ?? rgb(0.16, 0.16, 0.2) });
-        y -= opts.size * 1.4;
+
+    // Rendu d'un bloc Markdown : titres (#), listes (-/1.), règles, tableaux, paragraphes.
+    const renderMd = (text: string) => {
+      for (const line of clean(text).split("\n")) {
+        const l = line.replace(/\s+$/, "");
+        if (!l.trim()) { y -= 5; continue; }
+        if (/^([-*_])\1{2,}$/.test(l.trim())) { needSpace(12); y -= 2; page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.6, color: ruleCol }); y -= 10; continue; }
+        const h = l.match(/^\s*(#{1,4})\s+(.*)$/);
+        if (h) { const sz = h[1].length <= 1 ? 13 : h[1].length === 2 ? 12 : 11; needSpace(sz + 12); y -= 4; drawRich(h[2], { size: sz, color: brand, allBold: true, gap: 3 }); continue; }
+        const bl = l.match(/^\s*[-*]\s+(.*)$/);
+        if (bl) { needSpace(16); page.drawText("-", { x: M + 8, y, size: 10.5, font: bold, color: brand }); drawRich(bl[1], { size: 10.5, indent: 20 }); continue; }
+        const nb = l.match(/^\s*(\d+)[.)]\s+(.*)$/);
+        if (nb) { needSpace(16); page.drawText(nb[1] + ".", { x: M + 6, y, size: 10.5, font: bold, color: brand }); drawRich(nb[2], { size: 10.5, indent: 24 }); continue; }
+        if (/^\s*\|.*\|\s*$/.test(l)) { if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) continue; const cells = l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).filter(Boolean); needSpace(15); drawRich(cells.join("   |   "), { size: 10, color: muted }); continue; }
+        needSpace(14); drawRich(l, { size: 10.5, gap: 2 });
       }
     };
 
-    // En-tête
-    draw(org.nom ?? "Organisme de formation", { f: bold, size: 16, color: brand });
-    const sub = [org.qualiopi ? `Qualiopi ${org.qualiopi}` : "", org.email ?? "", org.telephone ?? ""].filter(Boolean).join("   ");
-    if (sub) draw(sub, { f: font, size: 9, color: rgb(0.43, 0.43, 0.43) });
-    y -= 6; page.drawLine({ start: { x: M, y }, end: { x: A4[0] - M, y }, thickness: 1.5, color: brand }); y -= 22;
+    // ── En-tête : bandeau de marque ──
+    const bandH = 62;
+    page.drawRectangle({ x: 0, y: H - bandH, width: W, height: bandH, color: brand });
+    page.drawText(clean(org.nom ?? "Organisme de formation"), { x: M, y: H - 34, size: 17, font: bold, color: rgb(1, 1, 1) });
+    const orgSub = [org.qualiopi ? `Qualiopi ${org.qualiopi}` : "", org.email ?? "", org.telephone ?? ""].filter(Boolean).join("    ");
+    if (orgSub) page.drawText(clean(orgSub), { x: M, y: H - 50, size: 9, font, color: rgb(1, 1, 1) });
+    y = H - bandH - 30;
 
-    // Titre + métadonnées
-    draw(titre, { f: bold, size: 18, color: rgb(0.08, 0.08, 0.12) }); y -= 4;
-    const metaLines = [
+    // ── Titre + métadonnées ──
+    drawRich(titre, { size: 20, color: rgb(0.08, 0.08, 0.12), allBold: true });
+    y -= 2; page.drawLine({ start: { x: M, y }, end: { x: M + 96, y }, thickness: 2.5, color: brand }); y -= 16;
+    for (const ml of [
       m.apprenant ? `Apprenant : ${m.apprenant}` : "",
-      m.organismePartenaire ? `Organisme / partenaire : ${m.organismePartenaire}` : "",
+      m.organismePartenaire ? `Partenaire : ${m.organismePartenaire}` : "",
       `Date : ${new Date().toLocaleDateString("fr-FR")}`,
-    ].filter(Boolean);
-    for (const ml of metaLines) draw(ml, { f: font, size: 10, color: rgb(0.35, 0.35, 0.35) });
+    ].filter(Boolean)) drawRich(clean(ml as string), { size: 10, color: muted });
     y -= 12;
 
-    // Sections
+    // ── Sections ──
     for (const s of sections) {
-      if (y < M + 40) { page = pdf.addPage(A4); y = A4[1] - M; }
-      draw(s.titre ?? "", { f: bold, size: 13, color: brand });
-      draw(s.contenu ?? "", { f: font, size: 10.5 }); y -= 10;
+      needSpace(70); // éviter un titre de section orphelin en bas de page
+      y -= 6;
+      page.drawRectangle({ x: M, y: y - 2, width: 3.5, height: 14, color: brand });
+      drawRich(s.titre ?? "", { size: 13.5, color: rgb(0.08, 0.08, 0.12), allBold: true, indent: 11 });
+      y -= 1; page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.8, color: ruleCol }); y -= 12;
+      renderMd(s.contenu ?? "");
+      y -= 10;
     }
+
+    // ── Pied de page sur toutes les pages (avec total) ──
+    const allPages = pdf.getPages();
+    const total = allPages.length;
+    allPages.forEach((p, i) => {
+      p.drawLine({ start: { x: M, y: M - 10 }, end: { x: W - M, y: M - 10 }, thickness: 0.6, color: ruleCol });
+      p.drawText(clean(org.nom ?? ""), { x: M, y: M - 22, size: 8, font, color: muted });
+      const pn = `Page ${i + 1} / ${total}`;
+      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 8), y: M - 22, size: 8, font, color: muted });
+    });
 
     const bytes = await pdf.save();
 
