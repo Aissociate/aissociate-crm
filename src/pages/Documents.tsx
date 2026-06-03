@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, ExternalLink, Lock, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Lock, Search, Folder, Bot } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -11,10 +11,11 @@ import type { Document } from '@/lib/database.types';
 const CATEGORIES = ['general', 'procedure', 'qualiopi', 'modele', 'contractuel', 'reglementaire'];
 const empty = (): Partial<Document> => ({
   titre: '', categorie: 'general', description: '', fichier_url: '', version: 1, statut: 'actif', tags: [],
+  dossier: '', chat_direction: false, chat_conseiller: false,
 });
 
 export default function Documents() {
-  const { isManager, session } = useAuth();
+  const { isManager, isAdmin, session } = useAuth();
   const { data, loading, refresh } = useCollection<Document>('documents', {
     orderBy: { column: 'created_at', ascending: false },
   });
@@ -23,8 +24,10 @@ export default function Documents() {
   const [tagsText, setTagsText] = useState('');
   const [saving, setSaving] = useState(false);
   const [cat, setCat] = useState('');
+  const [fol, setFol] = useState('');
   const [q, setQ] = useState('');
   const set = (k: keyof Document, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const folders = [...new Set(data.map((d) => d.dossier).filter(Boolean) as string[])].sort();
 
   const openNew = () => { setForm(empty()); setTagsText(''); setOpen(true); };
   const openEdit = (d: Document) => { setForm(d); setTagsText((d.tags ?? []).join(', ')); setOpen(true); };
@@ -52,6 +55,7 @@ export default function Documents() {
       titre: d.titre, categorie: d.categorie, description: d.description,
       fichier_url: d.fichier_url, version: d.version + 1, statut: 'actif',
       parent_id: d.parent_id ?? d.id, tags: d.tags, owner_id: session?.user.id,
+      dossier: d.dossier, chat_direction: d.chat_direction, chat_conseiller: d.chat_conseiller, contenu_texte: d.contenu_texte,
     });
     if (error) { alert(error.message); return; }
     refresh();
@@ -65,7 +69,8 @@ export default function Documents() {
   };
 
   const filtered = data.filter((d) =>
-    (!cat || d.categorie === cat) && `${d.titre} ${(d.tags ?? []).join(' ')}`.toLowerCase().includes(q.toLowerCase()),
+    (!cat || d.categorie === cat) && (!fol || d.dossier === fol) &&
+    `${d.titre} ${(d.tags ?? []).join(' ')}`.toLowerCase().includes(q.toLowerCase()),
   );
 
   return (
@@ -83,9 +88,13 @@ export default function Documents() {
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
           <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <select className="input max-w-[220px]" value={cat} onChange={(e) => setCat(e.target.value)}>
+        <select className="input max-w-[200px]" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">Toutes catégories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="input max-w-[200px]" value={fol} onChange={(e) => setFol(e.target.value)}>
+          <option value="">Tous les dossiers</option>
+          {folders.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
       </div>
 
@@ -107,7 +116,12 @@ export default function Documents() {
             <tr key={d.id} className="hover:bg-surface-2">
               <td className="px-4 py-3">
                 <span className="flex items-center gap-2 font-medium text-fg"><FileText className="h-4 w-4 text-brand-500" />{d.titre}</span>
-                {(d.tags ?? []).length > 0 && <span className="mt-0.5 flex flex-wrap gap-1">{d.tags.map((t) => <Badge key={t} className="bg-surface-2 text-muted">{t}</Badge>)}</span>}
+                <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                  {d.dossier && <Badge className="bg-amber-50 text-amber-700"><Folder className="mr-1 h-3 w-3" />{d.dossier}</Badge>}
+                  {d.chat_direction && <Badge className="bg-indigo-100 text-indigo-700"><Bot className="mr-1 h-3 w-3" />Direction</Badge>}
+                  {d.chat_conseiller && <Badge className="bg-brand-50 text-brand-700"><Bot className="mr-1 h-3 w-3" />Conseiller</Badge>}
+                  {(d.tags ?? []).map((t) => <Badge key={t} className="bg-surface-2 text-muted">{t}</Badge>)}
+                </span>
               </td>
               <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{d.categorie}</Badge></td>
               <td className="px-4 py-3 text-muted">v{d.version}</td>
@@ -153,7 +167,25 @@ export default function Documents() {
               <input className="input mt-2" placeholder="https://…" value={form.fichier_url ?? ''} onChange={(e) => set('fichier_url', e.target.value)} />
             </Field>
           </div>
+          <Field label="Dossier" hint="Rangement de l'espace documentaire (existant ou nouveau)">
+            <input className="input" list="doc-dossiers" value={form.dossier ?? ''} onChange={(e) => set('dossier', e.target.value)} placeholder="ex. Qualiopi, Modèles…" />
+            <datalist id="doc-dossiers">{folders.map((f) => <option key={f} value={f} />)}</datalist>
+          </Field>
           <div className="col-span-2"><Field label="Tags (séparés par des virgules)"><input className="input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} /></Field></div>
+          {isAdmin && (
+            <div className="col-span-2 rounded-lg border border-line bg-surface-2 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg"><Bot className="h-4 w-4 text-brand-600" /> Activation pour l'assistant IA</p>
+              <p className="mb-2 text-xs text-muted">Cochez les chats autorisés à utiliser ce document comme source. Décoché partout = utilisé par aucun chat.</p>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm text-fg">
+                  <input type="checkbox" checked={!!form.chat_direction} onChange={(e) => set('chat_direction', e.target.checked)} /> Chat Direction
+                </label>
+                <label className="flex items-center gap-2 text-sm text-fg">
+                  <input type="checkbox" checked={!!form.chat_conseiller} onChange={(e) => set('chat_conseiller', e.target.checked)} /> Chat Conseiller
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </div>

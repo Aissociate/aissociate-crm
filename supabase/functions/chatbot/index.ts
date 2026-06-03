@@ -68,14 +68,18 @@ Deno.serve(async (req: Request) => {
     const docSources: { n: number; id: string; label: string; url: string | null }[] = [];
 
     if (d.documents !== false) {
+      // Seuls les documents EXPLICITEMENT activés pour CE chat (coche admin).
       const { data: docs } = await sb.from("documents")
-        .select("id, titre, categorie, description, tags, fichier_url, contenu_texte").limit(200);
+        .select("id, titre, categorie, description, tags, fichier_url, contenu_texte, dossier")
+        .eq(isDirection ? "chat_direction" : "chat_conseiller", true)
+        .limit(200);
       if (docs?.length) {
         const lines = docs.map((x, i) => {
           docSources.push({ n: i + 1, id: x.id as string, label: (x.titre as string) ?? "Document", url: (x.fichier_url as string) ?? null });
           const tags = Array.isArray(x.tags) && x.tags.length ? ` — tags: ${(x.tags as string[]).join(", ")}` : "";
+          const dossier = x.dossier ? ` — dossier: ${x.dossier}` : "";
           const body = [x.description, x.contenu_texte].filter(Boolean).join("\n");
-          return `[D${i + 1}] « ${x.titre} » (${x.categorie ?? "—"})${tags}\n${body}`.trim();
+          return `[D${i + 1}] « ${x.titre} » (${x.categorie ?? "—"})${dossier}${tags}\n${body}`.trim();
         });
         ctx.push("# Base documentaire\n" + lines.join("\n\n"));
       }

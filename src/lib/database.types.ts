@@ -96,6 +96,7 @@ export type Document = Timestamps & {
   id: string; titre: string; categorie: string; description: string | null;
   fichier_url: string | null; version: number; statut: string;
   parent_id: string | null; tags: string[]; owner_id: string | null;
+  contenu_texte: string | null; chat_direction: boolean; chat_conseiller: boolean; dossier: string | null;
 };
 export type KanbanBoard = Timestamps & {
   id: string; nom: string; description: string | null; owner_id: string | null;
