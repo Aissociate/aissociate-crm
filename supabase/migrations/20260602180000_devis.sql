@@ -76,3 +76,6 @@ insert into storage.buckets (id, name, public) values ('devis', 'devis', false) 
 drop policy if exists "devis_storage_rw" on storage.objects;
 create policy "devis_storage_rw" on storage.objects for all to authenticated
   using (bucket_id = 'devis') with check (bucket_id = 'devis');
+
+-- Recharge immédiatement le cache de schéma de PostgREST (sinon « table non trouvée »).
+notify pgrst, 'reload schema';
