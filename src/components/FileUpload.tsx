@@ -5,7 +5,7 @@ import { uploadFile, openFile, type Bucket } from '@/lib/storage';
 /** Bouton d'upload : téléverse dans le bucket et renvoie la valeur à stocker. */
 export function FileUpload({
   bucket, onUploaded, label = 'Téléverser',
-}: { bucket: Bucket; onUploaded: (value: string) => void; label?: string }) {
+}: { bucket: Bucket; onUploaded: (value: string, file?: File) => void; label?: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -17,7 +17,7 @@ export function FileUpload({
     setBusy(false);
     if (e.target) e.target.value = '';
     if (error || !value) { alert(error ?? 'Échec du téléversement'); return; }
-    onUploaded(value);
+    onUploaded(value, file);
   };
 
   return (

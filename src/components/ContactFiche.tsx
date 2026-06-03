@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2 } from 'lucide-react';
+import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
@@ -7,7 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn, fullName, initials, formatDate, formatMoney, genReference } from '@/lib/utils';
 import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_COLORS, OPP_STAGE_LABELS } from '@/lib/constants';
 import { Badge } from '@/components/ui';
-import type { Contact, Entreprise, Financeur, Profile, ContactAction, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
+import { FileUpload, FileLink } from '@/components/FileUpload';
+import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
 const STATUTS_PROSPECT = ['', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
 const ACTION_TYPES = ['appel', 'email', 'rdv', 'relance', 'note', 'autre'];
@@ -65,15 +66,17 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
   const [sessions, setSessions] = useState<SessionFormation[]>([]);
   const [actions, setActions] = useState<ContactAction[]>([]);
+  const [coffre, setCoffre] = useState<ContactDocument[]>([]);
 
   const loadRefs = useCallback(async () => {
-    const [o, d, sp, a] = await Promise.all([
+    const [o, d, sp, a, cd] = await Promise.all([
       supabase.from('opportunites').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
       supabase.from('dossiers').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
       supabase.from('session_participants').select('session_id').eq('contact_id', c.id),
       supabase.from('contact_actions').select('*').eq('contact_id', c.id).order('date_action', { ascending: false }),
+      supabase.from('contact_documents').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
     ]);
-    setOpps(o.data ?? []); setDossiers(d.data ?? []); setActions(a.data ?? []);
+    setOpps(o.data ?? []); setDossiers(d.data ?? []); setActions(a.data ?? []); setCoffre(cd.data ?? []);
     const ids = ((sp.data ?? []) as Pick<SessionParticipant, 'session_id'>[]).map((x) => x.session_id);
     if (ids.length) {
       const s = await supabase.from('sessions_formation').select('*').in('id', ids).order('date_debut', { ascending: false });
@@ -127,6 +130,21 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   };
   // Sessions où le contact n'est pas déjà inscrit
   const enrollable = allSessions.filter((s) => !sessions.some((x) => x.id === s.id));
+
+  // ── Coffre de documents rattachés au contact ─────────────────────────────────
+  const addDoc = async (value: string, name?: string) => {
+    const { error } = await supabase.from('contact_documents').insert({
+      contact_id: c.id, titre: name || 'Document', fichier_url: value, created_by: session?.user.id ?? null,
+    });
+    if (error) { alert(error.message); return; }
+    loadRefs();
+  };
+  const removeDoc = async (d: ContactDocument) => {
+    if (!confirm(`Supprimer « ${d.titre} » ?`)) return;
+    const { error } = await supabase.from('contact_documents').delete().eq('id', d.id);
+    if (error) { alert(error.message); return; }
+    loadRefs();
+  };
 
   // ── Champs de suivi éditables ───────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -413,6 +431,26 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 </select>
                 <button onClick={enroll} disabled={busy || !enrollId} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Inscrire</button>
               </div>
+            )}
+          </section>
+
+          {/* Coffre de documents */}
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2"><FolderLock className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Coffre — documents</h3></div>
+              <div className="flex items-center gap-2"><span className="text-xs text-muted">{coffre.length}</span><FileUpload bucket="coffre" label="Ajouter" onUploaded={(v, f) => addDoc(v, f?.name)} /></div>
+            </div>
+            {coffre.length === 0 ? <p className="text-sm text-muted">Aucun document. Téléversez pièces, justificatifs, échanges…</p> : (
+              <ul className="space-y-1.5">{coffre.map((d) => (
+                <li key={d.id} className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 text-fg"><FileText className="h-4 w-4 shrink-0 text-brand-500" /><span className="truncate">{d.titre}</span></span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span className="text-xs text-muted">{formatDate(d.created_at)}</span>
+                    <FileLink bucket="coffre" value={d.fichier_url} />
+                    <button onClick={() => removeDoc(d)} className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </span>
+                </li>))}
+              </ul>
             )}
           </section>
 

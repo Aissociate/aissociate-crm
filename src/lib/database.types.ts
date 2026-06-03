@@ -53,6 +53,10 @@ export type Contact = Timestamps & {
   date_formation: string | null; assiette_commission: number | null;
   commission_validee: boolean; commission_payee: boolean;
 };
+export type ContactDocument = {
+  id: string; contact_id: string; titre: string; categorie: string | null;
+  fichier_url: string; created_by: string | null; created_at: string;
+};
 export type ContactAction = {
   id: string; contact_id: string; date_action: string; type: string; description: string;
   faite: boolean; auteur_id: string | null; created_at: string;
@@ -238,6 +242,7 @@ export type Database = {
       devis: TableShape<Devis>;
       devis_lignes: TableShape<DevisLigne>;
       contact_actions: TableShape<ContactAction>;
+      contact_documents: TableShape<ContactDocument>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
     };
