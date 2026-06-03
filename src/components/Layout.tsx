@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, UserPlus, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, LogOut, Menu, X, Bug, Bot } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, UserPlus, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, LogOut, Menu, X, Bug, Bot, ReceiptText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn } from '@/lib/utils';
@@ -39,6 +39,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/formations', label: 'Catalogue', icon: GraduationCap },
       { to: '/plans', label: 'Plans de formation', icon: FileText },
+      { to: '/devis', label: 'Devis', icon: ReceiptText },
       { to: '/dossiers', label: 'Dossiers', icon: FolderKanban },
       { to: '/calendrier', label: 'Calendrier', icon: CalendarDays },
       { to: '/formateurs', label: 'Formateurs', icon: Presentation },

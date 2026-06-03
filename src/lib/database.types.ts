@@ -158,6 +158,18 @@ export type PlanPdf = {
   id: string; plan_id: string | null; titre: string; apprenant: string | null;
   organisme: string | null; fichier_url: string | null; created_by: string | null; created_at: string;
 };
+export type DevisStatut = 'brouillon' | 'envoye' | 'accepte' | 'refuse' | 'expire';
+export type Devis = Timestamps & {
+  id: string; numero: string; contact_id: string | null; entreprise_id: string | null;
+  financeur_id: string | null; dossier_id: string | null;
+  date_emission: string; date_validite: string | null; statut: DevisStatut;
+  tva_taux: number; tva_exoneree: boolean; total_ht: number; total_tva: number; total_ttc: number;
+  objet: string | null; conditions: string | null; notes: string | null; fichier_url: string | null; owner_id: string | null;
+};
+export type DevisLigne = {
+  id: string; devis_id: string; designation: string; description: string | null;
+  quantite: number; unite: string; prix_unitaire_ht: number; ordre: number; created_at: string;
+};
 export type ParticipantStatut = 'inscrit' | 'present' | 'absent' | 'annule';
 export type SessionParticipant = {
   id: string; session_id: string; contact_id: string | null; nom: string; prenom: string | null;
@@ -223,6 +235,8 @@ export type Database = {
       formateurs: TableShape<Formateur>;
       formateur_documents: TableShape<FormateurDocument>;
       plan_pdfs: TableShape<PlanPdf>;
+      devis: TableShape<Devis>;
+      devis_lignes: TableShape<DevisLigne>;
       contact_actions: TableShape<ContactAction>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
@@ -235,6 +249,7 @@ export type Database = {
       financement_type: FinancementType;
       opportunite_stage: OpportuniteStage;
       dossier_statut: DossierStatut;
+      devis_statut: DevisStatut;
       piece_statut: PieceStatut;
       candidat_statut: CandidatStatut;
       plan_statut: PlanStatut;

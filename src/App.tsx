@@ -11,6 +11,7 @@ import Entreprises from '@/pages/Entreprises';
 import Pipeline from '@/pages/Pipeline';
 import Formations from '@/pages/Formations';
 import PlansFormation from '@/pages/PlansFormation';
+import Devis from '@/pages/Devis';
 import Dossiers from '@/pages/Dossiers';
 import DossierDetail from '@/pages/DossierDetail';
 import Calendrier from '@/pages/Calendrier';
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/formations" element={<Formations />} />
         <Route path="/plans" element={<PlansFormation />} />
+        <Route path="/devis" element={<Devis />} />
         <Route path="/dossiers" element={<Dossiers />} />
         <Route path="/dossiers/:id" element={<DossierDetail />} />
         <Route path="/calendrier" element={<Calendrier />} />
