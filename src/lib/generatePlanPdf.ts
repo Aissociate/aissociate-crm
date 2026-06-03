@@ -2,10 +2,14 @@ import { supabase } from './supabase';
 
 interface GenInput {
   planId: string | null;
-  contexte: Record<string, unknown>; // données envoyées à l'IA
+  contexte: Record<string, unknown>; // données du plan envoyées à l'IA
   apprenant: string;
   organismePartenaire: string;
   userId: string | null;
+  // Références pour rassembler le contexte client complet côté serveur.
+  contactId?: string | null;
+  entrepriseId?: string | null;
+  financeurId?: string | null;
 }
 
 /**
@@ -23,6 +27,9 @@ export async function generatePlanPdf(input: GenInput): Promise<{ titre: string 
         apprenant: input.apprenant,
         organismePartenaire: input.organismePartenaire,
         userId: input.userId,
+        contactId: input.contactId ?? null,
+        entrepriseId: input.entrepriseId ?? null,
+        financeurId: input.financeurId ?? null,
       },
     },
   });

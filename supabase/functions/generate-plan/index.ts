@@ -66,6 +66,29 @@ Deno.serve(async (req: Request) => {
     const { data: orgRow } = await sb.from("parametres").select("valeur").eq("cle", "organisme").maybeSingle();
     const org = (orgRow?.valeur ?? {}) as Record<string, string>;
 
+    // Contexte CLIENT complet (service role -> pas de RLS) : fiche contact entière,
+    // entreprise, financeur, dossiers liés et historique de suivi. Permet à l'IA de
+    // personnaliser le plan selon la situation réelle du client.
+    let clientContext: Record<string, unknown> | null = null;
+    if (m.contactId) {
+      const { data: contact } = await sb.from("contacts").select("*").eq("id", m.contactId).maybeSingle();
+      const entId = m.entrepriseId ?? contact?.entreprise_id ?? null;
+      const finId = m.financeurId ?? contact?.financeur_id ?? null;
+      const entreprise = entId ? (await sb.from("entreprises").select("*").eq("id", entId).maybeSingle()).data : null;
+      const financeur = finId ? (await sb.from("financeurs").select("*").eq("id", finId).maybeSingle()).data : null;
+      const { data: dossiers } = await sb.from("dossiers").select("*").eq("contact_id", m.contactId);
+      const { data: actions } = await sb.from("contact_actions").select("*").eq("contact_id", m.contactId).order("date_action", { ascending: false }).limit(30);
+      clientContext = { contact, entreprise, financeur, dossiers: dossiers ?? [], historique_suivi: actions ?? [] };
+    }
+
+    // Message utilisateur : données du plan + contexte client total.
+    const userContent = [
+      "Données du plan de formation (JSON) :\n" + JSON.stringify(plan),
+      clientContext
+        ? "Contexte client complet (JSON) — prends-le pleinement en compte pour personnaliser le plan (situation, besoins, entreprise, financement, dossiers, historique de suivi) :\n" + JSON.stringify(clientContext)
+        : "",
+    ].filter(Boolean).join("\n\n");
+
     // 1) Génération du contenu
     const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -79,7 +102,7 @@ Deno.serve(async (req: Request) => {
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: "Données du plan (JSON) :\n" + JSON.stringify(plan) },
+          { role: "user", content: userContent },
         ],
         temperature: 0.4,
       }),

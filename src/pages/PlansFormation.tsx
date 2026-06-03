@@ -53,6 +53,7 @@ export default function PlansFormation() {
         apprenant: cName(p.contact_id),
         organismePartenaire: eName(p.entreprise_id) || fName(p.financeur_id),
         userId: session?.user.id ?? null,
+        contactId: p.contact_id, entrepriseId: p.entreprise_id, financeurId: p.financeur_id,
       });
       pdfs.refresh();
       alert('PDF généré et enregistré.');
