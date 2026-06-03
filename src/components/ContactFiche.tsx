@@ -3,7 +3,8 @@ import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, C
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
-import { cn, fullName, initials, formatDate, formatMoney } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { cn, fullName, initials, formatDate, formatMoney, genReference } from '@/lib/utils';
 import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_COLORS, OPP_STAGE_LABELS } from '@/lib/constants';
 import { Badge } from '@/components/ui';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit, onUpdated }: Props) {
+  const { session } = useAuth();
   const entreprise = entreprises.find((e) => e.id === c.entreprise_id);
   const financeur = financeurs.find((f) => f.id === c.financeur_id);
   const owner = profiles.find((p) => p.id === c.owner_id);
@@ -79,6 +81,52 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     } else setSessions([]);
   }, [c.id]);
   useEffect(() => { void loadRefs(); }, [loadRefs]);
+
+  // ── Ajout d'opportunité / dossier / inscription à une session ────────────────
+  const [allSessions, setAllSessions] = useState<SessionFormation[]>([]);
+  useEffect(() => { supabase.from('sessions_formation').select('*').order('date_debut', { ascending: false }).then(({ data }) => setAllSessions(data ?? [])); }, []);
+  const [addPanel, setAddPanel] = useState<'opp' | 'doss' | 'sess' | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [newOpp, setNewOpp] = useState({ titre: '', montant: '' });
+  const [newDoss, setNewDoss] = useState({ intitule: '' });
+  const [enrollId, setEnrollId] = useState('');
+  // Propriétaire = utilisateur courant (requis par la RLS d'écriture pour un conseiller).
+  const ownerOf = session?.user.id ?? c.responsable_id ?? c.owner_id ?? null;
+
+  const addOpp = async () => {
+    if (!newOpp.titre.trim()) return;
+    setBusy(true);
+    const { error } = await supabase.from('opportunites').insert({
+      contact_id: c.id, entreprise_id: c.entreprise_id, financeur_id: c.financeur_id,
+      titre: newOpp.titre.trim(), montant: Number(newOpp.montant) || 0, stage: 'nouveau', probabilite: 0, owner_id: ownerOf,
+    });
+    setBusy(false);
+    if (error) { alert(error.message); return; }
+    setNewOpp({ titre: '', montant: '' }); setAddPanel(null); loadRefs();
+  };
+  const addDoss = async () => {
+    if (!newDoss.intitule.trim()) return;
+    setBusy(true);
+    const { error } = await supabase.from('dossiers').insert({
+      contact_id: c.id, entreprise_id: c.entreprise_id, financeur_id: c.financeur_id,
+      reference: genReference('DOS'), intitule: newDoss.intitule.trim(), owner_id: ownerOf,
+    });
+    setBusy(false);
+    if (error) { alert(error.message); return; }
+    setNewDoss({ intitule: '' }); setAddPanel(null); loadRefs();
+  };
+  const enroll = async () => {
+    if (!enrollId) return;
+    setBusy(true);
+    const { error } = await supabase.from('session_participants').insert({
+      session_id: enrollId, contact_id: c.id, nom: c.nom, prenom: c.prenom, email: c.email, statut: 'inscrit',
+    });
+    setBusy(false);
+    if (error) { alert(error.message); return; }
+    setEnrollId(''); setAddPanel(null); loadRefs();
+  };
+  // Sessions où le contact n'est pas déjà inscrit
+  const enrollable = allSessions.filter((s) => !sessions.some((x) => x.id === s.id));
 
   // ── Champs de suivi éditables ───────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -305,7 +353,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
 
           {/* Pipeline */}
           <section>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Pipeline</h3></div><span className="text-xs text-muted">{opps.length}</span></div>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Pipeline</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{opps.length}</span><button onClick={() => setAddPanel(addPanel === 'opp' ? null : 'opp')} title="Ajouter une opportunité" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {opps.length === 0 ? <p className="text-sm text-muted">Aucune opportunité.</p> : (
               <ul className="space-y-1.5">{opps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
@@ -314,11 +362,20 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 </li>))}
               </ul>
             )}
+            {addPanel === 'opp' && (
+              <div className="mt-2 space-y-2 rounded-lg border border-line bg-surface-2 p-2">
+                <input className="input" placeholder="Intitulé de l'opportunité" value={newOpp.titre} onChange={(e) => setNewOpp({ ...newOpp, titre: e.target.value })} />
+                <div className="flex gap-2">
+                  <input className="input" type="number" placeholder="Montant €" value={newOpp.montant} onChange={(e) => setNewOpp({ ...newOpp, montant: e.target.value })} />
+                  <button onClick={addOpp} disabled={busy || !newOpp.titre.trim()} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Dossiers */}
           <section>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><span className="text-xs text-muted">{dossiers.length}</span></div>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{dossiers.length}</span><button onClick={() => setAddPanel(addPanel === 'doss' ? null : 'doss')} title="Créer un dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
               <ul className="space-y-1.5">{dossiers.map((d) => (
                 <li key={d.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
@@ -327,11 +384,17 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 </li>))}
               </ul>
             )}
+            {addPanel === 'doss' && (
+              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
+                <input className="input" placeholder="Intitulé du dossier" value={newDoss.intitule} onChange={(e) => setNewDoss({ intitule: e.target.value })} />
+                <button onClick={addDoss} disabled={busy || !newDoss.intitule.trim()} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Créer</button>
+              </div>
+            )}
           </section>
 
           {/* Sessions */}
           <section>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><span className="text-xs text-muted">{sessions.length}</span></div>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{sessions.length}</span><button onClick={() => setAddPanel(addPanel === 'sess' ? null : 'sess')} title="Inscrire à une session" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {sessions.length === 0 ? <p className="text-sm text-muted">Aucune session.</p> : (
               <ul className="space-y-1.5">{sessions.map((s) => {
                 const passee = new Date(s.date_debut) < now;
@@ -341,6 +404,15 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                     <span className="flex items-center gap-2"><span className="text-xs text-muted">{formatDate(s.date_debut, 'dd/MM/yyyy')}</span><Badge className={passee ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{passee ? 'Réalisée' : 'Programmée'}</Badge></span>
                   </li>);
               })}</ul>
+            )}
+            {addPanel === 'sess' && (
+              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
+                <select className="input" value={enrollId} onChange={(e) => setEnrollId(e.target.value)}>
+                  <option value="">{enrollable.length ? 'Choisir une session…' : 'Aucune session disponible'}</option>
+                  {enrollable.map((s) => <option key={s.id} value={s.id}>{s.titre} — {formatDate(s.date_debut, 'dd/MM/yyyy')}</option>)}
+                </select>
+                <button onClick={enroll} disabled={busy || !enrollId} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Inscrire</button>
+              </div>
             )}
           </section>
 
