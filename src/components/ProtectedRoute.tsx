@@ -16,7 +16,7 @@ export default function ProtectedRoute({
     );
   }
   if (!session) return <Navigate to="/login" replace />;
-  if (adminOnly && !isAdmin) return <Navigate to="/" replace />;
-  if (managerOnly && !isManager) return <Navigate to="/" replace />;
+  if (adminOnly && !isAdmin) return <Navigate to="/dashboard" replace />;
+  if (managerOnly && !isManager) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }

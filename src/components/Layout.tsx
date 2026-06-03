@@ -20,7 +20,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Pilotage',
     items: [
-      { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
+      { to: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
       { to: '/assistant', label: 'Assistant IA', icon: Bot },
       { to: '/actions', label: 'Actions à faire', icon: ListTodo },
       { to: '/statistiques', label: 'Statistiques', icon: BarChart3 },
@@ -37,7 +37,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Formation',
     items: [
-      { to: '/formations', label: 'Catalogue', icon: GraduationCap },
+      { to: '/catalogue', label: 'Catalogue', icon: GraduationCap },
       { to: '/plans', label: 'Plans de formation', icon: FileText },
       { to: '/devis', label: 'Devis', icon: ReceiptText },
       { to: '/dossiers', label: 'Dossiers', icon: FolderKanban },
