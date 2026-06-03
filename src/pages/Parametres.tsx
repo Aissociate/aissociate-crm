@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
+import { FileUpload, FileLink } from '@/components/FileUpload';
 
 type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
   code_postal?: string; ville?: string; siret?: string; nda?: string; tva_intra?: string;
-  forme_juridique?: string; capital?: string;
+  forme_juridique?: string; capital?: string; logo_url?: string;
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
@@ -123,6 +124,14 @@ export default function Parametres() {
             <Field label="TVA intracommunautaire" hint="Laisser vide si exonéré"><input className="input" value={organisme.tva_intra ?? ''} onChange={(e) => setOrganisme({ ...organisme, tva_intra: e.target.value })} /></Field>
             <Field label="Forme juridique" hint="ex. SARL, SAS"><input className="input" value={organisme.forme_juridique ?? ''} onChange={(e) => setOrganisme({ ...organisme, forme_juridique: e.target.value })} /></Field>
             <Field label="Capital social"><input className="input" value={organisme.capital ?? ''} onChange={(e) => setOrganisme({ ...organisme, capital: e.target.value })} /></Field>
+            <div className="sm:col-span-2">
+              <Field label="Logo" hint="Affiché en en-tête des devis (PNG/JPG)">
+                <div className="flex items-center gap-3">
+                  <FileUpload bucket="documents" onUploaded={(v) => setOrganisme({ ...organisme, logo_url: v })} label="Téléverser un logo" />
+                  {organisme.logo_url && <FileLink bucket="documents" value={organisme.logo_url} onClear={() => setOrganisme({ ...organisme, logo_url: '' })} />}
+                </div>
+              </Field>
+            </div>
             <div className="flex items-center gap-3">
               <Button onClick={() => persist('organisme', organisme)} disabled={saving === 'organisme'}>
                 <Save className="h-4 w-4" /> {saving === 'organisme' ? 'Enregistrement…' : 'Enregistrer'}

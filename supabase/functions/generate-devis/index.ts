@@ -71,10 +71,29 @@ Deno.serve(async (req: Request) => {
       }
     };
 
-    // En-tête : émetteur (gauche) + bloc DEVIS (droite)
-    txt(org.nom ?? "Aissociate", M, y, { size: 15, f: bold, color: brand });
+    // Logo optionnel (haut gauche) — récupéré depuis l'URL du paramètre organisme.
+    let logoH = 0;
+    if (org.logo_url) {
+      try {
+        const r = await fetch(org.logo_url);
+        if (r.ok) {
+          const bytes = new Uint8Array(await r.arrayBuffer());
+          const ct = (r.headers.get("content-type") ?? "").toLowerCase();
+          const isPng = ct.includes("png") || org.logo_url.toLowerCase().includes(".png");
+          const img = isPng ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+          const sc = Math.min(150 / img.width, 56 / img.height);
+          const w = img.width * sc, h = img.height * sc;
+          page.drawImage(img, { x: M, y: y - h, width: w, height: h });
+          logoH = h + 8;
+        }
+      } catch { /* logo indisponible -> en-tête texte */ }
+    }
+
+    // En-tête : DEVIS (droite) + émetteur (gauche, sous le logo)
     txt("DEVIS", W - M, y, { size: 20, f: bold, color: ink, right: W - M });
-    y -= 16;
+    let yName = y - logoH;
+    txt(org.nom ?? "Aissociate", M, yName, { size: 14, f: bold, color: brand });
+    yName -= 16;
     const emit: string[] = [
       [org.forme_juridique, org.capital ? `au capital de ${org.capital}` : ""].filter(Boolean).join(" "),
       org.adresse ?? "", [org.code_postal, org.ville].filter(Boolean).join(" "),
@@ -83,10 +102,10 @@ Deno.serve(async (req: Request) => {
       org.tva_intra ? `TVA intra : ${org.tva_intra}` : "TVA non applicable (art. 261-4-4° du CGI)",
       [org.email, org.telephone].filter(Boolean).join("  -  "),
     ].filter(Boolean);
-    let yL = y;
+    let yL = yName;
     for (const l of emit) { txt(l, M, yL, { size: 8.5, color: muted }); yL -= 12; }
-    // Bloc droite : numéro + dates
-    let yR = y;
+    // Bloc droite : numéro + dates (sous le titre DEVIS)
+    let yR = y - 22;
     txt(`N° ${devis.numero}`, W - M, yR, { size: 10, f: bold, right: W - M }); yR -= 14;
     txt(`Date : ${frDate(devis.date_emission)}`, W - M, yR, { size: 9, color: muted, right: W - M }); yR -= 12;
     txt(`Validité : ${frDate(devis.date_validite)}`, W - M, yR, { size: 9, color: muted, right: W - M }); yR -= 12;
