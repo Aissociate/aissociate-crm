@@ -1,6 +1,7 @@
 // Supabase Edge Function — génération PDF d'un devis conforme (norme FR, HT).
-// Récupère le devis + lignes + client + organisme, rend un PDF (pdf-lib),
-// l'upload dans le bucket privé `devis` et enregistre `fichier_url`.
+// Mise en page calquée sur le modèle de facture fourni : logo, émetteur (gauche)
+// / client (droite), titre + date, tableau des prestations, bloc totaux gris,
+// conditions + exonération TVA, mentions légales en pied.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
@@ -18,6 +19,9 @@ function clean(s: unknown): string {
 }
 const eur = (n: number) => `${(Number(n) || 0).toFixed(2).replace(".", ",")} €`;
 const frDate = (d: string | null) => d ? new Date(d).toLocaleDateString("fr-FR") : "—";
+const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const frLong = (s: string | null) => { if (!s) return ""; const d = new Date(s); return `Le ${JOURS[d.getUTCDay()]} ${d.getUTCDate()} ${MOIS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
@@ -41,38 +45,49 @@ Deno.serve(async (req: Request) => {
     const totalTVA = totalHT * (taux / 100);
     const totalTTC = totalHT + totalTVA;
 
-    // ── Rendu PDF ──
+    // ── PDF ──
     const pdf = await PDFDocument.create();
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const A4: [number, number] = [595.28, 841.89];
     const W = A4[0], H = A4[1], M = 48;
-    const brand = rgb(0.917, 0.416, 0.118);
-    const ink = rgb(0.13, 0.13, 0.18);
-    const muted = rgb(0.42, 0.42, 0.47);
-    const line = rgb(0.85, 0.85, 0.88);
+    const brand = rgb(0.85, 0.30, 0.10);
+    const ink = rgb(0.12, 0.12, 0.16);
+    const muted = rgb(0.40, 0.40, 0.45);
+    const line = rgb(0.82, 0.82, 0.85);
+    const grayLight = rgb(0.95, 0.95, 0.96);
+    const grayMid = rgb(0.88, 0.88, 0.90);
     let page = pdf.addPage(A4);
-    let y = H - M;
 
-    const txt = (s: string, x: number, yy: number, o: { size?: number; f?: typeof font; color?: ReturnType<typeof rgb>; right?: number } = {}) => {
-      const size = o.size ?? 9.5, f = o.f ?? font, c = clean(s);
+    const T = (s: string, x: number, yy: number, o: { size?: number; f?: typeof font; color?: ReturnType<typeof rgb>; right?: number } = {}) => {
+      const size = o.size ?? 9, f = o.f ?? font, c = clean(s);
       const xx = o.right != null ? o.right - f.widthOfTextAtSize(c, size) : x;
       page.drawText(c, { x: xx, y: yy, size, font: f, color: o.color ?? ink });
     };
-    const wrapTxt = (s: string, x: number, maxW: number, size = 9.5, f = font, color = ink) => {
+    // Écrit un bloc multi-lignes à partir de (x, yTop), renvoie le y final.
+    const block = (lines: string[], x: number, yTop: number, o: { size?: number; gap?: number; boldFirst?: boolean } = {}) => {
+      const size = o.size ?? 9, gap = o.gap ?? 12.5; let yy = yTop;
+      lines.filter(Boolean).forEach((l, i) => { T(l, x, yy, { size, f: i === 0 && o.boldFirst ? bold : font, color: i === 0 && o.boldFirst ? ink : muted }); yy -= gap; });
+      return yy;
+    };
+    const wrap = (s: string, x: number, yTop: number, maxW: number, size = 9, f = font, color = ink) => {
+      let yy = yTop;
       for (const para of clean(s).split("\n")) {
-        let lineStr = "";
+        let ln = "";
         for (const w of para.split(/\s+/)) {
-          const test = lineStr ? lineStr + " " + w : w;
-          if (f.widthOfTextAtSize(test, size) > maxW && lineStr) { txt(lineStr, x, y, { size, f, color }); y -= size * 1.35; lineStr = w; }
-          else lineStr = test;
+          const test = ln ? ln + " " + w : w;
+          if (f.widthOfTextAtSize(test, size) > maxW && ln) { T(ln, x, yy, { size, f, color }); yy -= size * 1.32; ln = w; }
+          else ln = test;
         }
-        txt(lineStr, x, y, { size, f, color }); y -= size * 1.35;
+        T(ln, x, yy, { size, f, color }); yy -= size * 1.32;
       }
+      return yy;
     };
 
-    // Logo optionnel (haut gauche) — récupéré depuis l'URL du paramètre organisme.
-    let logoH = 0;
+    let y = H - M;
+
+    // 1) Logo (haut gauche)
+    let logoBottom = y;
     if (org.logo_url) {
       try {
         const r = await fetch(org.logo_url);
@@ -81,118 +96,119 @@ Deno.serve(async (req: Request) => {
           const ct = (r.headers.get("content-type") ?? "").toLowerCase();
           const isPng = ct.includes("png") || org.logo_url.toLowerCase().includes(".png");
           const img = isPng ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
-          const sc = Math.min(150 / img.width, 56 / img.height);
+          const sc = Math.min(150 / img.width, 55 / img.height);
           const w = img.width * sc, h = img.height * sc;
           page.drawImage(img, { x: M, y: y - h, width: w, height: h });
-          logoH = h + 8;
+          logoBottom = y - h - 14;
         }
-      } catch { /* logo indisponible -> en-tête texte */ }
+      } catch { /* en-tête sans logo */ }
     }
+    if (logoBottom === y) logoBottom = y - 6;
 
-    // En-tête : DEVIS (droite) + émetteur (gauche, sous le logo)
-    txt("DEVIS", W - M, y, { size: 20, f: bold, color: ink, right: W - M });
-    let yName = y - logoH;
-    txt(org.nom ?? "Aissociate", M, yName, { size: 14, f: bold, color: brand });
-    yName -= 16;
-    const emit: string[] = [
-      [org.forme_juridique, org.capital ? `au capital de ${org.capital}` : ""].filter(Boolean).join(" "),
-      org.adresse ?? "", [org.code_postal, org.ville].filter(Boolean).join(" "),
-      org.siret ? `SIRET : ${org.siret}` : "",
+    // 2) Émetteur (gauche) / Client (droite)
+    const colR = W / 2 + 12;
+    const emit = [
+      org.nom ?? "AISSOCIATE",
+      org.adresse ?? "",
+      [org.code_postal, org.ville].filter(Boolean).join(" "),
+      org.pays ?? "FRANCE",
+      org.email ?? "",
+      org.tva_intra ? `N° TVA Intracommunautaire : ${org.tva_intra}` : "TVA non applicable (art. 261-4-4° du CGI)",
+      org.siret ? `N° SIRET : ${org.siret}` : "",
+      org.naf ? `Code NAF : ${org.naf}` : "",
       org.nda ? `Déclaration d'activité n° ${org.nda}` : "",
-      org.tva_intra ? `TVA intra : ${org.tva_intra}` : "TVA non applicable (art. 261-4-4° du CGI)",
-      [org.email, org.telephone].filter(Boolean).join("  -  "),
-    ].filter(Boolean);
-    let yL = yName;
-    for (const l of emit) { txt(l, M, yL, { size: 8.5, color: muted }); yL -= 12; }
-    // Bloc droite : numéro + dates (sous le titre DEVIS)
-    let yR = y - 22;
-    txt(`N° ${devis.numero}`, W - M, yR, { size: 10, f: bold, right: W - M }); yR -= 14;
-    txt(`Date : ${frDate(devis.date_emission)}`, W - M, yR, { size: 9, color: muted, right: W - M }); yR -= 12;
-    txt(`Validité : ${frDate(devis.date_validite)}`, W - M, yR, { size: 9, color: muted, right: W - M }); yR -= 12;
-    y = Math.min(yL, yR) - 8;
-    page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 1, color: brand }); y -= 20;
-
-    // Client
-    txt("CLIENT", M, y, { size: 9, f: bold, color: muted }); y -= 14;
+    ];
     const cName = contact ? `${contact.prenom ?? ""} ${contact.nom ?? ""}`.trim() : "";
-    const clientLines = [
-      entreprise?.raison_sociale ?? cName,
+    const client = [
+      entreprise?.raison_sociale ?? cName ?? "Client",
       entreprise && cName ? `À l'attention de ${cName}` : "",
-      entreprise?.adresse ?? contact?.adresse ?? "",
+      entreprise?.adresse ?? "",
       [entreprise?.code_postal, entreprise?.ville ?? contact?.ville].filter(Boolean).join(" "),
       entreprise?.siret ? `SIRET : ${entreprise.siret}` : "",
       contact?.email ?? "",
-    ].filter(Boolean);
-    for (const l of clientLines) { txt(l, M, y, { size: 9.5 }); y -= 12; }
-    if (financeur) { y -= 4; txt(`Financeur pressenti : ${financeur.nom}`, M, y, { size: 9, f: bold, color: brand }); y -= 14; }
-    if (devis.objet) { y -= 4; txt("Objet :", M, y, { size: 9, f: bold }); y -= 12; wrapTxt(devis.objet, M, W - 2 * M, 9.5, font, ink); }
-    y -= 8;
+    ];
+    const yEmit = block(emit, M, logoBottom, { boldFirst: true });
+    const yCli = block(client, colR, logoBottom, { boldFirst: true });
+    y = Math.min(yEmit, yCli) - 14;
 
-    // Tableau des prestations
-    const cQty = W - M - 230, cPU = W - M - 120, cMt = W - M; // bornes droites des colonnes chiffrées
-    page.drawRectangle({ x: M, y: y - 4, width: W - 2 * M, height: 18, color: rgb(0.96, 0.96, 0.97) });
-    txt("Désignation", M + 4, y, { size: 9, f: bold }); txt("Qté", cQty, y, { size: 9, f: bold, right: cQty }); txt("PU HT", cPU, y, { size: 9, f: bold, right: cPU }); txt("Montant HT", cMt, y, { size: 9, f: bold, right: cMt });
-    y -= 18; page.drawLine({ start: { x: M, y: y + 4 }, end: { x: W - M, y: y + 4 }, thickness: 0.5, color: line });
+    // 3) Titre + date
+    T(`DEVIS N° ${devis.numero}`, M, y, { size: 16, f: bold }); y -= 14;
+    T(frLong(devis.date_emission), M, y, { size: 8.5, color: muted }); y -= 6;
+    if (financeur) { y -= 10; T(`Financeur pressenti : ${financeur.nom}`, M, y, { size: 9, f: bold, color: brand }); y -= 4; }
+    if (devis.objet) { y -= 10; y = wrap(`Objet : ${devis.objet}`, M, y, W - 2 * M, 9, font, ink); }
+    y -= 14;
+
+    // 4) Tableau
+    const cRefX = M + 4, cDesX = M + 70, cQtyR = W - M - 200, cPuR = W - M - 120, cTvaR = W - M - 64, cMtR = W - M - 4;
+    page.drawRectangle({ x: M, y: y - 5, width: W - 2 * M, height: 18, color: grayLight });
+    T("Référence", cRefX, y, { size: 8.5, f: bold, color: muted });
+    T("Désignation", cDesX, y, { size: 8.5, f: bold, color: muted });
+    T("Quantité", cQtyR, y, { size: 8.5, f: bold, color: muted, right: cQtyR });
+    T("PU HT", cPuR, y, { size: 8.5, f: bold, color: muted, right: cPuR });
+    T("TVA", cTvaR, y, { size: 8.5, f: bold, color: muted, right: cTvaR });
+    T("Montant HT", cMtR, y, { size: 8.5, f: bold, color: muted, right: cMtR });
+    y -= 13; page.drawLine({ start: { x: M, y: y + 5 }, end: { x: W - M, y: y + 5 }, thickness: 0.6, color: line }); y -= 6;
 
     for (const l of rows) {
-      if (y < M + 120) { page = pdf.addPage(A4); y = H - M; }
+      if (y < M + 140) { page = pdf.addPage(A4); y = H - M; }
       const mt = (Number(l.quantite) || 0) * (Number(l.prix_unitaire_ht) || 0);
-      const yStart = y;
-      // Désignation (avec description optionnelle), colonne gauche large
-      const desW = cQty - (M + 4) - 50;
-      const ySave = y; wrapTxt(l.designation, M + 4, desW, 9.5, font, ink);
-      if (l.description) wrapTxt(l.description, M + 4, desW, 8.5, font, muted);
-      const yEnd = y; y = ySave;
-      txt(`${Number(l.quantite)} ${l.unite ?? ""}`.trim(), cQty, yStart, { size: 9.5, right: cQty });
-      txt(eur(l.prix_unitaire_ht), cPU, yStart, { size: 9.5, right: cPU });
-      txt(eur(mt), cMt, yStart, { size: 9.5, right: cMt });
-      y = Math.min(yEnd, yStart - 14);
-      page.drawLine({ start: { x: M, y: y + 4 }, end: { x: W - M, y: y + 4 }, thickness: 0.3, color: line });
+      const yTop = y;
+      const desW = cQtyR - cDesX - 12;
+      let yD = wrap(l.designation, cDesX, yTop, desW, 9, bold, ink);
+      if (l.description) yD = wrap(l.description, cDesX, yD - 1, desW, 8.5, font, muted);
+      T(`${Number(l.quantite).toLocaleString("fr-FR", { minimumFractionDigits: 2 })}`, cQtyR, yTop, { size: 9, right: cQtyR });
+      T(eur(l.prix_unitaire_ht), cPuR, yTop, { size: 9, right: cPuR });
+      T(taux ? `${taux} %` : "0,00", cTvaR, yTop, { size: 9, right: cTvaR });
+      T(eur(mt), cMtR, yTop, { size: 9, right: cMtR });
+      y = Math.min(yD, yTop - 14) - 4;
+      page.drawLine({ start: { x: M, y: y + 6 }, end: { x: W - M, y: y + 6 }, thickness: 0.3, color: line });
     }
-    y -= 10;
+    y -= 18;
 
-    // Totaux (bloc à droite)
-    const tx = W - M - 200;
-    const totLine = (label: string, val: string, b = false) => {
-      txt(label, tx, y, { size: b ? 10 : 9, f: b ? bold : font, color: b ? ink : muted });
-      txt(val, cMt, y, { size: b ? 10 : 9, f: b ? bold : font, right: cMt });
-      y -= b ? 16 : 13;
-    };
-    totLine("Total HT", eur(totalHT));
-    if (devis.tva_exoneree) totLine("TVA", "Exonérée (art. 261-4-4° CGI)");
-    else { totLine(`TVA ${taux} %`, eur(totalTVA)); }
-    page.drawLine({ start: { x: tx, y: y + 6 }, end: { x: W - M, y: y + 6 }, thickness: 0.6, color: line });
-    totLine(devis.tva_exoneree ? "Net à payer (HT)" : "Total TTC", eur(devis.tva_exoneree ? totalHT : totalTTC), true);
-    y -= 8;
+    // 5) Conditions (gauche) + Totaux (droite)
+    if (y < M + 110) { page = pdf.addPage(A4); y = H - M; }
+    const blockTop = y;
+    // Totaux
+    const bx = W - M - 210, bw = 210;
+    page.drawRectangle({ x: bx, y: blockTop - 36, width: bw, height: 36, color: grayLight });
+    T("Total HT", bx + 12, blockTop - 13, { size: 9.5, f: bold, color: muted });
+    T(eur(totalHT), cMtR, blockTop - 13, { size: 9.5, f: bold, right: cMtR });
+    T(`TVA (${taux} %)`, bx + 12, blockTop - 28, { size: 9, color: muted });
+    T(eur(totalTVA), cMtR, blockTop - 28, { size: 9, right: cMtR });
+    page.drawRectangle({ x: bx, y: blockTop - 60, width: bw, height: 22, color: grayMid });
+    T("Total TTC", bx + 12, blockTop - 54, { size: 11, f: bold });
+    T(eur(totalTTC), cMtR, blockTop - 54, { size: 11, f: bold, right: cMtR });
+    // Conditions
+    let cy = blockTop;
+    T("Conditions de paiement :", M, cy, { size: 8.5, f: bold, color: muted }); cy -= 13;
+    if (devis.conditions) cy = wrap(devis.conditions, M, cy, bx - M - 16, 8, font, muted) - 2;
+    T("Exonéré de TVA - art. 261-4-4° du CGI", M, cy, { size: 8, color: muted }); cy -= 16;
+    T(`Devis valable jusqu'au ${frDate(devis.date_validite)}.`, M, cy, { size: 8, color: muted }); cy -= 18;
+    T("Bon pour accord, le ............  Signature (« lu et approuvé ») :", M, cy, { size: 8, f: bold, color: ink });
 
-    // Conditions + validité
-    if (devis.conditions) { txt("Conditions :", M, y, { size: 9, f: bold }); y -= 12; wrapTxt(devis.conditions, M, W - 2 * M, 8.5, font, muted); y -= 4; }
-    txt(`Devis valable jusqu'au ${frDate(devis.date_validite)}.`, M, y, { size: 8.5, color: muted }); y -= 16;
-
-    // Bon pour accord
-    if (y < M + 80) { page = pdf.addPage(A4); y = H - M; }
-    page.drawRectangle({ x: M, y: y - 56, width: 250, height: 58, borderColor: line, borderWidth: 0.8, color: rgb(1, 1, 1) });
-    txt("Bon pour accord", M + 8, y - 14, { size: 9, f: bold });
-    txt("Date :", M + 8, y - 30, { size: 8.5, color: muted });
-    txt("Signature (précédée de la mention « lu et approuvé ») :", M + 8, y - 46, { size: 7.5, color: muted });
-
-    // Pied de page : mentions légales sur toutes les pages
-    const mentions = clean(`${org.nom ?? "Aissociate"}${org.siret ? ` - SIRET ${org.siret}` : ""}${org.nda ? ` - Déclaration d'activité n° ${org.nda} (ne vaut pas agrément de l'État)` : ""}${org.qualiopi ? ` - Qualiopi ${org.qualiopi}` : ""}`);
+    // 6) Mentions légales + pagination sur toutes les pages
+    const legal = clean(
+      "CLAUSE DE RÉSERVE DE PROPRIÉTÉ : Conformément à la loi 80-335 du 12 mai 1980, nous réservons la propriété des produits jusqu'au paiement intégral du prix. " +
+      "Pénalité de retard : 3 fois le taux d'intérêt légal après la date d'échéance. Escompte pour règlement anticipé : néant. " +
+      "Indemnité forfaitaire pour frais de recouvrement (art. L441-10 du Code de commerce) : 40 €.",
+    );
     const allPages = pdf.getPages();
     allPages.forEach((p, i) => {
-      p.drawLine({ start: { x: M, y: M - 14 }, end: { x: W - M, y: M - 14 }, thickness: 0.5, color: line });
-      const w = font.widthOfTextAtSize(mentions, 6.5);
-      p.drawText(mentions.slice(0, 200), { x: M, y: M - 24, size: 6.5, font, color: muted });
+      let ly = M + 2;
+      const words = legal.split(" ");
+      const linesArr: string[] = []; let cur = "";
+      for (const w of words) { const t = cur ? cur + " " + w : w; if (font.widthOfTextAtSize(t, 6) > W - 2 * M && cur) { linesArr.push(cur); cur = w; } else cur = t; }
+      if (cur) linesArr.push(cur);
+      p.drawLine({ start: { x: M, y: M + (linesArr.length * 8) + 6 }, end: { x: W - M, y: M + (linesArr.length * 8) + 6 }, thickness: 0.4, color: line });
+      for (let k = linesArr.length - 1; k >= 0; k--) { p.drawText(linesArr[k], { x: M, y: ly, size: 6, font, color: muted }); ly += 8; }
       const pn = `Page ${i + 1} / ${allPages.length}`;
-      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 7), y: M - 24, size: 7, font, color: muted });
-      void w;
+      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 7), y: M - 6, size: 7, font, color: muted });
     });
 
     const bytes = await pdf.save();
     const path = `${crypto.randomUUID()}-${clean(devis.numero).replace(/[^A-Za-z0-9]+/g, "-")}.pdf`;
     const up = await sb.storage.from("devis").upload(path, bytes, { contentType: "application/pdf", upsert: false });
     if (up.error) return json({ error: `Storage: ${up.error.message}` }, 500);
-
     await sb.from("devis").update({ fichier_url: path, total_ht: totalHT, total_tva: totalTVA, total_ttc: totalTTC, updated_at: new Date().toISOString() }).eq("id", devisId);
 
     return json({ ok: true, numero: devis.numero, fichier_url: path });

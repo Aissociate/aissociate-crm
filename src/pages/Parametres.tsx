@@ -7,7 +7,7 @@ import { FileUpload, FileLink } from '@/components/FileUpload';
 type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
   code_postal?: string; ville?: string; siret?: string; nda?: string; tva_intra?: string;
-  forme_juridique?: string; capital?: string; logo_url?: string;
+  forme_juridique?: string; capital?: string; logo_url?: string; naf?: string; pays?: string;
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
@@ -121,6 +121,8 @@ export default function Parametres() {
             <Field label="Ville"><input className="input" value={organisme.ville ?? ''} onChange={(e) => setOrganisme({ ...organisme, ville: e.target.value })} /></Field>
             <Field label="SIRET" hint="Figure sur les devis"><input className="input" value={organisme.siret ?? ''} onChange={(e) => setOrganisme({ ...organisme, siret: e.target.value })} /></Field>
             <Field label="N° déclaration d'activité" hint="Organisme de formation"><input className="input" value={organisme.nda ?? ''} onChange={(e) => setOrganisme({ ...organisme, nda: e.target.value })} /></Field>
+            <Field label="Code NAF / APE"><input className="input" value={organisme.naf ?? ''} onChange={(e) => setOrganisme({ ...organisme, naf: e.target.value })} /></Field>
+            <Field label="Pays"><input className="input" value={organisme.pays ?? ''} onChange={(e) => setOrganisme({ ...organisme, pays: e.target.value })} placeholder="FRANCE" /></Field>
             <Field label="TVA intracommunautaire" hint="Laisser vide si exonéré"><input className="input" value={organisme.tva_intra ?? ''} onChange={(e) => setOrganisme({ ...organisme, tva_intra: e.target.value })} /></Field>
             <Field label="Forme juridique" hint="ex. SARL, SAS"><input className="input" value={organisme.forme_juridique ?? ''} onChange={(e) => setOrganisme({ ...organisme, forme_juridique: e.target.value })} /></Field>
             <Field label="Capital social"><input className="input" value={organisme.capital ?? ''} onChange={(e) => setOrganisme({ ...organisme, capital: e.target.value })} /></Field>
