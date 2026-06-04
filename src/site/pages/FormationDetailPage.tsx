@@ -4,7 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { GraduationCap, Clock, Users, Award, CheckCircle, FileText, Target, BookOpen, ArrowLeft, Euro } from 'lucide-react';
+import { GraduationCap, Clock, Users, Award, CircleCheck as CheckCircle, FileText, Target, BookOpen, ArrowLeft, Euro } from 'lucide-react';
+import SEO, { SITE_URL } from '../components/SEO';
 
 // Détail d'une formation issue du back-office CRM (id non présent dans le
 // dictionnaire OF). Rendu simple et sûr, design cohérent avec le site.
@@ -441,6 +442,29 @@ export default function FormationDetailPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title={`${formation.title} — Formation IA | Aissociate`}
+        description={`${formation.title}. ${formation.duration}, ${formation.price}. Financement ${formation.isEligibleCPF ? 'CPF, ' : ''}OPCO. Certifié Qualiopi. Présentiel ou distanciel.`}
+        keywords={`${formation.title}, formation IA, Qualiopi, ${formation.isEligibleCPF ? 'CPF, ' : ''}OPCO, ${formation.level || 'professionnel'}`}
+        image={formation.image}
+        imageAlt={formation.title}
+        url={`${SITE_URL}/formations/${formation.id}`}
+        type="course"
+        breadcrumbs={[
+          { name: 'Formations', url: `${SITE_URL}/formations` },
+          { name: formation.title, url: `${SITE_URL}/formations/${formation.id}` },
+        ]}
+        courseData={{
+          name: formation.title,
+          description: formation.objectives?.[0] || formation.title,
+          provider: 'Aissociate',
+          duration: formation.duration,
+          price: String(formation.price || '').replace(/[^\d]/g, '') || '0',
+          priceCurrency: 'EUR',
+          educationalLevel: formation.level || 'Tous niveaux',
+          courseMode: ['blended', 'onsite', 'online'],
+        }}
+      />
       <Header />
 
       <section className="relative h-96 overflow-hidden">

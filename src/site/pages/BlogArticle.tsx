@@ -3,9 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { Calendar, Clock, ArrowLeft, User, BookOpen, Loader2 } from 'lucide-react';
+import { Calendar, Clock, ArrowLeft, User, BookOpen, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { BlogArticle as BlogArticleType } from '../types/blog';
+import SEO, { SITE_URL, DEFAULT_OG_IMAGE } from '../components/SEO';
 
 export default function BlogArticle() {
   const { slug } = useParams<{ slug: string }>();
@@ -98,6 +99,31 @@ export default function BlogArticle() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title={(article.seo_title || `${article.title} | Blog Aissociate`)}
+        description={article.seo_description || article.excerpt || ''}
+        keywords={article.seo_keywords || ''}
+        image={article.image_url || DEFAULT_OG_IMAGE}
+        imageAlt={article.title}
+        url={`${SITE_URL}/blog/${article.slug}`}
+        type="article"
+        author={article.author}
+        publishedTime={article.published_at}
+        modifiedTime={article.updated_at || article.published_at}
+        breadcrumbs={[
+          { name: 'Blog', url: `${SITE_URL}/blog` },
+          { name: article.title, url: `${SITE_URL}/blog/${article.slug}` },
+        ]}
+        articleData={{
+          headline: article.title,
+          description: article.seo_description || article.excerpt || '',
+          image: article.image_url || DEFAULT_OG_IMAGE,
+          author: article.author,
+          datePublished: article.published_at,
+          dateModified: article.updated_at || article.published_at,
+          keywords: article.seo_keywords || '',
+        }}
+      />
       <Header />
 
       <div className="bg-slate-50 border-b border-slate-200 py-4">
@@ -152,7 +178,7 @@ export default function BlogArticle() {
           )}
 
           <div
-            className="prose prose-lg max-w-none prose-headings:text-slate-900 prose-headings:font-bold prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-6 prose-p:text-slate-700 prose-p:leading-relaxed prose-p:mb-6 prose-strong:text-slate-900"
+            className="blog-content text-slate-800"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 

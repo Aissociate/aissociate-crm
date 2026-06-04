@@ -1,0 +1,5 @@
+# SPA fallback
+/*    /index.html   200
+
+# Sitemap dynamique (articles blog + formations CRM)
+/sitemap-blog.xml  https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/sitemap-blog  200
