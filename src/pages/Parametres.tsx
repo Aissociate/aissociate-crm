@@ -14,7 +14,7 @@ type Imap = { host?: string; port?: number; user?: string; password?: string };
 type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
 type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
 type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
-type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[] };
+type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
 
 const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
   { key: 'documents', label: 'Base documentaire' },
@@ -300,9 +300,12 @@ export default function Parametres() {
               <textarea className="input font-mono text-xs" rows={6} value={blogRss} onChange={(e) => setBlogRss(e.target.value)} placeholder="https://news.google.com/rss/search?q=intelligence+artificielle&hl=fr" />
             </Field>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Field label="Mots-clés SEO (un par ligne)" hint="Intégrés naturellement dans les articles générés">
               <textarea className="input" rows={3} value={blogSeo} onChange={(e) => setBlogSeo(e.target.value)} />
+            </Field>
+            <Field label="Modèle d'image (OpenRouter)" hint="Génération auto de l'illustration. Gratuit par défaut ; repli Unsplash si indisponible">
+              <input className="input" value={blog.image_model ?? ''} onChange={(e) => setBlog({ ...blog, image_model: e.target.value })} placeholder="google/gemini-2.5-flash-image-preview:free" />
             </Field>
           </div>
           <div className="mt-3 flex flex-wrap gap-5">

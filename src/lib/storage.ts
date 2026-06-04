@@ -1,8 +1,8 @@
 import { supabase } from './supabase';
 
-export type Bucket = 'documents' | 'pieces' | 'cv' | 'formateurs' | 'plans' | 'devis' | 'coffre';
+export type Bucket = 'documents' | 'pieces' | 'cv' | 'formateurs' | 'plans' | 'devis' | 'coffre' | 'blog';
 
-const PUBLIC_BUCKETS: Bucket[] = ['documents'];
+const PUBLIC_BUCKETS: Bucket[] = ['documents', 'blog'];
 
 function safeName(name: string): string {
   const ext = name.includes('.') ? name.split('.').pop() : '';

@@ -4,6 +4,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { FileUpload } from '@/components/FileUpload';
 import { formatDate } from '@/lib/utils';
 import type { BlogArticle, BlogCategory } from '@/lib/database.types';
 
@@ -26,6 +27,7 @@ export default function BlogAdmin() {
   const [generating, setGenerating] = useState(false);
   const [catOpen, setCatOpen] = useState(false);
   const [newCat, setNewCat] = useState('');
+  const [preview, setPreview] = useState(false);
 
   const set = (k: keyof BlogArticle, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -45,8 +47,8 @@ export default function BlogAdmin() {
   };
   const catName = (id: string | null) => categories.data.find((c) => c.id === id)?.name ?? '—';
 
-  const openNew = () => { setForm(empty()); setOpen(true); };
-  const openEdit = (a: BlogArticle) => { setForm(a); setOpen(true); };
+  const openNew = () => { setForm(empty()); setPreview(false); setOpen(true); };
+  const openEdit = (a: BlogArticle) => { setForm(a); setPreview(false); setOpen(true); };
 
   const save = async () => {
     if (!form.title?.trim()) return;
@@ -166,9 +168,22 @@ export default function BlogAdmin() {
               </select>
             </Field>
           </div>
-          <Field label="Image (URL)"><input className="input" value={form.image_url ?? ''} onChange={(e) => set('image_url', e.target.value)} placeholder="https://…" /></Field>
+          <Field label="Image de couverture" hint="URL, téléversement, ou générée par l'IA à la création">
+            <div className="flex items-center gap-3">
+              <input className="input" value={form.image_url ?? ''} onChange={(e) => set('image_url', e.target.value)} placeholder="https://…" />
+              <FileUpload bucket="blog" label="Téléverser" onUploaded={(v) => set('image_url', v)} />
+            </div>
+            {form.image_url && <img src={form.image_url} alt="" className="mt-2 h-32 w-full rounded-lg object-cover" />}
+          </Field>
           <Field label="Extrait"><textarea className="input" rows={2} value={form.excerpt ?? ''} onChange={(e) => set('excerpt', e.target.value)} /></Field>
-          <Field label="Contenu (HTML)"><textarea className="input font-mono text-sm" rows={12} value={form.content ?? ''} onChange={(e) => set('content', e.target.value)} /></Field>
+          <Field label="Contenu (HTML)">
+            <div className="mb-1 flex justify-end">
+              <button type="button" onClick={() => setPreview((p) => !p)} className="text-xs font-medium text-brand-600 hover:text-brand-700">{preview ? 'Éditer le HTML' : 'Aperçu'}</button>
+            </div>
+            {preview
+              ? <div className="prose max-w-none rounded-lg border border-line bg-surface-1 p-4 text-sm" dangerouslySetInnerHTML={{ __html: form.content ?? '' }} />
+              : <textarea className="input font-mono text-sm" rows={12} value={form.content ?? ''} onChange={(e) => set('content', e.target.value)} />}
+          </Field>
           <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={!!form.published} onChange={(e) => set('published', e.target.checked)} /> Publié (visible sur le site)</label>
         </div>
       </Modal>

@@ -46,6 +46,41 @@ async function fetchRss(url: string): Promise<{ title: string; desc: string; lin
   } catch { return []; }
 }
 
+const FALLBACK_IMAGES = [
+  "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&h=600&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&h=600&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&h=600&fit=crop&q=80",
+];
+
+// Génère une image via un modèle OpenRouter (sortie image) -> data URL base64.
+async function generateImageDataUrl(apiKey: string, model: string, prompt: string): Promise<string | null> {
+  try {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM Formation AIssociate" },
+      body: JSON.stringify({
+        model,
+        modalities: ["image", "text"],
+        messages: [{ role: "user", content: `Illustration de blog professionnelle et moderne, SANS TEXTE, pour un article sur : ${prompt}. Style éditorial, ambiance technologie / IA, couleurs chaleureuses (orange/ambre), haute qualité, format paysage.` }],
+      }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const msg = d?.choices?.[0]?.message;
+    const url = msg?.images?.[0]?.image_url?.url ?? msg?.images?.[0]?.url ?? null;
+    return (typeof url === "string" && url.startsWith("data:")) ? url : null;
+  } catch { return null; }
+}
+function dataUrlToBytes(dataUrl: string): { mime: string; bytes: Uint8Array } | null {
+  const m = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+  if (!m) return null;
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { mime: m[1], bytes };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
@@ -53,7 +88,7 @@ Deno.serve(async (req: Request) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: blogRow } = await sb.from("parametres").select("valeur").eq("cle", "blog").maybeSingle();
-    const blog = (blogRow?.valeur ?? {}) as { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[] };
+    const blog = (blogRow?.valeur ?? {}) as { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
     const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
     const apiKey = Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key;
@@ -117,6 +152,19 @@ Deno.serve(async (req: Request) => {
     const { data: clash } = await sb.from("blog_articles").select("id").eq("slug", slug).maybeSingle();
     if (clash) slug = `${slug}-${Date.now().toString(36)}`;
 
+    // Illustration : génération IA (modèle gratuit) + upload bucket public, sinon Unsplash.
+    let imageUrl: string | null = null;
+    const imageModel = blog.image_model || "google/gemini-2.5-flash-image-preview:free";
+    const dataUrl = await generateImageDataUrl(apiKey, imageModel, title);
+    const img = dataUrl ? dataUrlToBytes(dataUrl) : null;
+    if (img) {
+      const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const up = await sb.storage.from("blog").upload(path, img.bytes, { contentType: img.mime, upsert: false });
+      if (!up.error) imageUrl = sb.storage.from("blog").getPublicUrl(path).data.publicUrl;
+    }
+    if (!imageUrl) imageUrl = FALLBACK_IMAGES[Math.floor(Math.random() * FALLBACK_IMAGES.length)];
+
     const publish = (body.publish ?? blog.auto_publish) === true;
     const { data: article, error } = await sb.from("blog_articles").insert({
       title,
@@ -124,6 +172,7 @@ Deno.serve(async (req: Request) => {
       excerpt: String(parsed.excerpt || "").slice(0, 500),
       content: String(parsed.content || ""),
       category_id: categoryId,
+      image_url: imageUrl,
       author: "IA — Veille Aissociate",
       read_time: Math.max(2, Math.round(String(parsed.content || "").length / 1200)),
       seo_keywords: parsed.seo_keywords ? String(parsed.seo_keywords) : null,
