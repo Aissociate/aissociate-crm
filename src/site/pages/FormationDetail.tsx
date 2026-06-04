@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import Header from '../components/Header';
+import SEO, { SITE_URL } from '../components/SEO';
 import Hero from '../components/Hero';
 import Target from '../components/Target';
 import Objectives from '../components/Objectives';
@@ -19,6 +20,14 @@ export default function FormationDetail() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Formation Closer IA éligible CPF — Certifiante Qualiopi | Aissociate"
+        description="Devenez Closer augmenté par l'IA : formation certifiante éligible CPF, certifiée Qualiopi. Maîtrisez la vente et la prospection commerciale assistées par l'intelligence artificielle."
+        keywords="formation closer IA, closer CPF, formation vente IA, prospection commerciale IA, formation commerciale IA, CPF, Qualiopi"
+        url={`${SITE_URL}/formations/closer-ia-cpf`}
+        type="course"
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formations', url: `${SITE_URL}/formations` }, { name: 'Closer IA CPF', url: `${SITE_URL}/formations/closer-ia-cpf` }]}
+      />
       <Header />
 
       <div className="bg-slate-50 border-b border-slate-200 py-4">

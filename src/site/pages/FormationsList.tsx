@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
+import SEO, { SITE_URL } from '../components/SEO';
 import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp } from 'lucide-react';
 
@@ -177,6 +178,13 @@ export default function FormationsList() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Catalogue de formations IA — Qualiopi, CPF & OPCO | Aissociate"
+        description="Découvrez nos formations en intelligence artificielle à La Réunion : création de contenus IA, IA pour PME, prospection, marketing, RH, management. Certifiées Qualiopi, finançables CPF et OPCO."
+        keywords="catalogue formation IA, formations intelligence artificielle Réunion, formation IA PME, formation IA marketing, formation IA RH, formation prospection IA, Qualiopi, CPF, OPCO"
+        url={`${SITE_URL}/formations`}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formations', url: `${SITE_URL}/formations` }]}
+      />
       <Header />
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">

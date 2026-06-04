@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import SEO, { SITE_URL } from '../components/SEO';
 import { Code, Bot, Zap, Database, MessageSquare, FileText, BarChart, Workflow, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function Development() {
@@ -77,6 +78,13 @@ export default function Development() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Développement d'agents IA & automatisation sur-mesure | Aissociate"
+        description="Création d'agents IA et automatisation des process pour les entreprises réunionnaises : intégrations sur-mesure, workflows intelligents, gain de productivité. Par un organisme certifié Qualiopi."
+        keywords="développement agent IA, automatisation process IA, agents IA sur-mesure, intégration IA entreprise, workflow IA, IA Réunion"
+        url={`${SITE_URL}/developpement`}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Développement', url: `${SITE_URL}/developpement` }]}
+      />
       <Header />
 
       <section className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white py-20 overflow-hidden">
