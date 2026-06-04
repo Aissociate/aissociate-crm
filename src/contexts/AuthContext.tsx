@@ -82,8 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const role = profile?.role ?? null;
-  const isAdmin = role === 'admin';
-  const isManager = role === 'admin' || role === 'directeur_commercial';
+  // Pont transitoire : le flux du site écrit `is_admin` sur `profiles` sans renseigner
+  // `role`. Tant que les deux modèles de rôles coexistent, on reconnaît aussi `is_admin`
+  // comme admin (et donc manager) pour ne pas enfermer un admin hors du back-office.
+  const isAdminFlag = (profile as { is_admin?: boolean | null } | null)?.is_admin === true;
+  const isAdmin = role === 'admin' || isAdminFlag;
+  const isManager = isAdmin || role === 'directeur_commercial';
 
   return (
     <AuthContext.Provider
