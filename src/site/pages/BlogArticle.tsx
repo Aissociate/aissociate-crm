@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { Calendar, Clock, ArrowLeft, User, BookOpen, Loader as Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { BlogArticle as BlogArticleType } from '../types/blog';
 import SEO, { SITE_URL, DEFAULT_OG_IMAGE } from '../components/SEO';
 

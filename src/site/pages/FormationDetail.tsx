@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft } from 'lucide-react';
 import Header from '../components/Header';
 import Hero from '../components/Hero';
@@ -17,7 +16,6 @@ import Footer from '../components/Footer';
 
 export default function FormationDetail() {
   const navigate = useNavigate();
-  useAuth();
 
   return (
     <div className="min-h-screen bg-white">

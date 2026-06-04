@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { BookOpen, Calendar, Clock, ArrowRight, TrendingUp, Loader as Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { BlogArticle, BlogCategory } from '../types/blog';
 import SEO, { SITE_URL } from '../components/SEO';
 
