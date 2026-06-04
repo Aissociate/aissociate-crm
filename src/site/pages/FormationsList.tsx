@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp } from 'lucide-react';
@@ -9,29 +8,7 @@ import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp } fro
 const GRADIENTS = ['from-orange-500 to-amber-600', 'from-emerald-500 to-teal-600', 'from-blue-500 to-cyan-600', 'from-purple-500 to-pink-600', 'from-amber-600 to-orange-700'];
 
 export default function FormationsList() {
-  // Formations issues du back-office CRM (table formations). Repli sur le
-  // contenu OF si la table est vide / inaccessible.
-  const [crmFormations, setCrmFormations] = useState(null);
-  useEffect(() => {
-    supabase.from('formations').select('*').eq('actif', true).order('intitule').then(({ data }) => {
-      if (data && data.length) {
-        setCrmFormations(data.map((f, i) => ({
-          id: f.id,
-          title: f.intitule,
-          subtitle: f.public_vise || f.modalite || '',
-          description: f.objectifs || '',
-          duration: f.duree_heures ? `${f.duree_heures}h` : '',
-          participants: f.public_vise || 'Tous publics',
-          price: f.prix ? `${Number(f.prix).toLocaleString('fr-FR')} €` : 'Sur devis',
-          level: f.prerequis ? 'Prérequis requis' : 'Tous niveaux',
-          certifications: ['Financement OPCO'],
-          objectives: Array.isArray(f.programme) && f.programme.length ? f.programme : (f.objectifs ? String(f.objectifs).split('\n').filter(Boolean) : []),
-          color: GRADIENTS[i % GRADIENTS.length],
-        })));
-      }
-    });
-  }, []);
-
+  // Catalogue 100 % statique (page descriptive, aucune base de données).
   const fallbackFormations = [
     {
       id: 'creation-contenus-ia',
@@ -196,7 +173,7 @@ export default function FormationsList() {
       color: 'from-amber-600 to-orange-700'
     }
   ];
-  const formations = crmFormations ?? fallbackFormations;
+  const formations = fallbackFormations;
 
   return (
     <div className="min-h-screen bg-white">
