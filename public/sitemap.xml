@@ -5,121 +5,101 @@
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
                             http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
 
-  <!-- Page d'accueil -->
+  <!-- Accueil -->
   <url>
-    <loc>https://votre-domaine.fr/</loc>
-    <lastmod>2026-01-27</lastmod>
+    <loc>https://aissociate.fr/</loc>
+    <lastmod>2026-06-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg</image:loc>
-      <image:title>Formation IA Générative</image:title>
-      <image:caption>Formation certifiée Qualiopi en Intelligence Artificielle</image:caption>
+      <image:title>Aissociate — Formation IA Générative certifiée Qualiopi</image:title>
+      <image:caption>Formation professionnelle en intelligence artificielle générative, certifiée Qualiopi, finançable CPF et OPCO</image:caption>
     </image:image>
   </url>
 
-  <!-- Page Formation principale -->
+  <!-- Formations -->
   <url>
-    <loc>https://votre-domaine.fr/formation</loc>
-    <lastmod>2026-01-27</lastmod>
+    <loc>https://aissociate.fr/formations</loc>
+    <lastmod>2026-06-04</lastmod>
     <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.fr/formations/closer-ia-cpf</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&amp;h=600&amp;fit=crop&amp;q=80</image:loc>
+      <image:title>Formation Création de contenus IA — Certifiante CPF Qualiopi</image:title>
+    </image:image>
+  </url>
+
+  <url>
+    <loc>https://aissociate.fr/formations/creation-contenus-ia</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- Liste des formations -->
   <url>
-    <loc>https://votre-domaine.fr/formations</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <loc>https://aissociate.fr/formations/introduction-ia-pme</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
   </url>
 
-  <!-- Pages de formation détaillées -->
   <url>
-    <loc>https://votre-domaine.fr/formation/cadre-legal-qualiopi</loc>
-    <lastmod>2026-01-27</lastmod>
+    <loc>https://aissociate.fr/formations/automatisation-process-pme</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.fr/formations/marches-publics-btp</loc>
+    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
+  <!-- Blog (index — articles dynamiques dans sitemap-blog.xml) -->
   <url>
-    <loc>https://votre-domaine.fr/formation/cadre-cpf</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/modes-financement</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/programme-formation</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/vision-funnel</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/fonctionnement-crm</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/script-closer-cpf</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/script-explications</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://votre-domaine.fr/formation/objections-courantes</loc>
-    <lastmod>2026-01-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <!-- Page Blog -->
-  <url>
-    <loc>https://votre-domaine.fr/blog</loc>
-    <lastmod>2026-01-27</lastmod>
+    <loc>https://aissociate.fr/blog</loc>
+    <lastmod>2026-06-04</lastmod>
     <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <priority>0.85</priority>
   </url>
 
-  <!-- Page Contact -->
+  <!-- Pages secondaires -->
   <url>
-    <loc>https://votre-domaine.fr/contact</loc>
-    <lastmod>2026-01-27</lastmod>
+    <loc>https://aissociate.fr/contact</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.75</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.fr/formulaire</loc>
+    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
-  <!-- Page Organisme -->
   <url>
-    <loc>https://votre-domaine.fr/organisme</loc>
-    <lastmod>2026-01-27</lastmod>
+    <loc>https://aissociate.fr/aides-formation</loc>
+    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.fr/assistance</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
   </url>
 
 </urlset>

@@ -3,9 +3,10 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { BookOpen, Calendar, Clock, ArrowRight, TrendingUp, Loader2 } from 'lucide-react';
+import { BookOpen, Calendar, Clock, ArrowRight, TrendingUp, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { BlogArticle, BlogCategory } from '../types/blog';
+import SEO, { SITE_URL } from '../components/SEO';
 
 export default function Blog() {
   const [articles, setArticles] = useState<BlogArticle[]>([]);
@@ -66,6 +67,14 @@ export default function Blog() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Blog IA — Actualités, conseils et formations IA pour PME | Aissociate"
+        description="Découvrez nos articles sur l'intelligence artificielle générative, le CPF, l'automatisation des PME et les tendances IA. Conseils pratiques par des experts certifiés Qualiopi."
+        keywords="blog intelligence artificielle, actualités IA, formation IA PME, IA générative conseils, ChatGPT entreprise, automatisation IA, CPF formation IA, Qualiopi blog"
+        url={`${SITE_URL}/blog`}
+        type="website"
+        breadcrumbs={[{ name: 'Blog', url: `${SITE_URL}/blog` }]}
+      />
       <Header />
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">

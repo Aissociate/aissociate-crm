@@ -1,23 +1,45 @@
-# robots.txt pour Formation IA Générative
-# Optimisé pour le référencement Google et l'indexation par les IA
+# robots.txt — Aissociate Formation IA (https://aissociate.fr)
+# Optimisé pour Google, Bing et les IA (ChatGPT, Perplexity, Claude, Gemini…)
 
 User-agent: *
 Allow: /
-
-# Pages principales accessibles
-Allow: /formation
 Allow: /blog
-Allow: /contact
+Allow: /blog/
 Allow: /formations
+Allow: /formations/
+Allow: /contact
+Allow: /formulaire
+Allow: /aides-formation
+Allow: /assistance
 
-# Bloquer les pages d'administration et de connexion
-Disallow: /admin
+# Bloquer back-office et pages non publiques
 Disallow: /login
 Disallow: /dashboard
+Disallow: /admin
 Disallow: /onboarding
 Disallow: /qualiopi
+Disallow: /contacts
+Disallow: /entreprises
+Disallow: /pipeline
+Disallow: /catalogue
+Disallow: /plans
+Disallow: /devis
+Disallow: /dossiers
+Disallow: /calendrier
+Disallow: /formateurs
+Disallow: /kanban
+Disallow: /documents
+Disallow: /messagerie
+Disallow: /assistant
+Disallow: /statistiques
+Disallow: /actions
+Disallow: /administration
+Disallow: /parametres
+Disallow: /tickets
+Disallow: /recrutement
+Disallow: /blog-admin
 
-# Permettre l'accès aux ressources statiques
+# Ressources statiques autorisées
 Allow: /*.css$
 Allow: /*.js$
 Allow: /*.jpg$
@@ -27,48 +49,102 @@ Allow: /*.gif$
 Allow: /*.svg$
 Allow: /*.webp$
 
-# Crawlers spécifiques pour les IA
+Crawl-delay: 1
+
+# ── IA Generative (accès total aux pages publiques) ──
 User-agent: GPTBot
 Allow: /
-Disallow: /admin
+Disallow: /login
 Disallow: /dashboard
 
 User-agent: ChatGPT-User
 Allow: /
-Disallow: /admin
+Disallow: /login
 Disallow: /dashboard
 
-User-agent: CCBot
+User-agent: OAI-SearchBot
 Allow: /
-Disallow: /admin
+Disallow: /login
+Disallow: /dashboard
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /login
 Disallow: /dashboard
 
 User-agent: anthropic-ai
 Allow: /
-Disallow: /admin
+Disallow: /login
 Disallow: /dashboard
 
 User-agent: Claude-Web
 Allow: /
-Disallow: /admin
+Disallow: /login
+Disallow: /dashboard
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /login
 Disallow: /dashboard
 
 User-agent: Google-Extended
 Allow: /
 
-# Bots de recherche principaux
+User-agent: Gemini
+Allow: /
+Disallow: /login
+Disallow: /dashboard
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /login
+Disallow: /dashboard
+
+User-agent: CCBot
+Allow: /
+Disallow: /login
+Disallow: /dashboard
+
+# ── Moteurs de recherche ──
 User-agent: Googlebot
 Allow: /
-Disallow: /admin
+Disallow: /login
 Disallow: /dashboard
+
+User-agent: Googlebot-Image
+Allow: /
 
 User-agent: Bingbot
 Allow: /
-Disallow: /admin
+Disallow: /login
 Disallow: /dashboard
 
-# Délai entre les requêtes (en secondes)
-Crawl-delay: 1
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /login
+Disallow: /dashboard
 
-# Sitemap
-Sitemap: https://votre-domaine.fr/sitemap.xml
+User-agent: Applebot
+Allow: /
+Disallow: /login
+Disallow: /dashboard
+
+# ── Réseaux sociaux (prévisualisation des liens) ──
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+# Sitemaps
+Sitemap: https://aissociate.fr/sitemap.xml
+Sitemap: https://aissociate.fr/sitemap-blog.xml
