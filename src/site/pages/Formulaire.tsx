@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState } from 'react';
 import { Send, CheckCircle2, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { syncLeadToGHL } from '../lib/ghlSync';
 import SEO from '../components/SEO';
 

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Award, CheckCircle, FileText, Target, BookOpen, ArrowLeft, Euro } from 'lucide-react';
