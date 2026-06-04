@@ -29,7 +29,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    // Diagnostic explicite : révèle le projet Supabase utilisé et l'issue du chargement.
+    const projet = import.meta.env.VITE_SUPABASE_URL;
+    if (error) {
+      console.error('[AISSOCIATE] ❌ Échec chargement profil —', error.message, '| projet:', projet, '| user:', userId);
+    } else if (!data) {
+      console.warn('[AISSOCIATE] ⚠️ Aucun profil pour ce compte sur CE projet —', projet, '| user:', userId,
+        '→ promeus CE compte sur CE projet (SQL editor de', projet + ').');
+    } else {
+      console.info('[AISSOCIATE] ✅ Profil chargé —', data.email, '| role =', data.role, '| projet:', projet);
+    }
     setProfile(data ?? null);
   }, []);
 
