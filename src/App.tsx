@@ -22,6 +22,7 @@ import Kanban from '@/pages/Kanban';
 import Documents from '@/pages/Documents';
 import Messagerie from '@/pages/Messagerie';
 import Assistant from '@/pages/Assistant';
+import BlogAdmin from '@/pages/BlogAdmin';
 import Recrutement from '@/pages/Recrutement';
 import Statistiques from '@/pages/Statistiques';
 import ActionsAFaire from '@/pages/ActionsAFaire';
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="/documents" element={<Documents />} />
         <Route path="/messagerie" element={<Messagerie />} />
         <Route path="/assistant" element={<Assistant />} />
+        <Route path="/blog-admin" element={<ProtectedRoute managerOnly><BlogAdmin /></ProtectedRoute>} />
         <Route
           path="/recrutement"
           element={<ProtectedRoute managerOnly><Recrutement /></ProtectedRoute>}

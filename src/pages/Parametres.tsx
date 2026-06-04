@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
@@ -14,6 +14,7 @@ type Imap = { host?: string; port?: number; user?: string; password?: string };
 type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
 type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
 type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
+type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean };
 
 const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
   { key: 'documents', label: 'Base documentaire' },
@@ -44,19 +45,22 @@ export default function Parametres() {
   const [imap, setImap] = useState<Imap>({});
   const [ai, setAi] = useState<Ai>({ model: 'anthropic/claude-opus-4.8' });
   const [chatbot, setChatbot] = useState<Chatbot>({});
+  const [blog, setBlog] = useState<Blog>({});
+  const [blogThemes, setBlogThemes] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
         if (row.cle === 'imap') setImap({ port: 993, ...((row.valeur as Imap) ?? {}) });
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
+        if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); }
       }
       setLoading(false);
     })();
@@ -274,6 +278,33 @@ export default function Parametres() {
               <Save className="h-4 w-4" /> {saving === 'chatbot' ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
             {savedMsg === 'chatbot' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+          </div>
+        </Card>
+
+        {/* Blog IA — génération automatique / veille */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <Newspaper className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Blog IA — génération & veille</h2>
+          </div>
+          <Field label="Prompt maître" hint="Doit demander une réponse JSON {title, excerpt, content (HTML), category, seo_keywords}">
+            <textarea className="input" rows={5} value={blog.prompt ?? ''} onChange={(e) => setBlog({ ...blog, prompt: e.target.value })} />
+          </Field>
+          <div className="mt-4">
+            <Field label="Thèmes de veille (un par ligne)" hint="Le cron / la génération auto choisit un thème au hasard">
+              <textarea className="input" rows={6} value={blogThemes} onChange={(e) => setBlogThemes(e.target.value)} />
+            </Field>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-5">
+            <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={!!blog.auto_publish} onChange={(e) => setBlog({ ...blog, auto_publish: e.target.checked })} /> Publier automatiquement (sinon brouillon)</label>
+            <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={blog.use_web !== false} onChange={(e) => setBlog({ ...blog, use_web: e.target.checked })} /> Recherche web (veille temps réel via modèle « :online »)</label>
+          </div>
+          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">Un <strong>cron hebdomadaire</strong> appelle l'Edge Function <code>generate-article</code> (lundi 8h). Génération manuelle possible depuis <strong>Blog › Générer par IA</strong>. Clé IA dans la section ci-dessus.</p>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={() => persist('blog', { ...blog, themes: blogThemes.split('\n').map((t) => t.trim()).filter(Boolean) })} disabled={saving === 'blog'}>
+              <Save className="h-4 w-4" /> {saving === 'blog' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+            {savedMsg === 'blog' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
           </div>
         </Card>
       </div>

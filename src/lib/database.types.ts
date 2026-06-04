@@ -162,6 +162,14 @@ export type PlanPdf = {
   id: string; plan_id: string | null; titre: string; apprenant: string | null;
   organisme: string | null; fichier_url: string | null; created_by: string | null; created_at: string;
 };
+export type BlogCategory = { id: string; name: string; slug: string; description: string | null; color: string | null; icon: string | null; created_at: string; updated_at: string };
+export type BlogArticle = {
+  id: string; title: string; slug: string; excerpt: string; content: string;
+  category_id: string | null; image_url: string | null; author: string | null; read_time: number | null;
+  seo_title: string | null; seo_description: string | null; seo_keywords: string | null;
+  published: boolean; published_at: string | null; ai_model_used: string | null; generation_prompt: string | null;
+  views_count: number | null; created_at: string; updated_at: string;
+};
 export type DevisStatut = 'brouillon' | 'envoye' | 'accepte' | 'refuse' | 'expire';
 export type Devis = Timestamps & {
   id: string; numero: string; contact_id: string | null; entreprise_id: string | null;
@@ -241,6 +249,8 @@ export type Database = {
       plan_pdfs: TableShape<PlanPdf>;
       devis: TableShape<Devis>;
       devis_lignes: TableShape<DevisLigne>;
+      blog_articles: TableShape<BlogArticle>;
+      blog_categories: TableShape<BlogCategory>;
       contact_actions: TableShape<ContactAction>;
       contact_documents: TableShape<ContactDocument>;
       audit_log: TableShape<AuditLog>;
