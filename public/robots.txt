@@ -1,4 +1,4 @@
-# robots.txt — Aissociate Formation IA (https://aissociate.fr)
+# robots.txt — Aissociate Formation IA (https://aissociate.re)
 # Optimisé pour Google, Bing et les IA (ChatGPT, Perplexity, Claude, Gemini…)
 
 User-agent: *
@@ -146,5 +146,5 @@ User-agent: Slackbot
 Allow: /
 
 # Sitemaps
-Sitemap: https://aissociate.fr/sitemap.xml
-Sitemap: https://aissociate.fr/sitemap-blog.xml
+Sitemap: https://aissociate.re/sitemap.xml
+Sitemap: https://aissociate.re/sitemap-blog.xml

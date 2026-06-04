@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useEffect } from 'react';
 
-export const SITE_URL = 'https://aissociate.fr';
+export const SITE_URL = 'https://aissociate.re';
 export const SITE_NAME = 'Aissociate — Formation IA Générative';
 export const DEFAULT_OG_IMAGE = 'https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg';
 

@@ -3,7 +3,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 
-const SITE_URL = "https://aissociate.fr";
+const SITE_URL = "https://aissociate.re";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
