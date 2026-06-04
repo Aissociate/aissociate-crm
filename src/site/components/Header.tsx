@@ -66,14 +66,6 @@ export default function Header() {
             </Link>
 
             <Link
-              to="/blog"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              Blog
-            </Link>
-
-            <Link
               to="/aides-formation"
               className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800 font-semibold transition-colors"
             >
@@ -124,15 +116,6 @@ export default function Header() {
             >
               <Code className="w-4 h-4" />
               Développement
-            </Link>
-
-            <Link
-              to="/blog"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <BookOpen className="w-4 h-4" />
-              Blog
             </Link>
 
             <Link

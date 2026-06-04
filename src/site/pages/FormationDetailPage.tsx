@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Award, CircleCheck as CheckCircle, FileText, Target, BookOpen, ArrowLeft, Euro } from 'lucide-react';
@@ -405,27 +404,7 @@ export default function FormationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const formation = id ? formationsData[id] : null;
 
-  // Repli back-office : si l'id n'est pas une fiche OF, on tente la table CRM.
-  const [crm, setCrm] = useState(null);
-  const [crmLoading, setCrmLoading] = useState(false);
-  useEffect(() => {
-    if (id && !formationsData[id]) {
-      setCrmLoading(true);
-      supabase.from('formations').select('*').eq('id', id).eq('actif', true).maybeSingle()
-        .then(({ data }) => { setCrm(data); setCrmLoading(false); });
-    }
-  }, [id]);
-
   if (!formation) {
-    if (crmLoading) {
-      return (
-        <div className="min-h-screen bg-white"><Header />
-          <div className="max-w-4xl mx-auto px-4 py-20 text-center text-slate-500">Chargement…</div>
-          <Footer />
-        </div>
-      );
-    }
-    if (crm) return <CrmFormationDetail f={crm} />;
     return (
       <div className="min-h-screen bg-white">
         <Header />
