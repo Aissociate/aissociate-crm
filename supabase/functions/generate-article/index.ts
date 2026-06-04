@@ -23,6 +23,28 @@ function parseJson(content: string): Record<string, unknown> | null {
   if (m) { try { return JSON.parse(m[0]); } catch { /* */ } }
   return null;
 }
+const strip = (s: string) => s.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").trim();
+// Parse minimal RSS/Atom : renvoie les items récents { title, desc, link }.
+async function fetchRss(url: string): Promise<{ title: string; desc: string; link: string }[]> {
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 AissociateBot" } });
+    if (!r.ok) return [];
+    const xml = await r.text();
+    const out: { title: string; desc: string; link: string }[] = [];
+    for (const b of xml.split(/<item[\s>]/i).slice(1, 12)) {
+      const title = strip(b.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+      const desc = strip(b.match(/<description>([\s\S]*?)<\/description>/i)?.[1] ?? "").slice(0, 320);
+      const link = strip(b.match(/<link>([\s\S]*?)<\/link>/i)?.[1] ?? "");
+      if (title) out.push({ title, desc, link });
+    }
+    if (!out.length) for (const e of xml.split(/<entry[\s>]/i).slice(1, 12)) {
+      const title = strip(e.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+      const link = e.match(/<link[^>]*href="([^"]+)"/i)?.[1] ?? "";
+      if (title) out.push({ title, desc: "", link });
+    }
+    return out;
+  } catch { return []; }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
@@ -31,18 +53,34 @@ Deno.serve(async (req: Request) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: blogRow } = await sb.from("parametres").select("valeur").eq("cle", "blog").maybeSingle();
-    const blog = (blogRow?.valeur ?? {}) as { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean };
+    const blog = (blogRow?.valeur ?? {}) as { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[] };
     const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
     const apiKey = Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key;
     if (!apiKey) return json({ error: "Clé OpenRouter absente (Paramètres > IA)" }, 400);
 
     const themes = Array.isArray(blog.themes) && blog.themes.length ? blog.themes : ["Veille IA : tendances du moment"];
-    const subject = (body.subject as string) || themes[Math.floor(Math.random() * themes.length)];
+    const feeds = Array.isArray(blog.rss_feeds) ? blog.rss_feeds.filter(Boolean) : [];
+    const seo = Array.isArray(blog.seo_keywords) ? blog.seo_keywords.filter(Boolean) : [];
+
+    // Sujet : explicite, sinon veille via flux RSS (actualité IA), sinon thème.
+    let subject = (body.subject as string) || "";
+    let sourceNote = "";
+    if (!subject && feeds.length) {
+      const items = await fetchRss(feeds[Math.floor(Math.random() * feeds.length)]);
+      if (items.length) {
+        const it = items[Math.floor(Math.random() * Math.min(items.length, 5))];
+        subject = it.title;
+        sourceNote = `\n\nActualité IA récente à exploiter (veille RSS) :\nTitre : ${it.title}${it.desc ? `\nRésumé : ${it.desc}` : ""}${it.link ? `\nSource : ${it.link}` : ""}\nRédige un article ORIGINAL et à valeur ajoutée inspiré de cette actualité (ne recopie pas, contextualise pour les PME).`;
+      }
+    }
+    if (!subject) subject = themes[Math.floor(Math.random() * themes.length)];
+
     const useWeb = (body.use_web ?? blog.use_web) === true;
     const model = (ai.model || "anthropic/claude-opus-4.8") + (useWeb ? ":online" : "");
-    const systemPrompt = blog.prompt ||
-      'Rédige un article de blog en français sur le thème fourni. Réponds en JSON {"title","excerpt","content","category","seo_keywords"}.';
+    const systemPrompt = (blog.prompt ||
+      'Rédige un article de blog en français sur le thème fourni. Réponds en JSON {"title","excerpt","content","category","seo_keywords"}.') +
+      (seo.length ? `\n\nIntègre naturellement ces mots-clés SEO dans l'article : ${seo.join(", ")}.` : "");
 
     const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -51,7 +89,7 @@ Deno.serve(async (req: Request) => {
         model,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `THÈME : ${subject}\n\nRédige l'article maintenant (réponds uniquement par l'objet JSON).` },
+          { role: "user", content: `THÈME : ${subject}${sourceNote}\n\nRédige l'article maintenant (réponds uniquement par l'objet JSON).` },
         ],
         temperature: 0.6,
       }),

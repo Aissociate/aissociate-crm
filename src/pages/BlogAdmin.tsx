@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Sparkles, Eye, EyeOff, ExternalLink, Loader as Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Sparkles, Eye, EyeOff, ExternalLink, Loader as Loader2, Tag } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -24,8 +24,25 @@ export default function BlogAdmin() {
   const [subject, setSubject] = useState('');
   const [publishGen, setPublishGen] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [catOpen, setCatOpen] = useState(false);
+  const [newCat, setNewCat] = useState('');
 
   const set = (k: keyof BlogArticle, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+
+  const addCat = async () => {
+    const name = newCat.trim();
+    if (!name) return;
+    const { error } = await supabase.from('blog_categories').insert({ name, slug: slugify(name) });
+    if (error) { alert(error.message); return; }
+    setNewCat('');
+    categories.refresh();
+  };
+  const removeCat = async (id: string) => {
+    if (!confirm('Supprimer cette catégorie ? Les articles liés seront détachés.')) return;
+    const { error } = await supabase.from('blog_categories').delete().eq('id', id);
+    if (error) { alert(error.message); return; }
+    categories.refresh(); refresh();
+  };
   const catName = (id: string | null) => categories.data.find((c) => c.id === id)?.name ?? '—';
 
   const openNew = () => { setForm(empty()); setOpen(true); };
@@ -90,6 +107,7 @@ export default function BlogAdmin() {
         subtitle="Articles du site vitrine — rédaction manuelle ou génération IA (veille)"
         actions={isManager && (
           <>
+            <Button variant="secondary" onClick={() => setCatOpen(true)}><Tag className="h-4 w-4" /> Catégories</Button>
             <Button variant="secondary" onClick={() => setGenOpen(true)}><Sparkles className="h-4 w-4" /> Générer par IA</Button>
             <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouvel article</Button>
           </>
@@ -166,7 +184,29 @@ export default function BlogAdmin() {
             <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="ex. L'IA générative pour les PME" />
           </Field>
           <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={publishGen} onChange={(e) => setPublishGen(e.target.checked)} /> Publier directement (sinon brouillon)</label>
-          <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">Le prompt maître et les thèmes de veille se configurent dans <strong>Paramètres › Blog (IA)</strong>. Un cron hebdomadaire génère aussi un article automatiquement.</p>
+          <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">Le prompt maître, les thèmes, les flux RSS de veille et les mots-clés SEO se configurent dans <strong>Paramètres › Blog (IA)</strong>. Un cron hebdomadaire génère aussi un article automatiquement.</p>
+        </div>
+      </Modal>
+
+      {/* Catégories */}
+      <Modal open={catOpen} onClose={() => setCatOpen(false)} title="Catégories du blog" footer={<Button variant="secondary" onClick={() => setCatOpen(false)}>Fermer</Button>}>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input className="input" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="Nouvelle catégorie" onKeyDown={(e) => { if (e.key === 'Enter') addCat(); }} />
+            <Button onClick={addCat} disabled={!newCat.trim()}><Plus className="h-4 w-4" /> Ajouter</Button>
+          </div>
+          {categories.data.length === 0 ? (
+            <p className="text-sm text-muted">Aucune catégorie.</p>
+          ) : (
+            <ul className="divide-y divide-line rounded-lg border border-line">
+              {categories.data.map((c) => (
+                <li key={c.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span className="text-fg">{c.name} <span className="text-xs text-muted">· {c.slug}</span></span>
+                  <button onClick={() => removeCat(c.id)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </Modal>
     </div>

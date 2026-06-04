@@ -14,7 +14,7 @@ type Imap = { host?: string; port?: number; user?: string; password?: string };
 type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
 type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
 type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
-type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean };
+type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[] };
 
 const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
   { key: 'documents', label: 'Base documentaire' },
@@ -47,6 +47,8 @@ export default function Parametres() {
   const [chatbot, setChatbot] = useState<Chatbot>({});
   const [blog, setBlog] = useState<Blog>({});
   const [blogThemes, setBlogThemes] = useState('');
+  const [blogRss, setBlogRss] = useState('');
+  const [blogSeo, setBlogSeo] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function Parametres() {
         if (row.cle === 'imap') setImap({ port: 993, ...((row.valeur as Imap) ?? {}) });
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
-        if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); }
+        if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
       }
       setLoading(false);
     })();
@@ -290,9 +292,17 @@ export default function Parametres() {
           <Field label="Prompt maître" hint="Doit demander une réponse JSON {title, excerpt, content (HTML), category, seo_keywords}">
             <textarea className="input" rows={5} value={blog.prompt ?? ''} onChange={(e) => setBlog({ ...blog, prompt: e.target.value })} />
           </Field>
-          <div className="mt-4">
-            <Field label="Thèmes de veille (un par ligne)" hint="Le cron / la génération auto choisit un thème au hasard">
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Field label="Thèmes de veille (un par ligne)" hint="Utilisé si aucun flux RSS n'a fourni d'actualité">
               <textarea className="input" rows={6} value={blogThemes} onChange={(e) => setBlogThemes(e.target.value)} />
+            </Field>
+            <Field label="Flux RSS de veille IA (une URL par ligne)" hint="L'actualité récente sert de base aux articles">
+              <textarea className="input font-mono text-xs" rows={6} value={blogRss} onChange={(e) => setBlogRss(e.target.value)} placeholder="https://news.google.com/rss/search?q=intelligence+artificielle&hl=fr" />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Mots-clés SEO (un par ligne)" hint="Intégrés naturellement dans les articles générés">
+              <textarea className="input" rows={3} value={blogSeo} onChange={(e) => setBlogSeo(e.target.value)} />
             </Field>
           </div>
           <div className="mt-3 flex flex-wrap gap-5">
@@ -301,7 +311,7 @@ export default function Parametres() {
           </div>
           <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">Un <strong>cron hebdomadaire</strong> appelle l'Edge Function <code>generate-article</code> (lundi 8h). Génération manuelle possible depuis <strong>Blog › Générer par IA</strong>. Clé IA dans la section ci-dessus.</p>
           <div className="mt-4 flex items-center gap-3">
-            <Button onClick={() => persist('blog', { ...blog, themes: blogThemes.split('\n').map((t) => t.trim()).filter(Boolean) })} disabled={saving === 'blog'}>
+            <Button onClick={() => persist('blog', { ...blog, themes: blogThemes.split('\n').map((t) => t.trim()).filter(Boolean), rss_feeds: blogRss.split('\n').map((t) => t.trim()).filter(Boolean), seo_keywords: blogSeo.split('\n').map((t) => t.trim()).filter(Boolean) })} disabled={saving === 'blog'}>
               <Save className="h-4 w-4" /> {saving === 'blog' ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
             {savedMsg === 'blog' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
