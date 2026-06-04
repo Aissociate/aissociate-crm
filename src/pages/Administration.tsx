@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Building, ScrollText, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge, Table, Button, Modal, Field } from '@/components/ui';
@@ -13,10 +13,10 @@ const FIN_TYPES: FinancementType[] = [
   'transition_pro', 'agefice', 'entreprise', 'particulier', 'autre',
 ];
 
-type Tab = 'users' | 'financeurs' | 'audit';
+type Tab = 'pending' | 'users' | 'financeurs' | 'audit';
 
 export default function Administration() {
-  const [tab, setTab] = useState<Tab>('users');
+  const [tab, setTab] = useState<Tab>('pending');
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'created_at' } });
   const financeurs = useCollection<Financeur>('financeurs', { orderBy: { column: 'code' } });
   const audit = useCollection<AuditLog>('audit_log', { orderBy: { column: 'created_at', ascending: false } });
@@ -24,6 +24,15 @@ export default function Administration() {
   const [finOpen, setFinOpen] = useState(false);
   const [finForm, setFinForm] = useState<Partial<Financeur>>({});
   const setF = (k: keyof Financeur, v: unknown) => setFinForm((f) => ({ ...f, [k]: v }));
+
+  const pending = profiles.data.filter((p) => !p.approved);
+  const approved = profiles.data.filter((p) => p.approved);
+
+  const approveUser = async (p: Profile, approve: boolean) => {
+    const { error } = await supabase.from('profiles').update({ approved: approve, actif: approve }).eq('id', p.id);
+    if (error) { alert(error.message); return; }
+    profiles.refresh();
+  };
 
   const changeRole = async (p: Profile, role: UserRole) => {
     const { error } = await supabase.from('profiles').update({ role }).eq('id', p.id);
@@ -52,7 +61,8 @@ export default function Administration() {
     financeurs.refresh();
   };
 
-  const TABS: { key: Tab; label: string; icon: typeof Users }[] = [
+  const TABS: { key: Tab; label: string; icon: typeof Users; badge?: number }[] = [
+    { key: 'pending', label: 'En attente', icon: UserCheck, badge: pending.length },
     { key: 'users', label: 'Utilisateurs & droits', icon: Users },
     { key: 'financeurs', label: 'Financeurs', icon: Building },
     { key: 'audit', label: 'Journal d\'audit', icon: ScrollText },
@@ -67,9 +77,58 @@ export default function Administration() {
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.key ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-muted hover:text-fg'}`}>
             <t.icon className="h-4 w-4" /> {t.label}
+            {t.badge !== undefined && t.badge > 0 && (
+              <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">{t.badge}</span>
+            )}
           </button>
         ))}
       </div>
+
+      {tab === 'pending' && (
+        profiles.loading ? <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div> :
+        pending.length === 0 ? (
+          <Card><p className="py-6 text-center text-sm text-muted">Aucun compte en attente d'approbation.</p></Card>
+        ) : (
+          <Table head={
+            <tr>
+              <th className="px-4 py-3">Utilisateur</th>
+              <th className="px-4 py-3">Inscrit le</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          }>
+            {pending.map((p) => (
+              <tr key={p.id} className="hover:bg-surface-2">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/15 text-xs font-semibold text-amber-600">{initials(p.nom, p.prenom)}</span>
+                    <div>
+                      <p className="font-medium text-fg">{fullName(p.prenom, p.nom)}</p>
+                      <p className="text-xs text-muted">{p.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => approveUser(p, true)}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/20 transition-colors dark:text-emerald-400"
+                    >
+                      <UserCheck className="h-3.5 w-3.5" /> Approuver
+                    </button>
+                    <button
+                      onClick={() => approveUser(p, false)}
+                      className="flex items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-500/20 transition-colors dark:text-red-400"
+                    >
+                      <UserX className="h-3.5 w-3.5" /> Refuser
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        )
+      )}
 
       {tab === 'users' && (
         profiles.loading ? <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div> : (
@@ -81,7 +140,7 @@ export default function Administration() {
               <th className="px-4 py-3">Inscrit le</th>
             </tr>
           }>
-            {profiles.data.map((p) => (
+            {approved.map((p) => (
               <tr key={p.id} className="hover:bg-surface-2">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">

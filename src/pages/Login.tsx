@@ -29,7 +29,7 @@ export default function Login() {
     } else {
       const { error } = await signUp(email, password, { nom, prenom });
       if (error) setError(error);
-      else setInfo('Compte créé. Vous pouvez maintenant vous connecter.');
+      else setInfo('Votre compte a été créé. Un administrateur doit l\'approuver avant que vous puissiez accéder au back-office. Vous serez notifié.');
       if (!error) setMode('in');
     }
     setLoading(false);
@@ -98,8 +98,7 @@ export default function Login() {
 
         {mode === 'up' && (
           <p className="mt-4 text-center text-xs text-muted">
-            Le premier compte créé peut être promu administrateur depuis Supabase
-            (table <code>profiles</code>, colonne <code>role</code>).
+            Votre compte sera actif après validation par un administrateur ou directeur commercial.
           </p>
         )}
       </div>

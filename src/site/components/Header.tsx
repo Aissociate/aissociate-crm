@@ -1,31 +1,13 @@
-// @ts-nocheck
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { GraduationCap, Menu, X, Shield, Phone, Code, BookOpen, Euro } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { GraduationCap, Menu, X, Phone, Code, BookOpen, Euro } from 'lucide-react';
 import AdminLogo from './AdminLogo';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const { isAdmin } = useAuth();
 
   return (
     <header className="bg-white shadow-sm sticky top-0 z-50">
-      {isAdmin && (
-        <div className="bg-slate-900 py-2">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-end">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-1.5 rounded-lg font-semibold text-xs transition-all flex items-center gap-2"
-            >
-              <Shield className="w-3 h-3" />
-              Admin
-            </button>
-          </div>
-        </div>
-      )}
-
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <Link to="/" className="flex items-center gap-3 group">

@@ -13,6 +13,7 @@ interface AuthState {
   role: UserRole | null;
   isAdmin: boolean;
   isManager: boolean;
+  approved: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (
     email: string, password: string, meta: { nom: string; prenom: string; role?: UserRole },
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdminFlag = (profile as { is_admin?: boolean | null } | null)?.is_admin === true;
   const isAdmin = role === 'admin' || isAdminFlag;
   const isManager = isAdmin || role === 'directeur_commercial';
+  const approved = profile?.approved === true || isAdmin;
 
   return (
     <AuthContext.Provider
@@ -109,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         isAdmin,
         isManager,
+        approved,
         signIn,
         signUp,
         signOut,
