@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import SEO, { SITE_URL } from '../components/SEO';
 import { TrendingUp, Euro, ShieldCheck, Rocket, Users, Building2, Globe as Globe2, Award, Star, GraduationCap, MessageCircle, LifeBuoy, ArrowRight, CheckCircle2, ChevronRight, Wallet, Briefcase, UserCheck, MapPin } from 'lucide-react';
 
 const BLEU_FRANCE = '#000091';
@@ -45,6 +46,13 @@ export default function AidesFormation() {
 
   return (
     <div className="min-h-screen bg-white font-sans text-[#161616]">
+      <SEO
+        title="Financer sa formation IA : CPF, OPCO, France Travail | Aissociate"
+        description="Toutes les aides pour financer votre formation en intelligence artificielle : CPF, OPCO, France Travail, plan de développement des compétences. Accompagnement par un organisme Qualiopi à La Réunion."
+        keywords="financement formation IA, CPF formation IA, OPCO formation, aide formation France Travail, financer formation intelligence artificielle, plan de développement des compétences, Qualiopi"
+        url={`${SITE_URL}/aides-formation`}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Aides au financement', url: `${SITE_URL}/aides-formation` }]}
+      />
       <Header />
 
       <div className="w-full h-1 flex" aria-hidden="true">

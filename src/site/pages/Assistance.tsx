@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import SEO, { SITE_URL } from '../components/SEO';
 import { Phone, Calendar, CheckCircle, MessageSquare, Sparkles, Target, TrendingUp, Users, ArrowRight } from 'lucide-react';
 
 export default function Assistance() {
@@ -57,6 +58,13 @@ export default function Assistance() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Assistance & chatbots IA pour entreprises | Aissociate"
+        description="Déployez des assistants IA pour votre entreprise à La Réunion : support client 24/7, chatbots, qualification de leads, FAQ automatisée. Accompagnement par un organisme certifié Qualiopi."
+        keywords="assistant IA entreprise, chatbot IA, support client IA, qualification de leads IA, automatisation relation client, IA La Réunion"
+        url={`${SITE_URL}/assistance`}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Assistance', url: `${SITE_URL}/assistance` }]}
+      />
       <Header />
 
       <section className="relative bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20 overflow-hidden">

@@ -2,11 +2,26 @@
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import SEO, { SITE_URL, DEFAULT_OG_IMAGE } from '../components/SEO';
 import { GraduationCap, TrendingUp, Users, ArrowRight, Phone, Sparkles, Target, Clock, CheckCircle, FileText, Mail, Truck, Building2 } from 'lucide-react';
 
 export default function OrganismHome() {
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Formation IA à La Réunion — Qualiopi, CPF & OPCO | Aissociate"
+        description="Organisme de formation certifié Qualiopi à La Réunion. Formez vos équipes à l'IA générative : ChatGPT, prompt engineering, automatisation des process. Finançable CPF, OPCO, France Travail — présentiel ou distanciel."
+        keywords="formation IA La Réunion, formation intelligence artificielle Réunion, formation IA 974, formation IA Qualiopi, formation IA CPF, OPCO intelligence artificielle, ChatGPT entreprise, IA générative PME, automatisation IA, prompt engineering"
+        url={SITE_URL}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }]}
+        organizationData={{
+          name: 'Aissociate',
+          description: "Organisme de formation certifié Qualiopi spécialisé en intelligence artificielle générative à La Réunion. Formations finançables CPF, OPCO et France Travail.",
+          url: SITE_URL,
+          logo: DEFAULT_OG_IMAGE,
+          email: 'contact@aissociate.re',
+        }}
+      />
       <Header />
 
       <section className="relative bg-gradient-to-br from-slate-50 via-white to-orange-50 py-20 overflow-hidden">

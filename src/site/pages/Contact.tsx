@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import SEO, { SITE_URL } from '../components/SEO';
 import { Mail, Phone, MapPin, Send, CheckCircle, Clock, MessageSquare } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -51,6 +52,13 @@ export default function Contact() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title="Contact — Aissociate, formation IA à La Réunion (Qualiopi)"
+        description="Contactez Aissociate, organisme de formation en intelligence artificielle certifié Qualiopi à La Réunion. Devis, financement CPF / OPCO, inscriptions et accompagnement."
+        keywords="contact Aissociate, formation IA Réunion contact, devis formation IA, organisme formation IA La Réunion, inscription formation IA"
+        url={`${SITE_URL}/contact`}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Contact', url: `${SITE_URL}/contact` }]}
+      />
       <Header />
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">
