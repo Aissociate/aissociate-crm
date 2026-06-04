@@ -141,7 +141,7 @@ export default function PlansFormation() {
                 <span className="text-xs text-muted">v{p.version} · {p.contenu?.length ?? 0} modules</span>
               </td>
               <td className="px-4 py-3 text-muted">{p.duree_heures} h · {p.modalite}</td>
-              <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{PLAN_STATUT_LABELS[p.statut]}</Badge></td>
+              <td className="px-4 py-3"><Badge tone="brand">{PLAN_STATUT_LABELS[p.statut]}</Badge></td>
               <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">

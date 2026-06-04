@@ -137,7 +137,7 @@ export default function BugReporter() {
           {/* En-tête */}
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-red-100 p-1.5 text-red-600 dark:bg-red-900/30">
+              <div className="rounded-lg bg-red-500/10 p-1.5 text-red-500">
                 <Bug className="h-4 w-4" />
               </div>
               <span className="font-semibold text-fg">Signaler un bug</span>
@@ -149,7 +149,7 @@ export default function BugReporter() {
 
           {sent ? (
             <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-              <div className="rounded-full bg-emerald-100 p-3 text-emerald-600 dark:bg-emerald-900/30">
+              <div className="rounded-full bg-emerald-500/10 p-3 text-emerald-500">
                 <Send className="h-6 w-6" />
               </div>
               <p className="font-medium text-fg">Bug envoyé !</p>
@@ -227,10 +227,10 @@ export default function BugReporter() {
                         'flex-1 rounded-lg border py-1 text-xs font-medium capitalize transition',
                         priorite === p
                           ? {
-                              faible:   'border-slate-400 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
-                              normale:  'border-sky-400 bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-                              haute:    'border-orange-400 bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-                              critique: 'border-red-500 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+                              faible:   'border-line bg-surface-2 text-muted',
+                              normale:  'border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400',
+                              haute:    'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+                              critique: 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400',
                             }[p]
                           : 'border-line text-muted hover:border-line hover:bg-surface-2',
                       )}

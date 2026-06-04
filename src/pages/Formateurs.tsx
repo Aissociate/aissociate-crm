@@ -101,7 +101,7 @@ export default function Formateurs() {
                 className={`w-full rounded-xl border p-4 text-left transition ${activeId === f.id ? 'border-brand-500 bg-brand-500/10' : 'border-line bg-surface hover:bg-surface-2'}`}>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 font-medium text-fg"><GraduationCap className="h-4 w-4 text-brand-500" />{fullName(f.prenom, f.nom)}</span>
-                  <Badge className={f.statut === 'actif' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{f.statut}</Badge>
+                  <Badge tone={f.statut === 'actif' ? 'success' : 'neutral'}>{f.statut}</Badge>
                 </div>
                 {f.specialites && <p className="mt-1 truncate text-xs text-muted">{f.specialites}</p>}
                 <p className="mt-1 text-xs text-muted">{sessions.data.filter((s) => s.formateur_id === f.id).length} session(s)</p>
@@ -139,7 +139,7 @@ export default function Formateurs() {
                   <ul className="mb-3 space-y-2">
                     {docs.map((d) => (
                       <li key={d.id} className="flex items-center gap-3 rounded-lg border border-line px-3 py-2">
-                        <Badge className="bg-brand-50 text-brand-700">{DOC_CATS[d.categorie] ?? d.categorie}</Badge>
+                        <Badge tone="brand">{DOC_CATS[d.categorie] ?? d.categorie}</Badge>
                         <span className="flex-1 text-sm text-fg">{d.titre}</span>
                         {d.fichier_url && <FileLink bucket="formateurs" value={d.fichier_url} />}
                         {isManager && <button onClick={() => removeDoc(d)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}

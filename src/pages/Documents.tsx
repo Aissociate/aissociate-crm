@@ -117,13 +117,13 @@ export default function Documents() {
               <td className="px-4 py-3">
                 <span className="flex items-center gap-2 font-medium text-fg"><FileText className="h-4 w-4 text-brand-500" />{d.titre}</span>
                 <span className="mt-0.5 flex flex-wrap items-center gap-1">
-                  {d.dossier && <Badge className="bg-amber-50 text-amber-700"><Folder className="mr-1 h-3 w-3" />{d.dossier}</Badge>}
-                  {d.chat_direction && <Badge className="bg-indigo-100 text-indigo-700"><Bot className="mr-1 h-3 w-3" />Direction</Badge>}
-                  {d.chat_conseiller && <Badge className="bg-brand-50 text-brand-700"><Bot className="mr-1 h-3 w-3" />Conseiller</Badge>}
-                  {(d.tags ?? []).map((t) => <Badge key={t} className="bg-surface-2 text-muted">{t}</Badge>)}
+                  {d.dossier && <Badge tone="warning"><Folder className="mr-1 h-3 w-3" />{d.dossier}</Badge>}
+                  {d.chat_direction && <Badge tone="info"><Bot className="mr-1 h-3 w-3" />Direction</Badge>}
+                  {d.chat_conseiller && <Badge tone="brand"><Bot className="mr-1 h-3 w-3" />Conseiller</Badge>}
+                  {(d.tags ?? []).map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
                 </span>
               </td>
-              <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{d.categorie}</Badge></td>
+              <td className="px-4 py-3"><Badge tone="brand">{d.categorie}</Badge></td>
               <td className="px-4 py-3 text-muted">v{d.version}</td>
               <td className="px-4 py-3 text-muted">{formatDate(d.updated_at)}</td>
               <td className="px-4 py-3">

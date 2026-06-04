@@ -131,11 +131,11 @@ export default function BlogAdmin() {
             <tr key={a.id} className="hover:bg-surface-2">
               <td className="px-4 py-3">
                 <span className="font-medium text-fg">{a.title}</span>
-                {a.ai_model_used && <Badge className="ml-2 bg-violet-100 text-violet-700">IA</Badge>}
+                {a.ai_model_used && <Badge className="ml-2" tone="info">IA</Badge>}
               </td>
               <td className="px-4 py-3 text-muted">{catName(a.category_id)}</td>
               <td className="px-4 py-3">
-                <Badge className={a.published ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{a.published ? 'Publié' : 'Brouillon'}</Badge>
+                <Badge tone={a.published ? 'success' : 'neutral'}>{a.published ? 'Publié' : 'Brouillon'}</Badge>
               </td>
               <td className="px-4 py-3 text-muted">{formatDate(a.published_at ?? a.created_at)}</td>
               <td className="px-4 py-3">
@@ -181,7 +181,7 @@ export default function BlogAdmin() {
               <button type="button" onClick={() => setPreview((p) => !p)} className="text-xs font-medium text-brand-600 hover:text-brand-700">{preview ? 'Éditer le HTML' : 'Aperçu'}</button>
             </div>
             {preview
-              ? <div className="prose max-w-none rounded-lg border border-line bg-surface-1 p-4 text-sm" dangerouslySetInnerHTML={{ __html: form.content ?? '' }} />
+              ? <div className="prose max-w-none rounded-lg border border-line bg-surface p-4 text-sm" dangerouslySetInnerHTML={{ __html: form.content ?? '' }} />
               : <textarea className="input font-mono text-sm" rows={12} value={form.content ?? ''} onChange={(e) => set('content', e.target.value)} />}
           </Field>
           <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={!!form.published} onChange={(e) => set('published', e.target.checked)} /> Publié (visible sur le site)</label>

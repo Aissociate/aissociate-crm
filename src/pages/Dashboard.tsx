@@ -5,7 +5,7 @@ import {
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, StatCard, Card, Spinner, Badge } from '@/components/ui';
-import { DOSSIER_STATUT_COLORS, DOSSIER_STATUT_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
+import { DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
 import { formatMoney, formatDate } from '@/lib/utils';
 import type { Dossier, Opportunite, Contact } from '@/lib/database.types';
 
@@ -61,7 +61,7 @@ export default function Dashboard() {
                       <p className="truncate text-sm font-medium text-fg">{d.intitule}</p>
                       <p className="text-xs text-muted">{d.reference} · {formatDate(d.created_at)}</p>
                     </div>
-                    <Badge className={DOSSIER_STATUT_COLORS[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                    <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
                   </Link>
                 </li>
               ))}

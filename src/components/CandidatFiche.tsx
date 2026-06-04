@@ -5,7 +5,7 @@ import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { cn, fullName, initials, formatDate } from '@/lib/utils';
 import { CANDIDAT_STATUT_LABELS } from '@/lib/constants';
-import { Badge } from '@/components/ui';
+import { Badge, TONE_BADGE } from '@/components/ui';
 import type { Candidat, CandidatStatut, OffreRecrutement } from '@/lib/database.types';
 
 // Colonnes déjà affichées → masquées dans metadata
@@ -34,12 +34,12 @@ const CONTRACT_STEPS = [
 ] as const;
 
 const STATUT_COLORS: Record<CandidatStatut, string> = {
-  recu:         'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
-  preselection: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  entretien:    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  retenu:       'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  refuse:       'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  onboarding:   'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
+  recu:         TONE_BADGE.neutral,
+  preselection: TONE_BADGE.info,
+  entretien:    TONE_BADGE.warning,
+  retenu:       TONE_BADGE.success,
+  refuse:       TONE_BADGE.danger,
+  onboarding:   TONE_BADGE.brand,
 };
 
 function ScoreBar({ score }: { score: number | null }) {
@@ -297,7 +297,7 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
                 <TableProperties className="h-4 w-4 text-muted" />
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Questionnaire</h3>
                 {!c.metadata && (
-                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-xs">
+                  <Badge tone="warning" className="text-xs">
                     re-importer pour structurer
                   </Badge>
                 )}

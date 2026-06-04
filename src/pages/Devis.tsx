@@ -3,15 +3,14 @@ import { Plus, Trash2, Pencil, FileDown, Loader as Loader2, ReceiptText } from '
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, type Tone } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import { formatDate, fullName, formatMoney } from '@/lib/utils';
 import type { Devis, DevisLigne, DevisStatut, Contact, Entreprise, Financeur, Formation, Dossier } from '@/lib/database.types';
 
 const STATUT_LABELS: Record<DevisStatut, string> = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté', refuse: 'Refusé', expire: 'Expiré' };
-const STATUT_COLORS: Record<DevisStatut, string> = {
-  brouillon: 'bg-surface-2 text-muted', envoye: 'bg-sky-100 text-sky-700',
-  accepte: 'bg-emerald-100 text-emerald-700', refuse: 'bg-red-100 text-red-700', expire: 'bg-amber-100 text-amber-700',
+const STATUT_TONES: Record<DevisStatut, Tone> = {
+  brouillon: 'neutral', envoye: 'info', accepte: 'success', refuse: 'danger', expire: 'warning',
 };
 const UNITES = ['heure', 'jour', 'forfait', 'session', 'participant'];
 
@@ -151,7 +150,7 @@ export default function Devis() {
               <td className="px-4 py-3 text-muted">{cName(d.contact_id)}</td>
               <td className="px-4 py-3 text-muted">{formatDate(d.date_emission)}</td>
               <td className="px-4 py-3 text-right text-fg">{formatMoney(d.total_ht)}</td>
-              <td className="px-4 py-3"><Badge className={STATUT_COLORS[d.statut]}>{STATUT_LABELS[d.statut]}</Badge></td>
+              <td className="px-4 py-3"><Badge tone={STATUT_TONES[d.statut]}>{STATUT_LABELS[d.statut]}</Badge></td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
                   {d.fichier_url && <FileLink bucket="devis" value={d.fichier_url} />}

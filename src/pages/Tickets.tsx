@@ -8,7 +8,7 @@ import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
-import { PageHeader, Button, Modal, Field, Badge, EmptyState, Spinner } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Badge, EmptyState, Spinner, TONE_TILE, type Tone } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { Ticket, TicketStatut, TicketPriorite, TicketType } from '@/lib/database.types';
 
@@ -23,18 +23,18 @@ type TicketWithMeta = Ticket & {
 
 // ─── Constantes ────────────────────────────────────────────────────────────────
 
-const STATUT_CONFIG: Record<TicketStatut, { label: string; className: string; icon: typeof Clock }> = {
-  ouvert:   { label: 'Ouvert',    className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',   icon: Clock },
-  en_cours: { label: 'En cours',  className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', icon: Loader2 },
-  resolu:   { label: 'Résolu',    className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', icon: CheckCircle2 },
-  refuse:   { label: 'Refusé',    className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',       icon: XCircle },
+const STATUT_CONFIG: Record<TicketStatut, { label: string; tone: Tone; icon: typeof Clock }> = {
+  ouvert:   { label: 'Ouvert',    tone: 'info',    icon: Clock },
+  en_cours: { label: 'En cours',  tone: 'warning', icon: Loader2 },
+  resolu:   { label: 'Résolu',    tone: 'success', icon: CheckCircle2 },
+  refuse:   { label: 'Refusé',    tone: 'danger',  icon: XCircle },
 };
 
-const PRIORITE_CONFIG: Record<TicketPriorite, { label: string; className: string }> = {
-  faible:   { label: 'Faible',   className: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
-  normale:  { label: 'Normale',  className: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
-  haute:    { label: 'Haute',    className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-  critique: { label: 'Critique', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+const PRIORITE_CONFIG: Record<TicketPriorite, { label: string; tone: Tone }> = {
+  faible:   { label: 'Faible',   tone: 'neutral' },
+  normale:  { label: 'Normale',  tone: 'info' },
+  haute:    { label: 'Haute',    tone: 'warning' },
+  critique: { label: 'Critique', tone: 'danger' },
 };
 
 // ─── Schémas Zod ───────────────────────────────────────────────────────────────
@@ -58,17 +58,17 @@ function StatutBadge({ statut }: { statut: TicketStatut }) {
   const cfg = STATUT_CONFIG[statut];
   const Icon = cfg.icon;
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', cfg.className)}>
+    <Badge tone={cfg.tone}>
       <Icon className="h-3 w-3" />
       {cfg.label}
-    </span>
+    </Badge>
   );
 }
 
 function PrioriteBadge({ priorite }: { priorite: TicketPriorite | null }) {
   if (!priorite) return null;
   const cfg = PRIORITE_CONFIG[priorite];
-  return <Badge className={cfg.className}>{cfg.label}</Badge>;
+  return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
 }
 
 function FilterPill({
@@ -206,7 +206,7 @@ function DetailModal({
       <div className="space-y-5">
         {/* En-tête */}
         <div className="flex flex-wrap items-start gap-2">
-          <div className={cn('rounded-lg p-2', ticket.type === 'bug' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : 'bg-amber-100 text-amber-600 dark:bg-amber-900/30')}>
+          <div className={cn('rounded-lg p-2', TONE_TILE[ticket.type === 'bug' ? 'danger' : 'warning'])}>
             <TypeIcon className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
@@ -303,12 +303,7 @@ function TicketCard({
       className="group w-full rounded-xl border border-line bg-surface p-4 text-left transition hover:border-brand-400 hover:shadow-sm"
     >
       <div className="flex items-start gap-3">
-        <div className={cn(
-          'mt-0.5 shrink-0 rounded-lg p-2',
-          ticket.type === 'bug'
-            ? 'bg-red-100 text-red-500 dark:bg-red-900/30'
-            : 'bg-amber-100 text-amber-500 dark:bg-amber-900/30',
-        )}>
+        <div className={cn('mt-0.5 shrink-0 rounded-lg p-2', TONE_TILE[ticket.type === 'bug' ? 'danger' : 'warning'])}>
           <TypeIcon className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -316,10 +311,10 @@ function TicketCard({
             <StatutBadge statut={ticket.statut} />
             {ticket.priorite && <PrioriteBadge priorite={ticket.priorite} />}
             {ticket.admin_note && (
-              <Badge className="bg-brand-500/10 text-brand-600 dark:text-brand-400">Réponse</Badge>
+              <Badge tone="brand">Réponse</Badge>
             )}
             {ticket.screenshot_url && (
-              <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <Badge tone="neutral">
                 <ImageIcon className="h-2.5 w-2.5" />capture
               </Badge>
             )}
@@ -436,13 +431,13 @@ export default function Tickets() {
       {/* Statistiques rapides */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Bugs ouverts', value: bugCount, icon: <Bug className="h-5 w-5" />, color: 'text-red-500 bg-red-100 dark:bg-red-900/30' },
-          { label: 'Propositions actives', value: propCount, icon: <Lightbulb className="h-5 w-5" />, color: 'text-amber-500 bg-amber-100 dark:bg-amber-900/30' },
-          { label: 'Bugs résolus', value: tickets.filter((t) => t.type === 'bug' && t.statut === 'resolu').length, icon: <CheckCircle2 className="h-5 w-5" />, color: 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/30' },
-          { label: 'Propositions planifiées', value: tickets.filter((t) => t.type === 'proposition' && t.statut === 'en_cours').length, icon: <AlertTriangle className="h-5 w-5" />, color: 'text-sky-500 bg-sky-100 dark:bg-sky-900/30' },
+          { label: 'Bugs ouverts', value: bugCount, icon: <Bug className="h-5 w-5" />, tone: 'danger' as Tone },
+          { label: 'Propositions actives', value: propCount, icon: <Lightbulb className="h-5 w-5" />, tone: 'warning' as Tone },
+          { label: 'Bugs résolus', value: tickets.filter((t) => t.type === 'bug' && t.statut === 'resolu').length, icon: <CheckCircle2 className="h-5 w-5" />, tone: 'success' as Tone },
+          { label: 'Propositions planifiées', value: tickets.filter((t) => t.type === 'proposition' && t.statut === 'en_cours').length, icon: <AlertTriangle className="h-5 w-5" />, tone: 'info' as Tone },
         ].map((s) => (
           <div key={s.label} className="card flex items-center gap-3 p-4">
-            <div className={cn('rounded-lg p-2 shrink-0', s.color)}>{s.icon}</div>
+            <div className={cn('rounded-lg p-2 shrink-0', TONE_TILE[s.tone])}>{s.icon}</div>
             <div className="min-w-0">
               <p className="text-2xl font-bold text-fg">{s.value}</p>
               <p className="text-xs text-muted truncate">{s.label}</p>

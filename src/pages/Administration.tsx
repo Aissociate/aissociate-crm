@@ -65,7 +65,7 @@ export default function Administration() {
       <div className="mb-5 flex gap-1 border-b border-line">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-muted hover:text-fg'}`}>
+            className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.key ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-muted hover:text-fg'}`}>
             <t.icon className="h-4 w-4" /> {t.label}
           </button>
         ))}
@@ -85,7 +85,7 @@ export default function Administration() {
               <tr key={p.id} className="hover:bg-surface-2">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">{initials(p.nom, p.prenom)}</span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600 dark:text-brand-400">{initials(p.nom, p.prenom)}</span>
                     <div>
                       <p className="font-medium text-fg">{fullName(p.prenom, p.nom)}</p>
                       <p className="text-xs text-muted">{p.email}</p>
@@ -99,7 +99,7 @@ export default function Administration() {
                 </td>
                 <td className="px-4 py-3">
                   <button onClick={() => toggleActif(p)}>
-                    <Badge className={p.actif ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>{p.actif ? 'Actif' : 'Désactivé'}</Badge>
+                    <Badge tone={p.actif ? 'success' : 'danger'}>{p.actif ? 'Actif' : 'Désactivé'}</Badge>
                   </button>
                 </td>
                 <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
@@ -125,7 +125,7 @@ export default function Administration() {
             }>
               {financeurs.data.map((f) => (
                 <tr key={f.id} className="hover:bg-surface-2">
-                  <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{f.code}</Badge></td>
+                  <td className="px-4 py-3"><Badge tone="brand">{f.code}</Badge></td>
                   <td className="px-4 py-3 font-medium text-fg">{f.nom}</td>
                   <td className="px-4 py-3 text-xs text-muted">{f.specificites}</td>
                   <td className="px-4 py-3">

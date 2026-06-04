@@ -112,7 +112,7 @@ export default function Pipeline() {
                         </div>
                         {contact?.telephone && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><Phone className="h-3 w-3" /> {contact.telephone}</p>}
                         {contact && o.titre && <p className="mt-1 truncate text-xs text-muted">{o.titre}</p>}
-                        <p className="mt-1 text-sm font-semibold text-brand-700">{formatMoney(Number(o.montant))}</p>
+                        <p className="mt-1 text-sm font-semibold text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</p>
                         <p className="text-xs text-muted">{o.probabilite}% de probabilité</p>
                         <div className="mt-2 flex justify-between" onClick={(e) => e.stopPropagation()}>
                           <button disabled={idx === 0} onClick={() => move(o, -1)} className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>

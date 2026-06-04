@@ -50,15 +50,15 @@ export default function Assistant() {
       <PageHeader
         title="Assistant IA"
         subtitle="Questions sur l'activité, à partir de la base documentaire et de vos données"
-        actions={mode && <Badge className={mode === 'direction' ? 'bg-indigo-100 text-indigo-700' : 'bg-brand-50 text-brand-700'}>Mode {mode === 'direction' ? 'Direction' : 'Conseiller'}</Badge>}
+        actions={mode && <Badge tone={mode === 'direction' ? 'info' : 'brand'}>Mode {mode === 'direction' ? 'Direction' : 'Conseiller'}</Badge>}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface-1">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface">
         {/* Fil de conversation */}
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {messages.length === 0 && (
             <div className="mx-auto max-w-xl py-8 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Bot className="h-6 w-6" /></div>
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400"><Bot className="h-6 w-6" /></div>
               <p className="font-medium text-fg">Posez une question sur l'activité</p>
               <p className="mt-1 text-sm text-muted">
                 L'assistant répond à partir de la base documentaire et des données auxquelles vous avez accès
@@ -76,17 +76,17 @@ export default function Assistant() {
 
           {messages.map((m, i) => (
             <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${m.role === 'user' ? 'bg-surface-2 text-muted' : 'bg-brand-50 text-brand-600'}`}>
+              <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${m.role === 'user' ? 'bg-surface-2 text-muted' : 'bg-brand-500/10 text-brand-600 dark:text-brand-400'}`}>
                 {m.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
               </div>
-              <div className={`max-w-[80%] rounded-xl border p-3 ${m.role === 'user' ? 'border-brand-100 bg-brand-50' : 'border-line bg-surface'}`}>
+              <div className={`max-w-[80%] rounded-xl border p-3 ${m.role === 'user' ? 'border-brand-500/20 bg-brand-500/5' : 'border-line bg-surface'}`}>
                 <p className="whitespace-pre-wrap break-words text-sm text-fg">{m.content}</p>
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-2 border-t border-line pt-2">
                     <p className="mb-1 text-xs font-medium text-muted">Sources :</p>
                     <div className="flex flex-wrap gap-1.5">
                       {m.sources.map((s, j) => s.url ? (
-                        <a key={j} href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs text-brand-700 hover:bg-surface-1">
+                        <a key={j} href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs text-brand-600 dark:text-brand-400 hover:bg-surface">
                           <FileText className="h-3 w-3" /> {s.label}
                         </a>
                       ) : (

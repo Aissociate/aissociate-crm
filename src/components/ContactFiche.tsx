@@ -5,8 +5,8 @@ import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn, fullName, initials, formatDate, formatMoney, genReference } from '@/lib/utils';
-import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_COLORS, OPP_STAGE_LABELS } from '@/lib/constants';
-import { Badge } from '@/components/ui';
+import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_TONES, OPP_STAGE_LABELS } from '@/lib/constants';
+import { Badge, type Tone } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
@@ -214,11 +214,11 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
       }, [])
     : [];
 
-  const TYPE_COLORS: Record<string, string> = {
-    prospect: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    apprenant: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-    contact_entreprise: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-    contact_financeur: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+  const TYPE_TONE: Record<string, Tone> = {
+    prospect: 'info',
+    apprenant: 'success',
+    contact_entreprise: 'warning',
+    contact_financeur: 'brand',
   };
 
   return (
@@ -244,7 +244,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 {fullName(c.prenom, c.nom)}
               </h2>
               {c.fonction && <p className="text-sm text-muted">{c.fonction}</p>}
-              <Badge className={cn('mt-1', TYPE_COLORS[c.type] ?? 'bg-slate-100 text-slate-700')}>
+              <Badge className="mt-1" tone={TYPE_TONE[c.type] ?? 'neutral'}>
                 {CONTACT_TYPE_LABELS[c.type]}
               </Badge>
             </div>
@@ -376,7 +376,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <ul className="space-y-1.5">{opps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                   <span className="text-fg">{o.titre}</span>
-                  <span className="flex items-center gap-2"><Badge className="bg-brand-50 text-brand-700">{OPP_STAGE_LABELS[o.stage]}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
+                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage]}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
                 </li>))}
               </ul>
             )}
@@ -398,7 +398,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <ul className="space-y-1.5">{dossiers.map((d) => (
                 <li key={d.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                   <span className="text-fg">{d.intitule}</span>
-                  <Badge className={DOSSIER_STATUT_COLORS[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                  <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
                 </li>))}
               </ul>
             )}
@@ -419,7 +419,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 return (
                   <li key={s.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                     <span className="flex items-center gap-2 text-fg"><span className="h-2.5 w-2.5 rounded-full" style={{ background: s.couleur }} />{s.titre}</span>
-                    <span className="flex items-center gap-2"><span className="text-xs text-muted">{formatDate(s.date_debut, 'dd/MM/yyyy')}</span><Badge className={passee ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{passee ? 'Réalisée' : 'Programmée'}</Badge></span>
+                    <span className="flex items-center gap-2"><span className="text-xs text-muted">{formatDate(s.date_debut, 'dd/MM/yyyy')}</span><Badge tone={passee ? 'success' : 'warning'}>{passee ? 'Réalisée' : 'Programmée'}</Badge></span>
                   </li>);
               })}</ul>
             )}

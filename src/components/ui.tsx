@@ -4,6 +4,31 @@ import { cn } from '@/lib/utils';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
+// ─── Tons sémantiques ────────────────────────────────────────────────────────
+// Un seul vocabulaire de couleurs pour tout le CRM. Le MÊME concept = le MÊME ton
+// partout (un statut « actif/résolu » est toujours `success`, etc.). Toutes les
+// teintes sont dark-mode-safe (fond à faible opacité + texte avec variante dark).
+export type Tone = 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+
+export const TONE_BADGE: Record<Tone, string> = {
+  brand:   'bg-brand-500/10 text-brand-600 dark:text-brand-400',
+  success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  danger:  'bg-red-500/10 text-red-600 dark:text-red-400',
+  info:    'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  neutral: 'bg-surface-2 text-muted',
+};
+
+// Variante « pastille / tuile d'icône » (fond coloré + icône) — même palette.
+export const TONE_TILE: Record<Tone, string> = {
+  brand:   'bg-brand-500/10 text-brand-500',
+  success: 'bg-emerald-500/10 text-emerald-500',
+  warning: 'bg-amber-500/10 text-amber-500',
+  danger:  'bg-red-500/10 text-red-500',
+  info:    'bg-sky-500/10 text-sky-500',
+  neutral: 'bg-surface-2 text-muted',
+};
+
 export function Button({
   variant = 'primary', className, children, ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
@@ -38,9 +63,15 @@ export function PageHeader({
   );
 }
 
-export function Badge({ children, className }: { children: ReactNode; className?: string }) {
+export function Badge({
+  children, className, tone,
+}: { children: ReactNode; className?: string; tone?: Tone }) {
   return (
-    <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', className)}>
+    <span className={cn(
+      'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium',
+      tone && TONE_BADGE[tone],
+      className,
+    )}>
       {children}
     </span>
   );
