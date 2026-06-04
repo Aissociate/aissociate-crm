@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { Calendar, Clock, ArrowLeft, User, BookOpen, Loader2 } from 'lucide-react';
+import { Calendar, Clock, ArrowLeft, User, BookOpen, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { BlogArticle as BlogArticleType } from '../types/blog';
 
@@ -152,7 +152,7 @@ export default function BlogArticle() {
           )}
 
           <div
-            className="prose prose-lg max-w-none prose-headings:text-slate-900 prose-headings:font-bold prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-6 prose-p:text-slate-700 prose-p:leading-relaxed prose-p:mb-6 prose-strong:text-slate-900"
+            className="blog-content text-slate-800"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
