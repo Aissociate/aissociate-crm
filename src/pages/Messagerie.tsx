@@ -3,8 +3,8 @@ import { Plus, Mail, Send, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2,
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/components/ui';
-import { formatDate, fullName } from '@/lib/utils';
+import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
+import { formatDate, fullName, cn } from '@/lib/utils';
 import type { Email, Contact, Dossier, EmailDirection, EmailCanal, Profile, Formateur, Candidat, Document } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
@@ -21,10 +21,10 @@ const reSubject = (s: string | null): string => /^\s*re\s*:/i.test(s ?? '') ? (s
 
 type MatchKind = 'contact' | 'formateur' | 'candidat';
 const KIND_LABEL: Record<MatchKind, string> = { contact: 'Contact', formateur: 'Formateur', candidat: 'Recrutement' };
-const KIND_CLASS: Record<MatchKind, string> = {
-  contact: 'bg-brand-50 text-brand-700',
-  formateur: 'bg-violet-100 text-violet-700',
-  candidat: 'bg-orange-100 text-orange-700',
+const KIND_TONE: Record<MatchKind, Tone> = {
+  contact: 'brand',
+  formateur: 'info',
+  candidat: 'warning',
 };
 
 type Peer = { key: string; label: string; kind: MatchKind | null; contactId: string | null; ownerId: string | null };
@@ -286,13 +286,13 @@ export default function Messagerie() {
       />
 
       {smtpOk === false && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <p>Configuration SMTP incomplète. Renseignez l'hôte, l'utilisateur, le mot de passe et l'adresse d'expédition dans <strong>Paramètres → Serveur SMTP sortant</strong>.</p>
         </div>
       )}
       {smtpOk === true && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <p>SMTP configuré — l'envoi d'e-mails est opérationnel.</p>
         </div>
@@ -302,7 +302,7 @@ export default function Messagerie() {
         <div className="flex gap-1">
           {tabs.map(([key, label, Icon, count]) => (
             <button key={key} onClick={() => changeView(key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${view === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-muted hover:text-fg'}`}>
+              className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ${view === key ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-muted hover:text-fg'}`}>
               <Icon className="h-4 w-4" /> {label}
               <span className="rounded-full bg-surface-2 px-1.5 text-xs text-muted">{count}</span>
             </button>
@@ -318,7 +318,7 @@ export default function Messagerie() {
       </div>
 
       {view === 'orphelins' && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>Messages reçus d'un interlocuteur inconnu (aucun contact, formateur ni candidat). Visibles <strong>uniquement par l'administrateur</strong>. Affectez-les à un contact pour les router.</p>
         </div>
@@ -347,18 +347,18 @@ export default function Messagerie() {
           message={view === 'orphelins' ? undefined : 'Cliquez sur « Synchroniser » ou « Nouveau message ».'}
         />
       ) : (
-        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface-1">
+        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {convos.map((c) => {
             const expanded = openThreads.has(c.key);
             const last = c.emails[0];
             const aff = affectationLabel(c);
             return (
-              <div key={c.key} className={convoSelected(c) ? 'bg-brand-50/40' : ''}>
+              <div key={c.key} className={convoSelected(c) ? 'bg-brand-500/5' : ''}>
                 {/* En-tête : interlocuteur, dernière interaction, canaux, affectation */}
                 <div className="flex items-start gap-2.5 p-3">
                   <input type="checkbox" className="mt-2 shrink-0" checked={convoSelected(c)} onChange={() => toggleConvo(c)} title="Sélectionner la conversation" />
                   <button onClick={() => toggleThread(c.key)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                    <div className={`mt-0.5 shrink-0 rounded-full p-2 ${c.lastCanal === 'whatsapp' ? 'bg-green-50 text-green-600' : c.lastDir === 'entrant' ? 'bg-sky-50 text-sky-600' : 'bg-brand-50 text-brand-600'}`}>
+                    <div className={cn('mt-0.5 shrink-0 rounded-full p-2', TONE_TILE[c.lastCanal === 'whatsapp' ? 'success' : c.lastDir === 'entrant' ? 'info' : 'brand'])}>
                       {channelIcon(c.lastCanal, 'h-5 w-5')}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -366,7 +366,7 @@ export default function Messagerie() {
                         {c.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-brand-600" title="Non lu" />}
                         <p className={`truncate ${c.unread ? 'font-semibold' : 'font-medium'} text-fg`}>{c.label}</p>
                         {c.channels.has('email') && <Mail className="h-3 w-3 shrink-0 text-muted" />}
-                        {c.channels.has('whatsapp') && <MessageCircle className="h-3 w-3 shrink-0 text-green-600" />}
+                        {c.channels.has('whatsapp') && <MessageCircle className="h-3 w-3 shrink-0 text-emerald-500" />}
                         <span className="shrink-0 text-xs text-muted">· {c.emails.length}</span>
                         {c.emails.some((e) => e.attachments && e.attachments.length > 0) && <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />}
                         <span className="ml-auto shrink-0 text-xs text-muted">{formatDate(c.lastAt, 'dd/MM/yyyy HH:mm')}</span>
@@ -379,10 +379,10 @@ export default function Messagerie() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                         {c.kind ? (
                           <>
-                            <Badge className={KIND_CLASS[c.kind]}>{KIND_LABEL[c.kind]} · {c.label}</Badge>
-                            <Badge className={c.owners.size > 0 ? 'bg-surface-2 text-muted' : 'bg-indigo-100 text-indigo-700'}>{aff ?? 'Direction'}</Badge>
+                            <Badge tone={KIND_TONE[c.kind]}>{KIND_LABEL[c.kind]} · {c.label}</Badge>
+                            <Badge tone={c.owners.size > 0 ? 'neutral' : 'info'}>{aff ?? 'Direction'}</Badge>
                           </>
-                        ) : c.hasInbound ? <Badge className="bg-amber-100 text-amber-700">Non rattaché</Badge> : null}
+                        ) : c.hasInbound ? <Badge tone="warning">Non rattaché</Badge> : null}
                       </div>
                     </div>
                   </button>
@@ -397,7 +397,7 @@ export default function Messagerie() {
                           <UserCog className="h-3.5 w-3.5" /> {c.label} <span className="opacity-80">· {aff ?? 'Direction'}</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
                           <TriangleAlert className="h-3.5 w-3.5" /> {c.label} · non rattaché
                         </span>
                       )}
@@ -408,14 +408,14 @@ export default function Messagerie() {
                         const wa = e.canal === 'whatsapp';
                         return (
                           <div key={e.id} className={`flex ${e.direction === 'sortant' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[88%] rounded-xl border p-3 ${wa ? 'border-green-200 bg-green-50' : e.direction === 'sortant' ? 'border-brand-100 bg-brand-50' : 'border-line bg-surface-1'}`}>
+                            <div className={`max-w-[88%] rounded-xl border p-3 ${wa ? 'border-emerald-500/20 bg-emerald-500/5' : e.direction === 'sortant' ? 'border-brand-500/20 bg-brand-500/5' : 'border-line bg-surface'}`}>
                               <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted">
                                 <span className="flex min-w-0 items-center gap-1 truncate">
                                   {channelIcon(e.canal, 'h-3 w-3 shrink-0')}
                                   {e.direction === 'entrant' ? `De ${e.expediteur ?? '—'}` : `À ${e.destinataires.join(', ') || '—'}`}
                                 </span>
                                 <span className="flex shrink-0 items-center gap-2">
-                                  {e.direction === 'sortant' && !wa && <Badge className={e.statut === 'envoye' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{e.statut}</Badge>}
+                                  {e.direction === 'sortant' && !wa && <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
                                   {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
                                 </span>
                               </div>
@@ -424,7 +424,7 @@ export default function Messagerie() {
                               {e.attachments && e.attachments.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                   {e.attachments.map((a, i) => (
-                                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="inline-flex max-w-[14rem] items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs text-brand-700 hover:bg-surface-1">
+                                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="inline-flex max-w-[14rem] items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs text-brand-600 dark:text-brand-400 hover:bg-surface">
                                       <Paperclip className="h-3 w-3 shrink-0" /><span className="truncate">{a.filename}</span>
                                     </a>
                                   ))}
@@ -464,7 +464,7 @@ export default function Messagerie() {
           <div className="inline-flex rounded-lg border border-line p-0.5 text-sm">
             {(['email', 'whatsapp'] as EmailCanal[]).map((ch) => (
               <button key={ch} onClick={() => setCanal(ch)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${canal === ch ? (ch === 'whatsapp' ? 'bg-green-600 text-white' : 'bg-brand-600 text-white') : 'text-muted hover:text-fg'}`}>
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${canal === ch ? (ch === 'whatsapp' ? 'bg-emerald-600 text-white' : 'bg-brand-600 text-white') : 'text-muted hover:text-fg'}`}>
                 {channelIcon(ch, 'h-4 w-4')} {ch === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
               </button>
             ))}

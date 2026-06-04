@@ -76,8 +76,8 @@ export default function ActionsAFaire() {
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="font-semibold text-fg">{profName(key)}</h2>
                   <div className="flex items-center gap-2 text-xs">
-                    {late > 0 && <Badge className="bg-red-100 text-red-700">{late} en retard</Badge>}
-                    <Badge className="bg-surface-2 text-muted">{list.length}</Badge>
+                    {late > 0 && <Badge tone="danger">{late} en retard</Badge>}
+                    <Badge tone="neutral">{list.length}</Badge>
                   </div>
                 </div>
                 <ul className="space-y-1.5">
@@ -90,7 +90,7 @@ export default function ActionsAFaire() {
                           className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line text-transparent hover:border-emerald-500 hover:bg-emerald-500 hover:text-white">
                           <Check className="h-3 w-3" />
                         </button>
-                        <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
+                        <Badge tone="neutral">{a.type}</Badge>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-fg">{a.description}</p>
                           <p className="text-xs text-muted">{c ? fullName(c.prenom, c.nom) : '—'}</p>

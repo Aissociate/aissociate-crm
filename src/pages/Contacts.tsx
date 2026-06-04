@@ -238,7 +238,7 @@ export default function Contacts() {
                 {fullName(c.prenom, c.nom)}
                 {c.fonction && <span className="block text-xs font-normal text-muted">{c.fonction}</span>}
               </td>
-              <td className="px-4 py-3"><Badge className="bg-brand-50 text-brand-700">{CONTACT_TYPE_LABELS[c.type]}</Badge></td>
+              <td className="px-4 py-3"><Badge tone="brand">{CONTACT_TYPE_LABELS[c.type]}</Badge></td>
               <td className="px-4 py-3 text-muted">
                 {c.email && <span className="flex items-center gap-1 text-xs"><Mail className="h-3 w-3" />{c.email}</span>}
                 {c.telephone && <span className="flex items-center gap-1 text-xs"><Phone className="h-3 w-3" />{c.telephone}</span>}
@@ -256,7 +256,7 @@ export default function Contacts() {
                     {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
                   </select>
                 ) : (
-                  <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge className="bg-amber-100 text-amber-700">Non affecté</Badge>}</span>
+                  <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge tone="warning">Non affecté</Badge>}</span>
                 )}
               </td>
               <td className="px-4 py-3 text-xs">
@@ -269,9 +269,9 @@ export default function Contacts() {
                     </span>
                   ) : <span className="text-muted/60">—</span>}
                   <div className="flex flex-wrap gap-1">
-                    {stageOf[c.id] && <Badge className="bg-brand-50 text-brand-700">{OPP_STAGE_LABELS[stageOf[c.id]]}</Badge>}
+                    {stageOf[c.id] && <Badge tone="brand">{OPP_STAGE_LABELS[stageOf[c.id]]}</Badge>}
                     {nextSession[c.id] && (
-                      <Badge className={nextSession[c.id].date_debut >= TODAY ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}>
+                      <Badge tone={nextSession[c.id].date_debut >= TODAY ? 'warning' : 'success'}>
                         {nextSession[c.id].date_debut >= TODAY ? 'Session ' : 'Réalisée '}{formatDate(nextSession[c.id].date_debut, 'dd/MM')}
                       </Badge>
                     )}

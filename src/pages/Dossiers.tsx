@@ -5,7 +5,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
-import { DOSSIER_STATUT_COLORS, DOSSIER_STATUT_LABELS } from '@/lib/constants';
+import { DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, genReference } from '@/lib/utils';
 import type { Dossier, DossierStatut, Contact, Entreprise, Financeur, Formation, Workflow } from '@/lib/database.types';
 
@@ -118,7 +118,7 @@ export default function Dossiers() {
               <td className="px-4 py-3 font-medium text-fg">{d.intitule}</td>
               <td className="px-4 py-3 text-muted">{finName(d.financeur_id)}</td>
               <td className="px-4 py-3 text-muted">{formatMoney(d.montant_accorde || d.montant_demande)}</td>
-              <td className="px-4 py-3"><Badge className={DOSSIER_STATUT_COLORS[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge></td>
+              <td className="px-4 py-3"><Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge></td>
               <td className="px-4 py-3 text-right"><ChevronRight className="ml-auto h-4 w-4 text-muted" /></td>
             </tr>
           ))}

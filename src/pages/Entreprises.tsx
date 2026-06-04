@@ -73,7 +73,7 @@ export default function Entreprises() {
             <div key={e.id} className="card flex flex-col p-5">
               <div className="mb-2 flex items-start justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-brand-50 p-2 text-brand-600"><Building2 className="h-5 w-5" /></div>
+                  <div className="rounded-lg bg-brand-500/10 p-2 text-brand-600 dark:text-brand-400"><Building2 className="h-5 w-5" /></div>
                   <div>
                     <p className="font-semibold text-fg">{e.raison_sociale}</p>
                     <p className="text-xs text-muted">{e.ville || '—'}{e.secteur ? ` · ${e.secteur}` : ''}</p>

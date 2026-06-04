@@ -145,10 +145,10 @@ export default function Recrutement() {
           <div className="space-y-2">
             {offres.data.map((o) => (
               <button key={o.id} onClick={() => setSelected(o.id)}
-                className={`w-full rounded-xl border p-4 text-left transition ${activeOffre === o.id ? 'border-brand-500 bg-brand-50' : 'border-line bg-surface hover:bg-surface-2'}`}>
+                className={`w-full rounded-xl border p-4 text-left transition ${activeOffre === o.id ? 'border-brand-500 bg-brand-500/5' : 'border-line bg-surface hover:bg-surface-2'}`}>
                 <div className="flex items-start justify-between">
                   <span className="flex items-center gap-2 font-medium text-fg"><Briefcase className="h-4 w-4 text-brand-500" />{o.titre}</span>
-                  <Badge className={o.statut === 'ouverte' ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-2 text-muted'}>{o.statut}</Badge>
+                  <Badge tone={o.statut === 'ouverte' ? 'success' : 'neutral'}>{o.statut}</Badge>
                 </div>
                 {o.lieu && <p className="mt-1 text-xs text-muted">{o.lieu}</p>}
                 <p className="mt-1 text-xs text-muted">{candidats.data.filter((c) => c.offre_id === o.id).length} candidat(s)</p>

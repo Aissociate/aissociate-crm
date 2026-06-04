@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { PageHeader, Button, Card, Spinner, Badge, Field, Modal } from '@/components/ui';
+import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, TONE_BADGE } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import {
-  DOSSIER_STATUT_COLORS, DOSSIER_STATUT_LABELS, PIECE_STATUT_COLORS, PIECE_STATUT_LABELS,
+  DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
 import { formatMoney, formatDate } from '@/lib/utils';
 import type {
@@ -130,7 +130,7 @@ export default function DossierDetail() {
       <PageHeader
         title={dossier.intitule}
         subtitle={`${dossier.reference}${financeur ? ` · ${financeur.nom}` : ''}`}
-        actions={<Badge className={DOSSIER_STATUT_COLORS[dossier.statut]}>{DOSSIER_STATUT_LABELS[dossier.statut]}</Badge>}
+        actions={<Badge tone={DOSSIER_STATUT_TONES[dossier.statut]}>{DOSSIER_STATUT_LABELS[dossier.statut]}</Badge>}
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -150,7 +150,7 @@ export default function DossierDetail() {
                       <button
                         onClick={() => patch({ etape_courante: e.ordre })}
                         className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
-                          current ? 'border-brand-500 bg-brand-50' : done ? 'border-emerald-200 bg-emerald-50' : 'border-line hover:bg-surface-2'
+                          current ? 'border-brand-500 bg-brand-500/5' : done ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-line hover:bg-surface-2'
                         }`}
                       >
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
@@ -194,7 +194,7 @@ export default function DossierDetail() {
                       </span>
                     : <FileUpload bucket="pieces" label="Joindre" onUploaded={(v) => setPieceFichier(p, v)} />}
                   <select
-                    className={`rounded-md border-0 px-2 py-1 text-xs font-medium ${PIECE_STATUT_COLORS[p.statut]}`}
+                    className={`rounded-md border-0 px-2 py-1 text-xs font-medium ${TONE_BADGE[PIECE_STATUT_TONES[p.statut]]}`}
                     value={p.statut} onChange={(e) => setPieceStatut(p, e.target.value as PieceStatut)}
                   >
                     {PIECE_STATUTS.map((s) => <option key={s} value={s}>{PIECE_STATUT_LABELS[s]}</option>)}
@@ -247,7 +247,7 @@ export default function DossierDetail() {
       >
         {histPiece && (
           <ul className="space-y-2">
-            <li className="flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
+            <li className="flex items-center justify-between rounded-lg border border-brand-500/30 bg-brand-500/5 px-3 py-2">
               <span className="text-sm font-medium text-fg">Version {histPiece.version} (actuelle)</span>
               {histPiece.fichier_url && <FileLink bucket="pieces" value={histPiece.fichier_url} />}
             </li>

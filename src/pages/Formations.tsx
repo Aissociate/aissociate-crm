@@ -80,8 +80,8 @@ export default function Formations() {
               <div className="mt-auto flex flex-wrap gap-3 text-sm text-muted">
                 <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-muted" />{f.duree_heures} h</span>
                 <span className="flex items-center gap-1"><Euro className="h-4 w-4 text-muted" />{formatMoney(f.prix)}</span>
-                <Badge className="bg-brand-50 text-brand-700">{f.modalite}</Badge>
-                {!f.actif && <Badge className="bg-red-50 text-red-600">Inactif</Badge>}
+                <Badge tone="brand">{f.modalite}</Badge>
+                {!f.actif && <Badge tone="danger">Inactif</Badge>}
               </div>
             </div>
           ))}
