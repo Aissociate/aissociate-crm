@@ -61,6 +61,41 @@
     <priority>0.8</priority>
   </url>
 
+  <url>
+    <loc>https://aissociate.re/formations/ia-relation-client</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.re/formations/ia-marketing-communication</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.re/formations/ia-prospection-commerciale</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.re/formations/ia-ressources-humaines</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://aissociate.re/formations/ia-manager</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
   <!-- Services -->
   <url>
     <loc>https://aissociate.re/assistance</loc>

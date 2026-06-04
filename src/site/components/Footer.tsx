@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, FileText, Shield, Accessibility, MessageSquare } from 'lucide-react';
 import AdminLogo from './AdminLogo';
 
@@ -13,7 +14,7 @@ export default function Footer() {
   return (
     <footer className="bg-slate-900 text-white py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
+        <div className="grid md:grid-cols-3 gap-8 mb-8">
           <div>
             <div className="flex items-center gap-3 mb-4">
               <AdminLogo
@@ -45,6 +46,18 @@ export default function Footer() {
                 <span className="font-semibold text-orange-400">Actif</span>
               </p>
             </div>
+          </div>
+
+          <div>
+            <h4 className="text-lg font-bold mb-4">Navigation</h4>
+            <ul className="space-y-3 text-slate-300">
+              <li><Link to="/formations" className="hover:text-orange-400 transition-colors">Formations IA</Link></li>
+              <li><Link to="/aides-formation" className="hover:text-orange-400 transition-colors">Financer ma formation (CPF, OPCO)</Link></li>
+              <li><Link to="/assistance" className="hover:text-orange-400 transition-colors">Assistance &amp; chatbots IA</Link></li>
+              <li><Link to="/developpement" className="hover:text-orange-400 transition-colors">Développement d'agents IA</Link></li>
+              <li><Link to="/blog" className="hover:text-orange-400 transition-colors">Blog IA</Link></li>
+              <li><Link to="/contact" className="hover:text-orange-400 transition-colors">Contact</Link></li>
+            </ul>
           </div>
 
           <div>

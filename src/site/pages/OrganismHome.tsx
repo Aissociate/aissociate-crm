@@ -20,6 +20,13 @@ export default function OrganismHome() {
           url: SITE_URL,
           logo: DEFAULT_OG_IMAGE,
           email: 'contact@aissociate.re',
+          telephone: '+262692246860',
+          address: {
+            streetAddress: "36 chemin de l'État Major",
+            addressLocality: 'Saint-Denis',
+            postalCode: '97417',
+            addressCountry: 'RE',
+          },
         }}
       />
       <Header />

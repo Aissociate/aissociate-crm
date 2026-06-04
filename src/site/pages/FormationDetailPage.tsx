@@ -397,6 +397,221 @@ const formationsData: Record<string, any> = {
       'Format intra-entreprise pour un accompagnement personnalisé',
       'Conformité Qualiopi : QCM d\'évaluation + suivi à J+30'
     ]
+  },
+  'ia-relation-client': {
+    id: 'ia-relation-client',
+    ref: 'IAREL1',
+    title: "L'IA pour optimiser la relation client",
+    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop&q=80',
+    duration: '7h (1 jour)',
+    price: '595 € HT',
+    priceInter: '595 € HT',
+    priceIntra: 'Sur devis',
+    participants: 'Professionnels de la relation client',
+    level: 'Intermédiaire',
+    format: 'Présentiel ou en classe à distance',
+    isCertifying: false,
+    isEligibleCPF: false,
+    isEligibleOPCO: true,
+    prerequisites: "Maîtrise de base de l'outil informatique. Aucune compétence technique en IA requise.",
+    objectives: [
+      "Identifier les apports de l'IA à la relation client",
+      "Maîtriser les outils d'IA pour la personnalisation et la fidélisation",
+      'Développer le selfcare avec des chatbots intelligents',
+      "Définir une stratégie d'automatisation de la relation client"
+    ],
+    program: [
+      { title: "Module 1 : L'IA au service de l'expérience client", content: [
+        "Panorama des usages de l'IA en relation client",
+        'Personnalisation et recommandation à grande échelle',
+        'Analyse des sentiments et des verbatims clients',
+        'Étude de cas | Mise en pratique'
+      ] },
+      { title: 'Module 2 : Automatisation et selfcare', content: [
+        "Concevoir un chatbot / assistant intelligent",
+        'Automatiser les réponses et le routage des demandes',
+        "Définir une stratégie d'automatisation et mesurer le ROI",
+        "Atelier : votre plan d'action relation client augmentée"
+      ] }
+    ],
+    strengths: [
+      'Cas pratiques directement applicables à votre activité',
+      'Outils IA opérationnels dès la fin de la formation',
+      'Formation finançable OPCO / AGEFICE',
+      'Formateur expert IA & relation client'
+    ]
+  },
+  'ia-marketing-communication': {
+    id: 'ia-marketing-communication',
+    ref: 'IAMKT1',
+    title: "L'IA pour optimiser le marketing et la communication",
+    image: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=1200&h=600&fit=crop&q=80',
+    duration: '14h (2 jours)',
+    price: '1 190 € HT',
+    priceInter: '1 190 € HT',
+    priceIntra: 'Sur devis',
+    participants: 'Responsables marketing et communication',
+    level: 'Avancé',
+    format: 'Présentiel ou en classe à distance',
+    isCertifying: false,
+    isEligibleCPF: false,
+    isEligibleOPCO: true,
+    prerequisites: "Pratique régulière des outils de communication / marketing. Notions de base en IA appréciées.",
+    objectives: [
+      "Identifier les applications de l'IA en communication",
+      'Rédiger des prompts efficaces pour générer des contenus',
+      "Optimiser la stratégie de contenus avec l'IA",
+      'Gérer les relations médias et la communication de crise'
+    ],
+    program: [
+      { title: "Module 1 : Production de contenus assistée par l'IA", content: [
+        'Techniques de prompt engineering pour le marketing',
+        'Génération de contenus rédactionnels et visuels',
+        'Calendrier éditorial et déclinaison multicanale',
+        'Étude de cas | Mise en pratique'
+      ] },
+      { title: 'Module 2 : Stratégie, médias et pilotage', content: [
+        "Optimiser sa stratégie de contenus avec l'IA",
+        'Relations médias et e-réputation augmentées',
+        'Gérer une communication de crise avec l\'IA',
+        'Mesurer la performance et itérer'
+      ] }
+    ],
+    strengths: [
+      'Ateliers concrets sur vos propres campagnes',
+      'Bibliothèque de prompts marketing réutilisables',
+      'Formation finançable OPCO / AGEFICE',
+      'Formateur expert IA & communication'
+    ]
+  },
+  'ia-prospection-commerciale': {
+    id: 'ia-prospection-commerciale',
+    ref: 'IAPROSP1',
+    title: "L'IA pour optimiser la prospection commerciale",
+    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop&q=80',
+    duration: '7h (1 jour)',
+    price: '595 € HT',
+    priceInter: '595 € HT',
+    priceIntra: 'Sur devis',
+    participants: 'Commerciaux et managers commerciaux',
+    level: 'Intermédiaire',
+    format: 'Présentiel ou en classe à distance',
+    isCertifying: false,
+    isEligibleCPF: false,
+    isEligibleOPCO: true,
+    prerequisites: "Pratique de la prospection commerciale. Aucune compétence technique en IA requise.",
+    objectives: [
+      "Identifier le potentiel de l'IA pour la prospection",
+      'Qualifier et scorer les leads automatiquement',
+      "Personnaliser les messages pour améliorer l'engagement",
+      "Construire son plan d'utilisation de l'IA"
+    ],
+    program: [
+      { title: 'Module 1 : Cibler et qualifier avec l\'IA', content: [
+        "Identifier les cas d'usage de l'IA en prospection",
+        'Qualification et scoring automatique des leads',
+        'Enrichissement et priorisation des prospects',
+        'Étude de cas | Mise en pratique'
+      ] },
+      { title: 'Module 2 : Engager et convertir', content: [
+        'Personnalisation des messages à grande échelle',
+        'Séquences de prospection automatisées',
+        "Construire son plan d'action IA prospection",
+        'Atelier pratique sur vos cibles réelles'
+      ] }
+    ],
+    strengths: [
+      'Méthode directement applicable à votre pipeline',
+      'Outils et prompts de prospection prêts à l\'emploi',
+      'Formation finançable OPCO / AGEFICE',
+      'Formateur expert IA & développement commercial'
+    ]
+  },
+  'ia-ressources-humaines': {
+    id: 'ia-ressources-humaines',
+    ref: 'IARH1',
+    title: "L'IA pour optimiser les ressources humaines",
+    image: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=1200&h=600&fit=crop&q=80',
+    duration: '14h (2 jours)',
+    price: '1 190 € HT',
+    priceInter: '1 190 € HT',
+    priceIntra: 'Sur devis',
+    participants: 'DRH et professionnels RH',
+    level: 'Intermédiaire',
+    format: 'Présentiel ou en classe à distance',
+    isCertifying: false,
+    isEligibleCPF: false,
+    isEligibleOPCO: true,
+    prerequisites: "Exercer une fonction RH. Aucune compétence technique en IA requise.",
+    objectives: [
+      'Exploiter les données RH de manière stratégique',
+      "Attirer, recruter et fidéliser avec l'IA",
+      'Automatiser les processus administratifs RH',
+      "Renforcer l'engagement et la QVT"
+    ],
+    program: [
+      { title: 'Module 1 : Recrutement et talents augmentés', content: [
+        "Sourcing et présélection assistés par l'IA",
+        'Rédaction d\'offres et de fiches de poste',
+        'Analyse des données RH (people analytics)',
+        'Étude de cas | Mise en pratique'
+      ] },
+      { title: 'Module 2 : Automatisation RH et engagement', content: [
+        'Automatiser les tâches administratives RH',
+        "Onboarding et formation augmentés par l'IA",
+        'Mesurer et renforcer l\'engagement / la QVT',
+        'Cadre éthique et RGPD des données RH'
+      ] }
+    ],
+    strengths: [
+      'Cas pratiques sur l\'ensemble du cycle RH',
+      'Conformité RGPD et usage éthique des données',
+      'Formation finançable OPCO / AGEFICE',
+      'Formateur expert IA & ressources humaines'
+    ]
+  },
+  'ia-manager': {
+    id: 'ia-manager',
+    ref: 'IAMNG1',
+    title: "L'IA au service du manager",
+    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop&q=80',
+    duration: '7h (1 jour)',
+    price: '595 € HT',
+    priceInter: '595 € HT',
+    priceIntra: 'Sur devis',
+    participants: "Managers et responsables d'équipe",
+    level: 'Intermédiaire',
+    format: 'Présentiel ou en classe à distance',
+    isCertifying: false,
+    isEligibleCPF: false,
+    isEligibleOPCO: true,
+    prerequisites: "Exercer une fonction d'encadrement. Aucune compétence technique en IA requise.",
+    objectives: [
+      "Identifier les bénéfices de l'IA pour le management",
+      "Utiliser des outils d'IA pour la prise de décision",
+      "Améliorer la productivité et l'organisation des tâches",
+      'Accompagner son équipe dans la transformation IA'
+    ],
+    program: [
+      { title: "Module 1 : Manager avec l'appui de l'IA", content: [
+        "Cas d'usage de l'IA pour le management d'équipe",
+        "Aide à la décision et synthèse d'informations",
+        'Organisation, priorisation et reporting augmentés',
+        'Étude de cas | Mise en pratique'
+      ] },
+      { title: "Module 2 : Conduire la transformation IA de l'équipe", content: [
+        "Acculturer et embarquer son équipe sur l'IA",
+        'Définir des règles d\'usage responsables',
+        "Construire un plan d'intégration de l'IA",
+        'Atelier : votre feuille de route managériale'
+      ] }
+    ],
+    strengths: [
+      'Outils concrets pour le quotidien du manager',
+      'Approche conduite du changement',
+      'Formation finançable OPCO / AGEFICE',
+      'Formateur expert IA & management'
+    ]
   }
 };
 
