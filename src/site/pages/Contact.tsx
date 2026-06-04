@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { Mail, Phone, MapPin, Send, CheckCircle, Clock, MessageSquare } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -15,9 +16,29 @@ export default function Contact() {
 
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Enregistre le lead -> contact CRM (via contact_requests + trigger).
+    const parts = (formData.name || '').trim().split(/\s+/);
+    const firstName = parts.shift() || formData.name;
+    const lastName = parts.join(' ') || null;
+    try {
+      await supabase.from('contact_requests').insert([{
+        first_name: firstName,
+        last_name: lastName,
+        email: formData.email,
+        phone: formData.phone,
+        company: null,
+        request_type: formData.subject || 'Contact',
+        message: formData.message,
+        source: '/contact',
+        status: 'new',
+      }]);
+    } catch {
+      // non bloquant pour l'utilisateur
+    }
     setSubmitted(true);
+    setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
     setTimeout(() => setSubmitted(false), 3000);
   };
 
