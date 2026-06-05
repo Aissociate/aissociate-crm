@@ -142,17 +142,72 @@ function applyHead(html, r) {
   set(/(<meta property="og:url" content=")[^"]*(")/, `$1${esc(url)}$2`);
   set(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${esc(r.title)}$2`);
   set(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${esc(r.description)}$2`);
+  if (r.ogType) set(/(<meta property="og:type" content=")[^"]*(")/, `$1${esc(r.ogType)}$2`);
+  if (r.image) {
+    set(/(<meta property="og:image" content=")[^"]*(")/, `$1${esc(r.image)}$2`);
+    set(/(<meta name="twitter:image" content=")[^"]*(")/, `$1${esc(r.image)}$2`);
+  }
   const schemas = (r.schemas ?? []).map(ld).join('\n    ');
   if (schemas) html = html.replace('</head>', `    ${schemas}\n  </head>`);
   return html;
 }
 
-let count = 0;
-for (const r of routes) {
+function writeRoute(r) {
   const html = applyHead(tpl, r);
   const outDir = r.path === '/' ? DIST : join(DIST, r.path);
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'index.html'), html, 'utf8');
-  count++;
 }
-console.log(`[prerender] ${count} pages générées avec <head> + JSON-LD statiques.`);
+
+let count = 0;
+for (const r of routes) { writeRoute(r); count++; }
+
+// ── Articles de blog : lus dans Supabase au build (lecture publique RLS) ──
+// Nécessite VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY dans l'environnement de build.
+// Défensif : en l'absence d'accès, on saute sans faire échouer le build.
+async function prerenderBlog() {
+  const url = process.env.VITE_SUPABASE_URL;
+  const anon = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    console.log('[prerender] Blog ignoré (VITE_SUPABASE_URL / ANON_KEY absents du build).');
+    return 0;
+  }
+  try {
+    const q = `${url}/rest/v1/blog_articles?select=slug,title,excerpt,seo_title,seo_description,seo_keywords,image_url,author,published_at,updated_at&published=eq.true&order=published_at.desc`;
+    const res = await fetch(q, { headers: { apikey: anon, Authorization: `Bearer ${anon}` } });
+    if (!res.ok) { console.log(`[prerender] Blog ignoré (HTTP ${res.status}).`); return 0; }
+    const articles = await res.json();
+    let n = 0;
+    for (const a of articles) {
+      if (!a.slug) continue;
+      const u = `${SITE}/blog/${a.slug}`;
+      const img = a.image_url || OG_IMAGE;
+      const desc = a.seo_description || a.excerpt || a.title;
+      const article = {
+        '@context': 'https://schema.org', '@type': 'BlogPosting', '@id': `${u}#article`,
+        headline: a.title, description: desc, image: img, url: u,
+        datePublished: a.published_at, dateModified: a.updated_at || a.published_at,
+        author: { '@type': 'Organization', name: a.author || 'Aissociate' },
+        publisher: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate', logo: { '@type': 'ImageObject', url: OG_IMAGE } },
+        mainEntityOfPage: u, inLanguage: 'fr-FR',
+      };
+      writeRoute({
+        path: `/blog/${a.slug}`,
+        title: `${a.seo_title || a.title} | Aissociate`,
+        description: desc,
+        keywords: a.seo_keywords || '',
+        image: img,
+        ogType: 'article',
+        schemas: [article, breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Blog', url: `${SITE}/blog` }, { name: a.title, url: u }])],
+      });
+      n++;
+    }
+    return n;
+  } catch (e) {
+    console.log('[prerender] Blog ignoré (erreur fetch) :', String(e));
+    return 0;
+  }
+}
+
+const blogCount = await prerenderBlog();
+console.log(`[prerender] ${count} pages statiques + ${blogCount} articles de blog générés (<head> + JSON-LD).`);
