@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
@@ -15,6 +15,7 @@ type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_pro
 type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
 type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
 type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
+type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
 
 const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
   { key: 'documents', label: 'Base documentaire' },
@@ -46,6 +47,7 @@ export default function Parametres() {
   const [ai, setAi] = useState<Ai>({ model: 'anthropic/claude-opus-4.8' });
   const [chatbot, setChatbot] = useState<Chatbot>({});
   const [blog, setBlog] = useState<Blog>({});
+  const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
   const [blogThemes, setBlogThemes] = useState('');
   const [blogRss, setBlogRss] = useState('');
   const [blogSeo, setBlogSeo] = useState('');
@@ -55,7 +57,7 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
@@ -63,6 +65,7 @@ export default function Parametres() {
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
         if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
+        if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
       }
       setLoading(false);
     })();
@@ -82,6 +85,7 @@ export default function Parametres() {
   const smtpOk = !!(smtp.host && smtp.user && smtp.password && smtp.from);
   const imapOk = !!(imap.host && imap.user && imap.password);
   const aiOk = !!ai.openrouter_key;
+  const linkedinOk = !!(linkedin.access_token && linkedin.org_urn);
 
   return (
     <div>
@@ -100,6 +104,8 @@ export default function Parametres() {
             detail={imapOk ? 'Configuré ci-dessous.' : 'Hôte, utilisateur et mot de passe requis.'} />
           <StatusRow ok={aiOk} label="IA — génération de plans (OpenRouter)"
             detail={aiOk ? 'Clé configurée (lue uniquement côté serveur).' : 'Clé OpenRouter requise (secret OPENROUTER_API_KEY ou ci-dessous).'} />
+          <StatusRow ok={linkedinOk} label="LinkedIn — partage auto des articles"
+            detail={linkedinOk ? 'Access token + URN configurés. Les articles publiés sont postés sur la page entreprise.' : 'Access token OAuth (w_organization_social) + URN de la page requis (ci-dessous).'} />
           <StatusRow ok={false} label="Import auto & cron (Supabase Vault)"
             detail="À définir dans Supabase → Vault : secrets project_url et service_role_key (pour pg_cron). Non vérifiable depuis l'app." />
         </div>
@@ -111,6 +117,43 @@ export default function Parametres() {
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* LinkedIn — partage auto des articles */}
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <Linkedin className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">LinkedIn — partage auto des articles</h2>
+          </div>
+          <div className="space-y-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
+              <input type="checkbox" checked={linkedin.enabled ?? true} onChange={(e) => setLinkedin({ ...linkedin, enabled: e.target.checked })} />
+              Publier automatiquement chaque article mis en ligne (texte + image)
+            </label>
+            <Field label="Client ID" hint="Application LinkedIn (public)">
+              <input className="input" value={linkedin.client_id ?? ''} onChange={(e) => setLinkedin({ ...linkedin, client_id: e.target.value })} />
+            </Field>
+            <Field label="Client Secret" hint="Confidentiel — utilisé pour le renouvellement du token">
+              <input className="input" type="password" value={linkedin.client_secret ?? ''} onChange={(e) => setLinkedin({ ...linkedin, client_secret: e.target.value })} placeholder="••••••••" />
+            </Field>
+            <Field label="Access token" required hint="OAuth, scope w_organization_social (produit « Community Management API »)">
+              <input className="input" type="password" value={linkedin.access_token ?? ''} onChange={(e) => setLinkedin({ ...linkedin, access_token: e.target.value })} placeholder="Bearer token LinkedIn" />
+            </Field>
+            <Field label="URN de la page entreprise" required hint="ex. urn:li:organization:123456 (ou juste l'id 123456)">
+              <input className="input" value={linkedin.org_urn ?? ''} onChange={(e) => setLinkedin({ ...linkedin, org_urn: e.target.value })} placeholder="urn:li:organization:…" />
+            </Field>
+            <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">
+              Le <strong>client_id / secret</strong> seuls ne suffisent pas : il faut un <strong>access token</strong> obtenu via OAuth
+              (scope <code>w_organization_social</code>). Pour une sécurité maximale, vous pouvez aussi définir les secrets Supabase
+              <code> LINKEDIN_ACCESS_TOKEN</code> et <code>LINKEDIN_ORG_URN</code> (prioritaires sur ce formulaire).
+            </p>
+            <div className="flex items-center gap-3">
+              <Button onClick={() => persist('linkedin', linkedin)} disabled={saving === 'linkedin'}>
+                <Save className="h-4 w-4" /> {saving === 'linkedin' ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              {savedMsg === 'linkedin' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+            </div>
+          </div>
+        </Card>
+
         {/* Organisme */}
         <Card>
           <div className="mb-4 flex items-center gap-2">
