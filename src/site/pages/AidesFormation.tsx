@@ -8,6 +8,16 @@ import { TrendingUp, Euro, ShieldCheck, Rocket, Users, Building2, Globe as Globe
 const BLEU_FRANCE = '#000091';
 const ROUGE_MARIANNE = '#E1000F';
 
+// FAQ financement (rendu visible + FAQPage JSON-LD).
+const FAQ_AIDES = [
+  { question: "Quelles aides pour financer une formation en intelligence artificielle ?", answer: "Plusieurs dispositifs cumulables : CPF, OPCO et plan de développement des compétences, France Travail, FNE-Formation, crédit d'impôt formation du dirigeant, et pour les PME réunionnaises les fonds France 2030 et FEDER Réunion." },
+  { question: "Une formation IA est-elle éligible au CPF ?", answer: "Oui pour nos formations certifiantes : elles sont mobilisables via votre Compte Personnel de Formation. Les autres sont finançables par l'OPCO ou France Travail." },
+  { question: "Mon OPCO peut-il financer la formation IA de mes salariés ?", answer: "Oui. AIssociate étant certifié Qualiopi, votre OPCO peut prendre en charge tout ou partie de la formation dans le cadre du plan de développement des compétences." },
+  { question: "Qu'est-ce que le FNE-Formation ?", answer: "Un dispositif de l'État cofinançant la formation des salariés des entreprises, mobilisable selon les conditions en vigueur. Nous vous aidons à monter le dossier." },
+  { question: "Existe-t-il des aides spécifiques pour les entreprises réunionnaises ?", answer: "Oui : les PME de La Réunion peuvent mobiliser les fonds France 2030 et FEDER Réunion, cumulables avec les dispositifs nationaux." },
+  { question: "Comment savoir à quelles aides j'ai droit ?", answer: "Contactez-nous : en un rendez-vous, nous identifions les dispositifs cumulables adaptés à votre situation et nous montons le dossier de financement avec vous." },
+];
+
 export default function AidesFormation() {
   const initiatives = [
     { title: 'Plan France 2030', amount: '2,5 Mds €', description: "Investissement de l'État pour l'intelligence artificielle dans les entreprises françaises.", icon: Rocket },
@@ -52,6 +62,7 @@ export default function AidesFormation() {
         keywords="financement formation IA, CPF formation IA, OPCO formation, aide formation France Travail, financer formation intelligence artificielle, plan de développement des compétences, Qualiopi"
         url={`${SITE_URL}/aides-formation`}
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Aides au financement', url: `${SITE_URL}/aides-formation` }]}
+        faqData={FAQ_AIDES}
       />
       <Header />
 
@@ -498,6 +509,24 @@ export default function AidesFormation() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ financement — FAQPage JSON-LD */}
+      <section className="bg-white border-t border-[#DDDDDD]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-8">Financement de votre formation IA : questions fréquentes</h2>
+          <div className="space-y-4">
+            {FAQ_AIDES.map((item, i) => (
+              <details key={i} className="group border border-[#DDDDDD] p-6">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 font-semibold text-[#161616] list-none">
+                  {item.question}
+                  <span className="shrink-0 text-2xl leading-none transition-transform group-open:rotate-45" style={{ color: BLEU_FRANCE }}>+</span>
+                </summary>
+                <p className="mt-3 text-[#3A3A3A] leading-relaxed">{item.answer}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
