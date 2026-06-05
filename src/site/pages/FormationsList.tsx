@@ -193,9 +193,10 @@ export default function FormationsList() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl mb-6">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Nos formations</h1>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle</h1>
             <p className="text-xl text-slate-300">
-              Découvrez notre catalogue de formations certifiées pour développer vos compétences dans l'IA et le digital
+              Le catalogue de nos formations IA à La Réunion : création de contenus, IA pour PME, prospection, marketing, RH et management.
+              Formations certifiées <strong className="text-white">Qualiopi</strong>, finançables <strong className="text-white">CPF, OPCO et France Travail</strong>, en présentiel ou à distance.
             </p>
           </div>
         </div>
