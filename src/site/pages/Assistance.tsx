@@ -3,6 +3,13 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
+
+const FAQ_ASSISTANCE = [
+  { question: "Qu'est-ce qu'un assistant IA (chatbot) pour entreprise ?", answer: "Un assistant IA est un agent conversationnel qui répond à vos clients, qualifie les demandes et automatise les tâches courantes 24h/24, en s'appuyant sur vos contenus et vos données." },
+  { question: "L'IA peut-elle gérer mon support client 24/7 ?", answer: "Oui. Un chatbot IA traite les questions fréquentes en continu, transmet les cas complexes à vos équipes et améliore la satisfaction tout en réduisant la charge." },
+  { question: "Faut-il des compétences techniques pour déployer un assistant IA ?", answer: "Non. Nous vous accompagnons de la définition du besoin au déploiement, et nous formons vos équipes à l'usage — aucune compétence technique préalable n'est requise." },
+  { question: "Intervenez-vous à La Réunion et à distance ?", answer: "Oui, nous accompagnons les entreprises réunionnaises sur place comme à distance, avec un organisme de formation certifié Qualiopi." },
+];
 import { Phone, Calendar, CheckCircle, MessageSquare, Sparkles, Target, TrendingUp, Users, ArrowRight } from 'lucide-react';
 
 export default function Assistance() {
@@ -64,6 +71,7 @@ export default function Assistance() {
         keywords="assistant IA entreprise, chatbot IA, support client IA, qualification de leads IA, automatisation relation client, IA La Réunion"
         url={`${SITE_URL}/assistance`}
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Assistance', url: `${SITE_URL}/assistance` }]}
+        faqData={FAQ_ASSISTANCE}
       />
       <Header />
 
@@ -87,11 +95,11 @@ export default function Assistance() {
               </div>
 
               <h1 className="text-4xl sm:text-5xl font-bold mb-6 leading-tight">
-                Accélérez votre transformation digitale avec l'IA
+                Assistance &amp; assistants IA pour votre entreprise à La Réunion
               </h1>
 
               <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-                Bénéficiez d'un accompagnement personnalisé pour définir et mettre en place votre stratégie d'Intelligence Artificielle.
+                Chatbots, support client 24/7, qualification de leads et automatisation : bénéficiez d'un accompagnement personnalisé pour définir et déployer votre stratégie d'intelligence artificielle, par un organisme certifié Qualiopi.
               </p>
 
               <div className="flex flex-wrap gap-4">
@@ -290,6 +298,23 @@ export default function Assistance() {
                 </a>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 bg-slate-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-8 text-center">Questions fréquentes</h2>
+          <div className="space-y-4">
+            {FAQ_ASSISTANCE.map((item, i) => (
+              <details key={i} className="group bg-white border border-slate-200 rounded-xl p-6">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 font-semibold text-slate-900 list-none">
+                  {item.question}
+                  <span className="shrink-0 text-2xl leading-none text-orange-500 transition-transform group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-3 text-slate-600 leading-relaxed">{item.answer}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>

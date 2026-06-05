@@ -3,6 +3,13 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
+
+const FAQ_DEV = [
+  { question: "Qu'est-ce qu'un agent IA sur-mesure ?", answer: "Un agent IA sur-mesure est un assistant logiciel configuré pour vos processus : il exécute des tâches (rédaction, analyse, traitement de données, réponses) en autonomie, selon vos règles métier." },
+  { question: "Quels processus peut-on automatiser avec l'IA ?", answer: "Traitement des e-mails et documents, génération de contenus, reporting, qualification de leads, support client, saisie de données… Nous identifions avec vous les automatisations à plus fort ROI." },
+  { question: "L'agent IA s'intègre-t-il à mes outils existants ?", answer: "Oui. Nous concevons des intégrations avec vos outils (CRM, messagerie, tableur, site web) pour des workflows de bout en bout." },
+  { question: "Intervenez-vous auprès des entreprises réunionnaises ?", answer: "Oui, nous accompagnons les PME de La Réunion, en présentiel comme à distance, de la conception au déploiement et à la formation des équipes." },
+];
 import { Code, Bot, Zap, Database, MessageSquare, FileText, BarChart, Workflow, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function Development() {
@@ -84,6 +91,7 @@ export default function Development() {
         keywords="développement agent IA, automatisation process IA, agents IA sur-mesure, intégration IA entreprise, workflow IA, IA Réunion"
         url={`${SITE_URL}/developpement`}
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Développement', url: `${SITE_URL}/developpement` }]}
+        faqData={FAQ_DEV}
       />
       <Header />
 
@@ -106,11 +114,11 @@ export default function Development() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-              Développement d'applications <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-600">intelligentes</span>
+              Développement d'<span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-600">agents IA</span> &amp; automatisation sur-mesure
             </h1>
 
             <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-              Créez des applications sur mesure intégrant l'Intelligence Artificielle pour automatiser vos processus métier et gagner en productivité.
+              Agents IA et applications sur mesure pour automatiser vos processus métier et gagner en productivité. Intégrations à vos outils, accompagnement des entreprises réunionnaises par un organisme certifié Qualiopi.
             </p>
 
             <div className="flex flex-wrap gap-4 justify-center">
@@ -316,6 +324,23 @@ export default function Development() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 bg-slate-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-8 text-center">Questions fréquentes</h2>
+          <div className="space-y-4">
+            {FAQ_DEV.map((item, i) => (
+              <details key={i} className="group bg-white border border-slate-200 rounded-xl p-6">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 font-semibold text-slate-900 list-none">
+                  {item.question}
+                  <span className="shrink-0 text-2xl leading-none text-orange-500 transition-transform group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-3 text-slate-600 leading-relaxed">{item.answer}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
