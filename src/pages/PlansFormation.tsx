@@ -8,12 +8,13 @@ import { FileLink } from '@/components/FileUpload';
 import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
 import { formatDate, fullName } from '@/lib/utils';
 import { generatePlanPdf } from '@/lib/generatePlanPdf';
+import { ensureDossierClient } from '@/lib/dossierClient';
 import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur, PlanPdf } from '@/lib/database.types';
 
 const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
 const empty = (): Partial<PlanFormation> => ({
   nom: '', formation_id: null, contact_id: null, entreprise_id: null, financeur_id: null,
-  objectifs: '', contenu: [], duree_heures: 0, modalite: 'presentiel', statut: 'brouillon', version: 1,
+  objectifs: '', contenu: [], duree_heures: 0, modalite: 'presentiel', statut: 'brouillon', version: 1, dossier_id: null,
 });
 
 export default function PlansFormation() {
@@ -90,8 +91,20 @@ export default function PlansFormation() {
 
   const save = async () => {
     setSaving(true);
+    // Création automatique du dossier client au nom du prospect (clé : contact + formation).
+    let dossier_id = form.dossier_id ?? null;
+    if (!dossier_id && form.contact_id) {
+      const dossier = await ensureDossierClient({
+        contactId: form.contact_id, contactName: cName(form.contact_id),
+        formationId: form.formation_id ?? null, formationName: formName(form.formation_id ?? null),
+        entrepriseId: form.entreprise_id ?? null, financeurId: form.financeur_id ?? null,
+        ownerId: form.owner_id ?? session?.user.id ?? null,
+      });
+      dossier_id = dossier?.id ?? null;
+    }
     const payload = {
       ...form,
+      dossier_id,
       duree_heures: Number(form.duree_heures ?? 0),
       contenu: contenuText.split('\n').map((l) => l.trim()).filter(Boolean),
       owner_id: form.owner_id ?? session?.user.id,

@@ -1,109 +1,338 @@
-import { Link } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
 import {
-  FolderKanban, Users, TrendingUp, Euro, ArrowRight, AlertTriangle,
+  startOfDay, startOfWeek, startOfMonth,
+  subDays, subWeeks, subMonths, differenceInHours, format,
+} from 'date-fns';
+import { fr } from 'date-fns/locale';
+import {
+  Eye, ClipboardList, TrendingUp, Clock, Euro, Landmark, Trophy,
+  ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+} from 'recharts';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
-import { PageHeader, StatCard, Card, Spinner, Badge } from '@/components/ui';
-import { DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
-import { formatMoney, formatDate } from '@/lib/utils';
-import type { Dossier, Opportunite, Contact } from '@/lib/database.types';
+import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
+import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
+import { formatMoney, initials } from '@/lib/utils';
+import type { Dossier, Opportunite, Profile, PageView, ContactRequest } from '@/lib/database.types';
+
+type Gran = 'jour' | 'semaine' | 'mois';
+const GRAN_LABEL: Record<Gran, string> = { jour: 'Jour', semaine: 'Semaine', mois: 'Mois' };
+const COMPARATIF: Record<Gran, string> = { jour: "vs hier", semaine: 'vs semaine préc.', mois: 'vs mois préc.' };
+const GRID = 'rgb(148 163 184 / 0.2)';
+
+// ─── Helpers de période ──────────────────────────────────────────────────────
+function periodStart(gran: Gran, now: Date): Date {
+  if (gran === 'jour') return startOfDay(now);
+  if (gran === 'semaine') return startOfWeek(now, { weekStartsOn: 1 });
+  return startOfMonth(now);
+}
+function previousStart(gran: Gran, start: Date): Date {
+  if (gran === 'jour') return subDays(start, 1);
+  if (gran === 'semaine') return subWeeks(start, 1);
+  return subMonths(start, 1);
+}
+/** Débuts des N derniers seaux (pour la courbe de tendance). */
+function bucketStarts(gran: Gran, now: Date, n: number): Date[] {
+  const f = gran === 'jour'
+    ? (k: number) => startOfDay(subDays(now, k))
+    : gran === 'semaine'
+      ? (k: number) => startOfWeek(subWeeks(now, k), { weekStartsOn: 1 })
+      : (k: number) => startOfMonth(subMonths(now, k));
+  const out: Date[] = [];
+  for (let i = n - 1; i >= 0; i--) out.push(f(i));
+  return out;
+}
+function bucketLabel(gran: Gran, d: Date): string {
+  if (gran === 'mois') return format(d, 'MMM yy', { locale: fr });
+  return format(d, 'dd/MM', { locale: fr });
+}
+
+const inRange = (iso: string | null | undefined, a: Date, b: Date): boolean => {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  return t >= a.getTime() && t < b.getTime();
+};
+
+// ─── Indicateur de variation ─────────────────────────────────────────────────
+function Delta({ cur, prev, invert = false, label }: { cur: number; prev: number; invert?: boolean; label: string }) {
+  if (prev === 0 && cur === 0) {
+    return <span className="inline-flex items-center gap-1 text-xs text-muted"><Minus className="h-3 w-3" /> {label}</span>;
+  }
+  const pct = prev === 0 ? 100 : Math.round(((cur - prev) / Math.abs(prev)) * 100);
+  const up = pct >= 0;
+  const good = invert ? !up : up;
+  const tone = pct === 0 ? 'text-muted' : good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+  const Icon = pct === 0 ? Minus : up ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${tone}`}>
+      <Icon className="h-3.5 w-3.5" /> {prev === 0 ? '—' : `${up ? '+' : ''}${pct}%`}
+      <span className="font-normal text-muted">· {label}</span>
+    </span>
+  );
+}
+
+// ─── Carte KPI ───────────────────────────────────────────────────────────────
+function Kpi({ icon, label, value, hint, delta }: {
+  icon: ReactNode; label: string; value: ReactNode; hint?: string; delta?: ReactNode;
+}) {
+  return (
+    <div className="card flex flex-col gap-3 p-5">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted">{label}</span>
+        <span className="rounded-lg bg-brand-500/10 p-2 text-brand-500">{icon}</span>
+      </div>
+      <div>
+        <p className="text-2xl font-bold tracking-tight text-fg">{value}</p>
+        {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
+      </div>
+      {delta && <div className="border-t border-line pt-2">{delta}</div>}
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const { profile } = useAuth();
-  const dossiers = useCollection<Dossier>('dossiers', { orderBy: { column: 'created_at', ascending: false } });
-  const opps = useCollection<Opportunite>('opportunites');
-  const contacts = useCollection<Contact>('contacts');
+  const { profile, isManager } = useAuth();
+  const [gran, setGran] = useState<Gran>('semaine');
 
-  if (dossiers.loading || opps.loading || contacts.loading) {
+  const opps = useCollection<Opportunite>('opportunites');
+  const dossiers = useCollection<Dossier>('dossiers');
+  const views = useCollection<PageView>('page_views');
+  const leads = useCollection<ContactRequest>('contact_requests');
+  const profiles = useCollection<Profile>('profiles');
+
+  if (opps.loading || dossiers.loading) {
     return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
   }
 
-  const dossiersActifs = dossiers.data.filter((d) => !['cloture', 'refuse'].includes(d.statut));
-  const pipelineMontant = opps.data
-    .filter((o) => !['gagne', 'perdu'].includes(o.stage))
-    .reduce((s, o) => s + Number(o.montant ?? 0), 0);
-  const montantAccorde = dossiers.data.reduce((s, d) => s + Number(d.montant_accorde ?? 0), 0);
+  const now = new Date();
+  const start = periodStart(gran, now);
+  const prevStart = previousStart(gran, start);
+  // Comparatif à durée égale : on compare la même fraction écoulée de la période.
+  const elapsed = now.getTime() - start.getTime();
+  const prevEnd = new Date(prevStart.getTime() + elapsed);
+  const cmp = COMPARATIF[gran];
 
-  // Alertes : dossiers en instruction depuis longtemps ou sans date de dépôt
-  const aTraiter = dossiers.data.filter((d) => ['brouillon', 'montage'].includes(d.statut));
+  // ── KPI : visiteurs (uniques) + pages vues ──
+  const uniq = (rows: PageView[], a: Date, b: Date) =>
+    new Set(rows.filter((v) => inRange(v.created_at, a, b)).map((v) => v.visitor_id ?? v.id)).size;
+  const visiteursCur = uniq(views.data, start, now);
+  const visiteursPrev = uniq(views.data, prevStart, prevEnd);
+  const vuesCur = views.data.filter((v) => inRange(v.created_at, start, now)).length;
+
+  // ── KPI : formulaires web ──
+  const formCur = leads.data.filter((l) => inRange(l.created_at, start, now)).length;
+  const formPrev = leads.data.filter((l) => inRange(l.created_at, prevStart, prevEnd)).length;
+
+  // ── KPI : opportunités créées ──
+  const oppsCreesCur = opps.data.filter((o) => inRange(o.created_at, start, now));
+  const oppsCreesPrev = opps.data.filter((o) => inRange(o.created_at, prevStart, prevEnd));
+
+  // ── KPI : valeur moyenne d'opportunité (sur la période de création) ──
+  const avg = (arr: Opportunite[]) => (arr.length ? arr.reduce((s, o) => s + Number(o.montant ?? 0), 0) / arr.length : 0);
+  const valMoyCur = avg(oppsCreesCur);
+  const valMoyPrev = avg(oppsCreesPrev);
+
+  // ── KPI : temps de traitement (ouverture -> clôture gagné/perdu), en jours ──
+  const closedIn = (a: Date, b: Date) => opps.data.filter((o) => inRange(o.date_cloture, a, b));
+  const avgDays = (arr: Opportunite[]) =>
+    arr.length ? arr.reduce((s, o) => s + differenceInHours(new Date(o.date_cloture!), new Date(o.created_at)) / 24, 0) / arr.length : 0;
+  const traitementCur = avgDays(closedIn(start, now));
+  const traitementPrev = avgDays(closedIn(prevStart, prevEnd));
+
+  // ── KPI : dossiers chez le financeur (à l'étude / en instruction) — instantané ──
+  const depose = dossiers.data.filter((d) => d.statut === 'depose').length;
+  const enInstruction = dossiers.data.filter((d) => d.statut === 'en_instruction').length;
+  const chezFinanceur = depose + enInstruction;
+
+  // ── Courbe de tendance ──
+  const starts = bucketStarts(gran, now, gran === 'jour' ? 14 : 12);
+  const trend = starts.map((bStart, i) => {
+    const bEnd = i + 1 < starts.length ? starts[i + 1] : new Date(now.getTime() + 1);
+    return {
+      label: bucketLabel(gran, bStart),
+      Visiteurs: uniq(views.data, bStart, bEnd),
+      Formulaires: leads.data.filter((l) => inRange(l.created_at, bStart, bEnd)).length,
+      Opportunités: opps.data.filter((o) => inRange(o.created_at, bStart, bEnd)).length,
+    };
+  });
+
+  // ── Classement conseillers : CA des opportunités gagnées sur la période ──
+  const wonInPeriod = opps.data.filter((o) => o.stage === 'gagne' && inRange(o.date_cloture, start, now));
+  const byOwner = new Map<string, { ca: number; n: number }>();
+  for (const o of wonInPeriod) {
+    const k = o.owner_id ?? '—';
+    const cur = byOwner.get(k) ?? { ca: 0, n: 0 };
+    cur.ca += Number(o.montant ?? 0); cur.n += 1;
+    byOwner.set(k, cur);
+  }
+  const pName = (id: string) => {
+    const p = profiles.data.find((x) => x.id === id);
+    return p ? `${p.prenom ?? ''} ${p.nom ?? ''}`.trim() || p.email : 'Non attribué';
+  };
+  const classement = [...byOwner.entries()]
+    .map(([id, v]) => ({ id, name: pName(id), ...v }))
+    .sort((a, b) => b.ca - a.ca);
+  const caMax = classement[0]?.ca ?? 0;
+  const caTotal = classement.reduce((s, c) => s + c.ca, 0);
+
+  const fmtDays = (d: number) => `${d.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} j`;
 
   return (
     <div>
       <PageHeader
-        title={`Bonjour ${profile?.prenom || ''} 👋`}
-        subtitle="Vue d'ensemble de votre activité de gestion des dossiers de formation"
+        title={`Tableau de bord${profile?.prenom ? ` — ${profile.prenom}` : ''}`}
+        subtitle="Pilotage de l'activité commerciale et du site web, avec comparatif de période"
+        actions={
+          <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
+            {(Object.keys(GRAN_LABEL) as Gran[]).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGran(g)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  gran === g ? 'bg-brand-500 text-white shadow-sm' : 'text-muted hover:text-fg'
+                }`}
+              >
+                {GRAN_LABEL[g]}
+              </button>
+            ))}
+          </div>
+        }
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Dossiers actifs" value={dossiersActifs.length} icon={<FolderKanban className="h-6 w-6" />} hint={`${dossiers.data.length} au total`} />
-        <StatCard label="Contacts" value={contacts.data.length} icon={<Users className="h-6 w-6" />} />
-        <StatCard label="Pipeline en cours" value={formatMoney(pipelineMontant)} icon={<TrendingUp className="h-6 w-6" />} hint={`${opps.data.length} opportunités`} />
-        <StatCard label="Financements accordés" value={formatMoney(montantAccorde)} icon={<Euro className="h-6 w-6" />} />
+      {/* ── KPI ─────────────────────────────────────────────────────────────── */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {isManager && (
+          <Kpi
+            icon={<Eye className="h-5 w-5" />} label="Visiteurs site web" value={visiteursCur}
+            hint={`${vuesCur} pages vues`}
+            delta={<Delta cur={visiteursCur} prev={visiteursPrev} label={cmp} />}
+          />
+        )}
+        {isManager && (
+          <Kpi
+            icon={<ClipboardList className="h-5 w-5" />} label="Formulaires web" value={formCur}
+            delta={<Delta cur={formCur} prev={formPrev} label={cmp} />}
+          />
+        )}
+        <Kpi
+          icon={<TrendingUp className="h-5 w-5" />} label="Opportunités créées" value={oppsCreesCur.length}
+          delta={<Delta cur={oppsCreesCur.length} prev={oppsCreesPrev.length} label={cmp} />}
+        />
+        <Kpi
+          icon={<Clock className="h-5 w-5" />} label="Temps de traitement moyen"
+          value={fmtDays(traitementCur)} hint="ouverture → gagné/perdu"
+          delta={<Delta cur={traitementCur} prev={traitementPrev} invert label={cmp} />}
+        />
+        <Kpi
+          icon={<Euro className="h-5 w-5" />} label="Valeur moyenne / opportunité"
+          value={formatMoney(valMoyCur)}
+          delta={<Delta cur={valMoyCur} prev={valMoyPrev} label={cmp} />}
+        />
+        <Kpi
+          icon={<Landmark className="h-5 w-5" />} label="Dossiers chez le financeur"
+          value={chezFinanceur}
+          hint={`${depose} déposés · ${enInstruction} en instruction`}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* ── Tendance + répartition ──────────────────────────────────────────── */}
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-fg">Derniers dossiers</h2>
-            <Link to="/dossiers" className="flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700">
-              Tout voir <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          {dossiers.data.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">Aucun dossier pour l'instant.</p>
-          ) : (
-            <ul className="divide-y divide-line">
-              {dossiers.data.slice(0, 6).map((d) => (
-                <li key={d.id}>
-                  <Link to={`/dossiers/${d.id}`} className="flex items-center justify-between gap-3 py-3 hover:opacity-80">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-fg">{d.intitule}</p>
-                      <p className="text-xs text-muted">{d.reference} · {formatDate(d.created_at)}</p>
-                    </div>
-                    <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <h2 className="mb-1 font-semibold text-fg">Activité</h2>
+          <p className="mb-4 text-xs text-muted">
+            {gran === 'jour' ? '14 derniers jours' : gran === 'semaine' ? '12 dernières semaines' : '12 derniers mois'}
+          </p>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={trend} margin={{ left: -16, right: 8, top: 4 }}>
+              <defs>
+                <linearGradient id="gV" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35} /><stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} /></linearGradient>
+                <linearGradient id="gF" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.35} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                <linearGradient id="gO" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ea6a1e" stopOpacity={0.4} /><stop offset="95%" stopColor="#ea6a1e" stopOpacity={0} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis fontSize={11} allowDecimals={false} tickLine={false} axisLine={false} width={32} />
+              <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid rgb(148 163 184 / 0.3)', fontSize: 12 }} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+              {isManager && <Area type="monotone" dataKey="Visiteurs" stroke="#0ea5e9" fill="url(#gV)" strokeWidth={2} />}
+              {isManager && <Area type="monotone" dataKey="Formulaires" stroke="#10b981" fill="url(#gF)" strokeWidth={2} />}
+              <Area type="monotone" dataKey="Opportunités" stroke="#ea6a1e" fill="url(#gO)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
         </Card>
 
         <Card>
           <div className="mb-4 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <h2 className="font-semibold text-fg">À traiter</h2>
+            <Landmark className="h-5 w-5 text-amber-500" />
+            <h2 className="font-semibold text-fg">Chez le financeur</h2>
           </div>
-          {aTraiter.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted">Rien à traiter, bravo !</p>
+          <div className="space-y-3">
+            <div className="flex items-end justify-between">
+              <span className="text-sm text-muted">{DOSSIER_STATUT_LABELS.depose}</span>
+              <span className="text-xl font-bold text-fg">{depose}</span>
+            </div>
+            <div className="flex items-end justify-between">
+              <span className="text-sm text-muted">{DOSSIER_STATUT_LABELS.en_instruction}</span>
+              <span className="text-xl font-bold text-fg">{enInstruction}</span>
+            </div>
+            <div className="border-t border-line pt-3">
+              <div className="flex items-end justify-between">
+                <span className="text-sm font-medium text-fg">Total à l'étude</span>
+                <span className="text-2xl font-bold text-brand-600">{chezFinanceur}</span>
+              </div>
+            </div>
+          </div>
+          <p className="mt-4 rounded-lg bg-surface-2 p-3 text-xs text-muted">
+            Dossiers déposés et en cours d'instruction chez les financeurs (OPCO, CPF, France Travail…).
+          </p>
+        </Card>
+      </div>
+
+      {/* ── Classement des conseillers (CA des opportunités gagnées) ─────────── */}
+      {isManager && (
+        <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-semibold text-fg">
+              <Trophy className="h-5 w-5 text-amber-500" /> Classement des conseillers
+            </h2>
+            <Badge tone="brand">CA gagné · {GRAN_LABEL[gran].toLowerCase()} · {formatMoney(caTotal)}</Badge>
+          </div>
+          {classement.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted">Aucune opportunité gagnée sur la période sélectionnée.</p>
           ) : (
             <ul className="space-y-2">
-              {aTraiter.slice(0, 7).map((d) => (
-                <li key={d.id}>
-                  <Link to={`/dossiers/${d.id}`} className="block rounded-lg border border-line px-3 py-2 hover:bg-surface-2">
-                    <p className="truncate text-sm font-medium text-fg">{d.intitule}</p>
-                    <p className="text-xs text-muted">{DOSSIER_STATUT_LABELS[d.statut]}</p>
-                  </Link>
+              {classement.map((c, i) => (
+                <li key={c.id} className="flex items-center gap-3 rounded-lg border border-line p-3">
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                    i === 0 ? 'bg-amber-400/20 text-amber-600 dark:text-amber-400'
+                    : i === 1 ? 'bg-slate-400/20 text-slate-500'
+                    : i === 2 ? 'bg-orange-700/20 text-orange-700 dark:text-orange-400'
+                    : 'bg-surface-2 text-muted'
+                  }`}>{i + 1}</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-xs font-semibold text-brand-600">
+                    {initials(c.name.split(' ').slice(-1)[0], c.name.split(' ')[0])}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-fg">{c.name}</p>
+                      <p className="shrink-0 text-sm font-bold text-fg">{formatMoney(c.ca)}</p>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${caMax ? (c.ca / caMax) * 100 : 0}%` }} />
+                      </div>
+                      <span className="shrink-0 text-xs text-muted">{c.n} gagnée{c.n > 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
-          <div className="mt-4 border-t border-line pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted">Pipeline par étape</p>
-            {Object.entries(
-              opps.data.reduce<Record<string, number>>((acc, o) => {
-                acc[o.stage] = (acc[o.stage] ?? 0) + 1;
-                return acc;
-              }, {}),
-            ).map(([stage, n]) => (
-              <div key={stage} className="flex items-center justify-between py-1 text-sm">
-                <span className="text-muted">{OPP_STAGE_LABELS[stage as keyof typeof OPP_STAGE_LABELS]}</span>
-                <span className="font-medium text-fg">{n}</span>
-              </div>
-            ))}
-          </div>
         </Card>
-      </div>
+      )}
     </div>
   );
 }

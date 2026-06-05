@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, TONE_BADGE } from '@/components/ui';
@@ -11,6 +11,7 @@ import {
 import { formatMoney, formatDate } from '@/lib/utils';
 import type {
   Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
+  Devis, PlanFormation, PlanPdf, Document, ContactDocument,
 } from '@/lib/database.types';
 
 const STATUTS: DossierStatut[] = [
@@ -31,12 +32,38 @@ export default function DossierDetail() {
   const [saving, setSaving] = useState(false);
   const [histPiece, setHistPiece] = useState<DossierPiece | null>(null);
   const [versions, setVersions] = useState<PieceVersion[]>([]);
+  // Centralisation : production et documents rattachés au dossier client.
+  const [devis, setDevis] = useState<Devis[]>([]);
+  const [plans, setPlans] = useState<PlanFormation[]>([]);
+  const [planPdfs, setPlanPdfs] = useState<PlanPdf[]>([]);
+  const [docs, setDocs] = useState<Document[]>([]);
+  const [coffre, setCoffre] = useState<ContactDocument[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     const { data: d } = await supabase.from('dossiers').select('*').eq('id', id).maybeSingle();
     setDossier(d);
+    // Production et documents centralisés dans le dossier client.
+    const [{ data: dv }, { data: pl }, { data: dc }] = await Promise.all([
+      supabase.from('devis').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
+      supabase.from('plans_formation').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
+      supabase.from('documents').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
+    ]);
+    setDevis(dv ?? []);
+    setPlans(pl ?? []);
+    setDocs(dc ?? []);
+    const planIds = (pl ?? []).map((p) => p.id);
+    if (planIds.length) {
+      const { data: pp } = await supabase.from('plan_pdfs').select('*')
+        .in('plan_id', planIds).order('created_at', { ascending: false });
+      setPlanPdfs(pp ?? []);
+    } else setPlanPdfs([]);
+    if (d?.contact_id) {
+      const { data: cd } = await supabase.from('contact_documents').select('*')
+        .eq('contact_id', d.contact_id).order('created_at', { ascending: false });
+      setCoffre(cd ?? []);
+    } else setCoffre([]);
     if (d?.workflow_id) {
       const { data: e } = await supabase.from('workflow_etapes').select('*')
         .eq('workflow_id', d.workflow_id).order('ordre');
@@ -207,6 +234,91 @@ export default function DossierDetail() {
               <input className="input" placeholder="Ajouter une pièce…" value={newPiece}
                 onChange={(e) => setNewPiece(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addPiece()} />
               <Button variant="secondary" onClick={addPiece}><Plus className="h-4 w-4" /></Button>
+            </div>
+          </Card>
+
+          {/* Centralisation client : production générée + documents téléversés */}
+          <Card>
+            <h2 className="mb-1 flex items-center gap-2 font-semibold text-fg">
+              <FolderArchive className="h-4 w-4 text-brand-500" /> Centralisation client
+            </h2>
+            <p className="mb-4 text-sm text-muted">
+              Toute la production générée et les documents téléversés pour ce prospect, regroupés ici automatiquement.
+            </p>
+            <div className="space-y-5">
+              {/* Devis */}
+              <div>
+                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><ReceiptText className="h-4 w-4 text-muted" /> Devis ({devis.length})</p>
+                {devis.length === 0 ? <p className="text-xs text-muted">Aucun devis.</p> : (
+                  <ul className="space-y-1.5">
+                    {devis.map((dv) => (
+                      <li key={dv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                        <span className="text-fg">{dv.numero}{dv.objet ? ` · ${dv.objet}` : ''}</span>
+                        <span className="flex items-center gap-3">
+                          <span className="text-muted">{formatMoney(dv.total_ht)}</span>
+                          {dv.fichier_url && <FileLink bucket="devis" value={dv.fichier_url} />}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {/* Plans de formation */}
+              <div>
+                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><FileText className="h-4 w-4 text-muted" /> Plans de formation ({plans.length})</p>
+                {plans.length === 0 ? <p className="text-xs text-muted">Aucun plan.</p> : (
+                  <ul className="space-y-1.5">
+                    {plans.map((p) => (
+                      <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                        <span className="text-fg">{p.nom} <span className="text-xs text-muted">v{p.version} · {p.duree_heures} h</span></span>
+                        <Badge tone="brand">{p.statut}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {/* PDF générés (via les plans du dossier) */}
+              <div>
+                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><Sparkles className="h-4 w-4 text-muted" /> PDF générés ({planPdfs.length})</p>
+                {planPdfs.length === 0 ? <p className="text-xs text-muted">Aucun PDF généré.</p> : (
+                  <ul className="space-y-1.5">
+                    {planPdfs.map((d) => (
+                      <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                        <span className="text-fg">{d.titre} <span className="text-xs text-muted">{formatDate(d.created_at, 'dd/MM/yyyy HH:mm')}</span></span>
+                        {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {/* Documents téléversés */}
+              <div>
+                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><FileText className="h-4 w-4 text-muted" /> Documents ({docs.length})</p>
+                {docs.length === 0 ? <p className="text-xs text-muted">Aucun document.</p> : (
+                  <ul className="space-y-1.5">
+                    {docs.map((d) => (
+                      <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                        <span className="text-fg">{d.titre} <span className="text-xs text-muted">{d.categorie} · v{d.version}</span></span>
+                        {d.fichier_url && <FileLink bucket="documents" value={d.fichier_url} />}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {/* Coffre-fort du contact */}
+              <div>
+                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><FolderArchive className="h-4 w-4 text-muted" /> Coffre-fort du contact ({coffre.length})</p>
+                {coffre.length === 0 ? <p className="text-xs text-muted">Aucune pièce.</p> : (
+                  <ul className="space-y-1.5">
+                    {coffre.map((d) => (
+                      <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                        <span className="text-fg">{d.titre}{d.categorie ? <span className="text-xs text-muted"> · {d.categorie}</span> : null}</span>
+                        {d.fichier_url && <FileLink bucket="coffre" value={d.fichier_url} />}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </Card>
         </div>

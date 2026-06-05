@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, type Tone } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import { formatDate, fullName, formatMoney } from '@/lib/utils';
+import { ensureDossierClient } from '@/lib/dossierClient';
 import type { Devis, DevisLigne, DevisStatut, Contact, Entreprise, Financeur, Formation, Dossier } from '@/lib/database.types';
 
 const STATUT_LABELS: Record<DevisStatut, string> = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté', refuse: 'Refusé', expire: 'Expiré' };
@@ -34,7 +35,7 @@ export default function Devis() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Devis | null>(null);
   const [form, setForm] = useState({
-    contact_id: '', financeur_id: '', dossier_id: '',
+    contact_id: '', financeur_id: '', dossier_id: '', formation_id: '',
     date_emission: new Date().toISOString().slice(0, 10), date_validite: plus30(),
     objet: '', conditions: 'Règlement à 30 jours. Acompte de 30 % à la commande.', statut: 'brouillon' as DevisStatut,
   });
@@ -48,13 +49,13 @@ export default function Devis() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ contact_id: '', financeur_id: '', dossier_id: '', date_emission: new Date().toISOString().slice(0, 10), date_validite: plus30(), objet: '', conditions: 'Règlement à 30 jours. Acompte de 30 % à la commande.', statut: 'brouillon' });
+    setForm({ contact_id: '', financeur_id: '', dossier_id: '', formation_id: '', date_emission: new Date().toISOString().slice(0, 10), date_validite: plus30(), objet: '', conditions: 'Règlement à 30 jours. Acompte de 30 % à la commande.', statut: 'brouillon' });
     setLines([emptyLigne()]);
     setOpen(true);
   };
   const openEdit = async (d: Devis) => {
     setEditing(d);
-    setForm({ contact_id: d.contact_id ?? '', financeur_id: d.financeur_id ?? '', dossier_id: d.dossier_id ?? '', date_emission: d.date_emission, date_validite: d.date_validite ?? plus30(), objet: d.objet ?? '', conditions: d.conditions ?? '', statut: d.statut });
+    setForm({ contact_id: d.contact_id ?? '', financeur_id: d.financeur_id ?? '', dossier_id: d.dossier_id ?? '', formation_id: '', date_emission: d.date_emission, date_validite: d.date_validite ?? plus30(), objet: d.objet ?? '', conditions: d.conditions ?? '', statut: d.statut });
     const { data: lg } = await supabase.from('devis_lignes').select('*').eq('devis_id', d.id).order('ordre');
     setLines((lg ?? []).length ? (lg as DevisLigne[]).map((l) => ({ designation: l.designation, description: l.description ?? '', quantite: l.quantite, unite: l.unite, prix_unitaire_ht: l.prix_unitaire_ht })) : [emptyLigne()]);
     setOpen(true);
@@ -72,9 +73,21 @@ export default function Devis() {
   const save = async (): Promise<string | null> => {
     setSaving(true);
     const contact = contacts.data.find((c) => c.id === form.contact_id);
+    // Création automatique du dossier client au nom du prospect (si non rattaché).
+    let dossierId = form.dossier_id || null;
+    if (!dossierId && form.contact_id) {
+      const formation = formations.data.find((f) => f.id === form.formation_id);
+      const dossier = await ensureDossierClient({
+        contactId: form.contact_id, contactName: fullName(contact?.prenom, contact?.nom),
+        formationId: form.formation_id || null, formationName: formation?.intitule ?? null,
+        entrepriseId: contact?.entreprise_id ?? null, financeurId: form.financeur_id || null,
+        ownerId: session?.user.id ?? null,
+      });
+      dossierId = dossier?.id ?? null;
+    }
     const payload = {
       contact_id: form.contact_id || null, entreprise_id: contact?.entreprise_id ?? null,
-      financeur_id: form.financeur_id || null, dossier_id: form.dossier_id || null,
+      financeur_id: form.financeur_id || null, dossier_id: dossierId,
       date_emission: form.date_emission, date_validite: form.date_validite || null,
       objet: form.objet || null, conditions: form.conditions || null, statut: form.statut,
       tva_exoneree: true, tva_taux: 0, total_ht: totalHT, total_tva: 0, total_ttc: totalHT,
@@ -189,10 +202,16 @@ export default function Devis() {
                 {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
               </select>
             </Field>
-            <Field label="Dossier lié (éventuel)">
+            <Field label="Dossier lié" hint="Vide = dossier client créé/retrouvé automatiquement">
               <select className="input" value={form.dossier_id} onChange={(e) => setF('dossier_id', e.target.value)}>
-                <option value="">—</option>
+                <option value="">— Auto (au nom du prospect) —</option>
                 {dossiers.data.map((d) => <option key={d.id} value={d.id}>{d.reference} — {d.intitule}</option>)}
+              </select>
+            </Field>
+            <Field label="Formation concernée" hint="Clé du dossier client (prospect + formation)">
+              <select className="input" value={form.formation_id} onChange={(e) => setF('formation_id', e.target.value)} disabled={!!form.dossier_id}>
+                <option value="">— Aucune —</option>
+                {formations.data.map((f) => <option key={f.id} value={f.id}>{f.intitule}</option>)}
               </select>
             </Field>
             <Field label="Statut">

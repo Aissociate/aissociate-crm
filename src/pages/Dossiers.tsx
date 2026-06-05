@@ -7,16 +7,11 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, genReference } from '@/lib/utils';
+import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type { Dossier, DossierStatut, Contact, Entreprise, Financeur, Formation, Workflow } from '@/lib/database.types';
 
 const STATUTS: DossierStatut[] = [
   'brouillon', 'montage', 'depose', 'en_instruction', 'accorde', 'refuse', 'en_cours', 'solde', 'cloture',
-];
-
-// Pieces generees par defaut a la creation d'un dossier (checklist Qualiopi / financeur)
-const DEFAULT_PIECES = [
-  'Devis signé', 'Programme de formation', 'Convention / contrat de formation',
-  'Pièce d\'identité du bénéficiaire', 'Justificatif d\'éligibilité', 'Demande de prise en charge',
 ];
 
 const empty = (): Partial<Dossier> => ({

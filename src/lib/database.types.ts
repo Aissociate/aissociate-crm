@@ -64,7 +64,8 @@ export type ContactAction = {
 export type Opportunite = Timestamps & {
   id: string; titre: string; contact_id: string | null; entreprise_id: string | null;
   financeur_id: string | null; montant: number; stage: OpportuniteStage;
-  probabilite: number; date_cloture_prev: string | null; owner_id: string | null; notes: string | null;
+  probabilite: number; date_cloture_prev: string | null; date_cloture: string | null;
+  owner_id: string | null; notes: string | null;
 };
 export type Formation = Timestamps & {
   id: string; intitule: string; objectifs: string | null; programme: string[];
@@ -75,7 +76,7 @@ export type PlanFormation = Timestamps & {
   id: string; nom: string; formation_id: string | null; contact_id: string | null;
   entreprise_id: string | null; financeur_id: string | null; objectifs: string | null;
   contenu: string[]; duree_heures: number; modalite: string; statut: PlanStatut;
-  version: number; owner_id: string | null;
+  version: number; owner_id: string | null; dossier_id: string | null;
 };
 export type Workflow = Timestamps & {
   id: string; nom: string; financeur_id: string | null; actif: boolean;
@@ -100,7 +101,8 @@ export type Document = Timestamps & {
   id: string; titre: string; categorie: string; description: string | null;
   fichier_url: string | null; version: number; statut: string;
   parent_id: string | null; tags: string[]; owner_id: string | null;
-  contenu_texte: string | null; chat_direction: boolean; chat_conseiller: boolean; dossier: string | null;
+  contenu_texte: string | null; chat_direction: boolean; chat_conseiller: boolean;
+  dossier: string | null; dossier_id: string | null;
 };
 export type KanbanBoard = Timestamps & {
   id: string; nom: string; description: string | null; owner_id: string | null;
@@ -208,6 +210,14 @@ export type Parametre = {
   id: string; cle: string; valeur: Record<string, unknown> | null;
   description: string | null; updated_at: string;
 };
+export type ContactRequest = {
+  id: string; first_name: string | null; last_name: string | null; email: string | null;
+  phone: string | null; company: string | null; request_type: string | null; message: string | null;
+  source: string | null; status: string; contact_id: string | null; created_at: string;
+};
+export type PageView = {
+  id: string; path: string; visitor_id: string | null; referrer: string | null; created_at: string;
+};
 
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;
@@ -255,6 +265,8 @@ export type Database = {
       contact_documents: TableShape<ContactDocument>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
+      contact_requests: TableShape<ContactRequest>;
+      page_views: TableShape<PageView>;
     };
     Views: EmptyMap;
     Functions: EmptyMap;

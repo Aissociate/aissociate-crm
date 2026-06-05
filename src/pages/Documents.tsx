@@ -5,13 +5,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
-import { formatDate } from '@/lib/utils';
-import type { Document } from '@/lib/database.types';
+import { formatDate, fullName } from '@/lib/utils';
+import { ensureDossierClient } from '@/lib/dossierClient';
+import type { Document, Contact, Formation } from '@/lib/database.types';
 
 const CATEGORIES = ['general', 'procedure', 'qualiopi', 'modele', 'contractuel', 'reglementaire'];
 const empty = (): Partial<Document> => ({
   titre: '', categorie: 'general', description: '', fichier_url: '', version: 1, statut: 'actif', tags: [],
-  dossier: '', chat_direction: false, chat_conseiller: false,
+  dossier: '', dossier_id: null, chat_direction: false, chat_conseiller: false,
 });
 
 export default function Documents() {
@@ -19,9 +20,14 @@ export default function Documents() {
   const { data, loading, refresh } = useCollection<Document>('documents', {
     orderBy: { column: 'created_at', ascending: false },
   });
+  const contacts = useCollection<Contact>('contacts');
+  const formations = useCollection<Formation>('formations');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Document>>(empty());
   const [tagsText, setTagsText] = useState('');
+  // Sélection transitoire servant à rattacher le document au dossier client.
+  const [clientId, setClientId] = useState('');
+  const [clientFormationId, setClientFormationId] = useState('');
   const [saving, setSaving] = useState(false);
   const [cat, setCat] = useState('');
   const [fol, setFol] = useState('');
@@ -29,13 +35,28 @@ export default function Documents() {
   const set = (k: keyof Document, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const folders = [...new Set(data.map((d) => d.dossier).filter(Boolean) as string[])].sort();
 
-  const openNew = () => { setForm(empty()); setTagsText(''); setOpen(true); };
-  const openEdit = (d: Document) => { setForm(d); setTagsText((d.tags ?? []).join(', ')); setOpen(true); };
+  const openNew = () => { setForm(empty()); setTagsText(''); setClientId(''); setClientFormationId(''); setOpen(true); };
+  const openEdit = (d: Document) => { setForm(d); setTagsText((d.tags ?? []).join(', ')); setClientId(''); setClientFormationId(''); setOpen(true); };
 
   const save = async () => {
     setSaving(true);
+    // Rattachement automatique au dossier client si un prospect est sélectionné.
+    let dossier_id = form.dossier_id ?? null;
+    let dossierLabel = form.dossier ?? '';
+    if (!dossier_id && clientId) {
+      const contact = contacts.data.find((c) => c.id === clientId);
+      const formation = formations.data.find((f) => f.id === clientFormationId);
+      const dossier = await ensureDossierClient({
+        contactId: clientId, contactName: fullName(contact?.prenom, contact?.nom),
+        formationId: clientFormationId || null, formationName: formation?.intitule ?? null,
+        entrepriseId: contact?.entreprise_id ?? null, ownerId: session?.user.id ?? null,
+      });
+      if (dossier) { dossier_id = dossier.id; dossierLabel = dossier.intitule; }
+    }
     const payload = {
       ...form,
+      dossier_id,
+      dossier: dossierLabel,
       version: Number(form.version ?? 1),
       tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean),
       owner_id: form.owner_id ?? session?.user.id,
@@ -55,7 +76,7 @@ export default function Documents() {
       titre: d.titre, categorie: d.categorie, description: d.description,
       fichier_url: d.fichier_url, version: d.version + 1, statut: 'actif',
       parent_id: d.parent_id ?? d.id, tags: d.tags, owner_id: session?.user.id,
-      dossier: d.dossier, chat_direction: d.chat_direction, chat_conseiller: d.chat_conseiller, contenu_texte: d.contenu_texte,
+      dossier: d.dossier, dossier_id: d.dossier_id, chat_direction: d.chat_direction, chat_conseiller: d.chat_conseiller, contenu_texte: d.contenu_texte,
     });
     if (error) { alert(error.message); return; }
     refresh();
@@ -171,6 +192,20 @@ export default function Documents() {
             <input className="input" list="doc-dossiers" value={form.dossier ?? ''} onChange={(e) => set('dossier', e.target.value)} placeholder="ex. Qualiopi, Modèles…" />
             <datalist id="doc-dossiers">{folders.map((f) => <option key={f} value={f} />)}</datalist>
           </Field>
+          <div className="col-span-2 rounded-lg border border-line bg-surface-2 p-3">
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg"><Folder className="h-4 w-4 text-brand-600" /> Rattacher à un dossier client</p>
+            <p className="mb-2 text-xs text-muted">Sélectionnez un prospect : le document est centralisé dans son dossier (créé automatiquement à son nom si nécessaire). Ignoré si un dossier est déjà rattaché.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <select className="input" value={clientId} onChange={(e) => setClientId(e.target.value)} disabled={!!form.dossier_id}>
+                <option value="">— Prospect (aucun) —</option>
+                {contacts.data.map((c) => <option key={c.id} value={c.id}>{fullName(c.prenom, c.nom)}</option>)}
+              </select>
+              <select className="input" value={clientFormationId} onChange={(e) => setClientFormationId(e.target.value)} disabled={!!form.dossier_id || !clientId}>
+                <option value="">— Formation (aucune) —</option>
+                {formations.data.map((f) => <option key={f.id} value={f.id}>{f.intitule}</option>)}
+              </select>
+            </div>
+          </div>
           <div className="col-span-2"><Field label="Tags (séparés par des virgules)"><input className="input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} /></Field></div>
           {isAdmin && (
             <div className="col-span-2 rounded-lg border border-line bg-surface-2 p-3">
