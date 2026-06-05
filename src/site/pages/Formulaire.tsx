@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState } from 'react';
-import { Send, CheckCircle2, Loader2 } from 'lucide-react';
+import { Send, CircleCheck as CheckCircle2, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { syncLeadToGHL } from '../lib/ghlSync';
 import SEO from '../components/SEO';
@@ -136,7 +136,7 @@ const Formulaire = () => {
                     required
                     value={formData.firstName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
                     placeholder="Jean"
                   />
                 </div>
@@ -152,7 +152,7 @@ const Formulaire = () => {
                     required
                     value={formData.lastName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
                     placeholder="Dupont"
                   />
                 </div>
@@ -169,7 +169,7 @@ const Formulaire = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
                   placeholder="jean.dupont@example.com"
                 />
               </div>
@@ -185,7 +185,7 @@ const Formulaire = () => {
                   required
                   value={formData.phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
                   placeholder="06 12 34 56 78"
                 />
               </div>
@@ -200,7 +200,7 @@ const Formulaire = () => {
                   name="company"
                   value={formData.company}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
                   placeholder="Nom de votre entreprise (optionnel)"
                 />
               </div>
@@ -215,7 +215,7 @@ const Formulaire = () => {
                   required
                   value={formData.requestType}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white text-slate-900"
                 >
                   <option value="">Sélectionnez une formation ou un service</option>
                   <optgroup label="Formations CPF">
@@ -263,7 +263,7 @@ const Formulaire = () => {
                   rows={5}
                   value={formData.message}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all resize-none"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all resize-none text-slate-900 placeholder:text-slate-400"
                   placeholder="Décrivez-nous votre projet ou vos besoins..."
                 />
               </div>
