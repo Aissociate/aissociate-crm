@@ -42,6 +42,10 @@ import SiteBlogArticle from '@/site/pages/BlogArticle';
 import SiteAides from '@/site/pages/AidesFormation';
 import SiteContact from '@/site/pages/Contact';
 import SiteFormulaire from '@/site/pages/Formulaire';
+import SiteMentionsLegales from '@/site/pages/MentionsLegales';
+import SiteConfidentialite from '@/site/pages/Confidentialite';
+import SiteAccessibilite from '@/site/pages/Accessibilite';
+import SiteReclamations from '@/site/pages/Reclamations';
 
 export default function App() {
   const { configured } = useAuth();
@@ -61,6 +65,10 @@ export default function App() {
         <Route path="/aides-formation" element={<SiteAides />} />
         <Route path="/contact" element={<SiteContact />} />
         <Route path="/formulaire" element={<SiteFormulaire />} />
+        <Route path="/mentions-legales" element={<SiteMentionsLegales />} />
+        <Route path="/confidentialite" element={<SiteConfidentialite />} />
+        <Route path="/accessibilite" element={<SiteAccessibilite />} />
+        <Route path="/reclamations" element={<SiteReclamations />} />
       </Route>
 
       {/* ── CRM Aissociate (accès Admin) ── */}

@@ -5,10 +5,10 @@ import AdminLogo from './AdminLogo';
 
 export default function Footer() {
   const links = [
-    { icon: FileText, label: 'Mentions légales', href: '#' },
-    { icon: Shield, label: 'Politique de confidentialité', href: '#' },
-    { icon: Accessibility, label: 'Accessibilité', href: '#' },
-    { icon: MessageSquare, label: 'Réclamations', href: '#' }
+    { icon: FileText, label: 'Mentions légales', to: '/mentions-legales' },
+    { icon: Shield, label: 'Politique de confidentialité', to: '/confidentialite' },
+    { icon: Accessibility, label: 'Accessibilité', to: '/accessibilite' },
+    { icon: MessageSquare, label: 'Réclamations', to: '/reclamations' }
   ];
 
   return (
@@ -66,14 +66,14 @@ export default function Footer() {
               {links.map((link, index) => {
                 const Icon = link.icon;
                 return (
-                  <a
+                  <Link
                     key={index}
-                    href={link.href}
+                    to={link.to}
                     className="flex items-center gap-3 text-slate-300 hover:text-white transition-colors group"
                   >
                     <Icon className="w-5 h-5 text-orange-400 group-hover:text-orange-300" />
                     <span>{link.label}</span>
-                  </a>
+                  </Link>
                 );
               })}
             </div>
