@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
-import { Mail, Phone, MapPin, Send, CheckCircle, Clock, MessageSquare } from 'lucide-react';
+import { Mail, Phone, MapPin, Send, CheckCircle, Clock, MessageSquare, CircleAlert as AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function Contact() {
@@ -16,15 +17,19 @@ export default function Contact() {
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
     // Enregistre le lead -> contact CRM (via contact_requests + trigger).
     const parts = (formData.name || '').trim().split(/\s+/);
     const firstName = parts.shift() || formData.name;
     const lastName = parts.join(' ') || null;
     try {
-      await supabase.from('contact_requests').insert([{
+      const { error: submitError } = await supabase.from('contact_requests').insert([{
         first_name: firstName,
         last_name: lastName,
         email: formData.email,
@@ -35,12 +40,15 @@ export default function Contact() {
         source: '/contact',
         status: 'new',
       }]);
+      if (submitError) throw submitError;
+      setSubmitted(true);
+      setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      setTimeout(() => setSubmitted(false), 5000);
     } catch {
-      // non bloquant pour l'utilisateur
+      setError("L'envoi a échoué. Veuillez réessayer, ou contactez-nous directement par email ou téléphone.");
+    } finally {
+      setLoading(false);
     }
-    setSubmitted(true);
-    setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
-    setTimeout(() => setSubmitted(false), 3000);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -117,6 +125,13 @@ export default function Contact() {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6 flex items-center gap-3">
                   <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <p className="text-emerald-800">Votre message a été envoyé avec succès !</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                  <p className="text-red-800">{error}</p>
                 </div>
               )}
 
@@ -224,10 +239,11 @@ export default function Contact() {
 
                 <button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
                 >
                   <Send className="w-5 h-5" />
-                  Envoyer le message
+                  {loading ? 'Envoi en cours…' : 'Envoyer le message'}
                 </button>
 
                 <p className="text-sm text-slate-600 text-center">
@@ -266,12 +282,12 @@ export default function Contact() {
                 <p className="text-slate-700 mb-4">
                   Consultez notre FAQ pour trouver rapidement des réponses à vos questions les plus courantes.
                 </p>
-                <a
-                  href="#faq"
+                <Link
+                  to="/#faq"
                   className="inline-block text-emerald-600 hover:text-emerald-700 font-semibold hover:underline"
                 >
                   Voir la FAQ →
-                </a>
+                </Link>
               </div>
 
               <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-2xl p-8">

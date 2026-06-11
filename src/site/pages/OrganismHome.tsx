@@ -442,7 +442,7 @@ export default function OrganismHome() {
       </section>
 
       {/* FAQ — données structurées FAQPage (rich snippet) */}
-      <section className="py-20 bg-gradient-to-b from-white to-slate-50">
+      <section id="faq" className="py-20 bg-gradient-to-b from-white to-slate-50 scroll-mt-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">

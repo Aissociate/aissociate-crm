@@ -120,10 +120,22 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const sb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const sb = createClient(SUPABASE_URL, SERVICE);
+
+    // — Contrôle d'accès : cron interne (service_role) ou utilisateur connecté.
+    // La lecture des emails importés reste protégée par la RLS de la table.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "");
+    if (bearer !== SERVICE) {
+      const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: ud } = await userClient.auth.getUser();
+      if (!ud.user) return json({ ok: false, error: "Non authentifié" }, 401);
+    }
 
     const cfg = await loadImap(sb);
     if (!cfg) {

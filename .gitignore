@@ -20,3 +20,6 @@ dist-ssr
 .env.*
 !.env.example
 _imp/
+
+# Claude Code (prefs locales)
+.claude/settings.local.json

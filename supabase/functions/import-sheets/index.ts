@@ -45,13 +45,35 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const sb = createClient(SUPABASE_URL, SERVICE);
+
+    // — Contrôle d'accès : cron interne (service_role) ou manager connecté —
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "");
+    if (bearer !== SERVICE) {
+      const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: ud } = await userClient.auth.getUser();
+      if (!ud.user) {
+        return new Response(JSON.stringify({ error: "Non authentifié" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: profile } = await sb.from("profiles").select("role").eq("id", ud.user.id).maybeSingle();
+      const role = (profile?.role as string) ?? "conseiller";
+      if (role !== "admin" && role !== "directeur_commercial") {
+        return new Response(JSON.stringify({ error: "Accès réservé à la direction" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const source: string = body.source ?? "all";
-
-    const sb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     const result: Record<string, unknown> = {};
 

@@ -14,7 +14,7 @@ import { trackPageView } from '@/lib/track';
  * `page_views` (visiteur anonyme), alimentant les KPI « visiteurs » du dashboard.
  */
 export default function SiteFrame() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const lastTracked = useRef<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +22,17 @@ export default function SiteFrame() {
     lastTracked.current = pathname;
     void trackPageView(pathname);
   }, [pathname]);
+
+  // Ancres inter-pages (ex. /contact -> /#faq) : le routeur SPA ne scrolle pas
+  // nativement vers le hash après navigation. Saut instantané + une correction
+  // différée (la position de la cible bouge pendant le chargement des images).
+  useEffect(() => {
+    if (!hash) return;
+    const jump = () => document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+    jump();
+    const t = setTimeout(jump, 600);
+    return () => clearTimeout(t);
+  }, [pathname, hash]);
 
   return (
     <>
