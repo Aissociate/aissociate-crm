@@ -5,11 +5,34 @@ import Header from '../components/Header';
 import SEO, { SITE_URL } from '../components/SEO';
 import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const GRADIENTS = ['from-orange-500 to-amber-600', 'from-emerald-500 to-teal-600', 'from-blue-500 to-cyan-600', 'from-purple-500 to-pink-600', 'from-amber-600 to-orange-700'];
 
+// Mise en forme des champs CRM pour l'affichage public.
+const fmtPrix = (n) => `${Number(n).toLocaleString('fr-FR')} €`;
+const fmtDuree = (h) => {
+  if (!h) return null;
+  const jours = h % 7 === 0 ? h / 7 : null;
+  return jours ? `${h}h (${jours} jour${jours > 1 ? 's' : ''})` : `${h}h`;
+};
+const splitLines = (t) => String(t ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
+
 export default function FormationsList() {
-  // Catalogue 100 % statique (page descriptive, aucune base de données).
+  // Catalogue : contenu marketing statique (filet de sécurité + SEO), surchargé
+  // par la table `formations` du CRM quand le slug correspond ; les formations
+  // actives du CRM sans équivalent statique sont ajoutées à la suite.
+  const [crmRows, setCrmRows] = useState([]);
+  useEffect(() => {
+    let on = true;
+    supabase
+      .from('formations')
+      .select('id, slug, intitule, objectifs, public_vise, duree_heures, prix, certifiante, code_certification')
+      .eq('actif', true)
+      .then(({ data, error }) => { if (on && !error && data) setCrmRows(data); });
+    return () => { on = false; };
+  }, []);
+
   const fallbackFormations = [
     {
       id: 'creation-contenus-ia',
@@ -174,7 +197,44 @@ export default function FormationsList() {
       color: 'from-amber-600 to-orange-700'
     }
   ];
-  const formations = fallbackFormations;
+  // Surcharge des cartes statiques par les données CRM (correspondance par slug).
+  const bySlug = new Map(crmRows.filter((r) => r.slug).map((r) => [r.slug, r]));
+  const merged = fallbackFormations.map((f) => {
+    const db = bySlug.get(f.id);
+    if (!db) return f;
+    const objectives = splitLines(db.objectifs);
+    return {
+      ...f,
+      title: db.intitule || f.title,
+      duration: fmtDuree(db.duree_heures) ?? f.duration,
+      price: Number(db.prix) > 0 ? fmtPrix(db.prix) : f.price,
+      participants: db.public_vise || f.participants,
+      // objectifs CRM seulement s'ils sont rédigés en liste (1 ligne = 1 objectif)
+      objectives: objectives.length >= 2 ? objectives : f.objectives,
+    };
+  });
+  // Formations CRM publiées (slug défini) sans page statique correspondante.
+  const extras = crmRows
+    .filter((r) => r.slug && !fallbackFormations.some((f) => f.id === r.slug))
+    .map((r, i) => {
+      const objectives = splitLines(r.objectifs);
+      return {
+        id: r.slug,
+        title: r.intitule,
+        subtitle: '',
+        description: objectives.length < 2 ? (r.objectifs ?? '') : '',
+        duration: fmtDuree(r.duree_heures) ?? 'Sur mesure',
+        participants: r.public_vise || 'Professionnels',
+        price: Number(r.prix) > 0 ? fmtPrix(r.prix) : 'Sur devis',
+        level: 'Tous niveaux',
+        certifications: r.certifiante
+          ? ['CPF', ...(r.code_certification ? [r.code_certification] : []), 'Certifiant']
+          : ['Financement OPCO'],
+        objectives: objectives.length >= 2 ? objectives : [],
+        color: GRADIENTS[(fallbackFormations.length + i) % GRADIENTS.length],
+      };
+    });
+  const formations = [...merged, ...extras];
 
   return (
     <div className="min-h-screen bg-white">
@@ -274,9 +334,10 @@ export default function FormationsList() {
                       </div>
 
                       <h2 className="text-3xl font-bold text-slate-900 mb-2">{formation.title}</h2>
-                      <p className="text-lg text-orange-600 font-semibold mb-4">{formation.subtitle}</p>
-                      <p className="text-slate-600 mb-6 leading-relaxed">{formation.description}</p>
+                      {formation.subtitle ? <p className="text-lg text-orange-600 font-semibold mb-4">{formation.subtitle}</p> : null}
+                      {formation.description ? <p className="text-slate-600 mb-6 leading-relaxed">{formation.description}</p> : null}
 
+                      {formation.objectives.length > 0 && (
                       <div className="bg-slate-50 rounded-xl p-6 mb-6">
                         <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                           <CheckCircle className="w-5 h-5 text-orange-600" />
@@ -291,6 +352,7 @@ export default function FormationsList() {
                           ))}
                         </ul>
                       </div>
+                      )}
 
                       <Link
                         to={`/formations/${formation.id}`}

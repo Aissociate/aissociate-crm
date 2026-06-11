@@ -5,6 +5,13 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Award, CircleCheck as CheckCircle, FileText, Target, BookOpen, ArrowLeft, Euro } from 'lucide-react';
 import SEO, { SITE_URL } from '../components/SEO';
+import { supabase } from '@/lib/supabase';
+
+const fmtDuree = (h) => {
+  if (!h) return null;
+  const jours = h % 7 === 0 ? h / 7 : null;
+  return jours ? `${h}h (${jours} jour${jours > 1 ? 's' : ''})` : `${h}h`;
+};
 
 // Détail d'une formation issue du back-office CRM (id non présent dans le
 // dictionnaire OF). Rendu simple et sûr, design cohérent avec le site.
@@ -617,9 +624,46 @@ const formationsData: Record<string, any> = {
 
 export default function FormationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const formation = id ? formationsData[id] : null;
+  const staticFormation = id ? formationsData[id] : null;
 
-  if (!formation) {
+  // Données live du CRM : surchargent la page statique (correspondance par
+  // slug) ou servent de source unique pour une formation sans page statique.
+  const [crmRow, setCrmRow] = useState(null);
+  const [loading, setLoading] = useState(!staticFormation);
+  useEffect(() => {
+    if (!id) { setLoading(false); return; }
+    let on = true;
+    const isUuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id);
+    supabase
+      .from('formations')
+      .select('id, slug, intitule, objectifs, programme, prerequis, public_vise, duree_heures, modalite, prix, reference, certifiante, code_certification')
+      .eq('actif', true)
+      .eq(isUuid ? 'id' : 'slug', id)
+      .maybeSingle()
+      .then(
+        ({ data, error }) => { if (on) { if (!error) setCrmRow(data ?? null); setLoading(false); } },
+        () => { if (on) setLoading(false); },
+      );
+    return () => { on = false; };
+  }, [id]);
+
+  if (!staticFormation && loading) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center text-slate-500">
+          Chargement de la formation…
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!staticFormation && crmRow) {
+    return <CrmFormationDetail f={crmRow} />;
+  }
+
+  if (!staticFormation) {
     return (
       <div className="min-h-screen bg-white">
         <Header />
@@ -633,6 +677,17 @@ export default function FormationDetailPage() {
       </div>
     );
   }
+
+  // Page statique, enrichie par les valeurs à jour du CRM si disponibles.
+  const formation = crmRow ? {
+    ...staticFormation,
+    title: crmRow.intitule || staticFormation.title,
+    duration: fmtDuree(crmRow.duree_heures) ?? staticFormation.duration,
+    price: Number(crmRow.prix) > 0 ? `${Number(crmRow.prix).toLocaleString('fr-FR')} € HT` : staticFormation.price,
+    participants: crmRow.public_vise || staticFormation.participants,
+    prerequisites: crmRow.prerequis || staticFormation.prerequisites,
+    ref: crmRow.reference || staticFormation.ref,
+  } : staticFormation;
 
   return (
     <div className="min-h-screen bg-white">

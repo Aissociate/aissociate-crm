@@ -10,8 +10,13 @@ import type { Formation } from '@/lib/database.types';
 
 const empty = (): Partial<Formation> => ({
   intitule: '', objectifs: '', programme: [], prerequis: '', public_vise: '',
-  duree_heures: 0, modalite: 'presentiel', prix: 0, actif: true,
+  duree_heures: 0, modalite: 'presentiel', prix: 0, actif: true, slug: null,
 });
+
+// Slug d'URL du site public : minuscules, sans accents, tirets.
+const slugify = (s: string) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-+)|(-+$)/g, '');
 
 export default function Formations() {
   const { isManager } = useAuth();
@@ -32,6 +37,7 @@ export default function Formations() {
       duree_heures: Number(form.duree_heures ?? 0),
       prix: Number(form.prix ?? 0),
       programme: programmeText.split('\n').map((l) => l.trim()).filter(Boolean),
+      slug: slugify(form.slug ?? '') || null,
     };
     const { error } = form.id
       ? await supabase.from('formations').update(payload).eq('id', form.id)
@@ -81,6 +87,7 @@ export default function Formations() {
                 <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-muted" />{f.duree_heures} h</span>
                 <span className="flex items-center gap-1"><Euro className="h-4 w-4 text-muted" />{formatMoney(f.prix)}</span>
                 <Badge tone="brand">{f.modalite}</Badge>
+                {f.slug && f.actif && <Badge tone="info">site : /formations/{f.slug}</Badge>}
                 {!f.actif && <Badge tone="danger">Inactif</Badge>}
               </div>
             </div>
@@ -109,6 +116,12 @@ export default function Formations() {
           </select></Field>
           <Field label="Public visé"><input className="input" value={form.public_vise ?? ''} onChange={(e) => set('public_vise', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Prérequis"><input className="input" value={form.prerequis ?? ''} onChange={(e) => set('prerequis', e.target.value)} /></Field></div>
+          <div className="col-span-2">
+            <Field label="Slug site public (URL /formations/…)">
+              <input className="input" placeholder="ex. introduction-ia-pme — vide = absente du site" value={form.slug ?? ''} onChange={(e) => set('slug', e.target.value)} />
+            </Field>
+            <p className="mt-1 text-xs text-muted">Si le slug correspond à une page existante du site, la formation surcharge son contenu ; sinon une page est générée. Laisser vide pour ne pas publier sur le site.</p>
+          </div>
           <label className="col-span-2 flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={!!form.actif} onChange={(e) => set('actif', e.target.checked)} /> Formation active
           </label>
