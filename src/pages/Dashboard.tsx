@@ -1,11 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import {
   startOfDay, startOfWeek, startOfMonth,
   subDays, subWeeks, subMonths, differenceInHours, format,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
-  Eye, ClipboardList, TrendingUp, Clock, Euro, Landmark, Trophy,
+  Eye, ClipboardList, TrendingUp, Clock, Euro, Landmark, Trophy, Megaphone,
   ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
 import {
@@ -13,10 +13,19 @@ import {
 } from 'recharts';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, initials } from '@/lib/utils';
 import type { Dossier, Opportunite, Profile, PageView, ContactRequest } from '@/lib/database.types';
+
+type MetaCampaign = { name: string; spend: number; impressions: number; clicks: number; leads: number };
+type MetaInsights = {
+  ok?: boolean; configured?: boolean; error?: string; message?: string;
+  currency?: string; account?: string | null;
+  totals?: { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; reach: number; leads: number };
+  campaigns?: MetaCampaign[];
+};
 
 type Gran = 'jour' | 'semaine' | 'mois';
 const GRAN_LABEL: Record<Gran, string> = { jour: 'Jour', semaine: 'Semaine', mois: 'Mois' };
@@ -103,6 +112,21 @@ export default function Dashboard() {
   const leads = useCollection<ContactRequest>('contact_requests');
   const profiles = useCollection<Profile>('profiles');
 
+  // Performances publicitaires Meta (lues côté serveur via l'Edge Function meta-ads).
+  const [meta, setMeta] = useState<MetaInsights | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
+  useEffect(() => {
+    if (!isManager) return;
+    const n = new Date();
+    const s = periodStart(gran, n);
+    setMetaLoading(true);
+    supabase.functions
+      .invoke('meta-ads', { body: { action: 'insights', since: format(s, 'yyyy-MM-dd'), until: format(n, 'yyyy-MM-dd') } })
+      .then(({ data, error }) => setMeta(error ? { ok: false, error: error.message } : (data as MetaInsights)))
+      .catch((e) => setMeta({ ok: false, error: e instanceof Error ? e.message : String(e) }))
+      .finally(() => setMetaLoading(false));
+  }, [gran, isManager]);
+
   if (opps.loading || dossiers.loading) {
     return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
   }
@@ -179,6 +203,13 @@ export default function Dashboard() {
   const caTotal = classement.reduce((s, c) => s + c.ca, 0);
 
   const fmtDays = (d: number) => `${d.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} j`;
+  const fmtNum = (n: number) => n.toLocaleString('fr-FR');
+  const fmtCur = (n: number, cur = 'EUR') => {
+    try { return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(n); }
+    catch { return `${fmtNum(Math.round(n))} ${cur}`; }
+  };
+  const metaCur = meta?.currency ?? 'EUR';
+  const metaCpl = meta?.totals && meta.totals.leads > 0 ? meta.totals.spend / meta.totals.leads : null;
 
   return (
     <div>
@@ -290,6 +321,63 @@ export default function Dashboard() {
           </p>
         </Card>
       </div>
+
+      {/* ── Publicité Meta (performances Ads, lecture seule) ────────────────── */}
+      {isManager && (
+        <Card className="mb-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-semibold text-fg">
+              <Megaphone className="h-5 w-5 text-brand-600" /> Publicité Meta
+            </h2>
+            <div className="flex items-center gap-2">
+              {meta?.account && <Badge tone="neutral">{meta.account}</Badge>}
+              <Badge tone="brand">{GRAN_LABEL[gran].toLowerCase()}</Badge>
+            </div>
+          </div>
+
+          {metaLoading ? (
+            <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
+          ) : !meta ? null : meta.configured === false ? (
+            <p className="rounded-lg bg-surface-2 p-4 text-sm text-muted">
+              {meta.message ?? 'Compte Meta non configuré.'} Renseignez le compte publicitaire et le token dans <strong>Paramètres › Publicité Meta (Ads)</strong>.
+            </p>
+          ) : meta.ok === false ? (
+            <p className="rounded-lg bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
+              {meta.error?.includes('Failed to fetch') || meta.error?.includes('Edge Function')
+                ? "Edge Function « meta-ads » non déployée. Déployez-la puis rechargez."
+                : `Erreur Meta : ${meta.error}`}
+            </p>
+          ) : meta.totals ? (
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+                <Kpi icon={<Euro className="h-5 w-5" />} label="Dépense" value={fmtCur(meta.totals.spend, metaCur)} />
+                <Kpi icon={<ClipboardList className="h-5 w-5" />} label="Leads" value={fmtNum(meta.totals.leads)} />
+                <Kpi icon={<Euro className="h-5 w-5" />} label="Coût par lead" value={metaCpl != null ? fmtCur(metaCpl, metaCur) : '—'} />
+                <Kpi icon={<Eye className="h-5 w-5" />} label="Impressions" value={fmtNum(meta.totals.impressions)} hint={`${fmtNum(meta.totals.reach)} portée`} />
+                <Kpi icon={<TrendingUp className="h-5 w-5" />} label="Clics" value={fmtNum(meta.totals.clicks)} hint={`CTR ${meta.totals.ctr.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}%`} />
+              </div>
+              {meta.campaigns && meta.campaigns.length > 0 && (
+                <div className="mt-5">
+                  <p className="mb-2 text-xs font-semibold uppercase text-muted">Campagnes</p>
+                  <ul className="space-y-1.5">
+                    {meta.campaigns.slice(0, 6).map((c, i) => (
+                      <li key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                        <span className="min-w-0 flex-1 truncate text-fg">{c.name}</span>
+                        <span className="flex items-center gap-4 text-muted">
+                          <span>{c.leads} lead{c.leads > 1 ? 's' : ''}</span>
+                          <span className="font-medium text-fg">{fmtCur(c.spend, metaCur)}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted">Aucune donnée publicitaire sur la période.</p>
+          )}
+        </Card>
+      )}
 
       {/* ── Classement des conseillers (CA des opportunités gagnées) ─────────── */}
       {isManager && (

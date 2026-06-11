@@ -47,7 +47,7 @@ export type Contact = Timestamps & {
   // Fiche de suivi (qualification / commercial / conformité / commissions)
   statut_entreprise: string | null; ville: string | null; autres: string | null; effectif: string | null;
   besoin_resume: string | null; formation_envisagee: string | null; financement_envisage: string | null; interet: string | null;
-  statut_prospect: string | null; responsable_id: string | null;
+  statut_prospect: string | null; responsable_id: string | null; tags: string[];
   date_fixee: string | null; eligibilite_verifiee: boolean; financement_demande: boolean;
   financement_valide: boolean; inscription_validee: boolean;
   date_formation: string | null; assiette_commission: number | null;
@@ -71,6 +71,8 @@ export type Formation = Timestamps & {
   id: string; intitule: string; objectifs: string | null; programme: string[];
   prerequis: string | null; public_vise: string | null; duree_heures: number;
   modalite: string; prix: number; actif: boolean;
+  reference: string | null; prix_intra: number | null; certifiante: boolean | null;
+  code_certification: string | null; slug: string | null;
 };
 export type PlanFormation = Timestamps & {
   id: string; nom: string; formation_id: string | null; contact_id: string | null;

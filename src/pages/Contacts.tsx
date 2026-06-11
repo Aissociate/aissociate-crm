@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -19,10 +19,24 @@ const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min
 
 const TYPES: ContactType[] = ['prospect', 'apprenant', 'contact_entreprise', 'contact_financeur'];
 
+// Types de demande du formulaire public (/formulaire) — repris dans la saisie interne.
+const REQUEST_TYPE_GROUPS: { label: string; options: string[] }[] = [
+  { label: 'Formations CPF', options: ["Création de contenus rédactionnels et visuels par l'IA générative"] },
+  { label: 'Formations OPCO', options: [
+    'Introduction aux IA pour les PME', 'Automatisation des process des PME',
+    "L'IA pour optimiser la relation client", "L'IA pour optimiser le marketing et la communication",
+    "L'IA pour optimiser la prospection commerciale", "L'IA pour optimiser les ressources humaines",
+    'Apprenez à maîtriser les marchés publics avec lemarchepublic.fr',
+  ] },
+  { label: 'Services', options: ['Assistance IA', 'Développement sur mesure'] },
+];
+
 const empty = (): Partial<Contact> => ({
   type: 'prospect', civilite: '', nom: '', prenom: '', email: '',
-  telephone: '', fonction: '', entreprise_id: null, financeur_id: null, rgpd_consent: false, notes: '',
+  telephone: '', fonction: '', entreprise_id: null, financeur_id: null, rgpd_consent: false, notes: '', tags: [],
 });
+
+const emptyIntake = () => ({ firstName: '', lastName: '', email: '', phone: '', company: '', requestType: '', message: '' });
 
 export default function Contacts() {
   const { session, isManager } = useAuth();
@@ -57,10 +71,17 @@ export default function Contacts() {
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Contact>>(empty());
+  const [tagsText, setTagsText] = useState('');
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [affFilter, setAffFilter] = useState<string>('');
+  const [tagFilter, setTagFilter] = useState<string>('');
+  // Saisie interne (formulaire de demande) — création/mise à jour d'un contact
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const [intake, setIntake] = useState(emptyIntake());
+  const [intakeSaving, setIntakeSaving] = useState(false);
+  const [intakeMsg, setIntakeMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [fiche, setFiche] = useState<Contact | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -133,18 +154,58 @@ export default function Contacts() {
     alert(`${p?.importes ?? 0} nouveau(x) prospect(s) importé(s) depuis Google Sheets, en « non affecté ».`);
   };
 
-  const openNew = () => { setForm(empty()); setOpen(true); };
-  const openEdit = (c: Contact) => { setForm(c); setOpen(true); };
+  const openNew = () => { setForm(empty()); setTagsText(''); setOpen(true); };
+  const openEdit = (c: Contact) => { setForm(c); setTagsText((c.tags ?? []).join(', ')); setOpen(true); };
 
   const save = async () => {
     setSaving(true);
-    const payload = { ...form, owner_id: form.owner_id ?? session?.user.id };
+    const tags = tagsText.split(',').map((t) => t.trim()).filter(Boolean);
+    const payload = { ...form, tags, owner_id: form.owner_id ?? session?.user.id };
     const { error } = form.id
       ? await supabase.from('contacts').update(payload).eq('id', form.id)
       : await supabase.from('contacts').insert(payload);
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
+    refresh();
+  };
+
+  // Saisie interne : reprend le formulaire public et crée OU met à jour le contact
+  // (dédoublonnage par e-mail). Type « Assistance » => tag « Assistance », sans affectation.
+  const submitIntake = async () => {
+    if (!intake.lastName.trim() && !intake.email.trim()) { alert('Renseignez au moins le nom ou l\'e-mail.'); return; }
+    setIntakeSaving(true);
+    const isAssist = /assistance/i.test(intake.requestType);
+    const newTags = isAssist ? ['Assistance'] : [];
+    let existing: Contact | null = null;
+    if (intake.email.trim()) {
+      const { data: ex } = await supabase.from('contacts').select('*').eq('email', intake.email.trim()).limit(1).maybeSingle();
+      existing = ex as Contact | null;
+    }
+    let error;
+    if (existing) {
+      const mergedTags = Array.from(new Set([...(existing.tags ?? []), ...newTags]));
+      ({ error } = await supabase.from('contacts').update({
+        prenom: intake.firstName.trim() || existing.prenom,
+        telephone: intake.phone.trim() || existing.telephone,
+        formation_envisagee: intake.requestType || existing.formation_envisagee,
+        besoin_resume: intake.message.trim() || existing.besoin_resume,
+        tags: mergedTags,
+      }).eq('id', existing.id));
+    } else {
+      ({ error } = await supabase.from('contacts').insert({
+        type: 'prospect', nom: intake.lastName.trim() || '(lead)', prenom: intake.firstName.trim() || null,
+        email: intake.email.trim() || null, telephone: intake.phone.trim() || null,
+        statut_prospect: 'nouveau', besoin_resume: intake.message.trim() || null,
+        formation_envisagee: intake.requestType || null,
+        notes: 'Saisie interne (formulaire)' + (intake.company.trim() ? ' — entreprise : ' + intake.company.trim() : ''),
+        tags: newTags, owner_id: null, // tag seul, pas d'affectation
+      }));
+    }
+    setIntakeSaving(false);
+    if (error) { alert(error.message); return; }
+    setIntakeMsg(existing ? 'Contact mis à jour ✓' : 'Contact créé ✓');
+    setTimeout(() => { setIntakeMsg(null); setIntakeOpen(false); setIntake(emptyIntake()); }, 1200);
     refresh();
   };
 
@@ -155,11 +216,14 @@ export default function Contacts() {
     refresh();
   };
 
+  const allTags = [...new Set(data.flatMap((c) => c.tags ?? []))].sort();
+
   const filtered = data.filter((c) => {
     const matchQ = `${c.nom} ${c.prenom} ${c.email}`.toLowerCase().includes(q.toLowerCase());
     const matchType = !typeFilter || c.type === typeFilter;
     const matchAff = !affFilter || (affFilter === 'non' ? !c.owner_id : c.owner_id === affFilter);
-    return matchQ && matchType && matchAff;
+    const matchTag = !tagFilter || (c.tags ?? []).includes(tagFilter);
+    return matchQ && matchType && matchAff && matchTag;
   });
 
   const set = (k: keyof Contact, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -176,8 +240,13 @@ export default function Contacts() {
               <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
               {importing ? 'Import…' : 'Importer CSV'}
             </Button>
-            <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
-              <DownloadCloud className="h-4 w-4" /> Sheets
+            {isManager && (
+              <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
+                <DownloadCloud className="h-4 w-4" /> Sheets
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }} title="Saisir une demande comme le formulaire public (création ou mise à jour)">
+              <ClipboardList className="h-4 w-4" /> Saisie (formulaire)
             </Button>
             <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>
           </>
@@ -211,6 +280,12 @@ export default function Contacts() {
             {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
           </select>
         )}
+        {allTags.length > 0 && (
+          <select className="input max-w-[200px]" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">Tous les tags</option>
+            {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        )}
       </div>
 
       {loading ? (
@@ -237,6 +312,15 @@ export default function Contacts() {
               <td className="px-4 py-3 font-medium text-fg">
                 {fullName(c.prenom, c.nom)}
                 {c.fonction && <span className="block text-xs font-normal text-muted">{c.fonction}</span>}
+                {(c.tags ?? []).length > 0 && (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {(c.tags ?? []).map((t) => (
+                      <Badge key={t} tone={t.toLowerCase() === 'assistance' ? 'info' : 'neutral'}>
+                        <Tag className="mr-1 h-3 w-3" />{t}
+                      </Badge>
+                    ))}
+                  </span>
+                )}
               </td>
               <td className="px-4 py-3"><Badge tone="brand">{CONTACT_TYPE_LABELS[c.type]}</Badge></td>
               <td className="px-4 py-3 text-muted">
@@ -318,12 +402,60 @@ export default function Contacts() {
             {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
           </select></Field>
           <div className="col-span-2">
+            <Field label="Tags" hint="Séparés par des virgules (ex. Assistance)">
+              <input className="input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="Assistance, VIP…" />
+            </Field>
+          </div>
+          <div className="col-span-2">
             <Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field>
           </div>
           <label className="col-span-2 flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={!!form.rgpd_consent} onChange={(e) => set('rgpd_consent', e.target.checked)} />
             Consentement RGPD recueilli
           </label>
+        </div>
+      </Modal>
+
+      {/* Saisie interne — reprend le formulaire public (/formulaire) */}
+      <Modal
+        open={intakeOpen} onClose={() => setIntakeOpen(false)} wide
+        title="Saisie d'une demande (formulaire)"
+        footer={
+          <>
+            {intakeMsg && <span className="mr-auto text-sm text-emerald-600">{intakeMsg}</span>}
+            <Button variant="secondary" onClick={() => setIntakeOpen(false)}>Annuler</Button>
+            <Button onClick={submitIntake} disabled={intakeSaving}>{intakeSaving ? 'Enregistrement…' : 'Créer / mettre à jour'}</Button>
+          </>
+        }
+      >
+        <p className="mb-4 text-xs text-muted">
+          Reprend le formulaire public. Le contact est <strong>créé</strong> ou <strong>mis à jour</strong> (dédoublonnage par e-mail).
+          Une demande de type <strong>Assistance</strong> ajoute le tag « Assistance » (sans affectation).
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Prénom"><input className="input" value={intake.firstName} onChange={(e) => setIntake({ ...intake, firstName: e.target.value })} /></Field>
+          <Field label="Nom"><input className="input" value={intake.lastName} onChange={(e) => setIntake({ ...intake, lastName: e.target.value })} /></Field>
+          <Field label="E-mail" hint="Sert au dédoublonnage"><input className="input" type="email" value={intake.email} onChange={(e) => setIntake({ ...intake, email: e.target.value })} /></Field>
+          <Field label="Téléphone"><input className="input" value={intake.phone} onChange={(e) => setIntake({ ...intake, phone: e.target.value })} /></Field>
+          <Field label="Entreprise"><input className="input" value={intake.company} onChange={(e) => setIntake({ ...intake, company: e.target.value })} /></Field>
+          <Field label="Type de demande">
+            <select className="input" value={intake.requestType} onChange={(e) => setIntake({ ...intake, requestType: e.target.value })}>
+              <option value="">— Sélectionner —</option>
+              {REQUEST_TYPE_GROUPS.map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </Field>
+          <div className="col-span-2">
+            <Field label="Message"><textarea className="input" rows={3} value={intake.message} onChange={(e) => setIntake({ ...intake, message: e.target.value })} /></Field>
+          </div>
+          {/assistance/i.test(intake.requestType) && (
+            <div className="col-span-2">
+              <Badge tone="info"><Tag className="mr-1 h-3 w-3" /> Sera tagué « Assistance »</Badge>
+            </div>
+          )}
         </div>
       </Modal>
 

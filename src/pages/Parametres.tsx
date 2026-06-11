@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
@@ -16,6 +16,7 @@ type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; for
 type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
 type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
+type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
 
 const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
   { key: 'documents', label: 'Base documentaire' },
@@ -48,6 +49,7 @@ export default function Parametres() {
   const [chatbot, setChatbot] = useState<Chatbot>({});
   const [blog, setBlog] = useState<Blog>({});
   const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
+  const [metaAds, setMetaAds] = useState<MetaAds>({ api_version: 'v21.0' });
   const [blogThemes, setBlogThemes] = useState('');
   const [blogRss, setBlogRss] = useState('');
   const [blogSeo, setBlogSeo] = useState('');
@@ -57,7 +59,7 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
@@ -66,6 +68,7 @@ export default function Parametres() {
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
         if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
         if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
+        if (row.cle === 'meta_ads') setMetaAds({ api_version: 'v21.0', ...((row.valeur as MetaAds) ?? {}) });
       }
       setLoading(false);
     })();
@@ -86,6 +89,7 @@ export default function Parametres() {
   const imapOk = !!(imap.host && imap.user && imap.password);
   const aiOk = !!ai.openrouter_key;
   const linkedinOk = !!(linkedin.access_token && linkedin.org_urn);
+  const metaOk = !!(metaAds.access_token && metaAds.ad_account_id);
 
   return (
     <div>
@@ -106,6 +110,8 @@ export default function Parametres() {
             detail={aiOk ? 'Clé configurée (lue uniquement côté serveur).' : 'Clé OpenRouter requise (secret OPENROUTER_API_KEY ou ci-dessous).'} />
           <StatusRow ok={linkedinOk} label="LinkedIn — partage auto des articles"
             detail={linkedinOk ? 'Access token + URN configurés. Les articles publiés sont postés sur la page entreprise.' : 'Access token OAuth (w_organization_social) + URN de la page requis (ci-dessous).'} />
+          <StatusRow ok={metaOk} label="Publicité Meta (Marketing API)"
+            detail={metaOk ? 'Compte + token configurés. Performances Ads visibles sur le tableau de bord.' : 'Compte publicitaire (act_…) + access token Meta requis (ci-dessous).'} />
           <StatusRow ok={false} label="Import auto & cron (Supabase Vault)"
             detail="À définir dans Supabase → Vault : secrets project_url et service_role_key (pour pg_cron). Non vérifiable depuis l'app." />
         </div>
@@ -150,6 +156,41 @@ export default function Parametres() {
                 <Save className="h-4 w-4" /> {saving === 'linkedin' ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
               {savedMsg === 'linkedin' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+            </div>
+          </div>
+        </Card>
+
+        {/* Publicité Meta — performances Ads (lecture seule) */}
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <Megaphone className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Publicité Meta (Ads)</h2>
+          </div>
+          <div className="space-y-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
+              <input type="checkbox" checked={metaAds.enabled ?? false} onChange={(e) => setMetaAds({ ...metaAds, enabled: e.target.checked })} />
+              Afficher les performances Meta sur le tableau de bord
+            </label>
+            <Field label="Compte publicitaire" required hint="ID du compte, ex. act_1234567890 (ou juste 1234567890)">
+              <input className="input" value={metaAds.ad_account_id ?? ''} onChange={(e) => setMetaAds({ ...metaAds, ad_account_id: e.target.value })} placeholder="act_…" />
+            </Field>
+            <Field label="Access token" required hint="Token Meta avec la permission ads_read (System User recommandé)">
+              <input className="input" type="password" value={metaAds.access_token ?? ''} onChange={(e) => setMetaAds({ ...metaAds, access_token: e.target.value })} placeholder="••••••••" />
+            </Field>
+            <Field label="Version de l'API" hint="ex. v21.0">
+              <input className="input" value={metaAds.api_version ?? ''} onChange={(e) => setMetaAds({ ...metaAds, api_version: e.target.value })} placeholder="v21.0" />
+            </Field>
+            <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">
+              Lecture seule des performances (dépense, impressions, leads…). Le token est lu uniquement
+              côté serveur par l'Edge Function <code>meta-ads</code> et n'est jamais exposé au navigateur.
+              Pour une sécurité maximale, définissez plutôt le secret Supabase
+              <code> META_ACCESS_TOKEN</code> (prioritaire sur ce formulaire).
+            </p>
+            <div className="flex items-center gap-3">
+              <Button onClick={() => persist('meta_ads', metaAds)} disabled={saving === 'meta_ads'}>
+                <Save className="h-4 w-4" /> {saving === 'meta_ads' ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              {savedMsg === 'meta_ads' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
             </div>
           </div>
         </Card>
