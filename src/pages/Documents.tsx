@@ -219,6 +219,22 @@ export default function Documents() {
                   <input type="checkbox" checked={!!form.chat_conseiller} onChange={(e) => set('chat_conseiller', e.target.checked)} /> Chat Conseiller
                 </label>
               </div>
+              {(form.chat_direction || form.chat_conseiller) && (
+                <div className="mt-3">
+                  <Field label="Contenu texte (lu par l'assistant)">
+                    <textarea
+                      className="input text-xs"
+                      rows={6}
+                      placeholder="Collez ici le texte du document : c'est ce contenu que l'assistant cite en source (il ne lit pas les fichiers PDF/Word joints)."
+                      value={form.contenu_texte ?? ''}
+                      onChange={(e) => set('contenu_texte', e.target.value)}
+                    />
+                  </Field>
+                  {!((form.contenu_texte ?? '').trim()) && (
+                    <p className="mt-1 text-xs text-amber-600">Sans contenu texte, l'assistant ne connaît que le titre, la description et les tags du document.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

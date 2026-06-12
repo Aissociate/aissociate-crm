@@ -2,9 +2,12 @@
 // - Identifie l'utilisateur et son rôle (JWT) côté serveur.
 // - Choisit le PROMPT MAÎTRE selon le rôle (direction / conseiller).
 // - Rassemble le CONTEXTE selon les DROITS configurés (base documentaire,
-//   contacts, dossiers, formations, recrutement, finances), avec portée
-//   limitée aux données du conseiller le cas échéant.
-// - Appelle OpenRouter, renvoie la réponse + les SOURCES citées.
+//   contacts, entreprises, pipeline, dossiers, devis, formations, agenda,
+//   recrutement, leads du site, finances). Direction : tout le périmètre par
+//   défaut ; conseiller : portée limitée à ses affectations sauf scope=all,
+//   recrutement et leads exclus.
+// - Appelle OpenRouter, renvoie la réponse + les SOURCES citées ([D#] =
+//   documents de la base documentaire activés pour ce chat).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 
@@ -21,7 +24,11 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
-type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
+type Droits = {
+  documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;
+  pipeline?: boolean; entreprises?: boolean; devis?: boolean; agenda?: boolean;
+  recrutement?: boolean; leads?: boolean; finances?: boolean; scope?: string;
+};
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
@@ -62,17 +69,33 @@ Deno.serve(async (req: Request) => {
       : ((cb.prompt_conseiller as string) || DEFAULT_CONS);
     const scopeAll = isDirection || d.scope === "all";
     const finances = isDirection ? (d.finances !== false) : (d.finances === true);
+    // Direction : TOUT le périmètre par défaut (chaque domaine reste désactivable).
+    // Conseiller : données CRM courantes par défaut (portée limitée à ses
+    // affectations sauf scope=all) ; recrutement et leads réservés direction.
+    const allow = (key: keyof Droits, directionOnly = false): boolean => {
+      if (directionOnly && !isDirection) return false;
+      return d[key] !== false;
+    };
 
     // 3) Rassembler le contexte selon les droits.
     const ctx: string[] = [];
     const docSources: { n: number; id: string; label: string; url: string | null }[] = [];
 
-    if (d.documents !== false) {
+    if (allow("documents")) {
       // Seuls les documents EXPLICITEMENT activés pour CE chat (coche admin).
-      const { data: docs } = await sb.from("documents")
-        .select("id, titre, categorie, description, tags, fichier_url, contenu_texte, dossier")
+      const { data: rawDocs } = await sb.from("documents")
+        .select("id, titre, categorie, description, tags, fichier_url, contenu_texte, dossier, version, parent_id")
         .eq(isDirection ? "chat_direction" : "chat_conseiller", true)
         .limit(200);
+      // Ne garder que la dernière version de chaque lignée documentaire
+      // (« Nouvelle version » duplique le document avec ses droits chat).
+      const latest = new Map<string, Record<string, unknown>>();
+      for (const x of (rawDocs ?? [])) {
+        const key = (x.parent_id as string) ?? (x.id as string);
+        const prev = latest.get(key);
+        if (!prev || Number(x.version ?? 1) > Number(prev.version ?? 1)) latest.set(key, x);
+      }
+      const docs = [...latest.values()];
       if (docs?.length) {
         const lines = docs.map((x, i) => {
           docSources.push({ n: i + 1, id: x.id as string, label: (x.titre as string) ?? "Document", url: (x.fichier_url as string) ?? null });
@@ -85,7 +108,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (d.contacts !== false) {
+    if (allow("contacts")) {
       let cq = sb.from("contacts")
         .select("nom, prenom, email, telephone, ville, statut_prospect, besoin_resume, formation_envisagee, financement_envisage, owner_id, responsable_id")
         .limit(300);
@@ -98,7 +121,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (d.dossiers !== false) {
+    if (allow("dossiers")) {
       let dq = sb.from("dossiers").select("reference, intitule, statut, montant_demande, montant_accorde, owner_id").limit(300);
       if (!scopeAll) dq = dq.eq("owner_id", user.id);
       const { data: ds } = await dq;
@@ -109,7 +132,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (d.formations !== false) {
+    if (allow("formations")) {
       const { data: fs } = await sb.from("formations").select("*").limit(200);
       if (fs?.length) {
         ctx.push("# Catalogue formations\n" + fs.map((x: Record<string, unknown>) =>
@@ -118,7 +141,63 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (isDirection && d.recrutement) {
+    if (allow("pipeline")) {
+      let oq = sb.from("opportunites")
+        .select("titre, stage, montant, probabilite, date_cloture_prev, owner_id")
+        .order("created_at", { ascending: false }).limit(300);
+      if (!scopeAll) oq = oq.eq("owner_id", user.id);
+      const { data: os } = await oq;
+      if (os?.length) {
+        ctx.push("# Pipeline (opportunités)\n" + os.map((x) =>
+          `${x.titre} — étape: ${x.stage}${finances ? `; montant: ${x.montant ?? 0}€` : ""}; probabilité: ${x.probabilite ?? "—"}%${x.date_cloture_prev ? `; clôture prévue: ${x.date_cloture_prev}` : ""}`
+        ).join("\n"));
+      }
+    }
+
+    if (allow("entreprises")) {
+      let eq = sb.from("entreprises")
+        .select("raison_sociale, siret, secteur, effectif, ville, owner_id").limit(300);
+      if (!scopeAll) eq = eq.eq("owner_id", user.id);
+      const { data: es } = await eq;
+      if (es?.length) {
+        ctx.push("# Entreprises\n" + es.map((x) =>
+          `${x.raison_sociale}${x.ville ? ` (${x.ville})` : ""} — secteur: ${x.secteur ?? "—"}; effectif: ${x.effectif ?? "—"}${x.siret ? `; SIRET: ${x.siret}` : ""}`
+        ).join("\n"));
+      }
+    }
+
+    if (allow("devis")) {
+      let vq = sb.from("devis")
+        .select("numero, statut, date_emission, date_validite, objet, total_ttc, owner_id")
+        .order("date_emission", { ascending: false }).limit(200);
+      if (!scopeAll) vq = vq.eq("owner_id", user.id);
+      const { data: vs } = await vq;
+      if (vs?.length) {
+        ctx.push("# Devis\n" + vs.map((x) =>
+          `${x.numero} — statut: ${x.statut}; émis le ${x.date_emission}${x.date_validite ? ` (validité ${x.date_validite})` : ""}${finances ? `; total TTC: ${x.total_ttc ?? 0}€` : ""}${x.objet ? `; objet: ${x.objet}` : ""}`
+        ).join("\n"));
+      }
+    }
+
+    if (allow("agenda")) {
+      const { data: ss } = await sb.from("sessions_formation")
+        .select("titre, date_debut, date_fin, lieu, modalite, formateur")
+        .order("date_debut", { ascending: false }).limit(150);
+      if (ss?.length) {
+        ctx.push("# Sessions de formation (calendrier)\n" + ss.map((x) =>
+          `${x.titre} — du ${x.date_debut}${x.date_fin ? ` au ${x.date_fin}` : ""}; modalité: ${x.modalite ?? "—"}${x.lieu ? `; lieu: ${x.lieu}` : ""}${x.formateur ? `; formateur: ${x.formateur}` : ""}`
+        ).join("\n"));
+      }
+      const { data: trs } = await sb.from("formateurs")
+        .select("nom, prenom, specialites, statut").limit(100);
+      if (trs?.length) {
+        ctx.push("# Formateurs\n" + trs.map((x) =>
+          `${x.prenom ?? ""} ${x.nom} — statut: ${x.statut ?? "—"}${x.specialites ? `; spécialités: ${x.specialites}` : ""}`.trim()
+        ).join("\n"));
+      }
+    }
+
+    if (allow("recrutement", true)) {
       const { data: ks } = await sb.from("candidats").select("*").limit(200);
       if (ks?.length) {
         ctx.push("# Recrutement (candidats)\n" + ks.map((x: Record<string, unknown>) =>
@@ -127,10 +206,22 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const context = ctx.join("\n\n---\n\n").slice(0, 60000);
+    if (allow("leads", true)) {
+      const { data: ls } = await sb.from("contact_requests")
+        .select("first_name, last_name, email, request_type, status, source, created_at")
+        .order("created_at", { ascending: false }).limit(100);
+      if (ls?.length) {
+        ctx.push("# Leads du site (demandes de contact)\n" + ls.map((x) =>
+          `${x.first_name ?? ""} ${x.last_name ?? ""} <${x.email ?? "—"}> — demande: ${x.request_type ?? "—"}; statut: ${x.status ?? "—"}; source: ${x.source ?? "—"}; reçu le ${String(x.created_at).slice(0, 10)}`.trim()
+        ).join("\n"));
+      }
+    }
+
+    const context = ctx.join("\n\n---\n\n").slice(0, 100000);
 
     // 4) Appel IA.
     const systemPrompt = masterPrompt +
+      `\n\nDate du jour : ${new Date().toISOString().slice(0, 10)}.` +
       "\n\nUtilise UNIQUEMENT le contexte ci-dessous comme source de vérité. " +
       "Cite chaque source entre crochets (ex. [D1] pour un document, ou la référence du dossier / le nom du contact). " +
       "Si l'information ne s'y trouve pas, dis-le.\n\n=== CONTEXTE ===\n" +

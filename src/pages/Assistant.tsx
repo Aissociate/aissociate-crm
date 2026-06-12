@@ -10,7 +10,9 @@ type Msg = { role: 'user' | 'assistant'; content: string; sources?: Source[] };
 const SUGGESTIONS = [
   'Quels sont mes contacts à relancer en priorité ?',
   'Résume les dossiers en cours et leur statut.',
+  'Où en est le pipeline ? Quels devis sont en attente ?',
   'Que dit la documentation sur la procédure AGEFICE ?',
+  'Quelles sessions de formation sont planifiées prochainement ?',
   'Quelles formations du catalogue conviennent à un dirigeant de TPE ?',
 ];
 

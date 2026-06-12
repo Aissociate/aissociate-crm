@@ -12,19 +12,31 @@ type Organisme = {
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
 type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
-type Droits = { documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean; recrutement?: boolean; finances?: boolean; scope?: string };
+type Droits = {
+  documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;
+  pipeline?: boolean; entreprises?: boolean; devis?: boolean; agenda?: boolean;
+  recrutement?: boolean; leads?: boolean; finances?: boolean; scope?: string;
+};
 type Chatbot = { prompt_direction?: string; prompt_conseiller?: string; droits?: { conseiller?: Droits; direction?: Droits } };
 type Blog = { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
 type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
 
-const DROIT_LABELS: { key: keyof Droits; label: string }[] = [
-  { key: 'documents', label: 'Base documentaire' },
-  { key: 'contacts', label: 'Contacts' },
-  { key: 'dossiers', label: 'Dossiers' },
-  { key: 'formations', label: 'Catalogue formations' },
-  { key: 'recrutement', label: 'Recrutement' },
-  { key: 'finances', label: 'Informations financières' },
+// Domaines de contexte de l'assistant IA. `defaut` = accès si la case n'a
+// jamais été touchée (aligné sur l'Edge Function chatbot) ; recrutement et
+// leads sont réservés à la direction quoi qu'il arrive.
+const DROIT_LABELS: { key: keyof Droits; label: string; directionOnly?: boolean; defautConseiller?: boolean }[] = [
+  { key: 'documents', label: 'Base documentaire', defautConseiller: true },
+  { key: 'contacts', label: 'Contacts', defautConseiller: true },
+  { key: 'entreprises', label: 'Entreprises', defautConseiller: true },
+  { key: 'pipeline', label: 'Pipeline (opportunités)', defautConseiller: true },
+  { key: 'dossiers', label: 'Dossiers', defautConseiller: true },
+  { key: 'devis', label: 'Devis', defautConseiller: true },
+  { key: 'formations', label: 'Catalogue formations', defautConseiller: true },
+  { key: 'agenda', label: 'Sessions & formateurs', defautConseiller: true },
+  { key: 'recrutement', label: 'Recrutement', directionOnly: true },
+  { key: 'leads', label: 'Leads du site', directionOnly: true },
+  { key: 'finances', label: 'Informations financières', defautConseiller: false },
 ];
 
 function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
@@ -327,12 +339,37 @@ export default function Parametres() {
           </div>
 
           <div className="mt-4">
-            <p className="mb-2 text-sm font-medium text-fg">Droits de contexte des conseillers</p>
-            <p className="mb-3 text-xs text-muted">Sélectionnez les données que l'assistant peut consulter pour répondre à un conseiller. La direction a accès à l'ensemble.</p>
+            <p className="mb-2 text-sm font-medium text-fg">Droits de contexte — Direction</p>
+            <p className="mb-3 text-xs text-muted">
+              Tout le périmètre est accessible par défaut (portée complète, montants inclus). Décochez un domaine pour l'exclure du contexte de l'assistant.
+            </p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DROIT_LABELS.map(({ key, label }) => {
+                const dir = chatbot.droits?.direction ?? {};
+                const checked = dir[key] !== false;
+                return (
+                  <label key={key} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-fg">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => setChatbot({ ...chatbot, droits: { ...chatbot.droits, direction: { ...dir, [key]: e.target.checked } } })}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <p className="mb-2 text-sm font-medium text-fg">Droits de contexte — Conseillers</p>
+            <p className="mb-3 text-xs text-muted">
+              Données que l'assistant peut consulter pour répondre à un conseiller (recrutement et leads du site restent réservés à la direction).
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {DROIT_LABELS.filter((l) => !l.directionOnly).map(({ key, label, defautConseiller }) => {
                 const cons = chatbot.droits?.conseiller ?? {};
-                const checked = cons[key] === true;
+                const checked = (cons[key] ?? defautConseiller) === true;
                 return (
                   <label key={key} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-fg">
                     <input
@@ -351,7 +388,7 @@ export default function Parametres() {
                 checked={(chatbot.droits?.conseiller?.scope ?? 'assigned') === 'all'}
                 onChange={(e) => setChatbot({ ...chatbot, droits: { ...chatbot.droits, conseiller: { ...(chatbot.droits?.conseiller ?? {}), scope: e.target.checked ? 'all' : 'assigned' } } })}
               />
-              Accès à <strong>tous</strong> les contacts/dossiers (sinon uniquement ceux qui lui sont affectés)
+              Accès à <strong>tous</strong> les contacts / dossiers / pipeline / devis (sinon uniquement ceux qui lui sont affectés)
             </label>
           </div>
 
