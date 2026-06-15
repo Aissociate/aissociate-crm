@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Lock, Search, Folder, Bot } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Lock, Search, Folder, Bot, FileSearch, Loader as Loader2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -7,6 +7,7 @@ import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } f
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import { formatDate, fullName } from '@/lib/utils';
 import { ensureDossierClient } from '@/lib/dossierClient';
+import { isPdf, extractPdfTextFromFile, extractPdfTextFromUrl } from '@/lib/pdfText';
 import type { Document, Contact, Formation } from '@/lib/database.types';
 
 const CATEGORIES = ['general', 'procedure', 'qualiopi', 'modele', 'contractuel', 'reglementaire'];
@@ -32,11 +33,48 @@ export default function Documents() {
   const [cat, setCat] = useState('');
   const [fol, setFol] = useState('');
   const [q, setQ] = useState('');
+  // Extraction du texte PDF (pour le contexte de l'assistant IA).
+  const [extracting, setExtracting] = useState(false);
+  const [extractMsg, setExtractMsg] = useState<string | null>(null);
   const set = (k: keyof Document, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Téléverse le fichier puis, si c'est un PDF, en extrait le texte pour
+  // alimenter l'assistant (champ contenu_texte). Tolérant aux erreurs.
+  const onFileUploaded = async (value: string, file?: File) => {
+    set('fichier_url', value);
+    if (!file || !isPdf(file.name, file.type)) return;
+    setExtracting(true);
+    setExtractMsg(null);
+    try {
+      const text = await extractPdfTextFromFile(file);
+      if (text) { set('contenu_texte', text); setExtractMsg(`Texte extrait du PDF (${text.length.toLocaleString('fr-FR')} caractères).`); }
+      else setExtractMsg('PDF sans texte sélectionnable (scan/image ?) — saisie manuelle possible.');
+    } catch (e) {
+      setExtractMsg(`Extraction du texte impossible : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  // Ré-extraction depuis le fichier déjà rattaché (documents existants).
+  const reextract = async () => {
+    if (!form.fichier_url || !isPdf(form.fichier_url)) return;
+    setExtracting(true);
+    setExtractMsg(null);
+    try {
+      const text = await extractPdfTextFromUrl(form.fichier_url);
+      if (text) { set('contenu_texte', text); setExtractMsg(`Texte ré-extrait (${text.length.toLocaleString('fr-FR')} caractères). Enregistrez pour le sauvegarder.`); }
+      else setExtractMsg('PDF sans texte sélectionnable (scan/image ?).');
+    } catch (e) {
+      setExtractMsg(`Extraction impossible : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExtracting(false);
+    }
+  };
   const folders = [...new Set(data.map((d) => d.dossier).filter(Boolean) as string[])].sort();
 
-  const openNew = () => { setForm(empty()); setTagsText(''); setClientId(''); setClientFormationId(''); setOpen(true); };
-  const openEdit = (d: Document) => { setForm(d); setTagsText((d.tags ?? []).join(', ')); setClientId(''); setClientFormationId(''); setOpen(true); };
+  const openNew = () => { setForm(empty()); setTagsText(''); setClientId(''); setClientFormationId(''); setExtractMsg(null); setOpen(true); };
+  const openEdit = (d: Document) => { setForm(d); setTagsText((d.tags ?? []).join(', ')); setClientId(''); setClientFormationId(''); setExtractMsg(null); setOpen(true); };
 
   const save = async () => {
     setSaving(true);
@@ -182,10 +220,14 @@ export default function Documents() {
           <div className="col-span-2">
             <Field label="Fichier" hint="Téléversez un fichier ou collez une URL externe">
               <div className="flex items-center gap-3">
-                <FileUpload bucket="documents" onUploaded={(v) => set('fichier_url', v)} />
+                <FileUpload bucket="documents" onUploaded={onFileUploaded} />
                 {form.fichier_url && <FileLink bucket="documents" value={form.fichier_url} onClear={() => set('fichier_url', '')} />}
+                {extracting && <span className="inline-flex items-center gap-1 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Extraction du texte…</span>}
               </div>
               <input className="input mt-2" placeholder="https://…" value={form.fichier_url ?? ''} onChange={(e) => set('fichier_url', e.target.value)} />
+              {isPdf(form.fichier_url) && (
+                <p className="mt-1 text-xs text-muted">Le texte du PDF est extrait automatiquement à l'upload pour l'assistant IA.</p>
+              )}
             </Field>
           </div>
           <Field label="Dossier" hint="Rangement de l'espace documentaire (existant ou nouveau)">
@@ -221,16 +263,25 @@ export default function Documents() {
               </div>
               {(form.chat_direction || form.chat_conseiller) && (
                 <div className="mt-3">
-                  <Field label="Contenu texte (lu par l'assistant)">
-                    <textarea
-                      className="input text-xs"
-                      rows={6}
-                      placeholder="Collez ici le texte du document : c'est ce contenu que l'assistant cite en source (il ne lit pas les fichiers PDF/Word joints)."
-                      value={form.contenu_texte ?? ''}
-                      onChange={(e) => set('contenu_texte', e.target.value)}
-                    />
-                  </Field>
-                  {!((form.contenu_texte ?? '').trim()) && (
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-fg">Contenu texte (lu par l'assistant)</span>
+                    {isPdf(form.fichier_url) && (
+                      <button type="button" onClick={reextract} disabled={extracting}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
+                        {extracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSearch className="h-3.5 w-3.5" />}
+                        {extracting ? 'Extraction…' : 'Extraire le texte du PDF'}
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    className="input text-xs"
+                    rows={6}
+                    placeholder="Texte extrait automatiquement des PDF, ou à coller manuellement (Word, scans…). C'est ce contenu que l'assistant cite en source."
+                    value={form.contenu_texte ?? ''}
+                    onChange={(e) => set('contenu_texte', e.target.value)}
+                  />
+                  {extractMsg && <p className="mt-1 text-xs text-muted">{extractMsg}</p>}
+                  {!((form.contenu_texte ?? '').trim()) && !extractMsg && (
                     <p className="mt-1 text-xs text-amber-600">Sans contenu texte, l'assistant ne connaît que le titre, la description et les tags du document.</p>
                   )}
                 </div>
