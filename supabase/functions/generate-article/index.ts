@@ -91,7 +91,7 @@ Deno.serve(async (req: Request) => {
     const blog = (blogRow?.valeur ?? {}) as { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
     const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
-    const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key;
     if (!apiKey) return json({ error: "Clé OpenRouter absente (Paramètres > IA)" }, 400);
 
     const themes = Array.isArray(blog.themes) && blog.themes.length ? blog.themes : ["Veille IA : tendances du moment"];

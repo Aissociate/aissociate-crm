@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
     const cb = (cbRow?.valeur ?? {}) as Record<string, unknown>;
     const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
-    const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key;
     const model = ai.model || "anthropic/claude-opus-4.8";
     if (!apiKey) return json({ error: "Clé OpenRouter absente (Paramètres > IA)" }, 400);
 
