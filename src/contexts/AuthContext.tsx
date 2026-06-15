@@ -93,10 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const role = profile?.role ?? null;
-  // Pont transitoire : le flux du site écrit `is_admin` sur `profiles` sans renseigner
-  // `role`. Tant que les deux modèles de rôles coexistent, on reconnaît aussi `is_admin`
-  // comme admin (et donc manager) pour ne pas enfermer un admin hors du back-office.
-  const isAdminFlag = (profile as { is_admin?: boolean | null } | null)?.is_admin === true;
+  // Deux modèles de rôle coexistent : `role` (enum) et le flag `is_admin` écrit
+  // par le flux du site. La base les aligne désormais (helpers is_admin()/
+  // is_manager() honorent les deux, cf. migration align_is_admin_flag) ; on
+  // reconnaît donc aussi `is_admin` côté front pour rester cohérent.
+  const isAdminFlag = profile?.is_admin === true;
   const isAdmin = role === 'admin' || isAdminFlag;
   const isManager = isAdmin || role === 'directeur_commercial';
   const approved = profile?.approved === true || isAdmin;

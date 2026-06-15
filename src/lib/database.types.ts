@@ -27,6 +27,7 @@ type Timestamps = { created_at: string; updated_at: string };
 export type Profile = Timestamps & {
   id: string; email: string; nom: string; prenom: string;
   role: UserRole; telephone: string | null; actif: boolean; approved: boolean;
+  is_admin: boolean;
 };
 export type Financeur = Timestamps & {
   id: string; code: string; nom: string; type: FinancementType;
