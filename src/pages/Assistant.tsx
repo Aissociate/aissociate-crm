@@ -35,7 +35,21 @@ export default function Assistant() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('chatbot', { body: { question: q, history } });
-      if (error) throw new Error((error as { message?: string }).message ?? 'Erreur');
+      if (error) {
+        // invoke() renvoie un message générique (« non-2xx ») ; le vrai motif
+        // est dans le corps de la réponse de la fonction (error.context).
+        let detail = (error as { message?: string }).message ?? 'Erreur';
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof ctx.text === 'function') {
+          try {
+            const body = await ctx.text();
+            const parsed = body ? JSON.parse(body) : null;
+            if (parsed?.error) detail = parsed.error;
+            else if (body) detail = body.slice(0, 400);
+          } catch { /* corps non-JSON : on garde le message générique */ }
+        }
+        throw new Error(detail);
+      }
       const res = data as { ok?: boolean; answer?: string; role?: string; sources?: Source[]; error?: string };
       if (res?.error) throw new Error(res.error);
       if (res?.role) setMode(res.role);
