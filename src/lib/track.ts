@@ -18,16 +18,19 @@ function visitorId(): string {
 
 /**
  * Enregistre une vue de page du site vitrine (analytics 1st-party).
- * Tolérant aux erreurs : ne bloque jamais la navigation.
+ * Non bloquant pour le visiteur, mais l'échec est tracé en console : un INSERT
+ * Supabase ne « throw » pas sur erreur RLS/grant — il renvoie `{ error }` —, il
+ * faut donc le lire explicitement, sinon une panne d'écriture reste invisible.
  */
 export async function trackPageView(path: string): Promise<void> {
   try {
-    await supabase.from('page_views').insert({
+    const { error } = await supabase.from('page_views').insert({
       path,
       visitor_id: visitorId(),
       referrer: document.referrer || null,
     });
-  } catch {
-    /* silencieux : l'analytics ne doit pas impacter l'expérience visiteur */
+    if (error) console.warn('[analytics] page_views insert échoué :', error.message);
+  } catch (e) {
+    console.warn('[analytics] page_views insert exception :', e instanceof Error ? e.message : e);
   }
 }
