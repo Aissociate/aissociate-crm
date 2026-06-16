@@ -5,9 +5,11 @@ import { Button, Field, Spinner } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
 
+type Mode = 'in' | 'up' | 'reset';
+
 export default function Login() {
-  const { session, signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<'in' | 'up'>('in');
+  const { session, signIn, signUp, sendPasswordReset } = useAuth();
+  const [mode, setMode] = useState<Mode>('in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
@@ -23,7 +25,15 @@ export default function Login() {
     setError(null);
     setInfo(null);
     setLoading(true);
-    if (mode === 'in') {
+
+    if (mode === 'reset') {
+      const { error } = await sendPasswordReset(email);
+      if (error) setError(error);
+      else {
+        setInfo('Un lien de réinitialisation a été envoyé à ' + email + '. Vérifiez vos spams.');
+        setMode('in');
+      }
+    } else if (mode === 'in') {
       const { error } = await signIn(email, password);
       if (error) setError(error);
     } else {
@@ -37,7 +47,6 @@ export default function Login() {
 
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-app p-6">
-      {/* Halo décoratif aux couleurs de la marque */}
       <div className="pointer-events-none absolute -top-32 -right-24 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-orange-500/10 blur-3xl" />
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
@@ -48,20 +57,31 @@ export default function Login() {
           <p className="mt-4 text-sm text-muted">CRM de gestion des dossiers de formation</p>
         </div>
 
-        <div className="mb-5 flex rounded-lg bg-surface-2 p-1 text-sm font-medium">
-          <button
-            className={`flex-1 rounded-md py-1.5 transition ${mode === 'in' ? 'bg-surface text-fg shadow-sm' : 'text-muted'}`}
-            onClick={() => setMode('in')}
-          >
-            Connexion
-          </button>
-          <button
-            className={`flex-1 rounded-md py-1.5 transition ${mode === 'up' ? 'bg-surface text-fg shadow-sm' : 'text-muted'}`}
-            onClick={() => setMode('up')}
-          >
-            Créer un compte
-          </button>
-        </div>
+        {mode !== 'reset' && (
+          <div className="mb-5 flex rounded-lg bg-surface-2 p-1 text-sm font-medium">
+            <button
+              className={`flex-1 rounded-md py-1.5 transition ${mode === 'in' ? 'bg-surface text-fg shadow-sm' : 'text-muted'}`}
+              onClick={() => setMode('in')}
+            >
+              Connexion
+            </button>
+            <button
+              className={`flex-1 rounded-md py-1.5 transition ${mode === 'up' ? 'bg-surface text-fg shadow-sm' : 'text-muted'}`}
+              onClick={() => setMode('up')}
+            >
+              Créer un compte
+            </button>
+          </div>
+        )}
+
+        {mode === 'reset' && (
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-fg">Mot de passe oublié</h2>
+            <p className="mt-1 text-sm text-muted">
+              Saisissez votre adresse e-mail. Vous recevrez un lien pour choisir un nouveau mot de passe.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={submit} className="space-y-4">
           {mode === 'up' && (
@@ -80,21 +100,45 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)} required autoComplete="email"
             />
           </Field>
-          <Field label="Mot de passe">
-            <input
-              type="password" className="input" value={password}
-              onChange={(e) => setPassword(e.target.value)} required minLength={6}
-              autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
-            />
-          </Field>
+          {mode !== 'reset' && (
+            <Field label="Mot de passe">
+              <input
+                type="password" className="input" value={password}
+                onChange={(e) => setPassword(e.target.value)} required minLength={6}
+                autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+              />
+            </Field>
+          )}
 
           {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
           {info && <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">{info}</p>}
 
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? <Spinner className="h-4 w-4 text-white" /> : mode === 'in' ? 'Se connecter' : 'Créer le compte'}
+            {loading ? <Spinner className="h-4 w-4 text-white" /> : mode === 'in' ? 'Se connecter' : mode === 'up' ? 'Créer le compte' : 'Envoyer le lien'}
           </Button>
         </form>
+
+        {mode === 'in' && (
+          <p className="mt-4 text-center text-xs text-muted">
+            <button
+              className="underline hover:text-fg transition-colors"
+              onClick={() => { setError(null); setInfo(null); setMode('reset'); }}
+            >
+              Mot de passe oublié ?
+            </button>
+          </p>
+        )}
+
+        {mode === 'reset' && (
+          <p className="mt-4 text-center text-xs text-muted">
+            <button
+              className="underline hover:text-fg transition-colors"
+              onClick={() => { setError(null); setInfo(null); setMode('in'); }}
+            >
+              Retour à la connexion
+            </button>
+          </p>
+        )}
 
         {mode === 'up' && (
           <p className="mt-4 text-center text-xs text-muted">

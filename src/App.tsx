@@ -7,6 +7,7 @@ import SiteFrame from '@/components/SiteFrame';
 
 // ── CRM (back-office, derrière /login) ──
 import Login from '@/pages/Login';
+import ResetPassword from '@/pages/ResetPassword';
 import Dashboard from '@/pages/Dashboard';
 import Contacts from '@/pages/Contacts';
 import Entreprises from '@/pages/Entreprises';
@@ -73,6 +74,7 @@ export default function App() {
 
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
+      <Route path="/reset-password" element={configured ? <ResetPassword /> : <SupabaseNotice />} />
       <Route
         element={configured ? <ProtectedRoute><Layout /></ProtectedRoute> : <SupabaseNotice />}
       >

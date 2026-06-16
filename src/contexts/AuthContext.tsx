@@ -20,6 +20,8 @@ interface AuthState {
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -92,6 +94,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }, []);
 
+  const sendPasswordReset = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return { error: error?.message ?? null };
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error?.message ?? null };
+  }, []);
+
   const role = profile?.role ?? null;
   // Deux modèles de rôle coexistent : `role` (enum) et le flag `is_admin` écrit
   // par le flux du site. La base les aligne désormais (helpers is_admin()/
@@ -117,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut,
         refreshProfile,
+        sendPasswordReset,
+        updatePassword,
       }}
     >
       {children}
