@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, Badge, Button, Modal, Field, StatCard, EmptyState } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
-import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
+import { OPP_STAGE_LABELS, OPP_STAGE_ORDER, ROLE_LABELS } from '@/lib/constants';
 import { fullName, initials, formatMoney, formatDate } from '@/lib/utils';
 import type { Profile, Contact, Opportunite, Dossier, ContactAction, ConseillerDocument } from '@/lib/database.types';
 
@@ -29,7 +29,7 @@ export default function Conseillers() {
   const [saving, setSaving] = useState(false);
 
   const conseillers = useMemo(
-    () => profiles.data.filter((p) => p.role === 'conseiller' && p.approved),
+    () => profiles.data.filter((p) => (p.role === 'conseiller' || p.role === 'directeur_commercial') && p.approved),
     [profiles.data],
   );
 
@@ -90,7 +90,7 @@ export default function Conseillers() {
       <PageHeader title="Conseillers" subtitle="Affectations, coffre-fort personnel et stats individuelles" />
 
       {conseillers.length === 0 ? (
-        <EmptyState title="Aucun conseiller" message="Les comptes au rôle « Conseiller » (approuvés) apparaîtront ici." />
+        <EmptyState title="Aucun conseiller" message="Les comptes approuvés au rôle « Conseiller » ou « Directeur commercial » apparaîtront ici." />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
           {/* Liste des conseillers */}
@@ -105,7 +105,9 @@ export default function Conseillers() {
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-600 dark:text-brand-400">{initials(c.nom, c.prenom)}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-fg">{fullName(c.prenom, c.nom)}</p>
-                      <p className="truncate text-xs text-muted">{st.prospects} prospect(s) · {st.dossiers} dossier(s)</p>
+                      <p className="truncate text-xs text-muted">
+                        {c.role === 'directeur_commercial' ? `${ROLE_LABELS[c.role]} · ` : ''}{st.prospects} prospect(s) · {st.dossiers} dossier(s)
+                      </p>
                     </div>
                     {st.aRelancer > 0 && <Badge tone="warning">{st.aRelancer} à relancer</Badge>}
                   </div>
