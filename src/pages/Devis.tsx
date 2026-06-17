@@ -3,6 +3,7 @@ import { Plus, Trash2, Pencil, FileDown, Loader as Loader2, ReceiptText } from '
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { functionErrorMessage } from '@/lib/invokeError';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, type Tone } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import { formatDate, fullName, formatMoney } from '@/lib/utils';
@@ -123,7 +124,7 @@ export default function Devis() {
     setGenId(id);
     try {
       const { data: res, error } = await supabase.functions.invoke('generate-devis', { body: { devisId: id } });
-      if (error) throw new Error((error as { message?: string }).message ?? 'Erreur');
+      if (error) throw new Error(await functionErrorMessage(error));
       if ((res as { error?: string })?.error) throw new Error((res as { error?: string }).error);
       refresh();
       alert('PDF du devis généré.');

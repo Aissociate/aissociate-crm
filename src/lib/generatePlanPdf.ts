@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { functionErrorMessage } from './invokeError';
 
 interface GenInput {
   planId: string | null;
@@ -34,7 +35,7 @@ export async function generatePlanPdf(input: GenInput): Promise<{ titre: string 
     },
   });
   if (error) {
-    const msg = (error as { message?: string }).message ?? '';
+    const msg = await functionErrorMessage(error, '');
     throw new Error(
       "Génération indisponible : déployez l'Edge Function « generate-plan » et configurez la clé OpenRouter (Paramètres > IA). " + msg,
     );

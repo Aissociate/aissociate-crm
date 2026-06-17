@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Sparkles, Eye, EyeOff, ExternalLink, Loader as Lo
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { functionErrorMessage } from '@/lib/invokeError';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { FileUpload } from '@/components/FileUpload';
 import { formatDate } from '@/lib/utils';
@@ -90,7 +91,7 @@ export default function BlogAdmin() {
     setGenerating(true);
     try {
       const { data: res, error } = await supabase.functions.invoke('generate-article', { body: { subject: subject || undefined, publish: publishGen } });
-      if (error) throw new Error((error as { message?: string }).message ?? 'Erreur');
+      if (error) throw new Error(await functionErrorMessage(error));
       if ((res as { error?: string })?.error) throw new Error((res as { error?: string }).error);
       setGenOpen(false); setSubject(''); setPublishGen(false);
       categories.refresh(); refresh();
