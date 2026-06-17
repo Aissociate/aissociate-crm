@@ -81,6 +81,55 @@ function dataUrlToBytes(dataUrl: string): { mime: string; bytes: Uint8Array } | 
   return { mime: m[1], bytes };
 }
 
+// Génère une image via Kie.ai — Seedream 5.0 Lite (API asynchrone : création de
+// tâche puis interrogation du résultat). Renvoie les octets de l'image.
+async function generateImageKie(
+  apiKey: string,
+  opts: { quality: "basic" | "high"; aspectRatio: string },
+  prompt: string,
+): Promise<{ mime: string; bytes: Uint8Array } | null> {
+  try {
+    const create = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "seedream/5-lite-text-to-image",
+        input: {
+          prompt: `Illustration de blog professionnelle et moderne, sans texte, sur le thème : ${prompt}. Style éditorial, ambiance technologie / IA, couleurs chaleureuses (orange/ambre), haute qualité.`.slice(0, 3000),
+          aspect_ratio: opts.aspectRatio,
+          quality: opts.quality,
+          nsfw_checker: false,
+        },
+      }),
+    });
+    const cj = await create.json().catch(() => null);
+    const taskId = cj?.data?.taskId;
+    if (!create.ok || !taskId) return null;
+
+    // Interrogation du résultat (states: waiting | queuing | generating | success | fail).
+    for (let i = 0; i < 24; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const q = await fetch(
+        `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+        { headers: { "Authorization": `Bearer ${apiKey}` } },
+      );
+      const qj = await q.json().catch(() => null);
+      const state = qj?.data?.state;
+      if (state === "fail") return null;
+      if (state === "success") {
+        let url: string | null = null;
+        try { url = JSON.parse(qj.data.resultJson || "{}")?.resultUrls?.[0] ?? null; } catch { /* */ }
+        if (!url) return null;
+        const imgRes = await fetch(url);
+        if (!imgRes.ok) return null;
+        const mime = imgRes.headers.get("content-type") || "image/jpeg";
+        return { mime, bytes: new Uint8Array(await imgRes.arrayBuffer()) };
+      }
+    }
+    return null; // délai dépassé
+  } catch { return null; }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
@@ -88,7 +137,11 @@ Deno.serve(async (req: Request) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: blogRow } = await sb.from("parametres").select("valeur").eq("cle", "blog").maybeSingle();
-    const blog = (blogRow?.valeur ?? {}) as { prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean; rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string };
+    const blog = (blogRow?.valeur ?? {}) as {
+      prompt?: string; themes?: string[]; auto_publish?: boolean; use_web?: boolean;
+      rss_feeds?: string[]; seo_keywords?: string[]; image_model?: string;
+      image_provider?: string; kie_api_key?: string; kie_quality?: string; kie_aspect_ratio?: string;
+    };
     const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
     const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
@@ -152,11 +205,22 @@ Deno.serve(async (req: Request) => {
     const { data: clash } = await sb.from("blog_articles").select("id").eq("slug", slug).maybeSingle();
     if (clash) slug = `${slug}-${Date.now().toString(36)}`;
 
-    // Illustration : génération IA (modèle gratuit) + upload bucket public, sinon Unsplash.
+    // Illustration : génération IA + upload bucket public, sinon Unsplash.
+    // Provider : Kie.ai (Seedream) si une clé Kie est configurée, sinon OpenRouter.
     let imageUrl: string | null = null;
-    const imageModel = blog.image_model || "google/gemini-2.5-flash-image-preview:free";
-    const dataUrl = await generateImageDataUrl(apiKey, imageModel, title);
-    const img = dataUrl ? dataUrlToBytes(dataUrl) : null;
+    const kieKey = (Deno.env.get("KIE_API_KEY") || blog.kie_api_key || "").trim();
+    const provider = blog.image_provider || (kieKey ? "kie" : "openrouter");
+    let img: { mime: string; bytes: Uint8Array } | null = null;
+    if (provider === "kie" && kieKey) {
+      img = await generateImageKie(kieKey, {
+        quality: blog.kie_quality === "high" ? "high" : "basic",
+        aspectRatio: blog.kie_aspect_ratio || "16:9",
+      }, title);
+    } else {
+      const imageModel = blog.image_model || "google/gemini-2.5-flash-image-preview:free";
+      const dataUrl = await generateImageDataUrl(apiKey, imageModel, title);
+      img = dataUrl ? dataUrlToBytes(dataUrl) : null;
+    }
     if (img) {
       const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
       const path = `${crypto.randomUUID()}.${ext}`;
