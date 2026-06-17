@@ -58,6 +58,10 @@ export type ContactDocument = {
   id: string; contact_id: string; titre: string; categorie: string | null;
   fichier_url: string; created_by: string | null; created_at: string;
 };
+export type ConseillerDocument = {
+  id: string; conseiller_id: string; titre: string; categorie: string | null;
+  fichier_url: string; created_by: string | null; created_at: string;
+};
 export type ContactAction = {
   id: string; contact_id: string; date_action: string; type: string; description: string;
   faite: boolean; auteur_id: string | null; created_at: string;
@@ -266,6 +270,7 @@ export type Database = {
       blog_categories: TableShape<BlogCategory>;
       contact_actions: TableShape<ContactAction>;
       contact_documents: TableShape<ContactDocument>;
+      conseiller_documents: TableShape<ConseillerDocument>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;
