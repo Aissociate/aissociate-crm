@@ -16,6 +16,8 @@ export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
   apprenant: 'Apprenant',
   contact_entreprise: 'Contact entreprise',
   contact_financeur: 'Contact financeur',
+  formateur: 'Formateur / chargé de formation',
+  encadrement: 'Encadrement',
 };
 
 export const DOSSIER_STATUT_LABELS: Record<DossierStatut, string> = {

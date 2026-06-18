@@ -20,7 +20,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
 
-const TYPES: ContactType[] = ['prospect', 'contact', 'apprenant', 'contact_entreprise', 'contact_financeur'];
+const TYPES: ContactType[] = ['prospect', 'contact', 'apprenant', 'contact_entreprise', 'contact_financeur', 'formateur', 'encadrement'];
 
 // Types de demande du formulaire public (/formulaire) — repris dans la saisie interne.
 const REQUEST_TYPE_GROUPS: { label: string; options: string[] }[] = [
