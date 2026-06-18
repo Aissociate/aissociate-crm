@@ -10,7 +10,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type UserRole = 'admin' | 'directeur_commercial' | 'conseiller';
-export type ContactType = 'prospect' | 'apprenant' | 'contact_entreprise' | 'contact_financeur';
+export type ContactType = 'prospect' | 'contact' | 'apprenant' | 'contact_entreprise' | 'contact_financeur';
 export type FinancementType =
   | 'cpf' | 'opco' | 'france_travail' | 'pole_emploi' | 'conseil_regional'
   | 'transition_pro' | 'agefice' | 'entreprise' | 'particulier' | 'autre';

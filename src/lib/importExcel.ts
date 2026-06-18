@@ -99,6 +99,7 @@ export const CONTACT_IMPORT_FIELDS = [
   { key: 'telephone', label: 'Téléphone' },
   { key: 'ville', label: 'Ville' },
   { key: 'fonction', label: 'Fonction' },
+  { key: 'type', label: 'Type de contact' },
   { key: 'statut_prospect', label: 'Statut du contact' },
   { key: 'formation_envisagee', label: 'Formation envisagée' },
   { key: 'besoin_resume', label: 'Besoin / résumé' },
@@ -117,6 +118,7 @@ const FIELD_SYNONYMS: Record<ContactFieldKey, string[]> = {
   telephone: ['telephone', 'téléphone', 'phone', 'tel', 'mobile', 'portable', 'gsm', 'phone number'],
   ville: ['ville', 'city', 'commune', 'localite'],
   fonction: ['fonction', 'poste', 'job', 'job title', 'title', 'titre', 'role'],
+  type: ['type', 'type contact', 'type de contact', 'categorie', 'catégorie', 'category'],
   statut_prospect: ['statut', 'status', 'statut prospect', 'statut contact', 'etat', 'état', 'stage', 'lead status'],
   formation_envisagee: ['formation', 'formation envisagee', 'formation envisagée', 'interet', 'intérêt', 'produit'],
   besoin_resume: ['besoin', 'besoin resume', 'résumé', 'message', 'demande', 'commentaire', 'note interesse'],
@@ -125,6 +127,22 @@ const FIELD_SYNONYMS: Record<ContactFieldKey, string[]> = {
 };
 
 const normHeader = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+// Coercition d'une valeur de cellule vers un type de contact valide (enum base).
+type ContactTypeValue = Contact['type'];
+export const CONTACT_TYPE_VALUES: ContactTypeValue[] = ['prospect', 'contact', 'apprenant', 'contact_entreprise', 'contact_financeur'];
+function coerceType(raw: string, fallback: ContactTypeValue): ContactTypeValue {
+  const n = normHeader(raw);
+  if (!n) return fallback;
+  const direct = CONTACT_TYPE_VALUES.find((t) => normHeader(t) === n);
+  if (direct) return direct;
+  if (/(apprenant|stagiaire|eleve|élève)/.test(n)) return 'apprenant';
+  if (/(entreprise|societe|société|company)/.test(n)) return 'contact_entreprise';
+  if (/(financeur|opco|cpf|funder)/.test(n)) return 'contact_financeur';
+  if (/prospect|lead/.test(n)) return 'prospect';
+  if (/contact/.test(n)) return 'contact';
+  return fallback;
+}
 
 /** Devine un mapping initial colonne CSV → champ contact, par nom d'en-tête. */
 export function guessMapping(headers: string[]): ColumnMapping {
@@ -141,12 +159,13 @@ export function guessMapping(headers: string[]): ColumnMapping {
 
 /** Importe des contacts depuis des lignes CSV selon un mapping de colonnes. */
 export async function importContactsMapped(
-  rows: Row[], mapping: ColumnMapping, opts: { ownerId?: string | null } = {},
+  rows: Row[], mapping: ColumnMapping, opts: { ownerId?: string | null; defaultType?: ContactTypeValue } = {},
 ): Promise<ImportResult> {
   const get = (r: Row, key: ContactFieldKey): string => {
     const col = mapping[key];
     return col ? String(r[col] ?? '').trim() : '';
   };
+  const fallbackType: ContactTypeValue = opts.defaultType ?? 'prospect';
 
   const byKey = new Map<string, Partial<Contact>>();
   for (const r of rows) {
@@ -166,7 +185,8 @@ export async function importContactsMapped(
 
     byKey.set(`csv:${key}`, {
       external_id: `csv:${key}`,
-      type: 'prospect' as const,
+      // Type : depuis la colonne mappée si présente, sinon valeur par défaut.
+      type: coerceType(get(r, 'type'), fallbackType),
       nom, prenom: prenom || null,
       email: email || null, telephone: phone || null,
       ville: get(r, 'ville') || null,

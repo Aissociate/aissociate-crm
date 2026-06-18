@@ -20,7 +20,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
 
-const TYPES: ContactType[] = ['prospect', 'apprenant', 'contact_entreprise', 'contact_financeur'];
+const TYPES: ContactType[] = ['prospect', 'contact', 'apprenant', 'contact_entreprise', 'contact_financeur'];
 
 // Types de demande du formulaire public (/formulaire) — repris dans la saisie interne.
 const REQUEST_TYPE_GROUPS: { label: string; options: string[] }[] = [
@@ -95,6 +95,7 @@ export default function Contacts() {
   const [mapRows, setMapRows] = useState<Record<string, string>[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [mapOwner, setMapOwner] = useState<'none' | 'me'>('none');
+  const [mapType, setMapType] = useState<ContactType>('prospect');
 
   // Rafraîchissement automatique toutes les 5 min (nouveaux prospects non affectés)
   useEffect(() => {
@@ -173,7 +174,7 @@ export default function Contacts() {
     setImporting(true);
     try {
       const ownerId = mapOwner === 'me' ? (session?.user.id ?? null) : null;
-      const r = await importContactsMapped(mapRows, mapping, { ownerId });
+      const r = await importContactsMapped(mapRows, mapping, { ownerId, defaultType: mapType });
       setMapOpen(false);
       refresh();
       alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s).`);
@@ -532,9 +533,15 @@ export default function Contacts() {
                 value={mapping[f.key] ?? ''}
                 onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value || undefined }))}
               >
-                <option value="">— Ignorer —</option>
+                <option value="">{f.key === 'type' ? '— Valeur fixe ↓ —' : '— Ignorer —'}</option>
                 {mapHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
               </select>
+              {/* Type non mappé à une colonne : on choisit une valeur fixe (types définis en base). */}
+              {f.key === 'type' && !mapping.type && (
+                <select className="input flex-1" value={mapType} onChange={(e) => setMapType(e.target.value as ContactType)} title="Type appliqué à tous les contacts importés">
+                  {TYPES.map((t) => <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>)}
+                </select>
+              )}
             </div>
           ))}
         </div>

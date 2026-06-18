@@ -12,6 +12,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
   prospect: 'Prospect',
+  contact: 'Contact',
   apprenant: 'Apprenant',
   contact_entreprise: 'Contact entreprise',
   contact_financeur: 'Contact financeur',
