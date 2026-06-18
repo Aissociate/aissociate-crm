@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState } from '@/components/ui';
 import { CONTACT_TYPE_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
 import { fullName, formatDate } from '@/lib/utils';
-import { importProspectsFile } from '@/lib/importExcel';
+import {
+  importProspectsFile, parseSpreadsheetWithHeaders, importContactsMapped,
+  guessMapping, CONTACT_IMPORT_FIELDS, type ColumnMapping,
+} from '@/lib/importExcel';
 import ContactFiche from '@/components/ContactFiche';
 import type {
   Contact, ContactType, Entreprise, Financeur, Profile,
@@ -85,6 +88,13 @@ export default function Contacts() {
   const [importing, setImporting] = useState(false);
   const [fiche, setFiche] = useState<Contact | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Import CSV avec mapping de colonnes
+  const mapFileRef = useRef<HTMLInputElement>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [mapHeaders, setMapHeaders] = useState<string[]>([]);
+  const [mapRows, setMapRows] = useState<Record<string, string>[]>([]);
+  const [mapping, setMapping] = useState<ColumnMapping>({});
+  const [mapOwner, setMapOwner] = useState<'none' | 'me'>('none');
 
   // Rafraîchissement automatique toutes les 5 min (nouveaux prospects non affectés)
   useEffect(() => {
@@ -133,6 +143,40 @@ export default function Contacts() {
       const r = await importProspectsFile(file, session?.user.id);
       refresh();
       alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s) — répartis en round-robin.`);
+    } catch (err) {
+      alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Import CSV avec mapping : on lit les en-têtes, on pré-mappe, on ouvre la modale.
+  const openMapping = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    try {
+      const { headers, rows } = await parseSpreadsheetWithHeaders(file);
+      if (!headers.length || !rows.length) { alert('CSV vide ou illisible (en-tête + au moins une ligne attendus).'); return; }
+      setMapHeaders(headers);
+      setMapRows(rows);
+      setMapping(guessMapping(headers));
+      setMapOwner(isManager ? 'none' : 'me');
+      setMapOpen(true);
+    } catch (err) {
+      alert(`Lecture du CSV impossible : ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const runMappedImport = async () => {
+    if (!mapping.nom && !mapping.nom_complet) { alert('Mappez au moins la colonne « Nom » ou « Nom complet ».'); return; }
+    setImporting(true);
+    try {
+      const ownerId = mapOwner === 'me' ? (session?.user.id ?? null) : null;
+      const r = await importContactsMapped(mapRows, mapping, { ownerId });
+      setMapOpen(false);
+      refresh();
+      alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s).`);
     } catch (err) {
       alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -239,6 +283,10 @@ export default function Contacts() {
             <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
               <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
               {importing ? 'Import…' : 'Importer CSV'}
+            </Button>
+            <input ref={mapFileRef} type="file" accept=".csv" className="hidden" onChange={openMapping} />
+            <Button variant="secondary" onClick={() => mapFileRef.current?.click()} disabled={importing} title="Importer un CSV en choisissant le mapping des colonnes">
+              <Columns3 className="h-4 w-4" /> Importer (mapping)
             </Button>
             {isManager && (
               <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
@@ -458,6 +506,67 @@ export default function Contacts() {
               <Badge tone="info"><Tag className="mr-1 h-3 w-3" /> Sera tagué « Assistance »</Badge>
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Import CSV — mapping des colonnes */}
+      <Modal
+        open={mapOpen} onClose={() => setMapOpen(false)} wide
+        title="Importer un CSV — mapping des colonnes"
+        footer={<>
+          <Button variant="secondary" onClick={() => setMapOpen(false)}>Annuler</Button>
+          <Button onClick={runMappedImport} disabled={importing || (!mapping.nom && !mapping.nom_complet)}>
+            {importing ? 'Import…' : `Importer ${mapRows.length} ligne(s)`}
+          </Button>
+        </>}
+      >
+        <p className="mb-3 text-sm text-muted">
+          Associez chaque champ du contact à une colonne de votre fichier. Les colonnes ont été pré-mappées automatiquement ; ajustez si besoin. Au moins « Nom » ou « Nom complet » est requis.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {CONTACT_IMPORT_FIELDS.map((f) => (
+            <div key={f.key} className="flex items-center gap-2">
+              <label className="w-1/2 shrink-0 text-sm text-fg">{f.label}</label>
+              <select
+                className="input flex-1"
+                value={mapping[f.key] ?? ''}
+                onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value || undefined }))}
+              >
+                <option value="">— Ignorer —</option>
+                {mapHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-1 text-sm font-medium text-fg">Affectation</p>
+          <select className="input max-w-xs" value={mapOwner} onChange={(e) => setMapOwner(e.target.value as 'none' | 'me')}>
+            <option value="me">M'attribuer ces contacts</option>
+            {isManager && <option value="none">Non affecté (à répartir ensuite)</option>}
+          </select>
+        </div>
+
+        {/* Aperçu des 3 premières lignes selon le mapping */}
+        <div className="mt-4">
+          <p className="mb-1 text-sm font-medium text-fg">Aperçu</p>
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full text-xs">
+              <thead className="bg-surface-2 text-muted">
+                <tr>{CONTACT_IMPORT_FIELDS.filter((f) => mapping[f.key]).map((f) => <th key={f.key} className="px-2 py-1.5 text-left font-medium">{f.label}</th>)}</tr>
+              </thead>
+              <tbody>
+                {mapRows.slice(0, 3).map((r, i) => (
+                  <tr key={i} className="border-t border-line">
+                    {CONTACT_IMPORT_FIELDS.filter((f) => mapping[f.key]).map((f) => (
+                      <td key={f.key} className="px-2 py-1.5 text-fg">{r[mapping[f.key] as string] ?? ''}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-muted">Dédoublonnage par e-mail (ou téléphone/nom) ; réimporter le même fichier met à jour les contacts.</p>
         </div>
       </Modal>
 

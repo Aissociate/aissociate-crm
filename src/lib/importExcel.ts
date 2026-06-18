@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { Contact } from './database.types';
 
 type Row = Record<string, string>;
 
@@ -9,6 +10,16 @@ type Row = Record<string, string>;
 export async function parseSpreadsheet(file: File): Promise<Row[]> {
   const text = await file.text();
   return parseCsv(text);
+}
+
+/** Parse un CSV en renvoyant les en-têtes de colonnes ET les lignes (pour le mapping). */
+export async function parseSpreadsheetWithHeaders(file: File): Promise<{ headers: string[]; rows: Row[] }> {
+  const text = await file.text();
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd().split('\n');
+  if (lines.length < 1) return { headers: [], rows: [] };
+  const sep = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+  const headers = splitLine(lines[0], sep).map((h) => h.trim()).filter(Boolean);
+  return { headers, rows: parseCsv(text) };
 }
 
 function parseCsv(text: string): Row[] {
@@ -76,6 +87,110 @@ function pick(row: Row, ...keys: string[]): string {
 }
 
 export interface ImportResult { lus: number; importes: number }
+
+// ── Import CSV avec mapping de colonnes ──────────────────────────────────────
+
+/** Champs cibles d'un contact mappables depuis un CSV. */
+export const CONTACT_IMPORT_FIELDS = [
+  { key: 'nom_complet', label: 'Nom complet (à découper en prénom + nom)' },
+  { key: 'nom', label: 'Nom' },
+  { key: 'prenom', label: 'Prénom' },
+  { key: 'email', label: 'E-mail' },
+  { key: 'telephone', label: 'Téléphone' },
+  { key: 'ville', label: 'Ville' },
+  { key: 'fonction', label: 'Fonction' },
+  { key: 'statut_prospect', label: 'Statut du contact' },
+  { key: 'formation_envisagee', label: 'Formation envisagée' },
+  { key: 'besoin_resume', label: 'Besoin / résumé' },
+  { key: 'tags', label: 'Tags (séparés par , ou ;)' },
+  { key: 'notes', label: 'Notes' },
+] as const;
+
+export type ContactFieldKey = (typeof CONTACT_IMPORT_FIELDS)[number]['key'];
+export type ColumnMapping = Partial<Record<ContactFieldKey, string>>;
+
+const FIELD_SYNONYMS: Record<ContactFieldKey, string[]> = {
+  nom_complet: ['nom complet', 'full name', 'fullname', 'name', 'contact', 'nom et prenom'],
+  nom: ['nom', 'last name', 'lastname', 'surname', 'famille'],
+  prenom: ['prenom', 'prénom', 'first name', 'firstname'],
+  email: ['email', 'e-mail', 'mail', 'courriel', 'adresse email'],
+  telephone: ['telephone', 'téléphone', 'phone', 'tel', 'mobile', 'portable', 'gsm', 'phone number'],
+  ville: ['ville', 'city', 'commune', 'localite'],
+  fonction: ['fonction', 'poste', 'job', 'job title', 'title', 'titre', 'role'],
+  statut_prospect: ['statut', 'status', 'statut prospect', 'statut contact', 'etat', 'état', 'stage', 'lead status'],
+  formation_envisagee: ['formation', 'formation envisagee', 'formation envisagée', 'interet', 'intérêt', 'produit'],
+  besoin_resume: ['besoin', 'besoin resume', 'résumé', 'message', 'demande', 'commentaire', 'note interesse'],
+  tags: ['tags', 'tag', 'etiquettes', 'étiquettes', 'labels', 'segment'],
+  notes: ['notes', 'note', 'remarques', 'commentaires', 'observations'],
+};
+
+const normHeader = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+/** Devine un mapping initial colonne CSV → champ contact, par nom d'en-tête. */
+export function guessMapping(headers: string[]): ColumnMapping {
+  const map: ColumnMapping = {};
+  for (const field of CONTACT_IMPORT_FIELDS) {
+    const syns = FIELD_SYNONYMS[field.key].map(normHeader);
+    const hit = headers.find((h) => syns.includes(normHeader(h)));
+    if (hit) map[field.key] = hit;
+  }
+  // Si "nom complet" et "nom" tombent sur la même colonne, on privilégie "nom complet".
+  if (map.nom_complet && map.nom === map.nom_complet) delete map.nom;
+  return map;
+}
+
+/** Importe des contacts depuis des lignes CSV selon un mapping de colonnes. */
+export async function importContactsMapped(
+  rows: Row[], mapping: ColumnMapping, opts: { ownerId?: string | null } = {},
+): Promise<ImportResult> {
+  const get = (r: Row, key: ContactFieldKey): string => {
+    const col = mapping[key];
+    return col ? String(r[col] ?? '').trim() : '';
+  };
+
+  const byKey = new Map<string, Partial<Contact>>();
+  for (const r of rows) {
+    let nom = get(r, 'nom');
+    let prenom = get(r, 'prenom');
+    if (!nom) {
+      const full = get(r, 'nom_complet');
+      if (full) { const s = splitName(full); nom = s.nom; prenom = prenom || (s.prenom ?? ''); }
+    }
+    if (!nom) continue; // ligne sans nom -> ignorée
+
+    const email = get(r, 'email');
+    const phone = get(r, 'telephone');
+    const tagsStr = get(r, 'tags');
+    const tags = tagsStr ? tagsStr.split(/[;,]/).map((t) => t.trim()).filter(Boolean) : [];
+    const key = (email || phone || `${prenom} ${nom}`).toLowerCase().trim();
+
+    byKey.set(`csv:${key}`, {
+      external_id: `csv:${key}`,
+      type: 'prospect' as const,
+      nom, prenom: prenom || null,
+      email: email || null, telephone: phone || null,
+      ville: get(r, 'ville') || null,
+      fonction: get(r, 'fonction') || null,
+      statut_prospect: get(r, 'statut_prospect') || null,
+      formation_envisagee: get(r, 'formation_envisagee') || null,
+      besoin_resume: get(r, 'besoin_resume') || null,
+      notes: get(r, 'notes') || null,
+      tags,
+      owner_id: opts.ownerId ?? null,
+      metadata: r,
+    });
+  }
+
+  const payloads = [...byKey.values()];
+  let importes = 0;
+  if (payloads.length) {
+    const { data, error } = await supabase.from('contacts')
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id');
+    if (error) throw new Error(error.message);
+    importes = data?.length ?? 0;
+  }
+  return { lus: rows.length, importes };
+}
 
 export async function importCandidatsFile(file: File): Promise<ImportResult> {
   const rows = await parseSpreadsheet(file);
