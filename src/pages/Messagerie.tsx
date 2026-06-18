@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Plus, Mail, Send, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle } from 'lucide-react';
+import { Plus, Mail, Send, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, Upload, X, Loader as Loader2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
 import { formatDate, fullName, cn } from '@/lib/utils';
+import { uploadFile } from '@/lib/storage';
+import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
 import type { Email, Contact, Dossier, EmailDirection, EmailCanal, Profile, Formateur, Candidat, Document } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
+type Attachment = { filename: string; url: string };
 type View = 'conversations' | 'orphelins';
 
 // Adresse e-mail nue de « Nom <a@b.com> », normalisée.
@@ -47,6 +50,8 @@ export default function Messagerie() {
   const availableDocs = documents.data.filter((d) => d.fichier_url);
   const [smtpOk, setSmtpOk] = useState<boolean | null>(null);
   const [smtpFrom, setSmtpFrom] = useState<string | null>(null);
+  const [organisme, setOrganisme] = useState<OrganismeInfo | null>(null);
+  const [signatureCfg, setSignatureCfg] = useState<SignatureCfg | null>(null);
   const [ownerFilter, setOwnerFilter] = useState('');
 
   const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
@@ -119,10 +124,18 @@ export default function Messagerie() {
   };
 
   useEffect(() => {
-    supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle().then(({ data }) => {
-      const c = (data?.valeur ?? {}) as SmtpCfg;
-      setSmtpOk(!!(c.host && c.user && c.password && c.from));
-      setSmtpFrom(c.from ?? null);
+    supabase.from('parametres').select('cle, valeur').in('cle', ['smtp', 'organisme', 'email_signature']).then(({ data }) => {
+      (data ?? []).forEach((row) => {
+        if (row.cle === 'smtp') {
+          const c = (row.valeur ?? {}) as SmtpCfg;
+          setSmtpOk(!!(c.host && c.user && c.password && c.from));
+          setSmtpFrom(c.from ?? null);
+        }
+        if (row.cle === 'organisme') setOrganisme((row.valeur ?? {}) as OrganismeInfo);
+        if (row.cle === 'email_signature') setSignatureCfg((row.valeur ?? {}) as SignatureCfg);
+      });
+      // smtp absent → état « non configuré »
+      if (!(data ?? []).some((r) => r.cle === 'smtp')) setSmtpOk(false);
     });
   }, []);
 
@@ -143,11 +156,29 @@ export default function Messagerie() {
   const [corps, setCorps] = useState('');
   const [dossierId, setDossierId] = useState('');
   const [attachIds, setAttachIds] = useState<Set<string>>(new Set());
+  const [extraAttachments, setExtraAttachments] = useState<Attachment[]>([]); // PJ libres téléversées
+  const [uploadingAttach, setUploadingAttach] = useState(false);
+  const [includeSig, setIncludeSig] = useState(true);
   const [composeContactId, setComposeContactId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const toggleAttach = (id: string) => setAttachIds((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  const compose = () => { setCanal('email'); setDest(''); setSujet(''); setCorps(''); setDossierId(''); setAttachIds(new Set()); setComposeContactId(null); setOpen(true); };
+  // PJ libre : téléversement vers le bucket public « documents », URL passée à send-email.
+  const handleAttachUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (e.target) e.target.value = '';
+    if (!files.length) return;
+    setUploadingAttach(true);
+    for (const file of files) {
+      const { value, error } = await uploadFile('documents', file);
+      if (error || !value) { alert(`Échec du téléversement de « ${file.name} » : ${error ?? 'inconnu'}`); continue; }
+      setExtraAttachments((prev) => [...prev, { filename: file.name, url: value }]);
+    }
+    setUploadingAttach(false);
+  };
+  const removeExtraAttachment = (url: string) => setExtraAttachments((prev) => prev.filter((a) => a.url !== url));
+
+  const compose = () => { setCanal('email'); setDest(''); setSujet(''); setCorps(''); setDossierId(''); setAttachIds(new Set()); setExtraAttachments([]); setIncludeSig(true); setComposeContactId(null); setOpen(true); };
 
   // ── Répondre à une conversation (même canal que le dernier message) ──
   const affectationLabel = (c: Convo): string | null =>
@@ -171,13 +202,14 @@ export default function Messagerie() {
     } else {
       setCanal('email'); setDest(replyEmailTarget(c)); const le = lastEmail(c); setSujet(le ? reSubject(le.sujet) : '');
     }
-    setCorps(''); setDossierId(''); setAttachIds(new Set());
+    setCorps(''); setDossierId(''); setAttachIds(new Set()); setExtraAttachments([]); setIncludeSig(true);
     setOpen(true);
   };
 
   const send = async (statut: 'brouillon' | 'envoye') => {
     setSaving(true);
-    const attachments = availableDocs.filter((d) => attachIds.has(d.id) && d.fichier_url).map((d) => ({ filename: d.titre, url: d.fichier_url! }));
+    const docAttachments = availableDocs.filter((d) => attachIds.has(d.id) && d.fichier_url).map((d) => ({ filename: d.titre, url: d.fichier_url! }));
+    const attachments: Attachment[] = [...docAttachments, ...extraAttachments];
 
     if (canal === 'whatsapp') {
       const phone = digits(dest);
@@ -198,8 +230,10 @@ export default function Messagerie() {
     const destinataires = dest.split(',').map((d) => d.trim()).filter(Boolean);
     let finalStatut = statut;
     if (statut === 'envoye') {
+      const sigHtml = includeSig ? buildSignatureHtml(signatureCfg, organisme, profile) : '';
+      const html = (corps ?? '').replace(/\n/g, '<br>') + sigHtml;
       const { error: fnError } = await supabase.functions.invoke('send-email', {
-        body: { to: destinataires, subject: sujet, html: (corps ?? '').replace(/\n/g, '<br>'), text: corps, attachments },
+        body: { to: destinataires, subject: sujet, html, text: corps, attachments },
       });
       if (fnError) {
         finalStatut = 'brouillon';
@@ -509,6 +543,37 @@ export default function Messagerie() {
                 )}
                 {attachIds.size > 0 && <p className="mt-1 text-xs text-muted">{attachIds.size} pièce(s) jointe(s) sélectionnée(s)</p>}
               </Field>
+
+              {/* PJ libres : n'importe quel fichier depuis l'ordinateur */}
+              <Field label="Joindre d'autres fichiers" hint="Depuis votre ordinateur (tout type de fichier)">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-line bg-surface-2 px-3 py-2 text-sm text-muted transition hover:border-brand-400 hover:text-brand-600">
+                  {uploadingAttach ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingAttach ? 'Téléversement…' : 'Choisir un fichier…'}
+                  <input type="file" multiple className="hidden" onChange={handleAttachUpload} disabled={uploadingAttach} />
+                </label>
+                {extraAttachments.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {extraAttachments.map((a) => (
+                      <div key={a.url} className="flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2 py-1 text-sm">
+                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />
+                        <span className="truncate text-fg">{a.filename}</span>
+                        <button type="button" onClick={() => removeExtraAttachment(a.url)} className="ml-auto rounded p-0.5 text-muted hover:text-red-600" title="Retirer">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Field>
+
+              {/* Signature de mail */}
+              <label className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-2.5 text-sm">
+                <input type="checkbox" className="mt-0.5" checked={includeSig} onChange={(e) => setIncludeSig(e.target.checked)} />
+                <span className="min-w-0">
+                  <span className="font-medium text-fg">Inclure la signature</span>
+                  <span className="mt-0.5 block truncate text-xs text-muted">{signatureSummary(signatureCfg, organisme)}</span>
+                </span>
+              </label>
             </>
           )}
         </div>

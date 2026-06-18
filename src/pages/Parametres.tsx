@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
+import { buildSignatureHtml, type SignatureCfg } from '@/lib/signature';
 
 type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
@@ -29,6 +31,7 @@ const KIE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
 type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
 type NewsletterCfg = { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
+// SignatureCfg importé depuis @/lib/signature
 
 // Domaines de contexte de l'assistant IA. `defaut` = accès si la case n'a
 // jamais été touchée (aligné sur l'Edge Function chatbot) ; recrutement et
@@ -71,6 +74,8 @@ export default function Parametres() {
   const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
   const [metaAds, setMetaAds] = useState<MetaAds>({ api_version: 'v21.0' });
   const [newsletter, setNewsletter] = useState<NewsletterCfg>({ rgpd_only: true, sender_name: 'Aissociate' });
+  const [signature, setSignature] = useState<SignatureCfg>({ mode: 'auto', include_sender: true });
+  const { profile } = useAuth();
   const [blogThemes, setBlogThemes] = useState('');
   const [blogRss, setBlogRss] = useState('');
   const [blogSeo, setBlogSeo] = useState('');
@@ -80,7 +85,7 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
@@ -91,6 +96,7 @@ export default function Parametres() {
         if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
         if (row.cle === 'meta_ads') setMetaAds({ api_version: 'v21.0', ...((row.valeur as MetaAds) ?? {}) });
         if (row.cle === 'newsletter') setNewsletter({ rgpd_only: true, sender_name: 'Aissociate', ...((row.valeur as NewsletterCfg) ?? {}) });
+        if (row.cle === 'email_signature') setSignature({ mode: 'auto', include_sender: true, ...((row.valeur as SignatureCfg) ?? {}) });
       }
       setLoading(false);
     })();
@@ -277,6 +283,44 @@ export default function Parametres() {
                 <Save className="h-4 w-4" /> {saving === 'smtp' ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
               {savedMsg === 'smtp' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+            </div>
+          </div>
+        </Card>
+
+        {/* Signature e-mail */}
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <Send className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Signature des e-mails</h2>
+          </div>
+          <div className="space-y-4">
+            <p className="text-sm text-muted">Ajoutée automatiquement au bas des e-mails envoyés depuis la Messagerie.</p>
+            <Field label="Mode">
+              <select className="input" value={signature.mode ?? 'auto'} onChange={(e) => setSignature({ ...signature, mode: e.target.value as SignatureCfg['mode'] })}>
+                <option value="auto">Automatique (coordonnées + logo de l'organisme)</option>
+                <option value="custom">Personnalisée (HTML libre)</option>
+              </select>
+            </Field>
+            {signature.mode === 'custom' ? (
+              <Field label="Signature HTML" hint="Code HTML inséré tel quel">
+                <textarea className="input min-h-[120px] font-mono text-xs" value={signature.html ?? ''} onChange={(e) => setSignature({ ...signature, html: e.target.value })} placeholder="<div>…</div>" />
+              </Field>
+            ) : (
+              <label className="flex items-center gap-2 text-sm text-muted">
+                <input type="checkbox" checked={signature.include_sender !== false} onChange={(e) => setSignature({ ...signature, include_sender: e.target.checked })} />
+                Préfixer avec le nom et les coordonnées de l'expéditeur
+              </label>
+            )}
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted">Aperçu</p>
+              <div className="rounded-lg border border-line bg-white p-3 text-slate-800"
+                dangerouslySetInnerHTML={{ __html: buildSignatureHtml(signature, organisme, profile) || '<span style="color:#94a3b8">Aucune signature (renseignez l\'organisme).</span>' }} />
+            </div>
+            <div className="flex items-center gap-3">
+              <Button onClick={() => persist('email_signature', signature)} disabled={saving === 'email_signature'}>
+                <Save className="h-4 w-4" /> {saving === 'email_signature' ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              {savedMsg === 'email_signature' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
             </div>
           </div>
         </Card>
