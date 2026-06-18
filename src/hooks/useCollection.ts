@@ -37,7 +37,13 @@ export function useCollection<T = Record<string, unknown>>(table: TableName, opt
       for (const f of filters ?? []) query = query.eq(f.column, f.value);
       if (orderBy) query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
       const { data: rows, error: err } = await query.range(from, from + PAGE - 1);
-      if (err) { setError(err.message); break; }
+      if (err) {
+        // PGRST103 / 416 : la plage demandée dépasse la fin des données → fin
+        // normale de pagination, pas une vraie erreur.
+        const code = (err as { code?: string }).code;
+        if (code !== 'PGRST103' && !/range not satisfiable/i.test(err.message)) setError(err.message);
+        break;
+      }
       const batch = (rows as T[]) ?? [];
       all.push(...batch);
       if (batch.length === 0 || all.length >= MAX_ROWS) break;
