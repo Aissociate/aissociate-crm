@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Users, TrendingUp, FolderKanban, Euro, ListTodo, FolderArchive,
-  Plus, Trash2, UserRound, AlarmClock,
+  Plus, Trash2, UserRound, AlarmClock, Phone, IdCard, Save,
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
@@ -13,6 +13,15 @@ import { fullName, initials, formatMoney, formatDate } from '@/lib/utils';
 import type { Profile, Contact, Opportunite, Dossier, ContactAction, ConseillerDocument } from '@/lib/database.types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
+
+// Statut RH du conseiller (ticket Benjamin « statut du conseiller »).
+const CONSEILLER_STATUTS: { value: string; label: string }[] = [
+  { value: 'actif', label: 'En activité' },
+  { value: 'inactif', label: 'Inactif' },
+  { value: 'ancien', label: 'Ancien' },
+];
+const statutLabel = (s: string | null) => CONSEILLER_STATUTS.find((x) => x.value === (s ?? 'actif'))?.label ?? 'En activité';
+const statutTone = (s: string | null): 'success' | 'warning' | 'neutral' => (s === 'inactif' ? 'warning' : s === 'ancien' ? 'neutral' : 'success');
 
 export default function Conseillers() {
   const { session } = useAuth();
@@ -62,6 +71,23 @@ export default function Conseillers() {
   const s = selected ? statsOf(selected.id) : null;
   const selDocs = selected ? coffre.data.filter((cd) => cd.conseiller_id === selected.id) : [];
 
+  // ── Profil RH éditable du conseiller sélectionné (téléphone, statut, date) ──
+  const [hr, setHr] = useState({ telephone: '', statut_conseiller: 'actif', date_recrutement: '' });
+  const [hrSaving, setHrSaving] = useState(false);
+  useEffect(() => {
+    if (selected) setHr({ telephone: selected.telephone ?? '', statut_conseiller: selected.statut_conseiller ?? 'actif', date_recrutement: selected.date_recrutement ?? '' });
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveHr = async () => {
+    if (!selected) return;
+    setHrSaving(true);
+    const { error } = await supabase.from('profiles').update({
+      telephone: hr.telephone || null, statut_conseiller: hr.statut_conseiller, date_recrutement: hr.date_recrutement || null,
+    }).eq('id', selected.id);
+    setHrSaving(false);
+    if (error) { alert(error.message); return; }
+    profiles.refresh();
+  };
+
   const addDoc = async () => {
     if (!selected || !docForm.titre || !docForm.fichier_url) return;
     setSaving(true);
@@ -109,6 +135,7 @@ export default function Conseillers() {
                         {c.role === 'directeur_commercial' ? `${ROLE_LABELS[c.role]} · ` : ''}{st.prospects} prospect(s) · {st.dossiers} dossier(s)
                       </p>
                     </div>
+                    {(c.statut_conseiller && c.statut_conseiller !== 'actif') && <Badge tone={statutTone(c.statut_conseiller)}>{statutLabel(c.statut_conseiller)}</Badge>}
                     {st.aRelancer > 0 && <Badge tone="warning">{st.aRelancer} à relancer</Badge>}
                   </div>
                 </button>
@@ -125,7 +152,32 @@ export default function Conseillers() {
                   <h2 className="text-lg font-semibold text-fg">{fullName(selected.prenom, selected.nom)}</h2>
                   <p className="text-xs text-muted">{selected.email}</p>
                 </div>
+                <Badge tone={statutTone(selected.statut_conseiller)} className="ml-auto">{statutLabel(selected.statut_conseiller)}</Badge>
               </div>
+
+              {/* Profil RH : téléphone, statut, date de recrutement */}
+              <Card>
+                <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg"><IdCard className="h-4 w-4 text-brand-500" /> Profil</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Field label="Téléphone">
+                    <div className="relative">
+                      <Phone className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted" />
+                      <input className="input pl-9" value={hr.telephone} onChange={(e) => setHr((h) => ({ ...h, telephone: e.target.value }))} placeholder="0692…" />
+                    </div>
+                  </Field>
+                  <Field label="Statut">
+                    <select className="input" value={hr.statut_conseiller} onChange={(e) => setHr((h) => ({ ...h, statut_conseiller: e.target.value }))}>
+                      {CONSEILLER_STATUTS.map((st) => <option key={st.value} value={st.value}>{st.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Date de recrutement">
+                    <input type="date" className="input" value={hr.date_recrutement} onChange={(e) => setHr((h) => ({ ...h, date_recrutement: e.target.value }))} />
+                  </Field>
+                </div>
+                <div className="mt-3">
+                  <Button onClick={saveHr} disabled={hrSaving}><Save className="h-4 w-4" /> {hrSaving ? 'Enregistrement…' : 'Enregistrer'}</Button>
+                </div>
+              </Card>
 
               {/* Prospects & affectations */}
               <div>

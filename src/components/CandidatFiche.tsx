@@ -1,12 +1,14 @@
-import { useState } from 'react';
-import { X, Mail, Phone, FileText, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Star, TableProperties, NotebookPen, Save, ExternalLink, Building2, ClipboardList, SlidersHorizontal, FileSignature } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Mail, Phone, FileText, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Star, TableProperties, NotebookPen, Save, ExternalLink, Building2, ClipboardList, SlidersHorizontal, FileSignature, FolderArchive, Trash2, ArrowRightLeft, Loader as Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { cn, fullName, initials, formatDate } from '@/lib/utils';
 import { CANDIDAT_STATUT_LABELS } from '@/lib/constants';
 import { Badge, TONE_BADGE } from '@/components/ui';
-import type { Candidat, CandidatStatut, OffreRecrutement } from '@/lib/database.types';
+import { FileUpload, FileLink } from '@/components/FileUpload';
+import { uploadFile } from '@/lib/storage';
+import type { Candidat, CandidatStatut, OffreRecrutement, CandidatDocument } from '@/lib/database.types';
 
 // Colonnes déjà affichées → masquées dans metadata
 const META_SKIP = new Set([
@@ -135,6 +137,66 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
   };
   const contractDone = CONTRACT_STEPS.filter((s) => c[s.key]).length;
 
+  // ── Documents de recrutement (coffre dédié, transférable au conseiller) ────────
+  const [docs, setDocs] = useState<CandidatDocument[]>([]);
+  const [docForm, setDocForm] = useState({ titre: '', categorie: '', fichier_url: '' });
+  const [docSaving, setDocSaving] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+
+  useEffect(() => {
+    supabase.from('candidat_documents').select('*').eq('candidat_id', c.id).order('created_at', { ascending: false })
+      .then(({ data }) => setDocs(data ?? []));
+  }, [c.id]);
+
+  const addDoc = async () => {
+    if (!docForm.titre || !docForm.fichier_url) return;
+    setDocSaving(true);
+    const { data, error } = await supabase.from('candidat_documents')
+      .insert({ candidat_id: c.id, titre: docForm.titre, categorie: docForm.categorie || null, fichier_url: docForm.fichier_url })
+      .select().single();
+    setDocSaving(false);
+    if (error) { alert(error.message); return; }
+    if (data) setDocs((p) => [data, ...p]);
+    setDocForm({ titre: '', categorie: '', fichier_url: '' });
+  };
+
+  const removeDoc = async (d: CandidatDocument) => {
+    if (!confirm(`Retirer « ${d.titre} » ?`)) return;
+    const { error } = await supabase.from('candidat_documents').delete().eq('id', d.id);
+    if (error) { alert(error.message); return; }
+    setDocs((p) => p.filter((x) => x.id !== d.id));
+  };
+
+  // Transfert au coffre conseiller : rattachement par e-mail (le compte doit exister).
+  const transferToConseiller = async () => {
+    if (!c.email) { alert("Le candidat n'a pas d'e-mail : impossible de retrouver son compte conseiller."); return; }
+    if (!docs.length) { alert('Aucun document à transférer.'); return; }
+    setTransferring(true);
+    const { data: prof } = await supabase.from('profiles').select('id, prenom, nom, email').ilike('email', c.email).maybeSingle();
+    if (!prof) {
+      setTransferring(false);
+      alert("Aucun compte avec cet e-mail. Le conseiller doit d'abord créer son compte (même e-mail), puis relancez le transfert.");
+      return;
+    }
+    let ok = 0;
+    for (const d of docs) {
+      try {
+        const { data: signed } = await supabase.storage.from('recrutement').createSignedUrl(d.fichier_url, 120);
+        if (!signed) continue;
+        const blob = await (await fetch(signed.signedUrl)).blob();
+        const ext = d.fichier_url.includes('.') ? d.fichier_url.split('.').pop() : '';
+        const fname = ext && !d.titre.toLowerCase().endsWith(`.${ext.toLowerCase()}`) ? `${d.titre}.${ext}` : d.titre;
+        const file = new File([blob], fname, { type: blob.type || 'application/octet-stream' });
+        const { value, error } = await uploadFile('conseiller_coffre', file);
+        if (error || !value) continue;
+        await supabase.from('conseiller_documents').insert({ conseiller_id: prof.id, titre: d.titre, categorie: d.categorie ?? 'Recrutement', fichier_url: value });
+        ok++;
+      } catch { /* document ignoré */ }
+    }
+    setTransferring(false);
+    alert(`${ok}/${docs.length} document(s) transféré(s) dans le coffre de ${fullName(prof.prenom, prof.nom)}.`);
+  };
+
   // ── Questionnaire ─────────────────────────────────────────────────────────────
   const metaEntries = c.metadata
     ? Object.entries(c.metadata).filter(([k, v]) => k && !META_SKIP.has(k.toLowerCase().trim()) && v && String(v).trim())
@@ -237,6 +299,50 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
               {!c.email && !c.telephone && !c.cv_url && (
                 <p className="text-sm text-muted italic">Aucune coordonnée renseignée</p>
               )}
+            </div>
+          </section>
+
+          {/* Documents de recrutement (coffre dédié, transférable au conseiller) */}
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                <FolderArchive className="h-4 w-4" /> Documents de recrutement
+              </h3>
+              <button onClick={transferToConseiller} disabled={transferring || docs.length === 0}
+                title="Copier ces documents dans le coffre du conseiller (rattachement par e-mail)"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-xs font-medium text-brand-600 transition hover:bg-brand-500/10 disabled:opacity-50 dark:text-brand-400">
+                {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRightLeft className="h-3.5 w-3.5" />}
+                {transferring ? 'Transfert…' : 'Transférer au conseiller'}
+              </button>
+            </div>
+            {docs.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-line p-3 text-sm text-muted">Aucun document. Déposez ici les pièces reçues pendant le recrutement (contrat, pièce d'identité, justificatifs…). Elles pourront être transférées au coffre du conseiller.</p>
+            ) : (
+              <div className="divide-y divide-line rounded-lg border border-line">
+                {docs.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-fg">{d.titre}</p>
+                      <p className="text-xs text-muted">{d.categorie ? `${d.categorie} · ` : ''}{formatDate(d.created_at)}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <FileLink bucket="recrutement" value={d.fichier_url} />
+                      <button onClick={() => removeDoc(d)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Ajout d'un document */}
+            <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
+              <input className="input min-w-[140px] flex-1 py-1.5 text-sm" placeholder="Titre du document…" value={docForm.titre} onChange={(e) => setDocForm((f) => ({ ...f, titre: e.target.value }))} />
+              <input className="input w-[150px] py-1.5 text-sm" placeholder="Catégorie" value={docForm.categorie} onChange={(e) => setDocForm((f) => ({ ...f, categorie: e.target.value }))} />
+              {docForm.fichier_url
+                ? <FileLink bucket="recrutement" value={docForm.fichier_url} onClear={() => setDocForm((f) => ({ ...f, fichier_url: '' }))} />
+                : <FileUpload bucket="recrutement" label="Fichier" onUploaded={(v, file) => setDocForm((f) => ({ ...f, fichier_url: v, titre: f.titre || (file?.name ?? '') }))} />}
+              <button onClick={addDoc} disabled={docSaving || !docForm.titre || !docForm.fichier_url} className="btn-secondary py-1.5 text-sm disabled:opacity-50">
+                {docSaving ? 'Ajout…' : 'Ajouter'}
+              </button>
             </div>
           </section>
 

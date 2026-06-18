@@ -27,7 +27,7 @@ type Timestamps = { created_at: string; updated_at: string };
 export type Profile = Timestamps & {
   id: string; email: string; nom: string; prenom: string;
   role: UserRole; telephone: string | null; actif: boolean; approved: boolean;
-  is_admin: boolean;
+  is_admin: boolean; statut_conseiller: string | null; date_recrutement: string | null;
 };
 export type Financeur = Timestamps & {
   id: string; code: string; nom: string; type: FinancementType;
@@ -60,6 +60,10 @@ export type ContactDocument = {
 };
 export type ConseillerDocument = {
   id: string; conseiller_id: string; titre: string; categorie: string | null;
+  fichier_url: string; created_by: string | null; created_at: string;
+};
+export type CandidatDocument = {
+  id: string; candidat_id: string; titre: string; categorie: string | null;
   fichier_url: string; created_by: string | null; created_at: string;
 };
 export type ImportBatch = {
@@ -281,6 +285,7 @@ export type Database = {
       contact_actions: TableShape<ContactAction>;
       contact_documents: TableShape<ContactDocument>;
       conseiller_documents: TableShape<ConseillerDocument>;
+      candidat_documents: TableShape<CandidatDocument>;
       import_batches: TableShape<ImportBatch>;
       newsletters: TableShape<Newsletter>;
       audit_log: TableShape<AuditLog>;
