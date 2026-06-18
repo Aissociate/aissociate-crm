@@ -146,10 +146,14 @@ export default function Contacts() {
 
   // Répartition round-robin des prospects non affectés sur les conseillers actifs
   const distribute = async () => {
-    const ids = profiles.data.filter((p) => p.role === 'conseiller' && p.actif).map((p) => p.id);
-    if (!ids.length) { alert('Aucun conseiller actif : affectez les prospects manuellement.'); return; }
+    const conseillers = assignables.filter((p) => p.role === 'conseiller');
+    if (!conseillers.length) { alert('Aucun conseiller actif : affectez les prospects manuellement.'); return; }
     const targets = data.filter((c) => c.type === 'prospect' && !c.owner_id);
     if (!targets.length) { alert('Aucun prospect non affecté.'); return; }
+    const noms = conseillers.map((p) => fullName(p.prenom, p.nom)).join(', ');
+    // Validation récapitulative avant modification.
+    if (!confirm(`Répartir ${targets.length} prospect(s) non affecté(s) sur ${conseillers.length} conseiller(s) (${noms}) en round-robin ?`)) return;
+    const ids = conseillers.map((p) => p.id);
     setDistributing(true);
     for (let i = 0; i < targets.length; i++) {
       await supabase.from('contacts').update({ owner_id: ids[i % ids.length] }).eq('id', targets[i].id);

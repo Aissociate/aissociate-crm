@@ -163,6 +163,14 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     setSavingSec(null);
     onUpdated();
   };
+  // Auto-enregistrement d'un champ à la perte de focus (silencieux, sans recharger la liste).
+  const [savedField, setSavedField] = useState<string | null>(null);
+  const blurSave = async (field: keyof Contact, value: string) => {
+    if ((c[field] ?? '') === value) return; // pas de changement
+    await supabase.from('contacts').update({ [field]: value || null } as Partial<Contact>).eq('id', c.id);
+    setSavedField(field as string);
+    setTimeout(() => setSavedField((s) => (s === field ? null : s)), 1500);
+  };
   // Miroir local optimiste (la prop `c` reste figée tant que la liste n'est pas rechargée)
   const [over, setOver] = useState<Partial<Contact>>({});
   useEffect(() => { setOver({}); }, [c.id]);
@@ -271,7 +279,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
           {/* Coordonnées */}
-          <section>
+          <section className="rounded-xl border border-line bg-surface-2/40 p-4">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Coordonnées</h3>
             <div className="space-y-3">
               {c.email ? (
@@ -288,11 +296,9 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 <p className="text-sm text-muted italic">Aucune coordonnée renseignée</p>
               )}
               <div>
-                <label className="label">Autres coordonnées</label>
+                <label className="label">Autres coordonnées {savedField === 'autres' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
                 <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
-                  value={form.autres} onChange={(e) => setFf('autres', e.target.value)} />
-                <button onClick={() => saveSection('coord', { autres: form.autres || null })}
-                  disabled={savingSec === 'coord'} className="btn-secondary mt-1 py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> {savingSec === 'coord' ? '…' : 'Enregistrer'}</button>
+                  value={form.autres} onChange={(e) => setFf('autres', e.target.value)} onBlur={(e) => blurSave('autres', e.target.value)} />
               </div>
             </div>
           </section>
@@ -323,7 +329,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           )}
 
           {/* Qualification */}
-          <section>
+          <section className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2"><Target className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Qualification</h3></div>
               <select value={cc.statut_prospect ?? ''} onChange={(e) => patch({ statut_prospect: e.target.value || null })}
@@ -332,21 +338,20 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               </select>
             </div>
             <div className="space-y-2">
-              <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => setFf('besoin_resume', e.target.value)} /></div>
+              <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => setFf('besoin_resume', e.target.value)} onBlur={(e) => blurSave('besoin_resume', e.target.value)} /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => setFf('ville', e.target.value)} /></div>
-                <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => setFf('formation_envisagee', e.target.value)} /></div>
-                <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => setFf('financement_envisage', e.target.value)} /></div>
-                <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => setFf('interet', e.target.value)} /></div>
-                <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => setFf('effectif', e.target.value)} /></div>
+                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => setFf('ville', e.target.value)} onBlur={(e) => blurSave('ville', e.target.value)} /></div>
+                <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => setFf('formation_envisagee', e.target.value)} onBlur={(e) => blurSave('formation_envisagee', e.target.value)} /></div>
+                <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => setFf('financement_envisage', e.target.value)} onBlur={(e) => blurSave('financement_envisage', e.target.value)} /></div>
+                <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => setFf('interet', e.target.value)} onBlur={(e) => blurSave('interet', e.target.value)} /></div>
+                <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => setFf('effectif', e.target.value)} onBlur={(e) => blurSave('effectif', e.target.value)} /></div>
               </div>
-              <button onClick={() => saveSection('quali', { ville: form.ville || null, besoin_resume: form.besoin_resume || null, formation_envisagee: form.formation_envisagee || null, financement_envisage: form.financement_envisage || null, interet: form.interet || null, effectif: form.effectif || null })}
-                disabled={savingSec === 'quali'} className="btn-secondary py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> {savingSec === 'quali' ? '…' : 'Enregistrer'}</button>
+              <p className="text-xs text-muted">Enregistrement automatique à la sortie du champ {savedField && <span className="text-emerald-600">— enregistré ✓</span>}</p>
             </div>
           </section>
 
           {/* Suivi des actions */}
-          <section>
+          <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
             <div className="mb-3 flex items-center gap-2"><ClipboardList className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Suivi des actions</h3></div>
             {(derniere || prochaine) && (
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
