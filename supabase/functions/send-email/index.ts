@@ -12,7 +12,10 @@ const corsHeaders = {
 };
 
 interface EmailPayload {
-  to: string | string[];
+  to?: string | string[];
+  // Copie cachée : utilisé pour les envois de masse (newsletter) afin de ne pas
+  // exposer les adresses des destinataires entre eux.
+  bcc?: string | string[];
   subject: string;
   html?: string;
   text?: string;
@@ -58,9 +61,12 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
   try {
-    const { to, subject, html, text, attachments } = (await req.json()) as EmailPayload;
-    const recipients = Array.isArray(to) ? to : [to];
-    if (!recipients.length || !subject) return json({ error: 'Champs "to" et "subject" requis' }, 400);
+    const { to, bcc, subject, html, text, attachments } = (await req.json()) as EmailPayload;
+    const toList = (Array.isArray(to) ? to : to ? [to] : []).filter(Boolean);
+    const bccList = (Array.isArray(bcc) ? bcc : bcc ? [bcc] : []).filter(Boolean);
+    if ((!toList.length && !bccList.length) || !subject) {
+      return json({ error: 'Champs "to" (ou "bcc") et "subject" requis' }, 400);
+    }
 
     // Nodemailer récupère chaque pièce jointe depuis son URL (path).
     const mailAttachments = (attachments ?? [])
@@ -79,16 +85,20 @@ Deno.serve(async (req: Request) => {
       auth: { user: cfg.user, pass: cfg.pass },
     });
 
+    // Envoi de masse en BCC : le « to » est l'expéditeur lui-même (mail valide
+    // sans dévoiler la liste), les destinataires réels passent en bcc.
+    const toField = (toList.length ? toList : [cfg.from!]).join(", ");
     const info = await transporter.sendMail({
       from: cfg.from,
-      to: recipients.join(", "),
+      to: toField,
+      bcc: bccList.length ? bccList.join(", ") : undefined,
       subject,
       text: text ?? "",
       html: html ?? text ?? "",
       attachments: mailAttachments,
     });
 
-    return json({ ok: true, messageId: info.messageId, sent: recipients.length });
+    return json({ ok: true, messageId: info.messageId, sent: toList.length + bccList.length });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

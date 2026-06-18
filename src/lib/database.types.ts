@@ -62,6 +62,12 @@ export type ConseillerDocument = {
   id: string; conseiller_id: string; titre: string; categorie: string | null;
   fichier_url: string; created_by: string | null; created_at: string;
 };
+export type Newsletter = {
+  id: string; sujet: string; contenu_html: string; image_url: string | null;
+  periode_debut: string | null; periode_fin: string | null;
+  statut: 'brouillon' | 'envoye'; recipients_count: number;
+  created_by: string | null; created_at: string; sent_at: string | null;
+};
 export type ContactAction = {
   id: string; contact_id: string; date_action: string; type: string; description: string;
   faite: boolean; auteur_id: string | null; created_at: string;
@@ -271,6 +277,7 @@ export type Database = {
       contact_actions: TableShape<ContactAction>;
       contact_documents: TableShape<ContactDocument>;
       conseiller_documents: TableShape<ConseillerDocument>;
+      newsletters: TableShape<Newsletter>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;

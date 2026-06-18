@@ -24,6 +24,7 @@ import Documents from '@/pages/Documents';
 import Messagerie from '@/pages/Messagerie';
 import Assistant from '@/pages/Assistant';
 import BlogAdmin from '@/pages/BlogAdmin';
+import Newsletter from '@/pages/Newsletter';
 import Recrutement from '@/pages/Recrutement';
 import Conseillers from '@/pages/Conseillers';
 import Statistiques from '@/pages/Statistiques';
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="/messagerie" element={<Messagerie />} />
         <Route path="/assistant" element={<Assistant />} />
         <Route path="/blog-admin" element={<ProtectedRoute managerOnly><BlogAdmin /></ProtectedRoute>} />
+        <Route path="/newsletter" element={<ProtectedRoute managerOnly><Newsletter /></ProtectedRoute>} />
         <Route
           path="/recrutement"
           element={<ProtectedRoute managerOnly><Recrutement /></ProtectedRoute>}

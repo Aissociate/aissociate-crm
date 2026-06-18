@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn } from '@/lib/utils';
@@ -53,6 +53,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/kanban', label: 'Tableau Kanban', icon: LayoutGrid },
       { to: '/messagerie', label: 'Messagerie', icon: Mail },
       { to: '/blog-admin', label: 'Blog', icon: Newspaper, managerOnly: true },
+      { to: '/newsletter', label: 'Newsletter', icon: Send, managerOnly: true },
       { to: '/recrutement', label: 'Recrutement', icon: UserPlus, managerOnly: true },
     ],
   },

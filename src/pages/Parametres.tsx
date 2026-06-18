@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
@@ -28,6 +28,7 @@ type Blog = {
 const KIE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
 type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
+type NewsletterCfg = { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
 
 // Domaines de contexte de l'assistant IA. `defaut` = accès si la case n'a
 // jamais été touchée (aligné sur l'Edge Function chatbot) ; recrutement et
@@ -69,6 +70,7 @@ export default function Parametres() {
   const [blog, setBlog] = useState<Blog>({});
   const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
   const [metaAds, setMetaAds] = useState<MetaAds>({ api_version: 'v21.0' });
+  const [newsletter, setNewsletter] = useState<NewsletterCfg>({ rgpd_only: true, sender_name: 'Aissociate' });
   const [blogThemes, setBlogThemes] = useState('');
   const [blogRss, setBlogRss] = useState('');
   const [blogSeo, setBlogSeo] = useState('');
@@ -78,7 +80,7 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
@@ -88,6 +90,7 @@ export default function Parametres() {
         if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
         if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
         if (row.cle === 'meta_ads') setMetaAds({ api_version: 'v21.0', ...((row.valeur as MetaAds) ?? {}) });
+        if (row.cle === 'newsletter') setNewsletter({ rgpd_only: true, sender_name: 'Aissociate', ...((row.valeur as NewsletterCfg) ?? {}) });
       }
       setLoading(false);
     })();
@@ -480,6 +483,33 @@ export default function Parametres() {
               <Save className="h-4 w-4" /> {saving === 'blog' ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
             {savedMsg === 'blog' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+          </div>
+        </Card>
+
+        {/* Newsletter hebdomadaire */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <Send className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Newsletter hebdomadaire</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Field label="Nom de l'expéditeur" hint="Affiché dans l'e-mail (en-tête et pied de page)">
+              <input className="input" value={newsletter.sender_name ?? ''} onChange={(e) => setNewsletter({ ...newsletter, sender_name: e.target.value })} placeholder="Aissociate" />
+            </Field>
+            <Field label="Consigne éditoriale (intro IA)" hint="Guide la courte introduction générée">
+              <textarea className="input" rows={3} value={newsletter.intro ?? ''} onChange={(e) => setNewsletter({ ...newsletter, intro: e.target.value })} placeholder="Ton chaleureux et professionnel, 2-3 phrases…" />
+            </Field>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-5">
+            <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={newsletter.auto_send === true} onChange={(e) => setNewsletter({ ...newsletter, auto_send: e.target.checked })} /> Envoi automatique (sinon brouillon à valider)</label>
+            <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={newsletter.rgpd_only !== false} onChange={(e) => setNewsletter({ ...newsletter, rgpd_only: e.target.checked })} /> Uniquement les contacts ayant consenti (RGPD)</label>
+          </div>
+          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">Un <strong>cron hebdomadaire</strong> (lundi 9h) compile les articles du blog des 7 derniers jours dans un e-mail unique envoyé à toute la base (BCC). Génération/envoi manuels depuis la page <strong>Newsletter</strong>. Image d'en-tête : config <strong>Kie.ai</strong> de la section Blog. SMTP requis (section ci-dessus).</p>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={() => persist('newsletter', { ...newsletter })} disabled={saving === 'newsletter'}>
+              <Save className="h-4 w-4" /> {saving === 'newsletter' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+            {savedMsg === 'newsletter' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
           </div>
         </Card>
       </div>
