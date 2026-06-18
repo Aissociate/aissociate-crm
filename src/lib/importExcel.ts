@@ -4,64 +4,89 @@ import type { Contact } from './database.types';
 type Row = Record<string, string>;
 
 /**
- * Parse un fichier CSV (virgule, point-virgule ou tabulation) en tableau de lignes-objet.
- * Gère les champs entre guillemets et les séparateurs multiples.
+ * Parse un fichier CSV en tableau de lignes-objet.
+ * Parseur robuste (machine à états) : gère les champs entre guillemets
+ * contenant le séparateur ET des retours à la ligne, les guillemets échappés
+ * (""), le BOM, et détecte le séparateur (, ; ou tab) par comptage.
  */
 export async function parseSpreadsheet(file: File): Promise<Row[]> {
-  const text = await file.text();
-  return parseCsv(text);
+  return parseDelimited(await file.text()).rows;
 }
 
 /** Parse un CSV en renvoyant les en-têtes de colonnes ET les lignes (pour le mapping). */
 export async function parseSpreadsheetWithHeaders(file: File): Promise<{ headers: string[]; rows: Row[] }> {
-  const text = await file.text();
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd().split('\n');
-  if (lines.length < 1) return { headers: [], rows: [] };
-  const sep = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
-  const headers = splitLine(lines[0], sep).map((h) => h.trim()).filter(Boolean);
-  return { headers, rows: parseCsv(text) };
+  return parseDelimited(await file.text());
 }
 
-function parseCsv(text: string): Row[] {
-  // Normalise les fins de ligne, supprime les lignes vides en fin
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd().split('\n');
-  if (lines.length < 2) return [];
+const countOcc = (s: string, ch: string) => s.split(ch).length - 1;
 
-  // Détecte le séparateur dominant sur la 1re ligne
-  const firstLine = lines[0];
-  const sep = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ',';
-
-  const headers = splitLine(firstLine, sep).map((h) => h.trim());
-
-  return lines.slice(1).reduce<Row[]>((acc, line) => {
-    if (!line.trim()) return acc;
-    const cells = splitLine(line, sep);
-    const row: Row = {};
-    headers.forEach((h, i) => { row[h] = (cells[i] ?? '').trim(); });
-    acc.push(row);
-    return acc;
-  }, []);
+// Séparateur le plus probable d'après la 1re ligne (comptage, pas simple présence).
+function detectSeparator(headerLine: string): string {
+  let best = ','; let bestN = 0;
+  for (const sep of ['\t', ';', ','] as const) {
+    const n = countOcc(headerLine, sep);
+    if (n > bestN) { bestN = n; best = sep; }
+  }
+  return best;
 }
 
-// Découpe une ligne CSV en tenant compte des champs entre guillemets
-function splitLine(line: string, sep: string): string[] {
-  const result: string[] = [];
+// Découpe TOUT le texte en matrice de cellules (gère guillemets + sauts de ligne internes).
+function tokenize(text: string, sep: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let cur = '';
   let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; } // guillemet escapé
-      else inQuote = !inQuote;
-    } else if (ch === sep && !inQuote) {
-      result.push(cur);
-      cur = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuote) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; } // guillemet échappé ""
+        else inQuote = false;
+      } else { cur += ch; }
+    } else if (ch === '"') {
+      inQuote = true;
+    } else if (ch === sep) {
+      row.push(cur); cur = '';
+    } else if (ch === '\n') {
+      row.push(cur); cur = ''; rows.push(row); row = [];
     } else {
       cur += ch;
     }
   }
-  result.push(cur);
-  return result;
+  row.push(cur);
+  rows.push(row);
+  // Supprime une éventuelle dernière ligne vide (saut de ligne final).
+  if (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') rows.pop();
+  return rows;
+}
+
+function parseDelimited(raw: string): { headers: string[]; rows: Row[] } {
+  // BOM + normalisation des fins de ligne (\r\n et \r isolés -> \n).
+  const text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (!text.trim()) return { headers: [], rows: [] };
+
+  const firstNl = text.indexOf('\n');
+  const sep = detectSeparator(firstNl === -1 ? text : text.slice(0, firstNl));
+  const matrix = tokenize(text, sep);
+  if (!matrix.length) return { headers: [], rows: [] };
+
+  // En-têtes (dédoublonnage des noms identiques pour ne pas écraser des colonnes).
+  const seen: Record<string, number> = {};
+  const headers = matrix[0].map((h, idx) => {
+    let name = h.trim() || `colonne_${idx + 1}`;
+    if (seen[name]) { seen[name]++; name = `${name} (${seen[name]})`; } else { seen[name] = 1; }
+    return name;
+  });
+
+  const rows: Row[] = [];
+  for (let r = 1; r < matrix.length; r++) {
+    const cells = matrix[r];
+    if (cells.length === 1 && cells[0].trim() === '') continue; // ligne vide
+    const obj: Row = {};
+    headers.forEach((h, i) => { obj[h] = (cells[i] ?? '').trim(); });
+    rows.push(obj);
+  }
+  return { headers, rows };
 }
 
 function splitName(full: string): { prenom: string | null; nom: string } {
