@@ -21,10 +21,15 @@ export function useCollection<T = Record<string, unknown>>(table: TableName, opt
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    // Pagination : PostgREST plafonne une requête à 1000 lignes. On boucle par
-    // pages pour charger l'intégralité de la table (sinon, au-delà de 1000
-    // contacts, les plus anciens — ex. prospects — ne sont jamais récupérés).
+    // Pagination : PostgREST plafonne une requête (Supabase : 1000 lignes par
+    // défaut). On boucle par pages pour charger l'intégralité de la table —
+    // sinon, au-delà du plafond, les lignes les plus anciennes (ex. prospects
+    // importés avant un gros lot) ne sont jamais récupérées.
+    // Robustesse : on avance du nombre réellement reçu et on s'arrête quand une
+    // page revient vide, ce qui reste correct même si le plafond serveur est
+    // inférieur à PAGE.
     const PAGE = 1000;
+    const MAX_ROWS = 100000; // garde-fou anti-boucle
     const all: T[] = [];
     let from = 0;
     for (;;) {
@@ -35,8 +40,8 @@ export function useCollection<T = Record<string, unknown>>(table: TableName, opt
       if (err) { setError(err.message); break; }
       const batch = (rows as T[]) ?? [];
       all.push(...batch);
-      if (batch.length < PAGE) break;
-      from += PAGE;
+      if (batch.length === 0 || all.length >= MAX_ROWS) break;
+      from += batch.length;
     }
     setData(all);
     setLoading(false);
