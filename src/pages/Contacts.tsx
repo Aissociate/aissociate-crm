@@ -13,12 +13,10 @@ import {
 import ContactFiche from '@/components/ContactFiche';
 import type {
   Contact, ContactType, Entreprise, Financeur, Profile,
-  ContactAction, Opportunite, SessionParticipant, SessionFormation,
+  ContactAction, Opportunite, SessionParticipant, SessionFormation, ImportBatch,
 } from '@/lib/database.types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
-
-const LAST_IMPORT_KEY = 'aissociate.lastCsvImport';
 
 const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
 
@@ -98,29 +96,31 @@ export default function Contacts() {
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [mapOwner, setMapOwner] = useState<'none' | 'me'>('none');
   const [mapType, setMapType] = useState<ContactType>('prospect');
-  // Dernier import CSV (pour annulation) — persistant via localStorage.
-  const [lastImport, setLastImport] = useState<{ ids: string[]; at: string } | null>(() => {
-    try { const raw = localStorage.getItem(LAST_IMPORT_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  // Lots d'import (annulation persistante en base, multi-poste).
+  const batches = useCollection<ImportBatch>('import_batches', {
+    filters: [{ column: 'undone', value: false }],
+    orderBy: { column: 'created_at', ascending: false },
   });
-  const recordImport = (ids: string[]) => {
+  const recordImport = async (ids: string[], source: 'csv' | 'csv_mapping') => {
     if (!ids.length) return;
-    const batch = { ids, at: new Date().toISOString() };
-    setLastImport(batch);
-    try { localStorage.setItem(LAST_IMPORT_KEY, JSON.stringify(batch)); } catch { /* */ }
+    await supabase.from('import_batches').insert({
+      source, count: ids.length, contact_ids: ids, created_by: session?.user.id ?? null,
+    });
+    batches.refresh();
   };
-  const undoImport = async () => {
-    if (!lastImport?.ids.length) return;
-    if (!confirm(`Annuler le dernier import ? ${lastImport.ids.length} contact(s) CRÉÉ(s) seront supprimés (les contacts mis à jour ne sont pas affectés).`)) return;
+  const undoBatch = async (b: ImportBatch) => {
+    if (!b.contact_ids.length) return;
+    if (!confirm(`Annuler cet import ? ${b.contact_ids.length} contact(s) CRÉÉ(s) seront supprimés (les contacts mis à jour ne sont pas affectés).`)) return;
     setImporting(true);
     try {
-      for (let i = 0; i < lastImport.ids.length; i += 200) {
-        const { error } = await supabase.from('contacts').delete().in('id', lastImport.ids.slice(i, i + 200));
+      for (let i = 0; i < b.contact_ids.length; i += 200) {
+        const { error } = await supabase.from('contacts').delete().in('id', b.contact_ids.slice(i, i + 200));
         if (error) throw new Error(error.message);
       }
-      setLastImport(null);
-      try { localStorage.removeItem(LAST_IMPORT_KEY); } catch { /* */ }
+      await supabase.from('import_batches').update({ undone: true, undone_at: new Date().toISOString() }).eq('id', b.id);
+      batches.refresh();
       refresh();
-      alert('Dernier import annulé.');
+      alert('Import annulé.');
     } catch (err) {
       alert(`Annulation impossible : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -173,7 +173,7 @@ export default function Contacts() {
     try {
       // Round-robin sur les conseillers actifs ; si aucun -> non affecté (manuel)
       const r = await importProspectsFile(file, session?.user.id);
-      recordImport(r.created ?? []);
+      await recordImport(r.created ?? [], 'csv');
       refresh();
       alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s) — répartis en round-robin.`);
     } catch (err) {
@@ -207,7 +207,7 @@ export default function Contacts() {
     try {
       const ownerId = mapOwner === 'me' ? (session?.user.id ?? null) : null;
       const r = await importContactsMapped(mapRows, mapping, { ownerId, defaultType: mapType });
-      recordImport(r.created ?? []);
+      await recordImport(r.created ?? [], 'csv_mapping');
       setMapOpen(false);
       refresh();
       alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s) (${(r.created ?? []).length} créé(s)).`);
@@ -322,11 +322,6 @@ export default function Contacts() {
             <Button variant="secondary" onClick={() => mapFileRef.current?.click()} disabled={importing} title="Importer un CSV en choisissant le mapping des colonnes">
               <Columns3 className="h-4 w-4" /> Importer (mapping)
             </Button>
-            {lastImport && lastImport.ids.length > 0 && (
-              <Button variant="secondary" onClick={undoImport} disabled={importing} title={`Supprime les ${lastImport.ids.length} contacts créés par le dernier import`}>
-                <Undo2 className="h-4 w-4" /> Annuler l'import ({lastImport.ids.length})
-              </Button>
-            )}
             {isManager && (
               <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
                 <DownloadCloud className="h-4 w-4" /> Sheets
@@ -350,6 +345,24 @@ export default function Contacts() {
           <Button variant="secondary" onClick={distribute} disabled={distributing}>
             <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Répartir (round-robin)'}
           </Button>
+        </div>
+      )}
+
+      {/* Imports récents annulables (lots persistants en base) */}
+      {batches.data.length > 0 && (
+        <div className="mb-4 rounded-lg border border-line bg-surface-2 px-3 py-2">
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted"><Undo2 className="h-3.5 w-3.5" /> Imports récents — annulables</p>
+          <div className="flex flex-col gap-1.5">
+            {batches.data.slice(0, 5).map((b) => (
+              <div key={b.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-fg"><strong>{b.count}</strong> contact(s) créé(s)</span>
+                <span className="text-xs text-muted">{b.source === 'csv_mapping' ? 'CSV (mapping)' : 'CSV'} · {formatDate(b.created_at, 'dd/MM/yyyy HH:mm')}</span>
+                <button onClick={() => undoBatch(b)} disabled={importing} className="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50">
+                  <Undo2 className="h-3.5 w-3.5" /> Annuler
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
