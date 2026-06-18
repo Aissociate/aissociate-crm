@@ -86,17 +86,7 @@ function pick(row: Row, ...keys: string[]): string {
   return '';
 }
 
-export interface ImportResult { lus: number; importes: number; created?: string[] }
-
-/** Parmi des external_id, renvoie ceux qui N'EXISTENT PAS encore (donc à créer). */
-async function newExternalIds(extIds: string[]): Promise<Set<string>> {
-  const existing = new Set<string>();
-  for (let i = 0; i < extIds.length; i += 200) {
-    const { data } = await supabase.from('contacts').select('external_id').in('external_id', extIds.slice(i, i + 200));
-    for (const e of (data ?? [])) if (e.external_id) existing.add(e.external_id as string);
-  }
-  return new Set(extIds.filter((id) => !existing.has(id)));
-}
+export interface ImportResult { lus: number; importes: number }
 
 // ── Import CSV avec mapping de colonnes ──────────────────────────────────────
 
@@ -213,16 +203,13 @@ export async function importContactsMapped(
 
   const payloads = [...byKey.values()];
   let importes = 0;
-  let created: string[] = [];
   if (payloads.length) {
-    const newIds = await newExternalIds(payloads.map((p) => p.external_id as string));
     const { data, error } = await supabase.from('contacts')
-      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id, external_id');
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id');
     if (error) throw new Error(error.message);
     importes = data?.length ?? 0;
-    created = (data ?? []).filter((d) => newIds.has(d.external_id as string)).map((d) => d.id as string);
   }
-  return { lus: rows.length, importes, created };
+  return { lus: rows.length, importes };
 }
 
 export async function importCandidatsFile(file: File): Promise<ImportResult> {
@@ -315,14 +302,11 @@ export async function importProspectsFile(file: File, forcedOwnerId?: string): P
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
   let importes = 0;
-  let created: string[] = [];
   if (payloads.length) {
-    const newIds = await newExternalIds(payloads.map((p) => p.external_id));
     const { data, error } = await supabase.from('contacts')
-      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id, external_id');
+      .upsert(payloads, { onConflict: 'external_id', ignoreDuplicates: false }).select('id');
     if (error) throw new Error(error.message);
     importes = data?.length ?? 0;
-    created = (data ?? []).filter((d) => newIds.has(d.external_id as string)).map((d) => d.id as string);
   }
-  return { lus: rows.length, importes, created };
+  return { lus: rows.length, importes };
 }
