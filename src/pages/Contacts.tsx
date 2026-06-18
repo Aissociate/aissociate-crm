@@ -140,6 +140,7 @@ export default function Contacts() {
   // Sélection multiple + répartition round-robin (managers)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOwner, setBulkOwner] = useState('');
+  const [bulkType, setBulkType] = useState<ContactType>('prospect');
   const [rrOpen, setRrOpen] = useState(false);
   const [rrConseillers, setRrConseillers] = useState<Set<string>>(new Set());
 
@@ -159,6 +160,21 @@ export default function Contacts() {
     setDistributing(true);
     for (let i = 0; i < ids.length; i += 200) {
       const { error } = await supabase.from('contacts').update({ owner_id: bulkOwner || null }).in('id', ids.slice(i, i + 200));
+      if (error) { setDistributing(false); alert(error.message); return; }
+    }
+    setDistributing(false);
+    setSelected(new Set());
+    refresh();
+  };
+
+  // Changement de type en masse de la sélection (ex. requalifier des contacts en prospects).
+  const bulkChangeType = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!confirm(`Changer le type de ${ids.length} contact(s) en « ${CONTACT_TYPE_LABELS[bulkType]} » ?`)) return;
+    setDistributing(true);
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from('contacts').update({ type: bulkType }).in('id', ids.slice(i, i + 200));
       if (error) { setDistributing(false); alert(error.message); return; }
     }
     setDistributing(false);
@@ -410,6 +426,13 @@ export default function Contacts() {
           </Button>
           <Button variant="secondary" onClick={openRoundRobin} disabled={distributing}>
             <UserCheck className="h-4 w-4" /> Répartir (round-robin)
+          </Button>
+          <span className="mx-1 text-muted">·</span>
+          <select className="input max-w-[170px] py-1 text-xs" value={bulkType} onChange={(e) => setBulkType(e.target.value as ContactType)} title="Type cible">
+            {TYPES.map((t) => <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>)}
+          </select>
+          <Button variant="secondary" onClick={bulkChangeType} disabled={distributing}>
+            <Tag className="h-4 w-4" /> Changer le type
           </Button>
           <button onClick={() => setSelected(new Set())} className="ml-auto text-xs font-medium text-muted underline-offset-2 hover:underline">Désélectionner</button>
         </div>
