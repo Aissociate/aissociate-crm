@@ -136,6 +136,11 @@ export default function Contacts() {
   }, [refresh]);
 
   const [distributing, setDistributing] = useState(false);
+  // Sélection multiple + répartition round-robin (managers)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOwner, setBulkOwner] = useState('');
+  const [rrOpen, setRrOpen] = useState(false);
+  const [rrConseillers, setRrConseillers] = useState<Set<string>>(new Set());
 
   // Affectation d'un prospect à un conseiller (managers uniquement)
   const assign = async (c: Contact, ownerId: string) => {
@@ -144,23 +149,49 @@ export default function Contacts() {
     refresh();
   };
 
-  // Répartition round-robin des prospects non affectés sur les conseillers actifs
-  const distribute = async () => {
-    const conseillers = assignables.filter((p) => p.role === 'conseiller');
-    if (!conseillers.length) { alert('Aucun conseiller actif : affectez les prospects manuellement.'); return; }
-    const targets = data.filter((c) => c.type === 'prospect' && !c.owner_id);
-    if (!targets.length) { alert('Aucun prospect non affecté.'); return; }
-    const noms = conseillers.map((p) => fullName(p.prenom, p.nom)).join(', ');
-    // Validation récapitulative avant modification.
-    if (!confirm(`Répartir ${targets.length} prospect(s) non affecté(s) sur ${conseillers.length} conseiller(s) (${noms}) en round-robin ?`)) return;
-    const ids = conseillers.map((p) => p.id);
+  // Attribution globale de la sélection à un conseiller (avec confirmation).
+  const bulkAssign = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const label = bulkOwner ? ownerName(bulkOwner) : 'Non affecté';
+    if (!confirm(`Attribuer ${ids.length} contact(s) à ${label} ?`)) return;
+    setDistributing(true);
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from('contacts').update({ owner_id: bulkOwner || null }).in('id', ids.slice(i, i + 200));
+      if (error) { setDistributing(false); alert(error.message); return; }
+    }
+    setDistributing(false);
+    setSelected(new Set());
+    refresh();
+  };
+
+  // Ouvre la modale de répartition (conseillers présélectionnés = conseillers actifs).
+  const openRoundRobin = () => {
+    setRrConseillers(new Set(assignables.filter((p) => p.role === 'conseiller').map((p) => p.id)));
+    setRrOpen(true);
+  };
+  const toggleRrConseiller = (id: string) => setRrConseillers((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
+  // Cibles de la répartition : la sélection si présente, sinon tous les prospects non affectés.
+  const rrTargets = (): Contact[] => selected.size
+    ? data.filter((c) => selected.has(c.id))
+    : data.filter((c) => c.type === 'prospect' && !c.owner_id);
+
+  // Répartition round-robin sur les conseillers sélectionnés (partielle possible).
+  const runRoundRobin = async () => {
+    const ids = [...rrConseillers];
+    if (!ids.length) { alert('Sélectionnez au moins un conseiller.'); return; }
+    const targets = rrTargets();
+    if (!targets.length) { alert('Aucune cible à répartir.'); return; }
     setDistributing(true);
     for (let i = 0; i < targets.length; i++) {
       await supabase.from('contacts').update({ owner_id: ids[i % ids.length] }).eq('id', targets[i].id);
     }
     setDistributing(false);
+    setRrOpen(false);
+    setSelected(new Set());
     refresh();
-    alert(`${targets.length} prospect(s) répartis sur ${ids.length} conseiller(s) (round-robin).`);
+    alert(`${targets.length} contact(s) répartis sur ${ids.length} conseiller(s) (round-robin).`);
   };
 
   const ownerName = (id: string | null) => {
@@ -314,6 +345,12 @@ export default function Contacts() {
     return matchQ && matchType && matchAff && matchTag && matchStatut;
   });
 
+  // ── Sélection multiple (managers) ──
+  const selectableIds = filtered.map((c) => c.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+  const toggleSelect = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleSelectAll = () => setSelected((s) => (selectableIds.every((id) => s.has(id)) ? new Set() : new Set(selectableIds)));
+
   const set = (k: keyof Contact, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
@@ -352,9 +389,28 @@ export default function Contacts() {
           <UserCheck className="h-4 w-4 shrink-0" />
           <span className="flex-1"><strong>{nonAffectes}</strong> prospect(s) non affecté(s).</span>
           <button onClick={() => { setAffFilter('non'); setTypeFilter('prospect'); }} className="font-medium underline-offset-2 hover:underline">Afficher</button>
-          <Button variant="secondary" onClick={distribute} disabled={distributing}>
+          <Button variant="secondary" onClick={openRoundRobin} disabled={distributing}>
             <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Répartir (round-robin)'}
           </Button>
+        </div>
+      )}
+
+      {/* Barre d'actions de masse sur la sélection (managers) */}
+      {isManager && selected.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-sm">
+          <span className="font-medium text-brand-700 dark:text-brand-300">{selected.size} sélectionné(s)</span>
+          <span className="mx-1 text-muted">·</span>
+          <select className="input max-w-[200px] py-1 text-xs" value={bulkOwner} onChange={(e) => setBulkOwner(e.target.value)}>
+            <option value="">Non affecté</option>
+            {assignables.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+          </select>
+          <Button variant="secondary" onClick={bulkAssign} disabled={distributing}>
+            <UserCheck className="h-4 w-4" /> Attribuer
+          </Button>
+          <Button variant="secondary" onClick={openRoundRobin} disabled={distributing}>
+            <UserCheck className="h-4 w-4" /> Répartir (round-robin)
+          </Button>
+          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs font-medium text-muted underline-offset-2 hover:underline">Désélectionner</button>
         </div>
       )}
 
@@ -413,6 +469,9 @@ export default function Contacts() {
       ) : (
         <Table head={
           <tr>
+            {isManager && (
+              <th className="px-4 py-3 w-0"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} title="Tout sélectionner (page filtrée)" /></th>
+            )}
             <th className="px-4 py-3">Nom</th>
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Coordonnées</th>
@@ -424,9 +483,14 @@ export default function Contacts() {
           {filtered.map((c) => (
             <tr
               key={c.id}
-              className="cursor-pointer hover:bg-surface-2"
+              className={`cursor-pointer hover:bg-surface-2 ${selected.has(c.id) ? 'bg-brand-500/5' : ''}`}
               onClick={() => setFiche(c)}
             >
+              {isManager && (
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} />
+                </td>
+              )}
               <td className="px-4 py-3 font-medium text-fg">
                 {fullName(c.prenom, c.nom)}
                 {c.fonction && <span className="block text-xs font-normal text-muted">{c.fonction}</span>}
@@ -494,6 +558,41 @@ export default function Contacts() {
           ))}
         </Table>
       )}
+
+      {/* Répartition round-robin (cibles = sélection ou prospects non affectés) */}
+      <Modal
+        open={rrOpen} onClose={() => setRrOpen(false)} title="Répartir en round-robin"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRrOpen(false)}>Annuler</Button>
+            <Button onClick={runRoundRobin} disabled={distributing || rrConseillers.size === 0}>
+              <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Confirmer la répartition'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="rounded-lg bg-surface-2 p-3 text-sm text-fg">
+            Répartir <strong>{rrTargets().length}</strong> {selected.size ? 'contact(s) sélectionné(s)' : 'prospect(s) non affecté(s)'} sur <strong>{rrConseillers.size}</strong> conseiller(s) sélectionné(s).
+          </p>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Conseillers concernés</p>
+            {assignables.length === 0 ? (
+              <p className="text-sm text-muted">Aucun conseiller actif disponible.</p>
+            ) : (
+              <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+                {assignables.map((p) => (
+                  <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-surface-2">
+                    <input type="checkbox" checked={rrConseillers.has(p.id)} onChange={() => toggleRrConseiller(p.id)} />
+                    <span className="text-fg">{fullName(p.prenom, p.nom)}</span>
+                    <span className="text-xs text-muted">· {p.role === 'directeur_commercial' ? 'directeur commercial' : p.role}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={open} onClose={() => setOpen(false)}
