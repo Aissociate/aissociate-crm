@@ -149,6 +149,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   // ── Champs de suivi éditables ───────────────────────────────────────────────
   const [form, setForm] = useState({
     statut_entreprise: c.statut_entreprise ?? '', ville: c.ville ?? '', effectif: c.effectif ?? '',
+    autres: c.autres ?? '',
     besoin_resume: c.besoin_resume ?? '', formation_envisagee: c.formation_envisagee ?? '',
     financement_envisage: c.financement_envisage ?? '', interet: c.interet ?? '',
     responsable_id: c.responsable_id ?? '', date_formation: c.date_formation ?? '',
@@ -286,6 +287,13 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               {!c.email && !c.telephone && (
                 <p className="text-sm text-muted italic">Aucune coordonnée renseignée</p>
               )}
+              <div>
+                <label className="label">Autres coordonnées</label>
+                <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
+                  value={form.autres} onChange={(e) => setFf('autres', e.target.value)} />
+                <button onClick={() => saveSection('coord', { autres: form.autres || null })}
+                  disabled={savingSec === 'coord'} className="btn-secondary mt-1 py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> {savingSec === 'coord' ? '…' : 'Enregistrer'}</button>
+              </div>
             </div>
           </section>
 
@@ -326,12 +334,13 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <div className="space-y-2">
               <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => setFf('besoin_resume', e.target.value)} /></div>
               <div className="grid grid-cols-2 gap-2">
+                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => setFf('ville', e.target.value)} /></div>
                 <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => setFf('formation_envisagee', e.target.value)} /></div>
                 <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => setFf('financement_envisage', e.target.value)} /></div>
                 <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => setFf('interet', e.target.value)} /></div>
                 <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => setFf('effectif', e.target.value)} /></div>
               </div>
-              <button onClick={() => saveSection('quali', { besoin_resume: form.besoin_resume || null, formation_envisagee: form.formation_envisagee || null, financement_envisage: form.financement_envisage || null, interet: form.interet || null, effectif: form.effectif || null })}
+              <button onClick={() => saveSection('quali', { ville: form.ville || null, besoin_resume: form.besoin_resume || null, formation_envisagee: form.formation_envisagee || null, financement_envisage: form.financement_envisage || null, interet: form.interet || null, effectif: form.effectif || null })}
                 disabled={savingSec === 'quali'} className="btn-secondary py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> {savingSec === 'quali' ? '…' : 'Enregistrer'}</button>
             </div>
           </section>

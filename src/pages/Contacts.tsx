@@ -80,6 +80,7 @@ export default function Contacts() {
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [affFilter, setAffFilter] = useState<string>('');
   const [tagFilter, setTagFilter] = useState<string>('');
+  const [statutFilter, setStatutFilter] = useState<string>('');
   // Saisie interne (formulaire de demande) — création/mise à jour d'un contact
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [intake, setIntake] = useState(emptyIntake());
@@ -163,6 +164,10 @@ export default function Contacts() {
     return p ? fullName(p.prenom, p.nom) : '—';
   };
   const nonAffectes = data.filter((c) => c.type === 'prospect' && !c.owner_id).length;
+  // Conseillers attribuables : actifs et approuvés uniquement (pas d'inactif en attente).
+  const assignables = profiles.data.filter((p) => (p.role === 'conseiller' || p.role === 'directeur_commercial') && p.actif && p.approved);
+  // Statuts de qualification présents (pour le filtre de la liste).
+  const statutsPresents = [...new Set(data.map((c) => (c.statut_prospect ?? '').trim()).filter(Boolean))].sort();
 
   // Import des prospects depuis un fichier Excel/CSV (parse navigateur, insert via session)
   const importFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -301,7 +306,8 @@ export default function Contacts() {
     const matchType = !typeFilter || c.type === typeFilter;
     const matchAff = !affFilter || (affFilter === 'non' ? !c.owner_id : c.owner_id === affFilter);
     const matchTag = !tagFilter || (c.tags ?? []).includes(tagFilter);
-    return matchQ && matchType && matchAff && matchTag;
+    const matchStatut = !statutFilter || (c.statut_prospect ?? '') === statutFilter;
+    return matchQ && matchType && matchAff && matchTag && matchStatut;
   });
 
   const set = (k: keyof Contact, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -382,6 +388,12 @@ export default function Contacts() {
             {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
           </select>
         )}
+        {statutsPresents.length > 0 && (
+          <select className="input max-w-[200px]" value={statutFilter} onChange={(e) => setStatutFilter(e.target.value)}>
+            <option value="">Tous les statuts (qualif.)</option>
+            {statutsPresents.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
         {allTags.length > 0 && (
           <select className="input max-w-[200px]" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
             <option value="">Tous les tags</option>
@@ -439,7 +451,11 @@ export default function Contacts() {
                     onChange={(e) => { e.stopPropagation(); assign(c, e.target.value); }}
                   >
                     <option value="">Non affecté</option>
-                    {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+                    {assignables.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+                    {/* Garde l'affecté courant visible même s'il n'est plus actif. */}
+                    {c.owner_id && !assignables.some((p) => p.id === c.owner_id) && (
+                      <option value={c.owner_id}>{ownerName(c.owner_id)} (inactif)</option>
+                    )}
                   </select>
                 ) : (
                   <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge tone="warning">Non affecté</Badge>}</span>

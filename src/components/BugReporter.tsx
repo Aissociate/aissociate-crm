@@ -227,7 +227,7 @@ export default function BugReporter() {
                         'flex-1 rounded-lg border py-1 text-xs font-medium capitalize transition',
                         priorite === p
                           ? {
-                              faible:   'border-line bg-surface-2 text-muted',
+                              faible:   'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
                               normale:  'border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400',
                               haute:    'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400',
                               critique: 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400',
