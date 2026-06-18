@@ -73,7 +73,7 @@ export type Newsletter = {
   created_by: string | null; created_at: string; sent_at: string | null;
 };
 export type ContactAction = {
-  id: string; contact_id: string; date_action: string; type: string; description: string;
+  id: string; contact_id: string; date_action: string; heure_action: string | null; type: string; description: string;
   faite: boolean; auteur_id: string | null; created_at: string;
 };
 export type Opportunite = Timestamps & {

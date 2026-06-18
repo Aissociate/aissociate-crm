@@ -13,6 +13,15 @@ import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDoc
 const STATUTS_PROSPECT = ['', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
 const ACTION_TYPES = ['appel', 'email', 'rdv', 'relance', 'note', 'autre'];
 
+// ── Helpers date/heure pour le suivi des actions ────────────────────────────
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const hm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+// Heure « HH:MM:SS » → « HH:MM » pour l'affichage.
+const shortHeure = (h: string | null) => (h ? h.slice(0, 5) : '');
+// Clé de tri chronologique (date + heure, heure vide triée en dernier).
+const actionSortKey = (a: { date_action: string; heure_action: string | null }) => `${a.date_action}T${a.heure_action ?? '99:99'}`;
+
 // Colonnes déjà affichées dans les champs principaux — on les masque dans metadata
 const META_SKIP = new Set([
   'full_name', 'name', 'nom', 'prenom', 'email', 'phone', 'phone_number',
@@ -73,7 +82,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
       supabase.from('opportunites').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
       supabase.from('dossiers').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
       supabase.from('session_participants').select('session_id').eq('contact_id', c.id),
-      supabase.from('contact_actions').select('*').eq('contact_id', c.id).order('date_action', { ascending: false }),
+      supabase.from('contact_actions').select('*').eq('contact_id', c.id).order('date_action', { ascending: false }).order('heure_action', { ascending: false, nullsFirst: false }),
       supabase.from('contact_documents').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
     ]);
     setOpps(o.data ?? []); setDossiers(d.data ?? []); setActions(a.data ?? []); setCoffre(cd.data ?? []);
@@ -182,15 +191,35 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   };
 
   // ── Journal d'actions ───────────────────────────────────────────────────────
-  const [na, setNa] = useState({ date_action: new Date().toISOString().slice(0, 10), type: 'appel', description: '', faite: true });
+  const [na, setNa] = useState(() => { const d = new Date(); return { date_action: ymd(d), heure_action: hm(d), type: 'appel', description: '', faite: true }; });
+  const sortActions = (list: ContactAction[]) => [...list].sort((x, y) => actionSortKey(y).localeCompare(actionSortKey(x)));
   const addAction = async () => {
     if (!na.description.trim()) return;
     const { data } = await supabase.from('contact_actions')
-      .insert({ contact_id: c.id, date_action: na.date_action, type: na.type, description: na.description.trim(), faite: na.faite })
+      .insert({ contact_id: c.id, date_action: na.date_action, heure_action: na.heure_action || null, type: na.type, description: na.description.trim(), faite: na.faite })
       .select().single();
-    if (data) setActions((p) => [data, ...p].sort((x, y) => y.date_action.localeCompare(x.date_action)));
+    if (data) setActions((p) => sortActions([data, ...p]));
     setNa({ ...na, description: '' });
   };
+
+  // Actions rapides : crée immédiatement une action horodatée (rappels, appel fait…).
+  const quickAction = async (opts: { type: string; faite: boolean; when: Date; description: string }) => {
+    const { data } = await supabase.from('contact_actions')
+      .insert({ contact_id: c.id, date_action: ymd(opts.when), heure_action: hm(opts.when), type: opts.type, description: opts.description, faite: opts.faite })
+      .select().single();
+    if (data) setActions((p) => sortActions([data, ...p]));
+  };
+  const inMinutes = (m: number) => new Date(Date.now() + m * 60000);
+  const atToday = (h: number) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d; };
+  const tomorrowAt = (h: number) => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(h, 0, 0, 0); return d; };
+  const QUICK_ACTIONS: { label: string; run: () => void }[] = [
+    { label: 'Appel fait', run: () => quickAction({ type: 'appel', faite: true, when: new Date(), description: 'Appel réalisé' }) },
+    { label: 'Mail à envoyer', run: () => quickAction({ type: 'email', faite: false, when: new Date(), description: 'Envoyer un e-mail (ASAP)' }) },
+    { label: 'Rappel +15 min', run: () => quickAction({ type: 'relance', faite: false, when: inMinutes(15), description: 'Rappeler' }) },
+    { label: 'Rappel +1 h', run: () => quickAction({ type: 'relance', faite: false, when: inMinutes(60), description: 'Rappeler' }) },
+    { label: 'Cet après-midi', run: () => quickAction({ type: 'relance', faite: false, when: atToday(14), description: 'Rappeler' }) },
+    { label: 'Demain matin', run: () => quickAction({ type: 'relance', faite: false, when: tomorrowAt(9), description: 'Rappeler' }) },
+  ];
   const toggleAction = async (a: ContactAction) => {
     setActions((p) => p.map((x) => (x.id === a.id ? { ...x, faite: !x.faite } : x)));
     await supabase.from('contact_actions').update({ faite: !a.faite }).eq('id', a.id);
@@ -355,8 +384,8 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <div className="mb-3 flex items-center gap-2"><ClipboardList className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Suivi des actions</h3></div>
             {(derniere || prochaine) && (
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-surface-2 p-2"><p className="text-muted">Dernière action</p><p className="font-medium text-fg">{derniere ? `${derniere.description} · ${formatDate(derniere.date_action)}` : '—'}</p></div>
-                <div className="rounded-lg bg-amber-500/10 p-2"><p className="text-amber-700 dark:text-amber-400">Prochaine action</p><p className="font-medium text-fg">{prochaine ? `${prochaine.description} · ${formatDate(prochaine.date_action)}` : '—'}</p></div>
+                <div className="rounded-lg bg-surface-2 p-2"><p className="text-muted">Dernière action</p><p className="font-medium text-fg">{derniere ? `${derniere.description} · ${formatDate(derniere.date_action)}${shortHeure(derniere.heure_action) ? ` ${shortHeure(derniere.heure_action)}` : ''}` : '—'}</p></div>
+                <div className="rounded-lg bg-amber-500/10 p-2"><p className="text-amber-700 dark:text-amber-400">Prochaine action</p><p className="font-medium text-fg">{prochaine ? `${prochaine.description} · ${formatDate(prochaine.date_action)}${shortHeure(prochaine.heure_action) ? ` ${shortHeure(prochaine.heure_action)}` : ''}` : '—'}</p></div>
               </div>
             )}
             <ul className="space-y-1.5">
@@ -368,16 +397,25 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                   </button>
                   <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
                   <span className="flex-1 text-fg">{a.description}</span>
-                  <span className="text-xs text-muted">{formatDate(a.date_action)}</span>
+                  <span className="shrink-0 text-xs text-muted">{formatDate(a.date_action)}{shortHeure(a.heure_action) ? ` · ${shortHeure(a.heure_action)}` : ''}</span>
                   <button onClick={() => removeAction(a)} className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                 </li>
               ))}
               {actions.length === 0 && <li className="text-sm text-muted">Aucune action enregistrée.</li>}
             </ul>
+            {/* Actions rapides : planifient un rappel horodaté ou consignent une action faite */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {QUICK_ACTIONS.map((qa) => (
+                <button key={qa.label} onClick={qa.run} className="rounded-full border border-amber-500/30 bg-amber-500/5 px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-500/15 dark:text-amber-400">
+                  {qa.label}
+                </button>
+              ))}
+            </div>
             <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
               <select className="input w-[90px] py-1.5" value={na.type} onChange={(e) => setNa({ ...na, type: e.target.value })}>{ACTION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
               <input className="input min-w-[140px] flex-1 py-1.5" placeholder="Description…" value={na.description} onChange={(e) => setNa({ ...na, description: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addAction()} />
-              <input className="input w-[140px] py-1.5" type="date" value={na.date_action} onChange={(e) => setNa({ ...na, date_action: e.target.value })} />
+              <input className="input w-[130px] py-1.5" type="date" value={na.date_action} onChange={(e) => setNa({ ...na, date_action: e.target.value })} />
+              <input className="input w-[90px] py-1.5" type="time" value={na.heure_action} onChange={(e) => setNa({ ...na, heure_action: e.target.value })} title="Heure" />
               <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={na.faite} onChange={(e) => setNa({ ...na, faite: e.target.checked })} /> Réalisée</label>
               <button onClick={addAction} disabled={!na.description.trim()} className="btn-secondary py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
             </div>
