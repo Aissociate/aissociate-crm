@@ -245,9 +245,11 @@ export default function Contacts() {
                 <DownloadCloud className="h-4 w-4" /> Sheets
               </Button>
             )}
-            <Button variant="secondary" onClick={() => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }} title="Saisir une demande comme le formulaire public (création ou mise à jour)">
-              <ClipboardList className="h-4 w-4" /> Saisie (formulaire)
-            </Button>
+            {isManager && (
+              <Button variant="secondary" onClick={() => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }} title="Saisir une demande comme le formulaire public (création ou mise à jour)">
+                <ClipboardList className="h-4 w-4" /> Saisie (formulaire)
+              </Button>
+            )}
             <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>
           </>
         }
