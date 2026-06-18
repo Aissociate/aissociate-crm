@@ -77,7 +77,8 @@ export default function Contacts() {
   const [tagsText, setTagsText] = useState('');
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('');
+  // Affichage par défaut : les prospects (cœur du travail de prospection).
+  const [typeFilter, setTypeFilter] = useState<string>('prospect');
   const [affFilter, setAffFilter] = useState<string>('');
   const [tagFilter, setTagFilter] = useState<string>('');
   const [statutFilter, setStatutFilter] = useState<string>('');
