@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +17,8 @@ import type {
 } from '@/lib/database.types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
+
+const LAST_IMPORT_KEY = 'aissociate.lastCsvImport';
 
 const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
 
@@ -96,6 +98,35 @@ export default function Contacts() {
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [mapOwner, setMapOwner] = useState<'none' | 'me'>('none');
   const [mapType, setMapType] = useState<ContactType>('prospect');
+  // Dernier import CSV (pour annulation) — persistant via localStorage.
+  const [lastImport, setLastImport] = useState<{ ids: string[]; at: string } | null>(() => {
+    try { const raw = localStorage.getItem(LAST_IMPORT_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  });
+  const recordImport = (ids: string[]) => {
+    if (!ids.length) return;
+    const batch = { ids, at: new Date().toISOString() };
+    setLastImport(batch);
+    try { localStorage.setItem(LAST_IMPORT_KEY, JSON.stringify(batch)); } catch { /* */ }
+  };
+  const undoImport = async () => {
+    if (!lastImport?.ids.length) return;
+    if (!confirm(`Annuler le dernier import ? ${lastImport.ids.length} contact(s) CRÉÉ(s) seront supprimés (les contacts mis à jour ne sont pas affectés).`)) return;
+    setImporting(true);
+    try {
+      for (let i = 0; i < lastImport.ids.length; i += 200) {
+        const { error } = await supabase.from('contacts').delete().in('id', lastImport.ids.slice(i, i + 200));
+        if (error) throw new Error(error.message);
+      }
+      setLastImport(null);
+      try { localStorage.removeItem(LAST_IMPORT_KEY); } catch { /* */ }
+      refresh();
+      alert('Dernier import annulé.');
+    } catch (err) {
+      alert(`Annulation impossible : ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // Rafraîchissement automatique toutes les 5 min (nouveaux prospects non affectés)
   useEffect(() => {
@@ -142,6 +173,7 @@ export default function Contacts() {
     try {
       // Round-robin sur les conseillers actifs ; si aucun -> non affecté (manuel)
       const r = await importProspectsFile(file, session?.user.id);
+      recordImport(r.created ?? []);
       refresh();
       alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s) — répartis en round-robin.`);
     } catch (err) {
@@ -175,9 +207,10 @@ export default function Contacts() {
     try {
       const ownerId = mapOwner === 'me' ? (session?.user.id ?? null) : null;
       const r = await importContactsMapped(mapRows, mapping, { ownerId, defaultType: mapType });
+      recordImport(r.created ?? []);
       setMapOpen(false);
       refresh();
-      alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s).`);
+      alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s) (${(r.created ?? []).length} créé(s)).`);
     } catch (err) {
       alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -289,6 +322,11 @@ export default function Contacts() {
             <Button variant="secondary" onClick={() => mapFileRef.current?.click()} disabled={importing} title="Importer un CSV en choisissant le mapping des colonnes">
               <Columns3 className="h-4 w-4" /> Importer (mapping)
             </Button>
+            {lastImport && lastImport.ids.length > 0 && (
+              <Button variant="secondary" onClick={undoImport} disabled={importing} title={`Supprime les ${lastImport.ids.length} contacts créés par le dernier import`}>
+                <Undo2 className="h-4 w-4" /> Annuler l'import ({lastImport.ids.length})
+              </Button>
+            )}
             {isManager && (
               <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
                 <DownloadCloud className="h-4 w-4" /> Sheets
