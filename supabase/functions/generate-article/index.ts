@@ -166,25 +166,58 @@ Deno.serve(async (req: Request) => {
 
     const useWeb = (body.use_web ?? blog.use_web) === true;
     const model = (ai.model || "anthropic/claude-opus-4.8") + (useWeb ? ":online" : "");
+    // Quand la recherche web est active, on impose de s'appuyer sur l'actualité
+    // récente pour étayer l'article (faits, chiffres, exemples vérifiables).
+    const webNote = useWeb
+      ? "\n\nAppuie-toi sur l'ACTUALITÉ RÉCENTE (informations web à jour) pour étayer l'article avec des faits, chiffres, exemples et tendances récents et vérifiables. Reste original et contextualise pour les PME ; ne recopie pas tes sources."
+      : "";
     const systemPrompt = (blog.prompt ||
       'Rédige un article de blog en français sur le thème fourni. Réponds en JSON {"title","excerpt","content","category","seo_keywords"}.') +
       (seo.length ? `\n\nIntègre naturellement ces mots-clés SEO dans l'article : ${seo.join(", ")}.` : "");
 
-    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM Formation AIssociate" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `THÈME : ${subject}${sourceNote}\n\nRédige l'article maintenant (réponds uniquement par l'objet JSON).` },
-        ],
-        temperature: 0.6,
-      }),
-    });
-    if (!resp.ok) return json({ error: `OpenRouter ${resp.status}: ${(await resp.text()).slice(0, 300)}` }, 502);
-    const data = await resp.json();
-    const parsed = parseJson(data?.choices?.[0]?.message?.content ?? "");
+    // Génération du TEXTE (OpenRouter) et de l'IMAGE (provider configuré) en
+    // PARALLÈLE : l'image s'appuie sur le THÈME (connu d'avance), ce qui évite
+    // d'enchaîner les deux appels lents et de dépasser le budget temps (150s).
+    const kieKey = (Deno.env.get("KIE_API_KEY") || blog.kie_api_key || "").trim();
+    const imageProvider = blog.image_provider || (kieKey ? "kie" : "openrouter");
+
+    const textPromise = (async () => {
+      const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM Formation AIssociate" },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `THÈME : ${subject}${sourceNote}${webNote}\n\nRédige l'article maintenant (réponds uniquement par l'objet JSON).` },
+          ],
+          temperature: 0.6,
+        }),
+      });
+      if (!resp.ok) throw new Error(`OpenRouter ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
+      const data = await resp.json();
+      return parseJson(data?.choices?.[0]?.message?.content ?? "");
+    })();
+
+    const imagePromise = (async () => {
+      if (imageProvider === "kie" && kieKey) {
+        return await generateImageKie(kieKey, {
+          quality: blog.kie_quality === "high" ? "high" : "basic",
+          aspectRatio: blog.kie_aspect_ratio || "16:9",
+        }, subject);
+      }
+      const imageModel = blog.image_model || "google/gemini-2.5-flash-image-preview:free";
+      const dataUrl = await generateImageDataUrl(apiKey, imageModel, subject);
+      return dataUrl ? dataUrlToBytes(dataUrl) : null;
+    })();
+
+    let parsed: Record<string, unknown> | null;
+    let img: { mime: string; bytes: Uint8Array } | null;
+    try {
+      [parsed, img] = await Promise.all([textPromise, imagePromise]);
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 502);
+    }
     if (!parsed?.title) return json({ error: "Réponse IA invalide (titre manquant)" }, 502);
 
     const title = String(parsed.title);
@@ -205,22 +238,9 @@ Deno.serve(async (req: Request) => {
     const { data: clash } = await sb.from("blog_articles").select("id").eq("slug", slug).maybeSingle();
     if (clash) slug = `${slug}-${Date.now().toString(36)}`;
 
-    // Illustration : génération IA + upload bucket public, sinon Unsplash.
-    // Provider : Kie.ai (Seedream) si une clé Kie est configurée, sinon OpenRouter.
+    // Illustration : déjà générée en parallèle du texte (img). Upload bucket
+    // public, sinon repli Unsplash.
     let imageUrl: string | null = null;
-    const kieKey = (Deno.env.get("KIE_API_KEY") || blog.kie_api_key || "").trim();
-    const provider = blog.image_provider || (kieKey ? "kie" : "openrouter");
-    let img: { mime: string; bytes: Uint8Array } | null = null;
-    if (provider === "kie" && kieKey) {
-      img = await generateImageKie(kieKey, {
-        quality: blog.kie_quality === "high" ? "high" : "basic",
-        aspectRatio: blog.kie_aspect_ratio || "16:9",
-      }, title);
-    } else {
-      const imageModel = blog.image_model || "google/gemini-2.5-flash-image-preview:free";
-      const dataUrl = await generateImageDataUrl(apiKey, imageModel, title);
-      img = dataUrl ? dataUrlToBytes(dataUrl) : null;
-    }
     if (img) {
       const ext = img.mime.includes("png") ? "png" : img.mime.includes("webp") ? "webp" : "jpg";
       const path = `${crypto.randomUUID()}.${ext}`;
