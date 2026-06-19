@@ -24,26 +24,66 @@ function parseJson(content: string): Record<string, unknown> | null {
   return null;
 }
 const strip = (s: string) => s.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").trim();
-// Parse minimal RSS/Atom : renvoie les items récents { title, desc, link }.
-async function fetchRss(url: string): Promise<{ title: string; desc: string; link: string }[]> {
+
+type RssItem = { title: string; desc: string; link: string; date: number };
+
+const parseDate = (s: string): number => { const t = Date.parse(s.trim()); return Number.isNaN(t) ? 0 : t; };
+// Titre normalisé (minuscules, sans accents ni ponctuation) pour la déduplication.
+const normTitle = (s: string): string =>
+  (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// Parse minimal RSS/Atom : renvoie les items récents { title, desc, link, date }.
+async function fetchRss(url: string): Promise<RssItem[]> {
   try {
-    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 AissociateBot" } });
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 AissociateBot" }, signal: ctrl.signal });
+    clearTimeout(to);
     if (!r.ok) return [];
     const xml = await r.text();
-    const out: { title: string; desc: string; link: string }[] = [];
-    for (const b of xml.split(/<item[\s>]/i).slice(1, 12)) {
+    const out: RssItem[] = [];
+    for (const b of xml.split(/<item[\s>]/i).slice(1, 16)) {
       const title = strip(b.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? "");
       const desc = strip(b.match(/<description>([\s\S]*?)<\/description>/i)?.[1] ?? "").slice(0, 320);
       const link = strip(b.match(/<link>([\s\S]*?)<\/link>/i)?.[1] ?? "");
-      if (title) out.push({ title, desc, link });
+      const date = parseDate(b.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] ?? b.match(/<dc:date>([\s\S]*?)<\/dc:date>/i)?.[1] ?? "");
+      if (title) out.push({ title, desc, link, date });
     }
-    if (!out.length) for (const e of xml.split(/<entry[\s>]/i).slice(1, 12)) {
+    if (!out.length) for (const e of xml.split(/<entry[\s>]/i).slice(1, 16)) {
       const title = strip(e.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
       const link = e.match(/<link[^>]*href="([^"]+)"/i)?.[1] ?? "";
-      if (title) out.push({ title, desc: "", link });
+      const date = parseDate(e.match(/<updated>([\s\S]*?)<\/updated>/i)?.[1] ?? e.match(/<published>([\s\S]*?)<\/published>/i)?.[1] ?? "");
+      if (title) out.push({ title, desc: "", link, date });
     }
     return out;
   } catch { return []; }
+}
+
+// Sélection IA : choisit l'actualité la PLUS IMPORTANTE non déjà traitée.
+// Renvoie l'index choisi dans `candidates`, ou -1 si tout est doublon / échec.
+async function selectMostImportant(
+  apiKey: string, model: string, candidates: RssItem[], covered: string[],
+): Promise<number> {
+  if (!candidates.length) return -1;
+  const list = candidates.map((c, i) => `${i}. ${c.title}`).join("\n");
+  const cov = covered.slice(0, 60).map((s) => `- ${s}`).join("\n") || "(aucun)";
+  const prompt =
+    `Actualités IA disponibles (numérotées) :\n${list}\n\n` +
+    `Articles DÉJÀ publiés — NE PAS retraiter, éviter les doublons même reformulés :\n${cov}\n\n` +
+    `Choisis l'actualité la PLUS IMPORTANTE et impactante du jour pour des PME francophones, qui n'est PAS déjà traitée ci-dessus. ` +
+    `Réponds uniquement en JSON {"index": N} où N est le numéro choisi, ou {"index": -1} si toutes sont des doublons.`;
+  try {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM Formation AIssociate" },
+      body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0 }),
+    });
+    if (!r.ok) return -1;
+    const d = await r.json();
+    const parsed = parseJson(d?.choices?.[0]?.message?.content ?? "");
+    const idx = Number((parsed as { index?: unknown })?.index);
+    return Number.isInteger(idx) && idx >= 0 && idx < candidates.length ? idx : -1;
+  } catch { return -1; }
 }
 
 const FALLBACK_IMAGES = [
@@ -151,15 +191,43 @@ Deno.serve(async (req: Request) => {
     const feeds = Array.isArray(blog.rss_feeds) ? blog.rss_feeds.filter(Boolean) : [];
     const seo = Array.isArray(blog.seo_keywords) ? blog.seo_keywords.filter(Boolean) : [];
 
-    // Sujet : explicite, sinon veille via flux RSS (actualité IA), sinon thème.
+    // Sujet : explicite, sinon veille RSS — on retient l'actualité la plus
+    // importante du jour NON déjà traitée (anti-doublon), sinon un thème.
     let subject = (body.subject as string) || "";
     let sourceNote = "";
+    const buildSourceNote = (it: RssItem) =>
+      `\n\nActualité IA à exploiter (veille RSS) :\nTitre : ${it.title}${it.desc ? `\nRésumé : ${it.desc}` : ""}${it.link ? `\nSource : ${it.link}` : ""}\nRédige un article ORIGINAL et à valeur ajoutée inspiré de cette actualité (ne recopie pas, contextualise pour les PME).`;
     if (!subject && feeds.length) {
-      const items = await fetchRss(feeds[Math.floor(Math.random() * feeds.length)]);
-      if (items.length) {
-        const it = items[Math.floor(Math.random() * Math.min(items.length, 5))];
-        subject = it.title;
-        sourceNote = `\n\nActualité IA récente à exploiter (veille RSS) :\nTitre : ${it.title}${it.desc ? `\nRésumé : ${it.desc}` : ""}${it.link ? `\nSource : ${it.link}` : ""}\nRédige un article ORIGINAL et à valeur ajoutée inspiré de cette actualité (ne recopie pas, contextualise pour les PME).`;
+      // 1. Agréger les items de TOUS les flux (en parallèle), dédupliquer par titre.
+      const lists = await Promise.all(feeds.map((f) => fetchRss(f)));
+      const seen = new Set<string>();
+      let candidates = lists.flat().filter((it) => {
+        const k = normTitle(it.title);
+        if (!k || seen.has(k)) return false;
+        seen.add(k); return true;
+      });
+      // 2. Privilégier l'actualité du jour (< 48 h) quand des dates sont disponibles.
+      const now = Date.now();
+      const recent = candidates.filter((c) => c.date && now - c.date < 48 * 3600 * 1000);
+      if (recent.length) candidates = recent;
+      candidates.sort((a, b) => (b.date || 0) - (a.date || 0));
+      candidates = candidates.slice(0, 25);
+
+      if (candidates.length) {
+        // 3. Sujets déjà traités (titres + prompts de génération) → anti-doublon.
+        const { data: past } = await sb.from("blog_articles")
+          .select("title, generation_prompt").order("created_at", { ascending: false }).limit(80);
+        const covered = (past ?? [])
+          .flatMap((a) => [a.generation_prompt, a.title]).filter(Boolean).map((s) => String(s));
+        const coveredN = new Set(covered.map(normTitle));
+
+        // 4. Choix par l'IA de l'actu la plus importante non encore couverte.
+        const selModel = (ai.model || "anthropic/claude-opus-4.8").replace(/:online$/, "");
+        const idx = await selectMostImportant(apiKey, selModel, candidates, covered);
+        let chosen = idx >= 0 ? candidates[idx] : null;
+        // Repli : si l'IA renonce (tout doublon), prendre la plus récente non traitée.
+        if (!chosen) chosen = candidates.find((c) => !coveredN.has(normTitle(c.title))) ?? null;
+        if (chosen) { subject = chosen.title; sourceNote = buildSourceNote(chosen); }
       }
     }
     if (!subject) subject = themes[Math.floor(Math.random() * themes.length)];
