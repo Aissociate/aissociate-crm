@@ -421,8 +421,10 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             </div>
           </section>
 
+          {/* Pipeline, Sessions, Dossiers & Coffre — regroupés dans un même cadre */}
+          <section className="space-y-5 rounded-xl border border-line bg-surface-2/40 p-4">
           {/* Pipeline */}
-          <section>
+          <div>
             <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Pipeline</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{opps.length}</span><button onClick={() => setAddPanel(addPanel === 'opp' ? null : 'opp')} title="Ajouter une opportunité" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {opps.length === 0 ? <p className="text-sm text-muted">Aucune opportunité.</p> : (
               <ul className="space-y-1.5">{opps.map((o) => (
@@ -441,29 +443,10 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 </div>
               </div>
             )}
-          </section>
+          </div>
 
-          {/* Dossiers */}
-          <section>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{dossiers.length}</span><button onClick={() => setAddPanel(addPanel === 'doss' ? null : 'doss')} title="Créer un dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
-            {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
-              <ul className="space-y-1.5">{dossiers.map((d) => (
-                <li key={d.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
-                  <span className="text-fg">{d.intitule}</span>
-                  <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
-                </li>))}
-              </ul>
-            )}
-            {addPanel === 'doss' && (
-              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
-                <input className="input" placeholder="Intitulé du dossier" value={newDoss.intitule} onChange={(e) => setNewDoss({ intitule: e.target.value })} />
-                <button onClick={addDoss} disabled={busy || !newDoss.intitule.trim()} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Créer</button>
-              </div>
-            )}
-          </section>
-
-          {/* Sessions */}
-          <section>
+          {/* Sessions (placées avant Dossiers) */}
+          <div>
             <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{sessions.length}</span><button onClick={() => setAddPanel(addPanel === 'sess' ? null : 'sess')} title="Inscrire à une session" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {sessions.length === 0 ? <p className="text-sm text-muted">Aucune session.</p> : (
               <ul className="space-y-1.5">{sessions.map((s) => {
@@ -484,10 +467,29 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 <button onClick={enroll} disabled={busy || !enrollId} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Inscrire</button>
               </div>
             )}
-          </section>
+          </div>
+
+          {/* Dossiers */}
+          <div>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{dossiers.length}</span><button onClick={() => setAddPanel(addPanel === 'doss' ? null : 'doss')} title="Créer un dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
+            {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
+              <ul className="space-y-1.5">{dossiers.map((d) => (
+                <li key={d.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <span className="text-fg">{d.intitule}</span>
+                  <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                </li>))}
+              </ul>
+            )}
+            {addPanel === 'doss' && (
+              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
+                <input className="input" placeholder="Intitulé du dossier" value={newDoss.intitule} onChange={(e) => setNewDoss({ intitule: e.target.value })} />
+                <button onClick={addDoss} disabled={busy || !newDoss.intitule.trim()} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Créer</button>
+              </div>
+            )}
+          </div>
 
           {/* Coffre de documents */}
-          <section>
+          <div>
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2"><FolderLock className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Coffre — documents</h3></div>
               <div className="flex items-center gap-2"><span className="text-xs text-muted">{coffre.length}</span><FileUpload bucket="coffre" label="Ajouter" onUploaded={(v, f) => addDoc(v, f?.name)} /></div>
@@ -504,10 +506,11 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 </li>))}
               </ul>
             )}
+          </div>
           </section>
 
           {/* Checklist conformité */}
-          <section>
+          <section className="rounded-xl border border-line bg-surface-2/40 p-4">
             <div className="mb-3 flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Checklist conformité dossier</h3></div>
             <div className="mb-2"><label className="label">Date fixée</label><input className="input" type="date" value={cc.date_fixee ?? ''} onChange={(e) => patch({ date_fixee: e.target.value || null })} /></div>
             <div className="space-y-1.5">{CHECKLIST.map((item) => (
@@ -518,7 +521,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           </section>
 
           {/* Commissions */}
-          <section>
+          <section className="rounded-xl border border-line bg-surface-2/40 p-4">
             <div className="mb-3 flex items-center gap-2"><Coins className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Commissions</h3></div>
             <div className="grid grid-cols-2 gap-2">
               <div><label className="label">Date formation</label><input className="input" type="date" value={form.date_formation ?? ''} onChange={(e) => setFf('date_formation', e.target.value)} /></div>
