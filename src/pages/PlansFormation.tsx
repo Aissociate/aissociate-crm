@@ -15,6 +15,7 @@ const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
 const empty = (): Partial<PlanFormation> => ({
   nom: '', formation_id: null, contact_id: null, entreprise_id: null, financeur_id: null,
   objectifs: '', contenu: [], duree_heures: 0, modalite: 'presentiel', statut: 'brouillon', version: 1, dossier_id: null,
+  dates_session: '',
 });
 
 export default function PlansFormation() {
@@ -46,13 +47,14 @@ export default function PlansFormation() {
     try {
       const contexte = {
         nom: p.nom, objectifs: p.objectifs, contenu: p.contenu, duree_heures: p.duree_heures,
-        modalite: p.modalite, formation: formName(p.formation_id),
+        modalite: p.modalite, dates_session: p.dates_session, formation: formName(p.formation_id),
         apprenant: cName(p.contact_id), organisme: eName(p.entreprise_id), financeur: fName(p.financeur_id),
       };
       await generatePlanPdf({
         planId: p.id, contexte,
         apprenant: cName(p.contact_id),
         organismePartenaire: eName(p.entreprise_id) || fName(p.financeur_id),
+        datesSession: p.dates_session ?? null,
         userId: session?.user.id ?? null,
         contactId: p.contact_id, entrepriseId: p.entreprise_id, financeurId: p.financeur_id,
       });
@@ -114,6 +116,7 @@ export default function PlansFormation() {
       dossier_id,
       duree_heures: Number(form.duree_heures ?? 0),
       contenu: contenuText.split('\n').map((l) => l.trim()).filter(Boolean),
+      dates_session: (form.dates_session ?? '').trim() || null,
       owner_id: form.owner_id ?? session?.user.id,
     };
     const { error } = form.id
@@ -235,6 +238,7 @@ export default function PlansFormation() {
           <Field label="Modalité"><select className="input" value={form.modalite ?? 'presentiel'} onChange={(e) => set('modalite', e.target.value)}>
             {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
           </select></Field>
+          <div className="col-span-2"><Field label="Dates de session" hint="Affichées sur le PDF (ex. « Les 4 et 5 août 2026 »)"><input className="input" placeholder="ex. Les 4 et 5 août 2026" value={form.dates_session ?? ''} onChange={(e) => set('dates_session', e.target.value)} /></Field></div>
           <Field label="Bénéficiaire (contact)"><select className="input" value={form.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
             <option value="">—</option>
             {contacts.data.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}

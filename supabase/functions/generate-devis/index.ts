@@ -165,7 +165,7 @@ Deno.serve(async (req: Request) => {
       const qteStr = `${Number(l.quantite).toLocaleString("fr-FR", { minimumFractionDigits: 2 })}${l.unite ? " " + l.unite : ""}`;
       T(qteStr, cQtyR, yTop, { size: 9, right: cQtyR });
       T(eur(l.prix_unitaire_ht), cPuR, yTop, { size: 9, right: cPuR });
-      T(taux ? `${taux} %` : "0,00", cTvaR, yTop, { size: 9, right: cTvaR });
+      T(taux ? `${taux} %` : "Exonéré", cTvaR, yTop, { size: 9, right: cTvaR });
       T(eur(mt), cMtR, yTop, { size: 9, right: cMtR });
       y = Math.min(yD, yTop - 14) - 4;
       page.drawLine({ start: { x: M, y: y + 6 }, end: { x: W - M, y: y + 6 }, thickness: 0.3, color: line });
@@ -174,8 +174,8 @@ Deno.serve(async (req: Request) => {
 
     // 5) Conditions (gauche) + Totaux (droite) — ancré en BAS de page (au-dessus
     //    des mentions légales), conformément au modèle demandé.
-    if (y < M + 200) { page = pdf.addPage(A4); }
-    const blockTop = M + 185;
+    if (y < M + 235) { page = pdf.addPage(A4); }
+    const blockTop = M + 215;
     // Totaux
     const bx = W - M - 210, bw = 210;
     page.drawRectangle({ x: bx, y: blockTop - 36, width: bw, height: 36, color: grayLight });

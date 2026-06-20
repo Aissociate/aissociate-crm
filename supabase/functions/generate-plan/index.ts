@@ -185,7 +185,8 @@ Deno.serve(async (req: Request) => {
     for (const ml of [
       m.apprenant ? `Apprenant : ${m.apprenant}` : "",
       m.organismePartenaire ? `Partenaire : ${m.organismePartenaire}` : "",
-      `Date : ${new Date().toLocaleDateString("fr-FR")}`,
+      m.datesSession ? `Dates de session : ${m.datesSession}` : "",
+      `Date d'édition : ${new Date().toLocaleDateString("fr-FR")}`,
     ].filter(Boolean)) drawRich(clean(ml as string), { size: 10, color: muted });
     y -= 12;
 
@@ -212,10 +213,13 @@ Deno.serve(async (req: Request) => {
 
     const bytes = await pdf.save();
 
-    // 3) Upload + enregistrement
-    const safe = clean(titre).replace(/[^A-Za-z0-9]+/g, "-").slice(0, 40).toLowerCase() || "plan";
-    const path = `${crypto.randomUUID()}-${safe}.pdf`;
-    const up = await sb.storage.from("plans").upload(path, bytes, { contentType: "application/pdf", upsert: false });
+    // 3) Upload + enregistrement — nom de fichier lisible
+    //    PLAN_DE_FORMATION_[AAAA-MM-JJ]_[client]_[titre].
+    const safe = (s: string) => clean(s).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "x";
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const client = (m.apprenant as string) || (m.organismePartenaire as string) || "client";
+    const path = `PLAN_DE_FORMATION_${dateStr}_${safe(client)}_${safe(titre).slice(0, 24)}.pdf`;
+    const up = await sb.storage.from("plans").upload(path, bytes, { contentType: "application/pdf", upsert: true });
     if (up.error) return json({ error: `Storage: ${up.error.message}` }, 500);
 
     const { error: insErr } = await sb.from("plan_pdfs").insert({

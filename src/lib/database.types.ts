@@ -98,6 +98,7 @@ export type PlanFormation = Timestamps & {
   entreprise_id: string | null; financeur_id: string | null; objectifs: string | null;
   contenu: string[]; duree_heures: number; modalite: string; statut: PlanStatut;
   version: number; owner_id: string | null; dossier_id: string | null;
+  dates_session: string | null;
 };
 export type Workflow = Timestamps & {
   id: string; nom: string; financeur_id: string | null; actif: boolean;
