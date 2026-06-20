@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Wand as Wand2, Sparkles } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Wand as Wand2, Sparkles, Copy } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -73,6 +73,13 @@ export default function PlansFormation() {
 
   const openNew = () => { setForm(empty()); setContenuText(''); setOpen(true); };
   const openEdit = (p: PlanFormation) => { setForm(p); setContenuText((p.contenu ?? []).join('\n')); setOpen(true); };
+  // Reprendre un plan existant pour le modifier : ouvre une copie (nouveau plan).
+  const duplicate = (p: PlanFormation) => {
+    const { id: _id, created_at: _c, updated_at: _u, ...rest } = p as PlanFormation & { created_at?: string; updated_at?: string };
+    setForm({ ...rest, id: undefined, nom: `${p.nom} (copie)`, statut: 'brouillon', version: 1, dossier_id: null });
+    setContenuText((p.contenu ?? []).join('\n'));
+    setOpen(true);
+  };
 
   // Pre-remplit le plan a partir d'une formation du catalogue (4.3)
   const applyFormation = (id: string) => {
@@ -161,6 +168,7 @@ export default function PlansFormation() {
                   <Button variant="secondary" onClick={() => generatePdf(p)} disabled={genId === p.id} title="Générer un PDF structuré (IA)">
                     <Sparkles className={`h-4 w-4 ${genId === p.id ? 'animate-pulse' : ''}`} /> {genId === p.id ? 'Génération…' : 'PDF'}
                   </Button>
+                  <button onClick={() => duplicate(p)} title="Reprendre ce plan (créer une copie modifiable)" className="rounded p-1.5 text-muted hover:text-brand-600"><Copy className="h-4 w-4" /></button>
                   <button onClick={() => openEdit(p)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(p)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
@@ -224,7 +232,7 @@ export default function PlansFormation() {
           <div className="col-span-2"><Field label="Objectifs"><textarea className="input" rows={2} value={form.objectifs ?? ''} onChange={(e) => set('objectifs', e.target.value)} /></Field></div>
           <div className="col-span-2"><Field label="Contenu / modules (une ligne par module)"><textarea className="input" rows={5} value={contenuText} onChange={(e) => setContenuText(e.target.value)} /></Field></div>
           <Field label="Durée (heures)"><input className="input" type="number" value={form.duree_heures ?? 0} onChange={(e) => set('duree_heures', e.target.value)} /></Field>
-          <Field label="Modalité"><select className="input" value={form.modalite} onChange={(e) => set('modalite', e.target.value)}>
+          <Field label="Modalité"><select className="input" value={form.modalite ?? 'presentiel'} onChange={(e) => set('modalite', e.target.value)}>
             {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
           </select></Field>
           <Field label="Bénéficiaire (contact)"><select className="input" value={form.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
