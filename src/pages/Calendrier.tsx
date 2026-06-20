@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, subMonths, isSameMonth, isSameDay, format, parseISO,
+  startOfDay, endOfDay, isWithinInterval,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -139,8 +140,15 @@ export default function Calendrier() {
     setPart((p) => ({ ...p, contact_id: id, nom: c?.nom ?? p.nom, prenom: c?.prenom ?? '', email: c?.email ?? '' }));
   };
 
+  // Une session occupe TOUS les jours de date_debut à date_fin (inclus), pas
+  // seulement son jour de début (ex. session des 4 et 5 août affichée sur 2 jours).
   const sessionsOfDay = (day: Date) =>
-    sessions.filter((s) => isSameDay(parseISO(s.date_debut), day));
+    sessions.filter((s) => {
+      const debut = parseISO(s.date_debut);
+      const fin = s.date_fin ? parseISO(s.date_fin) : debut;
+      const end = fin < debut ? debut : fin;
+      return isWithinInterval(day, { start: startOfDay(debut), end: endOfDay(end) });
+    });
 
   return (
     <div>
