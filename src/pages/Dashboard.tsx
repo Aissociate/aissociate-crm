@@ -6,7 +6,7 @@ import {
 import { fr } from 'date-fns/locale';
 import {
   Eye, ClipboardList, TrendingUp, Clock, Euro, Landmark, Trophy, Megaphone,
-  ArrowUpRight, ArrowDownRight, Minus,
+  ArrowUpRight, ArrowDownRight, Minus, Mail,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, initials } from '@/lib/utils';
-import type { Dossier, Opportunite, Profile, PageView, ContactRequest } from '@/lib/database.types';
+import type { Dossier, Opportunite, Profile, PageView, ContactRequest, Email } from '@/lib/database.types';
 
 type MetaCampaign = { name: string; spend: number; impressions: number; clicks: number; leads: number };
 type MetaInsights = {
@@ -111,6 +111,20 @@ export default function Dashboard() {
   const views = useCollection<PageView>('page_views');
   const leads = useCollection<ContactRequest>('contact_requests');
   const profiles = useCollection<Profile>('profiles');
+  const emails = useCollection<Email>('emails');
+
+  // Mails entrants non lus par intervenant (owner du mail). Voir RLS : un
+  // conseiller ne voit que les siens, la direction voit tout.
+  const unreadByOwner = new Map<string, number>();
+  for (const e of emails.data) {
+    if (e.canal === 'whatsapp' || e.direction !== 'entrant' || e.lu) continue;
+    const k = e.owner_id ?? '—';
+    unreadByOwner.set(k, (unreadByOwner.get(k) ?? 0) + 1);
+  }
+  const myUnread = profile ? (unreadByOwner.get(profile.id) ?? 0) : 0;
+  const unreadList = [...unreadByOwner.entries()]
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
 
   // Performances publicitaires Meta (lues côté serveur via l'Edge Function meta-ads).
   const [meta, setMeta] = useState<MetaInsights | null>(null);
@@ -378,6 +392,32 @@ export default function Dashboard() {
           )}
         </Card>
       )}
+
+      {/* ── Mails entrants non lus par intervenant ───────────────────────────── */}
+      <Card className="mb-6">
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 font-semibold text-fg"><Mail className="h-5 w-5 text-brand-500" /> Mails entrants non lus</h2>
+          <Badge tone={(isManager ? unreadList.reduce((s, [, n]) => s + n, 0) : myUnread) > 0 ? 'warning' : 'neutral'}>
+            {isManager ? unreadList.reduce((s, [, n]) => s + n, 0) : myUnread} au total
+          </Badge>
+        </div>
+        {isManager ? (
+          unreadList.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted">Aucun mail entrant non lu.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {unreadList.map(([id, n]) => (
+                <li key={id} className="flex items-center justify-between py-2 text-sm">
+                  <span className="text-fg">{pName(id)}</span>
+                  <Badge tone="warning">{n} non lu{n > 1 ? 's' : ''}</Badge>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <p className="text-sm text-fg">Vous avez <strong>{myUnread}</strong> mail{myUnread > 1 ? 's' : ''} entrant{myUnread > 1 ? 's' : ''} non lu{myUnread > 1 ? 's' : ''}.</p>
+        )}
+      </Card>
 
       {/* ── Classement des conseillers (CA des opportunités gagnées) ─────────── */}
       {isManager && (
