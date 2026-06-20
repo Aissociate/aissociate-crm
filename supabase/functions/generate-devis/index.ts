@@ -15,7 +15,7 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 function clean(s: unknown): string {
-  return String(s ?? "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...").replace(/[•·]/g, "-").replace(/ /g, " ").replace(/[^\x09\x0A\x0D\x20-\xFF]/g, "");
+  return String(s ?? "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...").replace(/[•·]/g, "-").replace(/ /g, " ").replace(/[^\x09\x0A\x0D\x20-\xFF]/g, "");
 }
 const eur = (n: number) => `${(Number(n) || 0).toFixed(2).replace(".", ",")} €`;
 const frDate = (d: string | null) => d ? new Date(d).toLocaleDateString("fr-FR") : "—";
@@ -36,6 +36,9 @@ Deno.serve(async (req: Request) => {
     const { data: contact } = devis.contact_id ? await sb.from("contacts").select("*").eq("id", devis.contact_id).maybeSingle() : { data: null };
     const { data: entreprise } = devis.entreprise_id ? await sb.from("entreprises").select("*").eq("id", devis.entreprise_id).maybeSingle() : { data: null };
     const { data: financeur } = devis.financeur_id ? await sb.from("financeurs").select("*").eq("id", devis.financeur_id).maybeSingle() : { data: null };
+    const { data: formation } = devis.formation_id ? await sb.from("formations").select("reference, code_certification").eq("id", devis.formation_id).maybeSingle() : { data: null };
+    // Référence affichée dans le tableau : référence de la formation, sinon « SUR-MESURE ».
+    const ligneRef = (formation?.reference as string | undefined) || (devis.formation_id ? "" : "SUR-MESURE");
     const { data: orgRow } = await sb.from("parametres").select("valeur").eq("cle", "organisme").maybeSingle();
     const org = (orgRow?.valeur ?? {}) as Record<string, string>;
 
@@ -111,9 +114,10 @@ Deno.serve(async (req: Request) => {
       org.nom ?? "AISSOCIATE",
       org.adresse ?? "",
       [org.code_postal, org.ville].filter(Boolean).join(" "),
-      org.pays ?? "FRANCE",
+      org.telephone ? `Tél. ${org.telephone}` : "",
       org.email ?? "",
-      org.tva_intra ? `N° TVA Intracommunautaire : ${org.tva_intra}` : "TVA non applicable (art. 261-4-4° du CGI)",
+      // L'exonération de TVA figure déjà près des totaux et en pied : pas de doublon ici.
+      org.tva_intra ? `N° TVA Intracommunautaire : ${org.tva_intra}` : "",
       org.siret ? `N° SIRET : ${org.siret}` : "",
       org.naf ? `Code NAF : ${org.naf}` : "",
       org.nda ? `Déclaration d'activité n° ${org.nda}` : "",
@@ -154,9 +158,12 @@ Deno.serve(async (req: Request) => {
       const mt = (Number(l.quantite) || 0) * (Number(l.prix_unitaire_ht) || 0);
       const yTop = y;
       const desW = cQtyR - cDesX - 12;
+      if (ligneRef) T(ligneRef, cRefX, yTop, { size: 8, color: muted });
       let yD = wrap(l.designation, cDesX, yTop, desW, 9, bold, ink);
       if (l.description) yD = wrap(l.description, cDesX, yD - 1, desW, 8.5, font, muted);
-      T(`${Number(l.quantite).toLocaleString("fr-FR", { minimumFractionDigits: 2 })}`, cQtyR, yTop, { size: 9, right: cQtyR });
+      // Quantité suivie de son unité (ex. « 14,00 h ») pour lever toute ambiguïté.
+      const qteStr = `${Number(l.quantite).toLocaleString("fr-FR", { minimumFractionDigits: 2 })}${l.unite ? " " + l.unite : ""}`;
+      T(qteStr, cQtyR, yTop, { size: 9, right: cQtyR });
       T(eur(l.prix_unitaire_ht), cPuR, yTop, { size: 9, right: cPuR });
       T(taux ? `${taux} %` : "0,00", cTvaR, yTop, { size: 9, right: cTvaR });
       T(eur(mt), cMtR, yTop, { size: 9, right: cMtR });
@@ -165,9 +172,10 @@ Deno.serve(async (req: Request) => {
     }
     y -= 18;
 
-    // 5) Conditions (gauche) + Totaux (droite)
-    if (y < M + 110) { page = pdf.addPage(A4); y = H - M; }
-    const blockTop = y;
+    // 5) Conditions (gauche) + Totaux (droite) — ancré en BAS de page (au-dessus
+    //    des mentions légales), conformément au modèle demandé.
+    if (y < M + 200) { page = pdf.addPage(A4); }
+    const blockTop = M + 185;
     // Totaux
     const bx = W - M - 210, bw = 210;
     page.drawRectangle({ x: bx, y: blockTop - 36, width: bw, height: 36, color: grayLight });
@@ -182,11 +190,19 @@ Deno.serve(async (req: Request) => {
     let cy = blockTop;
     T("Conditions de paiement :", M, cy, { size: 8.5, f: bold, color: muted }); cy -= 13;
     if (devis.conditions) cy = wrap(devis.conditions, M, cy, bx - M - 16, 8, font, muted) - 2;
+    T("Sous réserve d'acceptation du financeur.", M, cy, { size: 8, color: muted }); cy -= 12;
     T("Exonéré de TVA - art. 261-4-4° du CGI", M, cy, { size: 8, color: muted }); cy -= 16;
-    T(`Devis valable jusqu'au ${frDate(devis.date_validite)}.`, M, cy, { size: 8, color: muted }); cy -= 18;
-    T("Bon pour accord, le ............  Signature (« lu et approuvé ») :", M, cy, { size: 8, f: bold, color: ink });
+    T(`Devis valable jusqu'au ${frDate(devis.date_validite)}.`, M, cy, { size: 8, color: muted }); cy -= 20;
+    T("Bon pour accord, le ..............................", M, cy, { size: 8, f: bold, color: ink }); cy -= 14;
+    T("Signature (« lu et approuvé ») :", M, cy, { size: 8, f: bold, color: ink });
 
-    // 6) Mentions légales + pagination sur toutes les pages
+    // 6) Pied de page sur toutes les pages : identification organisme + mentions
+    //    légales + pagination.
+    const ident = [
+      `${org.nom ?? "AISSOCIATE"} - ${org.forme_juridique ?? "SARL"} au capital de ${org.capital ?? "100 €"} - ${org.adresse ?? ""} ${[org.code_postal, org.ville].filter(Boolean).join(" ")}`,
+      `Tél ${org.telephone ?? ""} - ${org.email ?? ""} - ${org.site_web ?? ""}`,
+      `NDA ${org.nda ?? ""} DEETS La Réunion - RCS ${org.rcs ?? ""} - APE ${org.naf ?? ""}`,
+    ].map(clean).filter((s) => s.replace(/[-\s]/g, "").length > 2);
     const legal = clean(
       "CLAUSE DE RÉSERVE DE PROPRIÉTÉ : Conformément à la loi 80-335 du 12 mai 1980, nous réservons la propriété des produits jusqu'au paiement intégral du prix. " +
       "Pénalité de retard : 3 fois le taux d'intérêt légal après la date d'échéance. Escompte pour règlement anticipé : néant. " +
@@ -194,20 +210,32 @@ Deno.serve(async (req: Request) => {
     );
     const allPages = pdf.getPages();
     allPages.forEach((p, i) => {
+      // Mentions légales (réserve de propriété), tout en bas.
       let ly = M + 2;
       const words = legal.split(" ");
       const linesArr: string[] = []; let cur = "";
       for (const w of words) { const t = cur ? cur + " " + w : w; if (font.widthOfTextAtSize(t, 6) > W - 2 * M && cur) { linesArr.push(cur); cur = w; } else cur = t; }
       if (cur) linesArr.push(cur);
-      p.drawLine({ start: { x: M, y: M + (linesArr.length * 8) + 6 }, end: { x: W - M, y: M + (linesArr.length * 8) + 6 }, thickness: 0.4, color: line });
       for (let k = linesArr.length - 1; k >= 0; k--) { p.drawText(linesArr[k], { x: M, y: ly, size: 6, font, color: muted }); ly += 8; }
+      // Identification de l'organisme, centrée, juste au-dessus.
+      ly += 3;
+      for (let k = ident.length - 1; k >= 0; k--) {
+        const w = font.widthOfTextAtSize(ident[k], 7);
+        p.drawText(ident[k], { x: Math.max(M, (W - w) / 2), y: ly, size: 7, font, color: ink });
+        ly += 9.5;
+      }
+      p.drawLine({ start: { x: M, y: ly + 1 }, end: { x: W - M, y: ly + 1 }, thickness: 0.4, color: line });
       const pn = `Page ${i + 1} / ${allPages.length}`;
-      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 7), y: M - 6, size: 7, font, color: muted });
+      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 7), y: M - 8, size: 7, font, color: muted });
     });
 
     const bytes = await pdf.save();
-    const path = `${crypto.randomUUID()}-${clean(devis.numero).replace(/[^A-Za-z0-9]+/g, "-")}.pdf`;
-    const up = await sb.storage.from("devis").upload(path, bytes, { contentType: "application/pdf", upsert: false });
+    // Nom de fichier lisible : DEVIS_[numéro]_[AAAA-MM-JJ]_[client].
+    const safe = (s: string) => clean(s).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "x";
+    const clientName = entreprise?.raison_sociale || cName || "client";
+    const dateStr = (devis.date_emission ?? "").slice(0, 10) || frDate(null);
+    const path = `DEVIS_${safe(devis.numero)}_${dateStr}_${safe(clientName)}.pdf`;
+    const up = await sb.storage.from("devis").upload(path, bytes, { contentType: "application/pdf", upsert: true });
     if (up.error) return json({ error: `Storage: ${up.error.message}` }, 500);
     await sb.from("devis").update({ fichier_url: path, total_ht: totalHT, total_tva: totalTVA, total_ttc: totalTTC, updated_at: new Date().toISOString() }).eq("id", devisId);
 
