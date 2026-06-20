@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import SEO, { SITE_URL } from '../components/SEO';
 import Footer from '../components/Footer';
-import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp } from 'lucide-react';
+import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const GRADIENTS = ['from-orange-500 to-amber-600', 'from-emerald-500 to-teal-600', 'from-blue-500 to-cyan-600', 'from-purple-500 to-pink-600', 'from-amber-600 to-orange-700'];
@@ -39,11 +39,11 @@ export default function FormationsList() {
       title: 'Création de contenus rédactionnels et visuels par l\'IA générative',
       subtitle: 'Usage responsable de l\'intelligence artificielle',
       description: 'Formation certifiante pour maîtriser la création de contenus avec l\'IA générative tout en respectant les principes de confidentialité et protection des données.',
-      duration: '21h (3 jours)',
+      duration: '14h (2 jours)',
       participants: 'Grand public',
       price: '1 600 €',
       level: 'Débutant',
-      certifications: ['CPF', 'RS 7667', 'Certifiant'],
+      certifications: ['CPF', 'RS 6776', 'Certifiant'],
       objectives: [
         'Analyser ses besoins professionnels en matière d\'IA générative',
         'Utiliser des outils d\'IA pour créer des contenus rédactionnels et visuels',
@@ -264,13 +264,21 @@ export default function FormationsList() {
 
       <section className="py-20 bg-gradient-to-b from-white via-slate-50/50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-3 gap-8 mb-12">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+            <div className="bg-white border-2 border-orange-300 rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <MapPin className="w-6 h-6 text-orange-600" />
+              </div>
+              <div className="font-bold text-slate-900 mb-1">Présentiel à La Réunion</div>
+              <div className="text-sm text-slate-600">Ou à distance, au choix</div>
+            </div>
+
             <div className="bg-white border-2 border-slate-200 rounded-xl p-6 text-center">
               <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <Award className="w-6 h-6 text-orange-600" />
               </div>
               <div className="font-bold text-slate-900 mb-1">Formation certifiante</div>
-              <div className="text-sm text-slate-600">RS 7667 éligible CPF</div>
+              <div className="text-sm text-slate-600">RS 6776 éligible CPF</div>
             </div>
 
             <div className="bg-white border-2 border-slate-200 rounded-xl p-6 text-center">
@@ -411,11 +419,18 @@ export default function FormationsList() {
                         </Link>
                       </div>
 
+                      {/* Certification : seules les formations « Certifiant » (RS) sont
+                          certifiantes ; les autres ne délivrent qu'une attestation de suivi.
+                          Annoncer à tort une certification est strictement interdit. */}
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                         <div className="flex items-start gap-3">
                           <Award className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                           <div className="text-sm text-emerald-800">
-                            <strong>Formation certifiée :</strong> Attestation de formation remise en fin de parcours
+                            {formation.certifications.includes('Certifiant') ? (
+                              <><strong>Formation certifiante</strong><br />Certification professionnelle RS 6776 délivrée à l'issue de la réussite des évaluations</>
+                            ) : (
+                              <><strong>Formation avec attestation de suivi</strong><br />Attestation de formation remise en fin de parcours</>
+                            )}
                           </div>
                         </div>
                       </div>

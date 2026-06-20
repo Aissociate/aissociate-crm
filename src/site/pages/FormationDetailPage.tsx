@@ -64,10 +64,10 @@ const formationsData: Record<string, any> = {
   'creation-contenus-ia': {
     id: 'creation-contenus-ia',
     ref: 'INTROIA1',
-    rs: 'RS 7667',
+    rs: 'RS 6776',
     title: 'Création de contenus rédactionnels et visuels par l\'usage responsable de l\'intelligence artificielle générative',
     image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop&q=80',
-    duration: '21h',
+    duration: '14h (2 jours)',
     price: '1 600€ HT',
     priceInter: '1 600€ HT',
     priceIntra: '1 600€ HT',
