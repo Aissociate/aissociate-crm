@@ -217,7 +217,9 @@ export default function Contacts() {
   };
   const nonAffectes = data.filter((c) => c.type === 'prospect' && !c.owner_id).length;
   // Conseillers attribuables : actifs et approuvés uniquement (pas d'inactif en attente).
-  const assignables = profiles.data.filter((p) => (p.role === 'conseiller' || p.role === 'directeur_commercial') && p.actif && p.approved);
+  // Attribuables : conseillers, directeurs commerciaux ET la direction (admins),
+  // dès lors qu'ils sont actifs et approuvés. La direction traite aussi des prospects.
+  const assignables = profiles.data.filter((p) => (p.role === 'conseiller' || p.role === 'directeur_commercial' || p.role === 'admin' || p.is_admin) && p.actif && p.approved);
   // Statuts de qualification présents (pour le filtre de la liste).
   const statutsPresents = [...new Set(data.map((c) => (c.statut_prospect ?? '').trim()).filter(Boolean))].sort();
 
