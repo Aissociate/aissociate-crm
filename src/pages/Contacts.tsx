@@ -546,10 +546,16 @@ export default function Contacts() {
                   >
                     <option value="">Non affecté</option>
                     {assignables.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
-                    {/* Garde l'affecté courant visible même s'il n'est plus actif. */}
-                    {c.owner_id && !assignables.some((p) => p.id === c.owner_id) && (
-                      <option value={c.owner_id}>{ownerName(c.owner_id)} (inactif)</option>
-                    )}
+                    {/* Garde l'affecté courant visible même s'il n'est pas dans la liste
+                        des attribuables — avec le VRAI motif, pas un « inactif » générique. */}
+                    {c.owner_id && !assignables.some((p) => p.id === c.owner_id) && (() => {
+                      const o = profiles.data.find((p) => p.id === c.owner_id);
+                      const motif = !o ? ' (compte introuvable)'
+                        : o.actif === false ? ' (désactivé)'
+                        : o.approved === false ? ' (non approuvé)'
+                        : '';
+                      return <option value={c.owner_id}>{ownerName(c.owner_id)}{motif}</option>;
+                    })()}
                   </select>
                 ) : (
                   <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge tone="warning">Non affecté</Badge>}</span>
