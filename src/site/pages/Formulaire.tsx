@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Send, CircleCheck as CheckCircle2, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { syncLeadToGHL } from '../lib/ghlSync';
 import SEO from '../components/SEO';
 
 const Formulaire = () => {
@@ -25,7 +24,7 @@ const Formulaire = () => {
     setError('');
 
     try {
-      const { data: inserted, error: submitError } = await supabase
+      const { error: submitError } = await supabase
         .from('contact_requests')
         .insert([
           {
@@ -39,26 +38,9 @@ const Formulaire = () => {
             source: window.location.pathname,
             status: 'new'
           }
-        ])
-        .select('id')
-        .single();
+        ]);
 
       if (submitError) throw submitError;
-
-      if (inserted?.id) {
-        syncLeadToGHL({
-          source_table: 'contact_requests',
-          source_id: inserted.id,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          email: formData.email,
-          phone: formData.phone,
-          company: formData.company || undefined,
-          source: window.location.pathname,
-          notes: formData.message,
-          tags: [formData.requestType],
-        });
-      }
 
       setSubmitted(true);
     } catch (err: any) {

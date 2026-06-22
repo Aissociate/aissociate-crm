@@ -10,7 +10,7 @@ import { Badge, type Tone } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
-const STATUTS_PROSPECT = ['', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
+const STATUTS_PROSPECT = ['', 'non assigné', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
 const ACTION_TYPES = ['appel', 'email', 'rdv', 'relance', 'note', 'autre'];
 
 // ── Helpers date/heure pour le suivi des actions ────────────────────────────

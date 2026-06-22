@@ -313,7 +313,7 @@ export default function Contacts() {
     if (!intake.lastName.trim() && !intake.email.trim()) { alert('Renseignez au moins le nom ou l\'e-mail.'); return; }
     setIntakeSaving(true);
     const isAssist = /assistance/i.test(intake.requestType);
-    const newTags = isAssist ? ['Assistance'] : [];
+    const assistTags = isAssist ? ['Assistance'] : [];
     let existing: Contact | null = null;
     if (intake.email.trim()) {
       const { data: ex } = await supabase.from('contacts').select('*').eq('email', intake.email.trim()).limit(1).maybeSingle();
@@ -321,7 +321,7 @@ export default function Contacts() {
     }
     let error;
     if (existing) {
-      const mergedTags = Array.from(new Set([...(existing.tags ?? []), ...newTags]));
+      const mergedTags = Array.from(new Set([...(existing.tags ?? []), ...assistTags]));
       ({ error } = await supabase.from('contacts').update({
         prenom: intake.firstName.trim() || existing.prenom,
         telephone: intake.phone.trim() || existing.telephone,
@@ -333,10 +333,10 @@ export default function Contacts() {
       ({ error } = await supabase.from('contacts').insert({
         type: 'prospect', nom: intake.lastName.trim() || '(lead)', prenom: intake.firstName.trim() || null,
         email: intake.email.trim() || null, telephone: intake.phone.trim() || null,
-        statut_prospect: 'nouveau', besoin_resume: intake.message.trim() || null,
+        statut_prospect: 'non assigné', besoin_resume: intake.message.trim() || null,
         formation_envisagee: intake.requestType || null,
         notes: 'Saisie interne (formulaire)' + (intake.company.trim() ? ' — entreprise : ' + intake.company.trim() : ''),
-        tags: newTags, owner_id: null, // tag seul, pas d'affectation
+        tags: ['nouveau prospect', ...assistTags], owner_id: null, // lead non assigné, pas d'affectation
       }));
     }
     setIntakeSaving(false);
@@ -523,7 +523,7 @@ export default function Contacts() {
                 {(c.tags ?? []).length > 0 && (
                   <span className="mt-1 flex flex-wrap gap-1">
                     {(c.tags ?? []).map((t) => (
-                      <Badge key={t} tone={t.toLowerCase() === 'assistance' ? 'info' : 'neutral'}>
+                      <Badge key={t} tone={t.toLowerCase() === 'assistance' ? 'info' : t.toLowerCase() === 'nouveau prospect' ? 'warning' : 'neutral'}>
                         <Tag className="mr-1 h-3 w-3" />{t}
                       </Badge>
                     ))}
