@@ -29,7 +29,7 @@ declare
   v_tags text[] := array['nouveau prospect'];
 begin
   if new.request_type ~* 'assistance' then
-    v_tags := v_tags || 'Assistance';
+    v_tags := array_append(v_tags, 'Assistance');
   end if;
 
   insert into public.contacts (type, nom, prenom, email, telephone, statut_prospect, besoin_resume, formation_envisagee, notes, tags)
