@@ -7,11 +7,11 @@ import { fr } from 'date-fns/locale';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
-import { ChevronLeft, ChevronRight, ClipboardList, CircleCheck as CheckCircle2, Circle, CalendarDays, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardList, CircleCheck as CheckCircle2, Circle, CalendarDays, Download, Trophy, ChevronDown } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, Badge, Spinner, EmptyState } from '@/components/ui';
-import { fullName, formatDate, cn } from '@/lib/utils';
+import { fullName, formatDate, cn, initials } from '@/lib/utils';
 import type { Profile, Contact, ContactAction } from '@/lib/database.types';
 
 type Gran = 'jour' | 'semaine' | 'mois';
@@ -49,6 +49,8 @@ export default function ConseillerActivite() {
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [conseillerFilter, setConseillerFilter] = useState<string>('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapse = (id: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const { start, end, label } = periodOf(gran, anchor);
 
@@ -111,6 +113,24 @@ export default function ConseillerActivite() {
     faites: filtered.filter((a) => a.faite).length,
     aFaire: filtered.filter((a) => !a.faite).length,
   };
+
+  // Classement d'activité sur la période (indépendant du filtre conseiller, pour
+  // garder le palmarès complet ; respecte le filtre par type).
+  const rankBase = periodActions.filter((a) => !typeFilter || a.type === typeFilter);
+  const ranking = (() => {
+    const m = new Map<string, { n: number; faites: number; aFaire: number }>();
+    for (const a of rankBase) {
+      const k = conseillerOf(a);
+      const e = m.get(k) ?? { n: 0, faites: 0, aFaire: 0 };
+      e.n++; if (a.faite) e.faites++; else e.aFaire++;
+      m.set(k, e);
+    }
+    return [...m.entries()]
+      .map(([id, v]) => ({ id, name: profileName(id === '—' ? null : id), ...v }))
+      .sort((a, b) => b.n - a.n || b.faites - a.faites);
+  })();
+  const rankMax = Math.max(1, ...ranking.map((r) => r.n));
+  const rankOf = new Map(ranking.map((r, i) => [r.id, i + 1]));
 
   // Données du graphique : par jour (semaine/mois) ou par type (jour).
   const chartData = useMemo(() => {
@@ -238,38 +258,80 @@ export default function ConseillerActivite() {
             </div>
           )}
 
-          {/* Actions organisées par conseiller */}
+          {/* Classement d'activité de la période (direction) — clic = filtrer */}
+          {isManager && ranking.length > 1 && (
+            <div className="mb-5 rounded-xl border border-line p-3">
+              <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg"><Trophy className="h-4 w-4 text-amber-500" /> Classement d'activité</p>
+              <ul className="space-y-1.5">
+                {ranking.map((r, i) => (
+                  <li key={r.id}>
+                    <button onClick={() => setConseillerFilter((c) => (c === r.id ? '' : r.id))}
+                      className={cn('flex w-full items-center gap-3 rounded-lg border p-2 text-left transition',
+                        conseillerFilter === r.id ? 'border-brand-500 bg-brand-500/5' : 'border-transparent hover:bg-surface-2')}>
+                      <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                        i === 0 ? 'bg-amber-400/20 text-amber-600 dark:text-amber-400'
+                          : i === 1 ? 'bg-slate-400/20 text-slate-500'
+                            : i === 2 ? 'bg-orange-700/20 text-orange-700 dark:text-orange-400'
+                              : 'bg-surface-2 text-muted')}>{i + 1}</span>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-xs font-semibold text-brand-600">{initials(r.name.split(' ').slice(-1)[0], r.name.split(' ')[0])}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-fg">{r.name}</span>
+                          <span className="shrink-0 text-xs text-muted">{r.n} action{r.n > 1 ? 's' : ''} · {r.faites} ✓</span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                          <div className="h-full rounded-full bg-brand-500" style={{ width: `${(r.n / rankMax) * 100}%` }} />
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Actions organisées par conseiller (même liste pour chacun) */}
           {groups.length === 0 ? (
             <EmptyState title="Aucune action sur cette période" message="Changez de période, de granularité ou de filtre." />
           ) : (
             <div className="space-y-4">
-              {groups.map((g) => (
-                <div key={g.id} className="rounded-xl border border-line">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-2/50 px-3 py-2">
-                    <span className="font-medium text-fg">{g.name}</span>
-                    <span className="flex items-center gap-1.5 text-xs">
-                      <Badge tone="neutral">{g.list.length}</Badge>
-                      <Badge tone="success">{g.faites} ✓</Badge>
-                      <Badge tone="warning">{g.aFaire} à faire</Badge>
-                    </span>
+              {groups.map((g) => {
+                const isOpen = !collapsed.has(g.id);
+                const rank = rankOf.get(g.id);
+                return (
+                  <div key={g.id} className="overflow-hidden rounded-xl border border-line">
+                    <button onClick={() => toggleCollapse(g.id)}
+                      className="flex w-full flex-wrap items-center gap-2 border-b border-line bg-surface-2/50 px-3 py-2 text-left transition hover:bg-surface-2">
+                      {rank && isManager && <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-bold text-muted">{rank}</span>}
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-[11px] font-semibold text-brand-600">{initials(g.name.split(' ').slice(-1)[0], g.name.split(' ')[0])}</span>
+                      <span className="font-medium text-fg">{g.name}</span>
+                      <span className="ml-auto flex items-center gap-1.5 text-xs">
+                        <Badge tone="neutral">{g.list.length}</Badge>
+                        <Badge tone="success">{g.faites} ✓</Badge>
+                        <Badge tone="warning">{g.aFaire} à faire</Badge>
+                        <ChevronDown className={cn('h-4 w-4 text-muted transition-transform', isOpen ? '' : '-rotate-90')} />
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <ul className="divide-y divide-line">
+                        {g.list.map((a) => (
+                          <li key={a.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                            {a.faite
+                              ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                              : <Circle className="h-4 w-4 shrink-0 text-amber-500" />}
+                            <span className="w-[110px] shrink-0 text-xs text-muted">
+                              {formatDate(a.date_action, 'dd/MM/yyyy')}{a.heure_action ? ` ${a.heure_action.slice(0, 5)}` : ''}
+                            </span>
+                            <Badge className="shrink-0 bg-surface-2 text-muted">{a.type}</Badge>
+                            <span className="min-w-0 flex-1 truncate text-fg">{a.description}</span>
+                            <span className="hidden shrink-0 text-xs text-muted sm:inline">{contactName(a.contact_id)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                  <ul className="divide-y divide-line">
-                    {g.list.map((a) => (
-                      <li key={a.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                        {a.faite
-                          ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-                          : <Circle className="h-4 w-4 shrink-0 text-amber-500" />}
-                        <span className="w-[110px] shrink-0 text-xs text-muted">
-                          {formatDate(a.date_action, 'dd/MM/yyyy')}{a.heure_action ? ` ${a.heure_action.slice(0, 5)}` : ''}
-                        </span>
-                        <Badge className="shrink-0 bg-surface-2 text-muted">{a.type}</Badge>
-                        <span className="min-w-0 flex-1 truncate text-fg">{a.description}</span>
-                        <span className="hidden shrink-0 text-xs text-muted sm:inline">{contactName(a.contact_id)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
