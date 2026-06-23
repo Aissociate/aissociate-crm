@@ -8,6 +8,7 @@ import {
   DOSSIER_STATUT_LABELS, OPP_STAGE_LABELS, OPP_STAGE_ORDER,
 } from '@/lib/constants';
 import { formatMoney } from '@/lib/utils';
+import ConseillerActivite from '@/components/ConseillerActivite';
 import type { Dossier, Opportunite, Financeur, DossierStatut } from '@/lib/database.types';
 
 // Palette de graphiques : marque en tête, puis tons sémantiques (cf. Badge), nuances de marque, neutre.
@@ -53,6 +54,11 @@ export default function Statistiques() {
         <StatCard label="Financements accordés" value={formatMoney(totalAccorde)} />
         <StatCard label="Opportunités" value={opps.data.length} />
         <StatCard label="Taux de conversion" value={`${tauxConv}%`} hint={`${gagnees} gagnées`} />
+      </div>
+
+      {/* Activité des conseillers — vue jour / semaine / mois, actions organisées */}
+      <div className="mb-6">
+        <ConseillerActivite />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
