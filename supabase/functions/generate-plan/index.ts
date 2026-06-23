@@ -184,6 +184,7 @@ Deno.serve(async (req: Request) => {
     y -= 2; page.drawLine({ start: { x: M, y }, end: { x: M + 96, y }, thickness: 2.5, color: brand }); y -= 16;
     for (const ml of [
       m.apprenant ? `Apprenant : ${m.apprenant}` : "",
+      m.clientSiret ? `SIRET : ${m.clientSiret}` : "",
       m.organismePartenaire ? `Partenaire : ${m.organismePartenaire}` : "",
       m.datesSession ? `Dates de session : ${m.datesSession}` : "",
       `Date d'édition : ${new Date().toLocaleDateString("fr-FR")}`,

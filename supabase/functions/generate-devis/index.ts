@@ -128,7 +128,7 @@ Deno.serve(async (req: Request) => {
       entreprise && cName ? `À l'attention de ${cName}` : "",
       entreprise?.adresse ?? "",
       [entreprise?.code_postal, entreprise?.ville ?? contact?.ville].filter(Boolean).join(" "),
-      entreprise?.siret ? `SIRET : ${entreprise.siret}` : "",
+      (entreprise?.siret || contact?.siret) ? `SIRET : ${entreprise?.siret || contact?.siret}` : "",
       contact?.email ?? "",
     ];
     const yEmit = block(emit, M, logoBottom, { boldFirst: true });

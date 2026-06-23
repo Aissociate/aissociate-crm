@@ -46,7 +46,7 @@ export type Contact = Timestamps & {
   rgpd_consent: boolean; notes: string | null; external_id: string | null;
   metadata: Record<string, string> | null;
   // Fiche de suivi (qualification / commercial / conformité / commissions)
-  statut_entreprise: string | null; ville: string | null; autres: string | null; effectif: string | null;
+  statut_entreprise: string | null; siret: string | null; ville: string | null; autres: string | null; effectif: string | null;
   besoin_resume: string | null; formation_envisagee: string | null; financement_envisage: string | null; interet: string | null;
   statut_prospect: string | null; responsable_id: string | null; tags: string[];
   date_fixee: string | null; eligibilite_verifiee: boolean; financement_demande: boolean;

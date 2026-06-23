@@ -55,6 +55,8 @@ export default function PlansFormation() {
         apprenant: cName(p.contact_id),
         organismePartenaire: eName(p.entreprise_id) || fName(p.financeur_id),
         datesSession: p.dates_session ?? null,
+        clientSiret: contacts.data.find((x) => x.id === p.contact_id)?.siret
+          || entreprises.data.find((x) => x.id === p.entreprise_id)?.siret || null,
         userId: session?.user.id ?? null,
         contactId: p.contact_id, entrepriseId: p.entreprise_id, financeurId: p.financeur_id,
       });

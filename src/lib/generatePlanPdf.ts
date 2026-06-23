@@ -7,6 +7,7 @@ interface GenInput {
   apprenant: string;
   organismePartenaire: string;
   datesSession?: string | null;
+  clientSiret?: string | null;
   userId: string | null;
   // Références pour rassembler le contexte client complet côté serveur.
   contactId?: string | null;
@@ -29,6 +30,7 @@ export async function generatePlanPdf(input: GenInput): Promise<{ titre: string 
         apprenant: input.apprenant,
         organismePartenaire: input.organismePartenaire,
         datesSession: input.datesSession ?? null,
+        clientSiret: input.clientSiret ?? null,
         userId: input.userId,
         contactId: input.contactId ?? null,
         entrepriseId: input.entrepriseId ?? null,

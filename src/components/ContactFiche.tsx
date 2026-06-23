@@ -158,7 +158,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   // ── Champs de suivi éditables ───────────────────────────────────────────────
   const [form, setForm] = useState({
     statut_entreprise: c.statut_entreprise ?? '', ville: c.ville ?? '', effectif: c.effectif ?? '',
-    autres: c.autres ?? '',
+    siret: c.siret ?? '', autres: c.autres ?? '',
     besoin_resume: c.besoin_resume ?? '', formation_envisagee: c.formation_envisagee ?? '',
     financement_envisage: c.financement_envisage ?? '', interet: c.interet ?? '',
     responsable_id: c.responsable_id ?? '', date_formation: c.date_formation ?? '',
@@ -324,6 +324,11 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               {!c.email && !c.telephone && (
                 <p className="text-sm text-muted italic">Aucune coordonnée renseignée</p>
               )}
+              <div>
+                <label className="label">SIRET (client) {savedField === 'siret' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
+                <input className="input" placeholder="N° SIRET — figure sur le devis et le plan de formation"
+                  value={form.siret} onChange={(e) => setFf('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
+              </div>
               <div>
                 <label className="label">Autres coordonnées {savedField === 'autres' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
                 <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
