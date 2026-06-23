@@ -183,7 +183,7 @@ async function sendEdition(
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
-    const body = await req.json().catch(() => ({})) as { action?: string; newsletterId?: string };
+    const body = await req.json().catch(() => ({})) as { action?: string; newsletterId?: string; api_key?: string; sender_email?: string };
     const action = body.action ?? "generate";
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -203,6 +203,29 @@ Deno.serve(async (req: Request) => {
       senderEmail: (brevoCfg.sender_email || "").trim(),
       senderName: (brevoCfg.sender_name || cfg.sender_name || "Aissociate").trim() || "Aissociate",
     };
+
+    // — Test de connexion Brevo (clé valide + expéditeur vérifié) —
+    if (action === "test") {
+      const key = ((body.api_key as string) || brevo.apiKey || "").trim();
+      const senderEmail = ((body.sender_email as string) || brevo.senderEmail || "").trim();
+      if (!key) return json({ error: "Clé API Brevo manquante." }, 400);
+      const acc = await fetch("https://api.brevo.com/v3/account", { headers: { "api-key": key, "accept": "application/json" } });
+      if (!acc.ok) {
+        const msg = acc.status === 401 ? "Clé API Brevo invalide ou révoquée." : `Brevo a répondu ${acc.status}.`;
+        return json({ error: msg }, 400);
+      }
+      const accData = await acc.json().catch(() => ({})) as { email?: string };
+      // Vérifie que l'e-mail expéditeur est un expéditeur vérifié dans Brevo.
+      let senderOk: boolean | null = null;
+      if (senderEmail) {
+        const s = await fetch("https://api.brevo.com/v3/senders", { headers: { "api-key": key, "accept": "application/json" } });
+        if (s.ok) {
+          const sd = await s.json().catch(() => ({})) as { senders?: { email?: string; active?: boolean }[] };
+          senderOk = (sd.senders ?? []).some((x) => (x.email ?? "").toLowerCase() === senderEmail.toLowerCase() && x.active !== false);
+        }
+      }
+      return json({ ok: true, account: accData.email ?? null, senderEmail, senderOk });
+    }
 
     // — Envoi d'une édition existante —
     if (action === "send") {

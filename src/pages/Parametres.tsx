@@ -76,6 +76,7 @@ export default function Parametres() {
   const [metaAds, setMetaAds] = useState<MetaAds>({ api_version: 'v21.0' });
   const [newsletter, setNewsletter] = useState<NewsletterCfg>({ rgpd_only: true, sender_name: 'Aissociate' });
   const [brevo, setBrevo] = useState<BrevoCfg>({ sender_name: 'Aissociate' });
+  const [brevoTest, setBrevoTest] = useState<{ loading: boolean; ok?: boolean; text?: string }>({ loading: false });
   const [signature, setSignature] = useState<SignatureCfg>({ mode: 'auto', include_sender: true });
   const { profile } = useAuth();
   const [blogThemes, setBlogThemes] = useState('');
@@ -112,6 +113,25 @@ export default function Parametres() {
     if (error) { alert(error.message); return; }
     setSavedMsg(cle);
     setTimeout(() => setSavedMsg(null), 2000);
+  };
+
+  // Teste la connexion Brevo (clé valide + expéditeur vérifié), côté serveur.
+  const testBrevo = async () => {
+    setBrevoTest({ loading: true });
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-newsletter', {
+        body: { action: 'test', api_key: brevo.api_key, sender_email: brevo.sender_email },
+      });
+      if (error) throw new Error(error.message);
+      const r = data as { ok?: boolean; account?: string; senderEmail?: string; senderOk?: boolean | null; error?: string };
+      if (r?.error) throw new Error(r.error);
+      const sender = r.senderEmail
+        ? (r.senderOk ? ` · expéditeur « ${r.senderEmail} » vérifié ✓` : ` · ⚠ expéditeur « ${r.senderEmail} » non vérifié dans Brevo`)
+        : '';
+      setBrevoTest({ loading: false, ok: r.senderOk !== false, text: `Connexion OK${r.account ? ` (compte ${r.account})` : ''}${sender}` });
+    } catch (err) {
+      setBrevoTest({ loading: false, ok: false, text: err instanceof Error ? err.message : String(err) });
+    }
   };
 
   if (loading) return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
@@ -546,12 +566,18 @@ export default function Parametres() {
               <Field label="E-mail expéditeur" hint="Doit être un expéditeur vérifié dans Brevo"><input className="input" value={brevo.sender_email ?? ''} onChange={(e) => setBrevo({ ...brevo, sender_email: e.target.value })} placeholder="contact@aissociate.re" /></Field>
               <Field label="Nom de l'expéditeur"><input className="input" value={brevo.sender_name ?? ''} onChange={(e) => setBrevo({ ...brevo, sender_name: e.target.value })} placeholder="Aissociate" /></Field>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button onClick={() => persist('brevo', { ...brevo })} disabled={saving === 'brevo'}>
                 <Save className="h-4 w-4" /> {saving === 'brevo' ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
+              <Button variant="secondary" onClick={testBrevo} disabled={brevoTest.loading || !brevo.api_key}>
+                {brevoTest.loading ? 'Test…' : 'Tester la connexion'}
+              </Button>
               {savedMsg === 'brevo' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
             </div>
+            {brevoTest.text && (
+              <p className={`text-sm ${brevoTest.ok ? 'text-emerald-600' : 'text-amber-600 dark:text-amber-400'}`}>{brevoTest.text}</p>
+            )}
           </div>
         </Card>
 
