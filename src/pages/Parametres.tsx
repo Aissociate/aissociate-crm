@@ -31,6 +31,7 @@ const KIE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
 type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
 type NewsletterCfg = { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
+type BrevoCfg = { api_key?: string; sender_email?: string; sender_name?: string };
 // SignatureCfg importé depuis @/lib/signature
 
 // Domaines de contexte de l'assistant IA. `defaut` = accès si la case n'a
@@ -74,6 +75,7 @@ export default function Parametres() {
   const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
   const [metaAds, setMetaAds] = useState<MetaAds>({ api_version: 'v21.0' });
   const [newsletter, setNewsletter] = useState<NewsletterCfg>({ rgpd_only: true, sender_name: 'Aissociate' });
+  const [brevo, setBrevo] = useState<BrevoCfg>({ sender_name: 'Aissociate' });
   const [signature, setSignature] = useState<SignatureCfg>({ mode: 'auto', include_sender: true });
   const { profile } = useAuth();
   const [blogThemes, setBlogThemes] = useState('');
@@ -85,7 +87,7 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature', 'brevo']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
@@ -96,6 +98,7 @@ export default function Parametres() {
         if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
         if (row.cle === 'meta_ads') setMetaAds({ api_version: 'v21.0', ...((row.valeur as MetaAds) ?? {}) });
         if (row.cle === 'newsletter') setNewsletter({ rgpd_only: true, sender_name: 'Aissociate', ...((row.valeur as NewsletterCfg) ?? {}) });
+        if (row.cle === 'brevo') setBrevo({ sender_name: 'Aissociate', ...((row.valeur as BrevoCfg) ?? {}) });
         if (row.cle === 'email_signature') setSignature({ mode: 'auto', include_sender: true, ...((row.valeur as SignatureCfg) ?? {}) });
       }
       setLoading(false);
@@ -530,6 +533,28 @@ export default function Parametres() {
           </div>
         </Card>
 
+        {/* Brevo — envoi des newsletters par API */}
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <Send className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Brevo (envoi des newsletters)</h2>
+          </div>
+          <div className="space-y-4">
+            <p className="text-sm text-muted">Les newsletters sont envoyées via l'<strong>API transactionnelle Brevo</strong>. Créez une clé dans Brevo → <em>SMTP &amp; API → API Keys</em>.</p>
+            <Field label="Clé API Brevo" hint="Stockée côté serveur (table protégée admin)"><input className="input" type="password" value={brevo.api_key ?? ''} onChange={(e) => setBrevo({ ...brevo, api_key: e.target.value })} autoComplete="new-password" placeholder="xkeysib-…" /></Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="E-mail expéditeur" hint="Doit être un expéditeur vérifié dans Brevo"><input className="input" value={brevo.sender_email ?? ''} onChange={(e) => setBrevo({ ...brevo, sender_email: e.target.value })} placeholder="contact@aissociate.re" /></Field>
+              <Field label="Nom de l'expéditeur"><input className="input" value={brevo.sender_name ?? ''} onChange={(e) => setBrevo({ ...brevo, sender_name: e.target.value })} placeholder="Aissociate" /></Field>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button onClick={() => persist('brevo', { ...brevo })} disabled={saving === 'brevo'}>
+                <Save className="h-4 w-4" /> {saving === 'brevo' ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              {savedMsg === 'brevo' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+            </div>
+          </div>
+        </Card>
+
         {/* Newsletter hebdomadaire */}
         <Card className="lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
@@ -548,7 +573,7 @@ export default function Parametres() {
             <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={newsletter.auto_send === true} onChange={(e) => setNewsletter({ ...newsletter, auto_send: e.target.checked })} /> Envoi automatique (sinon brouillon à valider)</label>
             <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={newsletter.rgpd_only !== false} onChange={(e) => setNewsletter({ ...newsletter, rgpd_only: e.target.checked })} /> Uniquement les contacts ayant consenti (RGPD)</label>
           </div>
-          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">Un <strong>cron hebdomadaire</strong> (lundi 9h) compile les articles du blog des 7 derniers jours dans un e-mail unique envoyé à toute la base (BCC). Génération/envoi manuels depuis la page <strong>Newsletter</strong>. Image d'en-tête : config <strong>Kie.ai</strong> de la section Blog. SMTP requis (section ci-dessus).</p>
+          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">Un <strong>cron hebdomadaire</strong> (lundi 9h) compile les articles du blog des 7 derniers jours dans un e-mail unique envoyé à toute la base (BCC). Génération/envoi manuels depuis la page <strong>Newsletter</strong>. Image d'en-tête : config <strong>Kie.ai</strong> de la section Blog. Envoi via <strong>Brevo</strong> (section ci-dessus).</p>
           <div className="mt-4 flex items-center gap-3">
             <Button onClick={() => persist('newsletter', { ...newsletter })} disabled={saving === 'newsletter'}>
               <Save className="h-4 w-4" /> {saving === 'newsletter' ? 'Enregistrement…' : 'Enregistrer'}

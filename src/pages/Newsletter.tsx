@@ -18,13 +18,13 @@ export default function Newsletter() {
     try {
       const { data: res, error } = await supabase.functions.invoke('generate-newsletter', { body: { action: 'generate' } });
       if (error) throw new Error(await functionErrorMessage(error));
-      const r = res as { ok?: boolean; skipped?: boolean; reason?: string; articles?: number; statut?: string; sent?: number; error?: string };
+      const r = res as { ok?: boolean; skipped?: boolean; reason?: string; articles?: number; statut?: string; sent?: number; total?: number; warning?: string; error?: string };
       if (r?.error) throw new Error(r.error);
       if (r?.skipped) { alert(r.reason ?? 'Aucune actualité à compiler cette semaine.'); return; }
       refresh();
       alert(r?.statut === 'envoye'
-        ? `Newsletter générée et envoyée à ${r.sent ?? 0} destinataire(s).`
-        : `Brouillon de newsletter généré (${r?.articles ?? 0} article(s)). Relisez-le puis envoyez-le.`);
+        ? `Newsletter générée et envoyée à ${r.sent ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).${r?.warning ? `\n⚠ Envoi partiel : ${r.warning}` : ''}`
+        : `Brouillon de newsletter généré (${r?.articles ?? 0} article(s)). Relisez-le puis envoyez-le.${r?.warning ? `\n⚠ ${r.warning}` : ''}`);
     } catch (err) {
       alert(`Génération indisponible : déployez l'Edge Function « generate-newsletter ». ${err instanceof Error ? err.message : ''}`);
     } finally {
@@ -38,12 +38,12 @@ export default function Newsletter() {
     try {
       const { data: res, error } = await supabase.functions.invoke('generate-newsletter', { body: { action: 'send', newsletterId: n.id } });
       if (error) throw new Error(await functionErrorMessage(error));
-      const r = res as { ok?: boolean; sent?: number; error?: string };
+      const r = res as { ok?: boolean; sent?: number; total?: number; warning?: string; error?: string };
       if (r?.error) throw new Error(r.error);
       refresh();
-      alert(`Newsletter envoyée à ${r?.sent ?? 0} destinataire(s).`);
+      alert(`Newsletter envoyée à ${r?.sent ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).${r?.warning ? `\n⚠ Envoi partiel : ${r.warning}` : ''}`);
     } catch (err) {
-      alert(`Envoi impossible : vérifiez la configuration SMTP (Paramètres). ${err instanceof Error ? err.message : ''}`);
+      alert(`Envoi impossible : vérifiez la configuration Brevo (Paramètres → Brevo). ${err instanceof Error ? err.message : ''}`);
     } finally {
       setSendingId(null);
     }

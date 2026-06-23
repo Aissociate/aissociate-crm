@@ -4,7 +4,8 @@
 //   d'en-tête (Kie.ai Seedream), construit un e-mail HTML soigné et enregistre
 //   l'édition. Brouillon par défaut ; envoyée directement si auto_send.
 // - action 'send' : envoie une édition existante (brouillon) à toute la base
-//   en BCC (par lots), via la fonction send-email.
+//   en BCC (par lots), via l'API transactionnelle Brevo (clé : secret
+//   BREVO_API_KEY ou Paramètres → Brevo).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 
@@ -134,21 +135,49 @@ async function recipients(sb: ReturnType<typeof createClient>, rgpdOnly: boolean
   return [...set];
 }
 
-// Envoie une édition à toute la base, en BCC par lots, via send-email.
-async function sendEdition(sb: ReturnType<typeof createClient>, SUPABASE_URL: string, SERVICE: string, edition: { id: string; sujet: string; contenu_html: string }, rgpdOnly: boolean): Promise<{ sent: number }> {
+type BrevoCfg = { apiKey: string; senderEmail: string; senderName: string };
+
+// Envoie une édition à toute la base via l'API transactionnelle Brevo
+// (/v3/smtp/email), en BCC par lots (destinataires masqués entre eux).
+async function sendEdition(
+  sb: ReturnType<typeof createClient>,
+  edition: { id: string; sujet: string; contenu_html: string },
+  rgpdOnly: boolean,
+  brevo: BrevoCfg,
+): Promise<{ sent: number; total: number; error?: string }> {
+  if (!brevo.apiKey || !brevo.senderEmail) {
+    return { sent: 0, total: 0, error: "Configuration Brevo incomplète : renseignez la clé API et l'e-mail expéditeur (Paramètres → Brevo)." };
+  }
   const list = await recipients(sb, rgpdOnly);
+  if (!list.length) return { sent: 0, total: 0, error: "Aucun destinataire (contacts avec e-mail)." };
+
   let sent = 0;
+  let lastErr = "";
+  // Brevo transactionnel : max 99 destinataires (to+cc+bcc) par appel → lots de 90.
   for (let i = 0; i < list.length; i += 90) {
     const batch = list.slice(i, i + 90);
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SERVICE}` },
-      body: JSON.stringify({ bcc: batch, subject: edition.sujet, html: edition.contenu_html }),
+      headers: { "api-key": brevo.apiKey, "content-type": "application/json", "accept": "application/json" },
+      body: JSON.stringify({
+        sender: { name: brevo.senderName, email: brevo.senderEmail },
+        // « to » = l'expéditeur lui-même (adresse valide) ; les vrais destinataires en BCC.
+        to: [{ email: brevo.senderEmail, name: brevo.senderName }],
+        bcc: batch.map((e) => ({ email: e })),
+        subject: edition.sujet,
+        htmlContent: edition.contenu_html,
+      }),
     });
     if (r.ok) sent += batch.length;
+    else lastErr = `Brevo ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`;
   }
-  await sb.from("newsletters").update({ statut: "envoye", sent_at: new Date().toISOString(), recipients_count: sent }).eq("id", edition.id);
-  return { sent };
+  const total = list.length;
+  // Statut « envoyé » uniquement si au moins un envoi a réussi ; sinon on garde
+  // le brouillon (pas de faux positif). On signale aussi les envois partiels.
+  if (sent > 0) {
+    await sb.from("newsletters").update({ statut: "envoye", sent_at: new Date().toISOString(), recipients_count: sent }).eq("id", edition.id);
+  }
+  return { sent, total, error: sent < total ? (lastErr || "Envoi partiel ou échoué via Brevo.") : undefined };
 }
 
 Deno.serve(async (req: Request) => {
@@ -165,13 +194,24 @@ Deno.serve(async (req: Request) => {
     const cfg = (nlRow?.valeur ?? {}) as { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
     const rgpdOnly = cfg.rgpd_only !== false;
 
+    // Config Brevo (envoi des newsletters via API transactionnelle). Clé : secret
+    // BREVO_API_KEY prioritaire, sinon table parametres (cle='brevo').
+    const { data: brevoRow } = await sb.from("parametres").select("valeur").eq("cle", "brevo").maybeSingle();
+    const brevoCfg = (brevoRow?.valeur ?? {}) as { api_key?: string; sender_email?: string; sender_name?: string };
+    const brevo: BrevoCfg = {
+      apiKey: (Deno.env.get("BREVO_API_KEY") || brevoCfg.api_key || "").trim(),
+      senderEmail: (brevoCfg.sender_email || "").trim(),
+      senderName: (brevoCfg.sender_name || cfg.sender_name || "Aissociate").trim() || "Aissociate",
+    };
+
     // — Envoi d'une édition existante —
     if (action === "send") {
       if (!body.newsletterId) return json({ error: "newsletterId requis" }, 400);
       const { data: ed } = await sb.from("newsletters").select("id, sujet, contenu_html, statut").eq("id", body.newsletterId).maybeSingle();
       if (!ed) return json({ error: "Édition introuvable" }, 404);
-      const { sent } = await sendEdition(sb, SUPABASE_URL, SERVICE, ed as { id: string; sujet: string; contenu_html: string }, rgpdOnly);
-      return json({ ok: true, sent });
+      const { sent, total, error: sendErr } = await sendEdition(sb, ed as { id: string; sujet: string; contenu_html: string }, rgpdOnly, brevo);
+      if (!sent) return json({ error: sendErr ?? "Échec de l'envoi via Brevo." }, 400);
+      return json({ ok: true, sent, total, warning: sent < total ? sendErr : undefined });
     }
 
     // — Génération d'une édition —
@@ -248,10 +288,12 @@ Deno.serve(async (req: Request) => {
     }).select("id, sujet, contenu_html").maybeSingle();
     if (error || !ins) return json({ error: error?.message ?? "Échec d'enregistrement" }, 500);
 
-    let sent = 0;
-    if (auto) ({ sent } = await sendEdition(sb, SUPABASE_URL, SERVICE, ins as { id: string; sujet: string; contenu_html: string }, rgpdOnly));
+    let sent = 0, total = 0;
+    let sendWarn: string | undefined;
+    if (auto) ({ sent, total, error: sendWarn } = await sendEdition(sb, ins as { id: string; sujet: string; contenu_html: string }, rgpdOnly, brevo));
+    const statut = auto && sent > 0 ? "envoye" : "brouillon";
 
-    return json({ ok: true, id: (ins as { id: string }).id, articles: articles.length, statut: auto ? "envoye" : "brouillon", sent });
+    return json({ ok: true, id: (ins as { id: string }).id, articles: articles.length, statut, sent, total, warning: auto && sent < total ? sendWarn : undefined });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
