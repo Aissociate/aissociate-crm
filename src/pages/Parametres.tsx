@@ -31,7 +31,7 @@ const KIE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
 type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
 type NewsletterCfg = { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
-type BrevoCfg = { api_key?: string; sender_email?: string; sender_name?: string };
+type BrevoCfg = { api_key?: string; sender_email?: string; sender_name?: string; daily_limit?: number };
 // SignatureCfg importé depuis @/lib/signature
 
 // Domaines de contexte de l'assistant IA. `defaut` = accès si la case n'a
@@ -566,6 +566,9 @@ export default function Parametres() {
               <Field label="E-mail expéditeur" hint="Doit être un expéditeur vérifié dans Brevo"><input className="input" value={brevo.sender_email ?? ''} onChange={(e) => setBrevo({ ...brevo, sender_email: e.target.value })} placeholder="contact@aissociate.re" /></Field>
               <Field label="Nom de l'expéditeur"><input className="input" value={brevo.sender_name ?? ''} onChange={(e) => setBrevo({ ...brevo, sender_name: e.target.value })} placeholder="Aissociate" /></Field>
             </div>
+            <Field label="Limite d'envoi par jour" hint="Plan gratuit Brevo = 300/jour. Au-delà, l'envoi est mis en file et étalé (max 7 jours).">
+              <input className="input max-w-[160px]" type="number" min={1} max={5000} value={brevo.daily_limit ?? 300} onChange={(e) => setBrevo({ ...brevo, daily_limit: Math.min(5000, Math.max(1, Number(e.target.value) || 300)) })} />
+            </Field>
             <div className="flex flex-wrap items-center gap-3">
               <Button onClick={() => persist('brevo', { ...brevo })} disabled={saving === 'brevo'}>
                 <Save className="h-4 w-4" /> {saving === 'brevo' ? 'Enregistrement…' : 'Enregistrer'}

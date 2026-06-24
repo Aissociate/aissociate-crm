@@ -114,7 +114,8 @@ function buildHtml(opts: { senderName: string; intro: string; headerImage: strin
       </td></tr>
       <tr><td style="padding:18px 28px;text-align:center;">
         <p style="margin:0 0 6px;font-size:12px;color:#9a9aa5;font-family:Arial,Helvetica,sans-serif;">${esc(senderName)} — Organisme de formation IA certifié Qualiopi · La Réunion</p>
-        <p style="margin:0;font-size:12px;color:#9a9aa5;font-family:Arial,Helvetica,sans-serif;"><a href="${SITE_URL}" style="color:#9a9aa5;">${SITE_URL.replace("https://", "")}</a> · Vous recevez cet e-mail en tant que contact d'Aissociate.</p>
+        <p style="margin:0 0 6px;font-size:12px;color:#9a9aa5;font-family:Arial,Helvetica,sans-serif;"><a href="${SITE_URL}" style="color:#9a9aa5;">${SITE_URL.replace("https://", "")}</a> · Vous recevez cet e-mail en tant que contact d'Aissociate.</p>
+        <p style="margin:0;font-size:12px;color:#9a9aa5;font-family:Arial,Helvetica,sans-serif;"><a href="{{UNSUBSCRIBE_URL}}" style="color:#9a9aa5;text-decoration:underline;">Se désinscrire de la newsletter</a></p>
       </td></tr>
     </table>
   </td></tr>
@@ -122,9 +123,9 @@ function buildHtml(opts: { senderName: string; intro: string; headerImage: strin
 </body></html>`;
 }
 
-// Récupère les destinataires (contacts avec e-mail, RGPD optionnel), dédupliqués.
+// Destinataires (contacts avec e-mail, RGPD optionnel), HORS désinscrits, dédupliqués.
 async function recipients(sb: ReturnType<typeof createClient>, rgpdOnly: boolean): Promise<string[]> {
-  let q = sb.from("contacts").select("email, rgpd_consent").not("email", "is", null);
+  let q = sb.from("contacts").select("email, rgpd_consent").not("email", "is", null).eq("newsletter_unsubscribed", false);
   if (rgpdOnly) q = q.eq("rgpd_consent", true);
   const { data } = await q;
   const set = new Set<string>();
@@ -135,49 +136,147 @@ async function recipients(sb: ReturnType<typeof createClient>, rgpdOnly: boolean
   return [...set];
 }
 
+// Lien de désinscription personnalisé (jeton par contact), via la fonction publique.
+const unsubUrl = (sbUrl: string, token: string) => `${sbUrl}/functions/v1/newsletter-unsubscribe?t=${token}`;
+
+// Map e-mail (minuscule) -> jeton de désinscription, pour les contacts NON désinscrits.
+async function tokenMap(sb: ReturnType<typeof createClient>): Promise<Map<string, string>> {
+  const { data } = await sb.from("contacts").select("email, unsubscribe_token").not("email", "is", null).eq("newsletter_unsubscribed", false);
+  const m = new Map<string, string>();
+  for (const c of (data ?? []) as { email?: string; unsubscribe_token?: string }[]) {
+    const e = String(c.email ?? "").trim().toLowerCase();
+    if (e && c.unsubscribe_token) m.set(e, c.unsubscribe_token);
+  }
+  return m;
+}
+
+// Verrou anti-concurrence du drain (UPDATE conditionnel atomique).
+async function acquireDrainLock(sb: ReturnType<typeof createClient>): Promise<boolean> {
+  const now = new Date().toISOString();
+  const until = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const { data } = await sb.from("newsletter_drain_lock").update({ locked_until: until })
+    .eq("id", 1).or(`locked_until.is.null,locked_until.lt.${now}`).select("id");
+  return (data?.length ?? 0) > 0;
+}
+async function releaseDrainLock(sb: ReturnType<typeof createClient>): Promise<void> {
+  await sb.from("newsletter_drain_lock").update({ locked_until: null }).eq("id", 1);
+}
+
 type BrevoCfg = { apiKey: string; senderEmail: string; senderName: string };
 
-// Envoie une édition à toute la base via l'API transactionnelle Brevo
-// (/v3/smtp/email), en BCC par lots (destinataires masqués entre eux).
-async function sendEdition(
-  sb: ReturnType<typeof createClient>,
-  edition: { id: string; sujet: string; contenu_html: string },
-  rgpdOnly: boolean,
-  brevo: BrevoCfg,
-): Promise<{ sent: number; total: number; error?: string }> {
-  if (!brevo.apiKey || !brevo.senderEmail) {
-    return { sent: 0, total: 0, error: "Configuration Brevo incomplète : renseignez la clé API et l'e-mail expéditeur (Paramètres → Brevo)." };
-  }
-  const list = await recipients(sb, rgpdOnly);
-  if (!list.length) return { sent: 0, total: 0, error: "Aucun destinataire (contacts avec e-mail)." };
+// Envoie un lot via l'API Brevo avec personnalisation par destinataire
+// (messageVersions) : chacun reçoit son propre lien de désinscription.
+async function brevoSendBatch(brevo: BrevoCfg, subject: string, baseHtml: string, items: { email: string; token: string }[], sbUrl: string): Promise<{ ok: boolean; err?: string }> {
+  const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": brevo.apiKey, "content-type": "application/json", "accept": "application/json" },
+    body: JSON.stringify({
+      sender: { name: brevo.senderName, email: brevo.senderEmail },
+      subject,
+      htmlContent: baseHtml.replace(/\{\{UNSUBSCRIBE_URL\}\}/g, SITE_URL),
+      messageVersions: items.map((it) => ({
+        to: [{ email: it.email }],
+        htmlContent: baseHtml.replace(/\{\{UNSUBSCRIBE_URL\}\}/g, unsubUrl(sbUrl, it.token)),
+      })),
+    }),
+  });
+  return r.ok ? { ok: true } : { ok: false, err: `Brevo ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}` };
+}
 
-  let sent = 0;
-  let lastErr = "";
-  // Brevo transactionnel : max 99 destinataires (to+cc+bcc) par appel → lots de 90.
-  for (let i = 0; i < list.length; i += 90) {
-    const batch = list.slice(i, i + 90);
-    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: { "api-key": brevo.apiKey, "content-type": "application/json", "accept": "application/json" },
-      body: JSON.stringify({
-        sender: { name: brevo.senderName, email: brevo.senderEmail },
-        // « to » = l'expéditeur lui-même (adresse valide) ; les vrais destinataires en BCC.
-        to: [{ email: brevo.senderEmail, name: brevo.senderName }],
-        bcc: batch.map((e) => ({ email: e })),
-        subject: edition.sujet,
-        htmlContent: edition.contenu_html,
-      }),
-    });
-    if (r.ok) sent += batch.length;
-    else lastErr = `Brevo ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`;
+// E-mails déjà envoyés aujourd'hui (toutes éditions) — quota Brevo/jour partagé.
+async function sentTodayCount(sb: ReturnType<typeof createClient>): Promise<number> {
+  const startOfDay = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").toISOString();
+  const { count } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true })
+    .eq("status", "sent").gte("sent_at", startOfDay);
+  return count ?? 0;
+}
+
+// Met à jour le statut d'une édition selon l'état de sa file (en_cours/envoye).
+async function updateNlStatut(sb: ReturnType<typeof createClient>, nlId: string): Promise<void> {
+  const { count: pending } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true }).eq("newsletter_id", nlId).eq("status", "pending");
+  const { count: sentC } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true }).eq("newsletter_id", nlId).eq("status", "sent");
+  const done = (pending ?? 0) === 0;
+  await sb.from("newsletters").update({
+    statut: done ? "envoye" : "en_cours",
+    recipients_count: sentC ?? 0,
+    ...(done && (sentC ?? 0) > 0 ? { sent_at: new Date().toISOString() } : {}),
+  }).eq("id", nlId);
+}
+
+// Draine la file dans la limite du quota du jour (plafond Brevo global au compte),
+// FIFO par created_at, par lots de 90, en regroupant par édition. Sérialisé par
+// verrou, avec jeton de désinscription par destinataire et retry borné (3).
+async function drainQueue(sb: ReturnType<typeof createClient>, brevo: BrevoCfg, dailyLimit: number, sbUrl: string): Promise<{ sent: number; remaining: number }> {
+  if (!brevo.apiKey || !brevo.senderEmail) return { sent: 0, remaining: 0 };
+  if (!(await acquireDrainLock(sb))) return { sent: 0, remaining: 0 };
+  try {
+    const remaining = Math.max(0, dailyLimit - await sentTodayCount(sb));
+    if (remaining <= 0) return { sent: 0, remaining: 0 };
+    const { data: pend } = await sb.from("newsletter_queue")
+      .select("id, newsletter_id, email, retry_count").eq("status", "pending").order("created_at", { ascending: true }).limit(remaining);
+    const rows = (pend ?? []) as { id: string; newsletter_id: string; email: string; retry_count: number }[];
+    if (!rows.length) return { sent: 0, remaining };
+    const tokens = await tokenMap(sb);
+
+    const byNl = new Map<string, typeof rows>();
+    for (const r of rows) { const a = byNl.get(r.newsletter_id) ?? []; a.push(r); byNl.set(r.newsletter_id, a); }
+
+    let sent = 0;
+    const nowIso = new Date().toISOString();
+    for (const [nlId, items] of byNl) {
+      const { data: ed } = await sb.from("newsletters").select("sujet, contenu_html").eq("id", nlId).maybeSingle();
+      if (!ed) continue;
+      const e = ed as { sujet: string; contenu_html: string };
+      for (let i = 0; i < items.length; i += 90) {
+        const batch = items.slice(i, i + 90);
+        // Désinscrits/supprimés depuis la mise en file : retirés sans envoi.
+        const valid = batch.filter((b) => tokens.has(b.email));
+        const skipped = batch.filter((b) => !tokens.has(b.email));
+        if (skipped.length) await sb.from("newsletter_queue").update({ status: "failed", error: "exclu (désinscrit/supprimé)" }).in("id", skipped.map((s) => s.id));
+        if (!valid.length) continue;
+        const res = await brevoSendBatch(brevo, e.sujet, e.contenu_html, valid.map((v) => ({ email: v.email, token: tokens.get(v.email)! })), sbUrl);
+        if (res.ok) {
+          await sb.from("newsletter_queue").update({ status: "sent", sent_at: nowIso }).in("id", valid.map((v) => v.id));
+          sent += valid.length;
+        } else {
+          // Retry : +1 ; après 3 échecs → « failed » (ne bloque plus la file).
+          const byRetry = new Map<number, string[]>();
+          for (const v of valid) { const rc = v.retry_count ?? 0; const a = byRetry.get(rc) ?? []; a.push(v.id); byRetry.set(rc, a); }
+          for (const [rc, ids] of byRetry) {
+            const next = rc + 1;
+            await sb.from("newsletter_queue").update(next >= 3 ? { status: "failed", error: res.err, retry_count: next } : { error: res.err, retry_count: next }).in("id", ids);
+          }
+        }
+      }
+      await updateNlStatut(sb, nlId);
+    }
+    return { sent, remaining };
+  } finally {
+    await releaseDrainLock(sb);
   }
-  const total = list.length;
-  // Statut « envoyé » uniquement si au moins un envoi a réussi ; sinon on garde
-  // le brouillon (pas de faux positif). On signale aussi les envois partiels.
-  if (sent > 0) {
-    await sb.from("newsletters").update({ statut: "envoye", sent_at: new Date().toISOString(), recipients_count: sent }).eq("id", edition.id);
+}
+
+// Met une édition en file (tous ses destinataires) puis envoie l'allocation du
+// jour. Garde-fou : refuse si la base dépasse dailyLimit * 7 (300×7 par défaut).
+async function enqueueAndDrain(
+  sb: ReturnType<typeof createClient>, nlId: string, rgpdOnly: boolean, brevo: BrevoCfg, dailyLimit: number, sbUrl: string,
+): Promise<{ total?: number; sentNow?: number; queued?: number; days?: number; error?: string }> {
+  if (!brevo.apiKey || !brevo.senderEmail) return { error: "Configuration Brevo incomplète (Paramètres → Brevo)." };
+  const list = await recipients(sb, rgpdOnly);
+  if (!list.length) return { error: "Aucun destinataire (contacts avec e-mail, hors désinscrits)." };
+  const cap = dailyLimit * 7;
+  if (list.length > cap) {
+    return { error: `Trop de destinataires (${list.length}) : dépasse le plafond de ${cap} (${dailyLimit} × 7 jours). Réduisez la base ou augmentez le quota Brevo.` };
   }
-  return { sent, total, error: sent < total ? (lastErr || "Envoi partiel ou échoué via Brevo.") : undefined };
+  const toInsert = list.map((email) => ({ newsletter_id: nlId, email, status: "pending" }));
+  for (let i = 0; i < toInsert.length; i += 500) {
+    await sb.from("newsletter_queue").upsert(toInsert.slice(i, i + 500), { onConflict: "newsletter_id,email", ignoreDuplicates: true });
+  }
+  await drainQueue(sb, brevo, dailyLimit, sbUrl);
+  await updateNlStatut(sb, nlId);
+  const { count: nlSent } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true }).eq("newsletter_id", nlId).eq("status", "sent");
+  const { count: nlPending } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true }).eq("newsletter_id", nlId).eq("status", "pending");
+  return { total: list.length, sentNow: nlSent ?? 0, queued: nlPending ?? 0, days: Math.ceil(list.length / dailyLimit) };
 }
 
 Deno.serve(async (req: Request) => {
@@ -197,12 +296,21 @@ Deno.serve(async (req: Request) => {
     // Config Brevo (envoi des newsletters via API transactionnelle). Clé : secret
     // BREVO_API_KEY prioritaire, sinon table parametres (cle='brevo').
     const { data: brevoRow } = await sb.from("parametres").select("valeur").eq("cle", "brevo").maybeSingle();
-    const brevoCfg = (brevoRow?.valeur ?? {}) as { api_key?: string; sender_email?: string; sender_name?: string };
+    const brevoCfg = (brevoRow?.valeur ?? {}) as { api_key?: string; sender_email?: string; sender_name?: string; daily_limit?: number | string };
     const brevo: BrevoCfg = {
       apiKey: (Deno.env.get("BREVO_API_KEY") || brevoCfg.api_key || "").trim(),
       senderEmail: (brevoCfg.sender_email || "").trim(),
       senderName: (brevoCfg.sender_name || cfg.sender_name || "Aissociate").trim() || "Aissociate",
     };
+    // Plafond d'envoi par jour (Brevo gratuit = 300). La file étale au-delà.
+    // Borné [1, 5000] pour éviter toute valeur aberrante côté config.
+    const dailyLimit = Math.min(5000, Math.max(1, Number(brevoCfg.daily_limit) > 0 ? Math.floor(Number(brevoCfg.daily_limit)) : 300));
+
+    // — Drain quotidien de la file (cron) —
+    if (action === "process_queue") {
+      const { sent } = await drainQueue(sb, brevo, dailyLimit, SUPABASE_URL);
+      return json({ ok: true, sent });
+    }
 
     // — Test de connexion Brevo (clé valide + expéditeur vérifié) —
     if (action === "test") {
@@ -230,11 +338,11 @@ Deno.serve(async (req: Request) => {
     // — Envoi d'une édition existante —
     if (action === "send") {
       if (!body.newsletterId) return json({ error: "newsletterId requis" }, 400);
-      const { data: ed } = await sb.from("newsletters").select("id, sujet, contenu_html, statut").eq("id", body.newsletterId).maybeSingle();
+      const { data: ed } = await sb.from("newsletters").select("id").eq("id", body.newsletterId).maybeSingle();
       if (!ed) return json({ error: "Édition introuvable" }, 404);
-      const { sent, total, error: sendErr } = await sendEdition(sb, ed as { id: string; sujet: string; contenu_html: string }, rgpdOnly, brevo);
-      if (!sent) return json({ error: sendErr ?? "Échec de l'envoi via Brevo." }, 400);
-      return json({ ok: true, sent, total, warning: sent < total ? sendErr : undefined });
+      const res = await enqueueAndDrain(sb, body.newsletterId, rgpdOnly, brevo, dailyLimit, SUPABASE_URL);
+      if (res.error) return json({ error: res.error }, 400);
+      return json({ ok: true, ...res });
     }
 
     // — Génération d'une édition —
@@ -311,12 +419,12 @@ Deno.serve(async (req: Request) => {
     }).select("id, sujet, contenu_html").maybeSingle();
     if (error || !ins) return json({ error: error?.message ?? "Échec d'enregistrement" }, 500);
 
-    let sent = 0, total = 0;
-    let sendWarn: string | undefined;
-    if (auto) ({ sent, total, error: sendWarn } = await sendEdition(sb, ins as { id: string; sujet: string; contenu_html: string }, rgpdOnly, brevo));
-    const statut = auto && sent > 0 ? "envoye" : "brouillon";
+    const nlId = (ins as { id: string }).id;
+    let q: { total?: number; sentNow?: number; queued?: number; days?: number; error?: string } = {};
+    if (auto) q = await enqueueAndDrain(sb, nlId, rgpdOnly, brevo, dailyLimit, SUPABASE_URL);
+    const statut = auto ? (q.error ? "brouillon" : ((q.queued ?? 0) > 0 ? "en_cours" : "envoye")) : "brouillon";
 
-    return json({ ok: true, id: (ins as { id: string }).id, articles: articles.length, statut, sent, total, warning: auto && sent < total ? sendWarn : undefined });
+    return json({ ok: true, id: nlId, articles: articles.length, statut, ...q, warning: q.error });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

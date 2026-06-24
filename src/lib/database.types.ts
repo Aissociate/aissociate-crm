@@ -53,6 +53,8 @@ export type Contact = Timestamps & {
   financement_valide: boolean; inscription_validee: boolean;
   date_formation: string | null; assiette_commission: number | null;
   commission_validee: boolean; commission_payee: boolean;
+  // Newsletter : désinscription (lien public à jeton)
+  newsletter_unsubscribed: boolean; unsubscribe_token: string;
 };
 export type ContactDocument = {
   id: string; contact_id: string; titre: string; categorie: string | null;
@@ -73,7 +75,7 @@ export type ImportBatch = {
 export type Newsletter = {
   id: string; sujet: string; contenu_html: string; image_url: string | null;
   periode_debut: string | null; periode_fin: string | null;
-  statut: 'brouillon' | 'envoye'; recipients_count: number;
+  statut: 'brouillon' | 'en_cours' | 'envoye'; recipients_count: number;
   created_by: string | null; created_at: string; sent_at: string | null;
 };
 export type ContactAction = {

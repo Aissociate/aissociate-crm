@@ -18,13 +18,16 @@ export default function Newsletter() {
     try {
       const { data: res, error } = await supabase.functions.invoke('generate-newsletter', { body: { action: 'generate' } });
       if (error) throw new Error(await functionErrorMessage(error));
-      const r = res as { ok?: boolean; skipped?: boolean; reason?: string; articles?: number; statut?: string; sent?: number; total?: number; warning?: string; error?: string };
+      const r = res as { ok?: boolean; skipped?: boolean; reason?: string; articles?: number; statut?: string; total?: number; sentNow?: number; queued?: number; days?: number; warning?: string; error?: string };
       if (r?.error) throw new Error(r.error);
       if (r?.skipped) { alert(r.reason ?? 'Aucune actualité à compiler cette semaine.'); return; }
       refresh();
+      const tail = r?.warning ? `\n⚠ ${r.warning}` : '';
       alert(r?.statut === 'envoye'
-        ? `Newsletter générée et envoyée à ${r.sent ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).${r?.warning ? `\n⚠ Envoi partiel : ${r.warning}` : ''}`
-        : `Brouillon de newsletter généré (${r?.articles ?? 0} article(s)). Relisez-le puis envoyez-le.${r?.warning ? `\n⚠ ${r.warning}` : ''}`);
+        ? `Newsletter générée et envoyée à ${r.sentNow ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).${tail}`
+        : r?.statut === 'en_cours'
+          ? `Newsletter générée. ${r?.sentNow ?? 0} envoyé(s) aujourd'hui, ${r?.queued ?? 0} en file (étalé sur ~${r?.days ?? 1} jour(s), ${r?.queued ? '300/jour' : ''}). La suite part automatiquement chaque jour.${tail}`
+          : `Brouillon de newsletter généré (${r?.articles ?? 0} article(s)). Relisez-le puis envoyez-le.${tail}`);
     } catch (err) {
       alert(`Génération indisponible : déployez l'Edge Function « generate-newsletter ». ${err instanceof Error ? err.message : ''}`);
     } finally {
@@ -38,10 +41,12 @@ export default function Newsletter() {
     try {
       const { data: res, error } = await supabase.functions.invoke('generate-newsletter', { body: { action: 'send', newsletterId: n.id } });
       if (error) throw new Error(await functionErrorMessage(error));
-      const r = res as { ok?: boolean; sent?: number; total?: number; warning?: string; error?: string };
+      const r = res as { ok?: boolean; total?: number; sentNow?: number; queued?: number; days?: number; error?: string };
       if (r?.error) throw new Error(r.error);
       refresh();
-      alert(`Newsletter envoyée à ${r?.sent ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).${r?.warning ? `\n⚠ Envoi partiel : ${r.warning}` : ''}`);
+      alert((r?.queued ?? 0) > 0
+        ? `Envoi lancé : ${r?.sentNow ?? 0} envoyé(s) aujourd'hui, ${r?.queued} en file. Le reste part automatiquement à raison de 300/jour (≈ ${r?.days ?? 1} jour(s)).`
+        : `Newsletter envoyée à ${r?.sentNow ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).`);
     } catch (err) {
       alert(`Envoi impossible : vérifiez la configuration Brevo (Paramètres → Brevo). ${err instanceof Error ? err.message : ''}`);
     } finally {
@@ -93,9 +98,11 @@ export default function Newsletter() {
               <td className="px-4 py-3">
                 {n.statut === 'envoye'
                   ? <Badge tone="success">Envoyée{n.sent_at ? ` · ${formatDate(n.sent_at)}` : ''}</Badge>
-                  : <Badge tone="warning">Brouillon</Badge>}
+                  : n.statut === 'en_cours'
+                    ? <Badge tone="info">En cours d'envoi</Badge>
+                    : <Badge tone="warning">Brouillon</Badge>}
               </td>
-              <td className="px-4 py-3 text-muted">{n.statut === 'envoye' ? <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{n.recipients_count}</span> : '—'}</td>
+              <td className="px-4 py-3 text-muted">{(n.statut === 'envoye' || n.statut === 'en_cours') ? <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{n.recipients_count}</span> : '—'}</td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-1">
                   <button onClick={() => setPreview(n)} className="rounded p-1.5 text-muted hover:text-brand-600" title="Aperçu"><Eye className="h-4 w-4" /></button>
