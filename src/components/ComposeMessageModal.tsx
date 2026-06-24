@@ -5,7 +5,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Button, Modal, Field } from '@/components/ui';
 import { uploadFile } from '@/lib/storage';
+import { fullName } from '@/lib/utils';
 import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
+import { applyTemplateVars, templatesForCanal, DEFAULT_TEMPLATES, type MessageTemplate, type TemplateVars } from '@/lib/messageTemplates';
 import type { Dossier, Document, Contact, EmailCanal } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
@@ -44,13 +46,15 @@ export default function ComposeMessageModal({
   const [smtpFrom, setSmtpFrom] = useState<string | null>(null);
   const [organisme, setOrganisme] = useState<OrganismeInfo | null>(null);
   const [signatureCfg, setSignatureCfg] = useState<SignatureCfg | null>(null);
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
 
   useEffect(() => {
-    supabase.from('parametres').select('cle, valeur').in('cle', ['smtp', 'organisme', 'email_signature']).then(({ data }) => {
+    supabase.from('parametres').select('cle, valeur').in('cle', ['smtp', 'organisme', 'email_signature', 'message_templates']).then(({ data }) => {
       (data ?? []).forEach((row) => {
         if (row.cle === 'smtp') setSmtpFrom(((row.valeur ?? {}) as SmtpCfg).from ?? null);
         if (row.cle === 'organisme') setOrganisme((row.valeur ?? {}) as OrganismeInfo);
         if (row.cle === 'email_signature') setSignatureCfg((row.valeur ?? {}) as SignatureCfg);
+        if (row.cle === 'message_templates') setTemplates(((row.valeur ?? {}) as { items?: MessageTemplate[] }).items ?? []);
       });
     });
   }, []);
@@ -145,6 +149,29 @@ export default function ComposeMessageModal({
     onClose(); onSent?.();
   };
 
+  // ── Modèles de messages (réponses rapides) ──
+  // Contexte pour les variables {{…}} : contact lié, sinon contact retrouvé par
+  // l'adresse e-mail saisie. Variables vides si le contact est inconnu.
+  const firstEmail = dest.split(',')[0]?.trim().toLowerCase() ?? '';
+  const resolvedContact =
+    contacts.find((c) => c.id === contactId) ??
+    (firstEmail ? contacts.find((c) => (c.email ?? '').toLowerCase() === firstEmail) : undefined);
+  const templateVars: TemplateVars = {
+    prenom: resolvedContact?.prenom, nom: resolvedContact?.nom, civilite: resolvedContact?.civilite,
+    fonction: resolvedContact?.fonction, formation: resolvedContact?.formation_envisagee,
+    conseiller: profile ? fullName(profile.prenom, profile.nom) : '',
+    organisme: organisme?.nom ?? '',
+  };
+  // Modèles configurés, ou modèles par défaut tant qu'aucun n'existe.
+  const effectiveTemplates = templates.length ? templates : DEFAULT_TEMPLATES;
+  const availableTemplates = templatesForCanal(effectiveTemplates, canal);
+  const applyTemplate = (id: string) => {
+    const t = effectiveTemplates.find((x) => x.id === id);
+    if (!t) return;
+    if (canal === 'email' && t.sujet) setSujet(applyTemplateVars(t.sujet, templateVars));
+    setCorps(applyTemplateVars(t.corps, templateVars));
+  };
+
   const waValid = canal === 'whatsapp' && !!digits(dest) && !!corps;
   const emailValid = canal === 'email' && !!sujet && !!dest;
 
@@ -170,6 +197,15 @@ export default function ComposeMessageModal({
             </button>
           ))}
         </div>
+
+        {availableTemplates.length > 0 && (
+          <Field label="Modèle de message" hint="Insère un message prédéfini (remplace le contenu actuel)">
+            <select className="input" value="" onChange={(e) => { if (e.target.value) applyTemplate(e.target.value); e.target.selectedIndex = 0; }}>
+              <option value="">— Choisir un modèle… —</option>
+              {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
+            </select>
+          </Field>
+        )}
 
         {canal === 'whatsapp' ? (
           <>
