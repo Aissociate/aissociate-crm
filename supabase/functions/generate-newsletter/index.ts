@@ -319,7 +319,13 @@ Deno.serve(async (req: Request) => {
       if (!key) return json({ error: "Clé API Brevo manquante." }, 400);
       const acc = await fetch("https://api.brevo.com/v3/account", { headers: { "api-key": key, "accept": "application/json" } });
       if (!acc.ok) {
-        const msg = acc.status === 401 ? "Clé API Brevo invalide ou révoquée." : `Brevo a répondu ${acc.status}.`;
+        // Remonte le message réel de Brevo (clé révoquée vs IP non autorisée…).
+        const raw = (await acc.text().catch(() => "")).slice(0, 300);
+        let hint = raw;
+        try { hint = (JSON.parse(raw)?.message as string) || raw; } catch { /* corps non-JSON */ }
+        const msg = acc.status === 401
+          ? `Clé API Brevo refusée (401)${hint ? ` : ${hint}` : ""}. Vérifiez la clé et, dans Brevo, les « IP autorisées » (SMTP & API → API Keys → Restrictions d'IP).`
+          : `Brevo a répondu ${acc.status}${hint ? ` : ${hint}` : ""}.`;
         return json({ error: msg }, 400);
       }
       const accData = await acc.json().catch(() => ({})) as { email?: string };

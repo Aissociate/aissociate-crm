@@ -1,5 +1,6 @@
-import { type ReactNode, type ButtonHTMLAttributes, useEffect } from 'react';
-import { X, Loader2, Inbox } from 'lucide-react';
+import { type ReactNode, type ButtonHTMLAttributes, useEffect, useRef, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { X, Loader2, Inbox, Search, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -150,6 +151,133 @@ export function Field({
       {children}
       {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
     </div>
+  );
+}
+
+// Sélecteur avec recherche textuelle (combobox). Remplace un <select> quand la
+// liste est longue (contacts, entreprises…). `emptyLabel` ajoute une option pour
+// vider la sélection (champ facultatif) ; sans elle, le champ n'a pas de « vide ».
+export type SearchOption = { value: string; label: string; sub?: string };
+
+export function SearchSelect({
+  value, onChange, options, placeholder = 'Rechercher…', emptyLabel, disabled, maxVisible = 50,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: SearchOption[];
+  placeholder?: string;
+  emptyLabel?: string;
+  disabled?: boolean;
+  maxVisible?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxH: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  const selected = options.find((o) => o.value === value) ?? null;
+
+  // Positionne le menu en `fixed` (échappe à l'overflow de la modale), vers le
+  // haut s'il manque de place dessous.
+  const place = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    const up = below < 300 && r.top > below;
+    const maxH = Math.min(320, Math.max(150, (up ? r.top : below) - 16));
+    setPos({ left: r.left, width: r.width, maxH, ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) });
+  };
+  const close = () => { setOpen(false); setQuery(''); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      close();
+    };
+    // Capture : passe AVANT le listener Escape de la modale (sur document) → ne ferme que le menu.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
+    const reflow = () => place();
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', reflow);
+    window.addEventListener('scroll', reflow, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', reflow);
+      window.removeEventListener('scroll', reflow, true);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => `${o.label} ${o.sub ?? ''}`.toLowerCase().includes(q));
+  }, [options, query]);
+  const shown = filtered.slice(0, maxVisible);
+  const choose = (v: string) => { onChange(v); close(); };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => { if (open) { close(); } else { place(); setOpen(true); setQuery(''); } }}
+        className="input flex w-full items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span className={cn('truncate', !selected && 'text-muted')}>{selected ? selected.label : (emptyLabel ?? placeholder)}</span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && pos && createPortal(
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, zIndex: 60 }}
+          className="rounded-lg border border-line bg-surface shadow-xl"
+        >
+          <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
+            <Search className="h-4 w-4 shrink-0 text-muted" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={placeholder}
+              className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-muted"
+            />
+          </div>
+          <ul style={{ maxHeight: pos.maxH }} className="overflow-y-auto py-1 text-sm">
+            {emptyLabel && (
+              <li>
+                <button type="button" onClick={() => choose('')} className="flex w-full items-center justify-between px-3 py-1.5 text-left text-muted hover:bg-surface-2">
+                  {emptyLabel}{!value && <Check className="h-4 w-4 shrink-0 text-brand-500" />}
+                </button>
+              </li>
+            )}
+            {shown.map((o) => (
+              <li key={o.value}>
+                <button type="button" onClick={() => choose(o.value)} className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-surface-2">
+                  <span className="min-w-0">
+                    <span className="block truncate text-fg">{o.label}</span>
+                    {o.sub && <span className="block truncate text-xs text-muted">{o.sub}</span>}
+                  </span>
+                  {o.value === value && <Check className="h-4 w-4 shrink-0 text-brand-500" />}
+                </button>
+              </li>
+            ))}
+            {shown.length === 0 && <li className="px-3 py-2 text-muted">Aucun résultat</li>}
+            {filtered.length > shown.length && (
+              <li className="px-3 py-1.5 text-xs text-muted">+{filtered.length - shown.length} autres — affinez la recherche</li>
+            )}
+          </ul>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 

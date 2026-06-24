@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, FileText, Wand as Wand2, Sparkles, Copy } from 'l
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
 import { formatDate, fullName } from '@/lib/utils';
@@ -229,10 +229,12 @@ export default function PlansFormation() {
         }
       >
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Formation source"><select className="input" value={form.formation_id ?? ''} onChange={(e) => applyFormation(e.target.value)}>
-            <option value="">— (plan vierge)</option>
-            {formations.data.map((f) => <option key={f.id} value={f.id}>{f.intitule}</option>)}
-          </select></Field>
+          <Field label="Formation source"><SearchSelect
+            value={form.formation_id ?? ''}
+            onChange={(v) => applyFormation(v)}
+            options={formations.data.map((f) => ({ value: f.id, label: f.intitule }))}
+            placeholder="Rechercher une formation…" emptyLabel="— (plan vierge)"
+          /></Field>
           <Field label="Nom du plan" required><input className="input" value={form.nom ?? ''} onChange={(e) => set('nom', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Objectifs"><textarea className="input" rows={2} value={form.objectifs ?? ''} onChange={(e) => set('objectifs', e.target.value)} /></Field></div>
           <div className="col-span-2"><Field label="Contenu / modules (une ligne par module)"><textarea className="input" rows={5} value={contenuText} onChange={(e) => setContenuText(e.target.value)} /></Field></div>
@@ -241,18 +243,24 @@ export default function PlansFormation() {
             {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
           </select></Field>
           <div className="col-span-2"><Field label="Dates de session" hint="Affichées sur le PDF (ex. « Les 4 et 5 août 2026 »)"><input className="input" placeholder="ex. Les 4 et 5 août 2026" value={form.dates_session ?? ''} onChange={(e) => set('dates_session', e.target.value)} /></Field></div>
-          <Field label="Bénéficiaire (contact)"><select className="input" value={form.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
-            <option value="">—</option>
-            {contacts.data.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}
-          </select></Field>
-          <Field label="Entreprise"><select className="input" value={form.entreprise_id ?? ''} onChange={(e) => set('entreprise_id', e.target.value || null)}>
-            <option value="">—</option>
-            {entreprises.data.map((e) => <option key={e.id} value={e.id}>{e.raison_sociale}</option>)}
-          </select></Field>
-          <Field label="Financeur"><select className="input" value={form.financeur_id ?? ''} onChange={(e) => set('financeur_id', e.target.value || null)}>
-            <option value="">—</option>
-            {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
-          </select></Field>
+          <Field label="Bénéficiaire (contact)"><SearchSelect
+            value={form.contact_id ?? ''}
+            onChange={(v) => set('contact_id', v || null)}
+            options={contacts.data.map((c) => ({ value: c.id, label: `${c.prenom} ${c.nom}`.trim(), sub: c.email ?? undefined }))}
+            placeholder="Rechercher un contact…" emptyLabel="—"
+          /></Field>
+          <Field label="Entreprise"><SearchSelect
+            value={form.entreprise_id ?? ''}
+            onChange={(v) => set('entreprise_id', v || null)}
+            options={entreprises.data.map((e) => ({ value: e.id, label: e.raison_sociale }))}
+            placeholder="Rechercher une entreprise…" emptyLabel="—"
+          /></Field>
+          <Field label="Financeur"><SearchSelect
+            value={form.financeur_id ?? ''}
+            onChange={(v) => set('financeur_id', v || null)}
+            options={financeurs.data.map((f) => ({ value: f.id, label: f.nom }))}
+            placeholder="Rechercher un financeur…" emptyLabel="—"
+          /></Field>
           <Field label="Statut"><select className="input" value={form.statut} onChange={(e) => set('statut', e.target.value as PlanStatut)}>
             {STATUTS.map((s) => <option key={s} value={s}>{PLAN_STATUT_LABELS[s]}</option>)}
           </select></Field>

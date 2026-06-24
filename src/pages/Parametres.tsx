@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import { buildSignatureHtml, type SignatureCfg } from '@/lib/signature';
+import { functionErrorMessage } from '@/lib/invokeError';
 
 type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
@@ -122,13 +123,16 @@ export default function Parametres() {
       const { data, error } = await supabase.functions.invoke('generate-newsletter', {
         body: { action: 'test', api_key: brevo.api_key, sender_email: brevo.sender_email },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await functionErrorMessage(error));
       const r = data as { ok?: boolean; account?: string; senderEmail?: string; senderOk?: boolean | null; error?: string };
       if (r?.error) throw new Error(r.error);
+      const sOk = r.senderOk; // true = vérifié · false = absent/inactif · null = non vérifiable
       const sender = r.senderEmail
-        ? (r.senderOk ? ` · expéditeur « ${r.senderEmail} » vérifié ✓` : ` · ⚠ expéditeur « ${r.senderEmail} » non vérifié dans Brevo`)
+        ? (sOk === true ? ` · expéditeur « ${r.senderEmail} » vérifié ✓`
+          : sOk === false ? ` · ⚠ expéditeur « ${r.senderEmail} » NON vérifié dans Brevo (l'envoi échouera)`
+          : ` · expéditeur « ${r.senderEmail} » : vérification indisponible`)
         : '';
-      setBrevoTest({ loading: false, ok: r.senderOk !== false, text: `Connexion OK${r.account ? ` (compte ${r.account})` : ''}${sender}` });
+      setBrevoTest({ loading: false, ok: sOk !== false, text: `Connexion OK${r.account ? ` (compte ${r.account})` : ''}${sender}` });
     } catch (err) {
       setBrevoTest({ loading: false, ok: false, text: err instanceof Error ? err.message : String(err) });
     }

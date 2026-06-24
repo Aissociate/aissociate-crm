@@ -4,7 +4,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
-import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, type Tone } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect, type Tone } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import { formatDate, fullName, formatMoney } from '@/lib/utils';
 import { ensureDossierClient } from '@/lib/dossierClient';
@@ -192,28 +192,36 @@ export default function Devis() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Client (contact)" required>
-              <select className="input" value={form.contact_id} onChange={(e) => setF('contact_id', e.target.value)}>
-                <option value="">— Sélectionner —</option>
-                {contacts.data.map((c) => <option key={c.id} value={c.id}>{fullName(c.prenom, c.nom)}{c.email ? ` · ${c.email}` : ''}</option>)}
-              </select>
+              <SearchSelect
+                value={form.contact_id}
+                onChange={(v) => setF('contact_id', v)}
+                options={contacts.data.map((c) => ({ value: c.id, label: fullName(c.prenom, c.nom), sub: c.email ?? undefined }))}
+                placeholder="Rechercher un contact (nom, e-mail)…"
+              />
             </Field>
             <Field label="Financeur (éventuel)">
-              <select className="input" value={form.financeur_id} onChange={(e) => setF('financeur_id', e.target.value)}>
-                <option value="">— Aucun —</option>
-                {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
-              </select>
+              <SearchSelect
+                value={form.financeur_id}
+                onChange={(v) => setF('financeur_id', v)}
+                options={financeurs.data.map((f) => ({ value: f.id, label: f.nom }))}
+                placeholder="Rechercher un financeur…" emptyLabel="— Aucun —"
+              />
             </Field>
             <Field label="Dossier lié" hint="Vide = dossier client créé/retrouvé automatiquement">
-              <select className="input" value={form.dossier_id} onChange={(e) => setF('dossier_id', e.target.value)}>
-                <option value="">— Auto (au nom du prospect) —</option>
-                {dossiers.data.map((d) => <option key={d.id} value={d.id}>{d.reference} — {d.intitule}</option>)}
-              </select>
+              <SearchSelect
+                value={form.dossier_id}
+                onChange={(v) => setF('dossier_id', v)}
+                options={dossiers.data.map((d) => ({ value: d.id, label: `${d.reference} — ${d.intitule}` }))}
+                placeholder="Rechercher un dossier…" emptyLabel="— Auto (au nom du prospect) —"
+              />
             </Field>
             <Field label="Formation concernée" hint="Clé du dossier client (prospect + formation)">
-              <select className="input" value={form.formation_id} onChange={(e) => setF('formation_id', e.target.value)} disabled={!!form.dossier_id}>
-                <option value="">— Aucune —</option>
-                {formations.data.map((f) => <option key={f.id} value={f.id}>{f.intitule}</option>)}
-              </select>
+              <SearchSelect
+                value={form.formation_id}
+                onChange={(v) => setF('formation_id', v)}
+                options={formations.data.map((f) => ({ value: f.id, label: f.intitule }))}
+                placeholder="Rechercher une formation…" emptyLabel="— Aucune —" disabled={!!form.dossier_id}
+              />
             </Field>
             <Field label="Statut">
               <select className="input" value={form.statut} onChange={(e) => setF('statut', e.target.value as DevisStatut)}>
