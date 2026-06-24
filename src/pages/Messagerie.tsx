@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Plus, Mail, Send, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, Upload, X, Loader as Loader2 } from 'lucide-react';
+import { Plus, Mail, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
 import { formatDate, fullName, cn } from '@/lib/utils';
-import { uploadFile } from '@/lib/storage';
-import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
-import type { Email, Contact, Dossier, EmailDirection, EmailCanal, Profile, Formateur, Candidat, Document } from '@/lib/database.types';
+import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
+import type { Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
-type Attachment = { filename: string; url: string };
 type View = 'conversations' | 'orphelins';
 
 // Adresse e-mail nue de « Nom <a@b.com> », normalisée.
@@ -39,19 +37,13 @@ type Convo = {
 };
 
 export default function Messagerie() {
-  const { session, profile, isManager, isAdmin } = useAuth();
+  const { isManager, isAdmin } = useAuth();
   const { data, loading, refresh } = useCollection<Email>('emails', { orderBy: { column: 'created_at', ascending: false } });
   const contacts = useCollection<Contact>('contacts');
-  const dossiers = useCollection<Dossier>('dossiers');
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
   const formateurs = useCollection<Formateur>('formateurs');
   const candidats = useCollection<Candidat>('candidats');
-  const documents = useCollection<Document>('documents');
-  const availableDocs = documents.data.filter((d) => d.fichier_url);
   const [smtpOk, setSmtpOk] = useState<boolean | null>(null);
-  const [smtpFrom, setSmtpFrom] = useState<string | null>(null);
-  const [organisme, setOrganisme] = useState<OrganismeInfo | null>(null);
-  const [signatureCfg, setSignatureCfg] = useState<SignatureCfg | null>(null);
   const [ownerFilter, setOwnerFilter] = useState('');
 
   const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
@@ -124,18 +116,11 @@ export default function Messagerie() {
   };
 
   useEffect(() => {
-    supabase.from('parametres').select('cle, valeur').in('cle', ['smtp', 'organisme', 'email_signature']).then(({ data }) => {
-      (data ?? []).forEach((row) => {
-        if (row.cle === 'smtp') {
-          const c = (row.valeur ?? {}) as SmtpCfg;
-          setSmtpOk(!!(c.host && c.user && c.password && c.from));
-          setSmtpFrom(c.from ?? null);
-        }
-        if (row.cle === 'organisme') setOrganisme((row.valeur ?? {}) as OrganismeInfo);
-        if (row.cle === 'email_signature') setSignatureCfg((row.valeur ?? {}) as SignatureCfg);
-      });
-      // smtp absent → état « non configuré »
-      if (!(data ?? []).some((r) => r.cle === 'smtp')) setSmtpOk(false);
+    // Statut SMTP pour le bandeau (la composition charge sa propre config).
+    supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle().then(({ data }) => {
+      if (!data) { setSmtpOk(false); return; }
+      const c = (data.valeur ?? {}) as SmtpCfg;
+      setSmtpOk(!!(c.host && c.user && c.password && c.from));
     });
   }, []);
 
@@ -147,38 +132,12 @@ export default function Messagerie() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const changeView = (v: View) => { setView(v); setSelection(new Set()); };
 
-  // ── Composition (e-mail ou WhatsApp) ──
+  // ── Composition (e-mail ou WhatsApp) — modale partagée ──
   const [syncing, setSyncing] = useState(false);
   const [open, setOpen] = useState(false);
-  const [canal, setCanal] = useState<EmailCanal>('email');
-  const [dest, setDest] = useState('');           // e-mails (séparés par virgule) ou numéro WhatsApp
-  const [sujet, setSujet] = useState('');
-  const [corps, setCorps] = useState('');
-  const [dossierId, setDossierId] = useState('');
-  const [attachIds, setAttachIds] = useState<Set<string>>(new Set());
-  const [extraAttachments, setExtraAttachments] = useState<Attachment[]>([]); // PJ libres téléversées
-  const [uploadingAttach, setUploadingAttach] = useState(false);
-  const [includeSig, setIncludeSig] = useState(true);
-  const [composeContactId, setComposeContactId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const toggleAttach = (id: string) => setAttachIds((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const [composeInitial, setComposeInitial] = useState<ComposeInitial>({});
 
-  // PJ libre : téléversement vers le bucket public « documents », URL passée à send-email.
-  const handleAttachUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (e.target) e.target.value = '';
-    if (!files.length) return;
-    setUploadingAttach(true);
-    for (const file of files) {
-      const { value, error } = await uploadFile('documents', file);
-      if (error || !value) { alert(`Échec du téléversement de « ${file.name} » : ${error ?? 'inconnu'}`); continue; }
-      setExtraAttachments((prev) => [...prev, { filename: file.name, url: value }]);
-    }
-    setUploadingAttach(false);
-  };
-  const removeExtraAttachment = (url: string) => setExtraAttachments((prev) => prev.filter((a) => a.url !== url));
-
-  const compose = () => { setCanal('email'); setDest(''); setSujet(''); setCorps(''); setDossierId(''); setAttachIds(new Set()); setExtraAttachments([]); setIncludeSig(true); setComposeContactId(null); setOpen(true); };
+  const compose = () => { setComposeInitial({}); setOpen(true); };
 
   // ── Répondre à une conversation (même canal que le dernier message) ──
   const affectationLabel = (c: Convo): string | null =>
@@ -196,60 +155,13 @@ export default function Messagerie() {
     return m ? ((m.direction === 'entrant' ? m.expediteur : m.destinataires[0]) ?? '') : '';
   };
   const reply = (c: Convo) => {
-    setComposeContactId(c.contactId);
     if (c.lastCanal === 'whatsapp') {
-      setCanal('whatsapp'); setDest(replyPhone(c)); setSujet('');
+      setComposeInitial({ canal: 'whatsapp', dest: replyPhone(c), contactId: c.contactId });
     } else {
-      setCanal('email'); setDest(replyEmailTarget(c)); const le = lastEmail(c); setSujet(le ? reSubject(le.sujet) : '');
+      const le = lastEmail(c);
+      setComposeInitial({ canal: 'email', dest: replyEmailTarget(c), sujet: le ? reSubject(le.sujet) : '', contactId: c.contactId });
     }
-    setCorps(''); setDossierId(''); setAttachIds(new Set()); setExtraAttachments([]); setIncludeSig(true);
     setOpen(true);
-  };
-
-  const send = async (statut: 'brouillon' | 'envoye') => {
-    setSaving(true);
-    const docAttachments = availableDocs.filter((d) => attachIds.has(d.id) && d.fichier_url).map((d) => ({ filename: d.titre, url: d.fichier_url! }));
-    const attachments: Attachment[] = [...docAttachments, ...extraAttachments];
-
-    if (canal === 'whatsapp') {
-      const phone = digits(dest);
-      if (!phone) { setSaving(false); alert('Numéro de téléphone requis pour WhatsApp.'); return; }
-      // Ouverture de WhatsApp (web/app) pré-rempli, puis journalisation du message.
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(corps ?? '')}`, '_blank', 'noopener');
-      const { error } = await supabase.from('emails').insert({
-        destinataires: [dest], sujet: sujet || 'WhatsApp', corps, statut: 'envoye', canal: 'whatsapp',
-        direction: 'sortant', expediteur: smtpFrom ?? profile?.email ?? null,
-        contact_id: composeContactId, sent_at: new Date().toISOString(), owner_id: session?.user.id, attachments: [],
-      });
-      setSaving(false);
-      if (error) { alert(error.message); return; }
-      setOpen(false); refresh();
-      return;
-    }
-
-    const destinataires = dest.split(',').map((d) => d.trim()).filter(Boolean);
-    let finalStatut = statut;
-    if (statut === 'envoye') {
-      const sigHtml = includeSig ? buildSignatureHtml(signatureCfg, organisme, profile) : '';
-      const html = (corps ?? '').replace(/\n/g, '<br>') + sigHtml;
-      const { error: fnError } = await supabase.functions.invoke('send-email', {
-        body: { to: destinataires, subject: sujet, html, text: corps, attachments },
-      });
-      if (fnError) {
-        finalStatut = 'brouillon';
-        alert('Envoi SMTP échoué. Vérifiez la configuration SMTP dans Paramètres.\nLe message a été enregistré en brouillon.');
-      }
-    }
-    const { error } = await supabase.from('emails').insert({
-      destinataires, sujet, corps, statut: finalStatut, attachments, canal: 'email',
-      expediteur: smtpFrom ?? profile?.email ?? null,
-      dossier_id: dossierId || null, contact_id: composeContactId,
-      sent_at: finalStatut === 'envoye' ? new Date().toISOString() : null,
-      owner_id: session?.user.id,
-    });
-    setSaving(false);
-    if (error) { alert(error.message); return; }
-    setOpen(false); refresh();
   };
 
   const remove = async (e: Email) => {
@@ -301,8 +213,6 @@ export default function Messagerie() {
 
   // Pastille canal (e-mail / WhatsApp)
   const channelIcon = (c: EmailCanal, cls = 'h-4 w-4') => (c === 'whatsapp' ? <MessageCircle className={cls} /> : <Mail className={cls} />);
-  const waValid = canal === 'whatsapp' && !!digits(dest) && !!corps;
-  const emailValid = canal === 'email' && !!sujet && !!dest;
 
   return (
     <div>
@@ -481,103 +391,8 @@ export default function Messagerie() {
         </div>
       )}
 
-      {/* Composition multi-canal */}
-      <Modal
-        open={open} onClose={() => setOpen(false)} wide
-        title={canal === 'whatsapp' ? 'Nouveau message WhatsApp' : 'Nouveau message'}
-        footer={
-          canal === 'whatsapp'
-            ? <Button onClick={() => send('envoye')} disabled={saving || !waValid}><MessageCircle className="h-4 w-4" /> Ouvrir WhatsApp</Button>
-            : <>
-                <Button variant="secondary" onClick={() => send('brouillon')} disabled={saving || !sujet}>Enregistrer brouillon</Button>
-                <Button onClick={() => send('envoye')} disabled={saving || !emailValid}><Send className="h-4 w-4" /> Envoyer</Button>
-              </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="inline-flex rounded-lg border border-line p-0.5 text-sm">
-            {(['email', 'whatsapp'] as EmailCanal[]).map((ch) => (
-              <button key={ch} onClick={() => setCanal(ch)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${canal === ch ? (ch === 'whatsapp' ? 'bg-emerald-600 text-white' : 'bg-brand-600 text-white') : 'text-muted hover:text-fg'}`}>
-                {channelIcon(ch, 'h-4 w-4')} {ch === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
-              </button>
-            ))}
-          </div>
-
-          {canal === 'whatsapp' ? (
-            <>
-              <Field label="Numéro WhatsApp" hint="Format international, ex. 262692123456" required>
-                <input className="input" value={dest} onChange={(e) => setDest(e.target.value)} placeholder="262692…" />
-              </Field>
-              <Field label="Message" required><textarea className="input" rows={6} value={corps} onChange={(e) => setCorps(e.target.value)} /></Field>
-              <p className="text-xs text-muted">L'envoi ouvre WhatsApp pré-rempli ; le message est journalisé dans la conversation.</p>
-            </>
-          ) : (
-            <>
-              <Field label="Destinataires (e-mails séparés par des virgules)" required>
-                <input className="input" value={dest} onChange={(e) => setDest(e.target.value)} list="contacts-emails" />
-                <datalist id="contacts-emails">
-                  {contacts.data.filter((c) => c.email).map((c) => <option key={c.id} value={c.email!}>{c.prenom} {c.nom}</option>)}
-                </datalist>
-              </Field>
-              <Field label="Dossier lié"><select className="input" value={dossierId} onChange={(e) => setDossierId(e.target.value)}>
-                <option value="">—</option>
-                {dossiers.data.map((d) => <option key={d.id} value={d.id}>{d.reference} — {d.intitule}</option>)}
-              </select></Field>
-              <Field label="Sujet" required><input className="input" value={sujet} onChange={(e) => setSujet(e.target.value)} /></Field>
-              <Field label="Message"><textarea className="input" rows={6} value={corps} onChange={(e) => setCorps(e.target.value)} /></Field>
-              <Field label="Pièces jointes" hint="Documents de l'espace documentaire">
-                {availableDocs.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-line p-3 text-sm text-muted">Aucun document disponible. Ajoutez des fichiers dans l'<strong>Espace documentaire</strong> pour pouvoir les joindre.</p>
-                ) : (
-                  <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
-                    {availableDocs.map((d) => (
-                      <label key={d.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-surface-2">
-                        <input type="checkbox" checked={attachIds.has(d.id)} onChange={() => toggleAttach(d.id)} />
-                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />
-                        <span className="truncate text-fg">{d.titre}</span>
-                        {d.categorie && <span className="shrink-0 text-xs text-muted">· {d.categorie}</span>}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {attachIds.size > 0 && <p className="mt-1 text-xs text-muted">{attachIds.size} pièce(s) jointe(s) sélectionnée(s)</p>}
-              </Field>
-
-              {/* PJ libres : n'importe quel fichier depuis l'ordinateur */}
-              <Field label="Joindre d'autres fichiers" hint="Depuis votre ordinateur (tout type de fichier)">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-line bg-surface-2 px-3 py-2 text-sm text-muted transition hover:border-brand-400 hover:text-brand-600">
-                  {uploadingAttach ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  {uploadingAttach ? 'Téléversement…' : 'Choisir un fichier…'}
-                  <input type="file" multiple className="hidden" onChange={handleAttachUpload} disabled={uploadingAttach} />
-                </label>
-                {extraAttachments.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {extraAttachments.map((a) => (
-                      <div key={a.url} className="flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2 py-1 text-sm">
-                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />
-                        <span className="truncate text-fg">{a.filename}</span>
-                        <button type="button" onClick={() => removeExtraAttachment(a.url)} className="ml-auto rounded p-0.5 text-muted hover:text-red-600" title="Retirer">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Field>
-
-              {/* Signature de mail */}
-              <label className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-2.5 text-sm">
-                <input type="checkbox" className="mt-0.5" checked={includeSig} onChange={(e) => setIncludeSig(e.target.checked)} />
-                <span className="min-w-0">
-                  <span className="font-medium text-fg">Inclure la signature</span>
-                  <span className="mt-0.5 block truncate text-xs text-muted">{signatureSummary(signatureCfg, organisme)}</span>
-                </span>
-              </label>
-            </>
-          )}
-        </div>
-      </Modal>
+      {/* Composition multi-canal (modale partagée avec la fiche contact) */}
+      <ComposeMessageModal open={open} onClose={() => setOpen(false)} onSent={refresh} initial={composeInitial} />
 
       {/* Affectation d'un e-mail / d'une conversation à un contact */}
       <Modal

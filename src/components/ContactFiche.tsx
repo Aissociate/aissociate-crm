@@ -8,6 +8,7 @@ import { cn, fullName, initials, formatDate, formatMoney, genReference } from '@
 import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_TONES, OPP_STAGE_LABELS } from '@/lib/constants';
 import { Badge, type Tone } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
+import ComposeMessageModal from '@/components/ComposeMessageModal';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
 const STATUTS_PROSPECT = ['', 'non assigné', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
@@ -53,6 +54,7 @@ interface Props {
 
 export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit, onUpdated }: Props) {
   const { session } = useAuth();
+  const [composeOpen, setComposeOpen] = useState(false);
   const entreprise = entreprises.find((e) => e.id === c.entreprise_id);
   const financeur = financeurs.find((f) => f.id === c.financeur_id);
   const owner = profiles.find((p) => p.id === c.owner_id);
@@ -289,6 +291,13 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
+              onClick={() => setComposeOpen(true)}
+              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
+              title="Envoyer un e-mail / WhatsApp"
+            >
+              <Mail className="h-4 w-4" />
+            </button>
+            <button
               onClick={() => { onClose(); onEdit(c); }}
               className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
               title="Modifier"
@@ -313,7 +322,15 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <div className="space-y-3">
               {c.email ? (
                 <InfoRow icon={<Mail className="h-4 w-4" />} label="E-mail"
-                  value={<a href={`mailto:${c.email}`} className="text-brand-600 hover:underline dark:text-brand-400">{c.email}</a>}
+                  value={
+                    <span className="flex flex-wrap items-center gap-2">
+                      <a href={`mailto:${c.email}`} className="text-brand-600 hover:underline dark:text-brand-400">{c.email}</a>
+                      <button onClick={() => setComposeOpen(true)}
+                        className="inline-flex items-center gap-1 rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-600 transition hover:bg-brand-500/20 dark:text-brand-400">
+                        <Mail className="h-3 w-3" /> Écrire
+                      </button>
+                    </span>
+                  }
                 />
               ) : null}
               {c.telephone ? (
@@ -646,6 +663,13 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           </button>
         </div>
       </div>
+
+      {/* Envoi rapide e-mail / WhatsApp depuis la fiche (modale partagée Messagerie) */}
+      <ComposeMessageModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        initial={{ canal: 'email', dest: c.email ?? '', contactId: c.id }}
+      />
     </>
   );
 }
