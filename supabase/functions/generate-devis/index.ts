@@ -203,6 +203,11 @@ Deno.serve(async (req: Request) => {
       `Tél ${org.telephone ?? ""} - ${org.email ?? ""} - ${org.site_web ?? ""}`,
       `NDA ${org.nda ?? ""} DEETS La Réunion - RCS ${org.rcs ?? ""} - APE ${org.naf ?? ""}`,
     ].map(clean).filter((s) => s.replace(/[-\s]/g, "").length > 2);
+    // Coordonnées bancaires (RIB) — renseignées dans Paramètres › Organisme.
+    const rib = [
+      org.iban ? `Règlement par virement - IBAN ${org.iban}${org.bic ? `  -  BIC ${org.bic}` : ""}` : "",
+      org.iban ? `Titulaire ${org.titulaire ?? org.nom ?? "AISSOCIATE"}${org.banque ? ` - Banque ${org.banque}` : ""}` : "",
+    ].map(clean).filter((s) => s.replace(/[-\s]/g, "").length > 2);
     const legal = clean(
       "CLAUSE DE RÉSERVE DE PROPRIÉTÉ : Conformément à la loi 80-335 du 12 mai 1980, nous réservons la propriété des produits jusqu'au paiement intégral du prix. " +
       "Pénalité de retard : 3 fois le taux d'intérêt légal après la date d'échéance. Escompte pour règlement anticipé : néant. " +
@@ -223,6 +228,15 @@ Deno.serve(async (req: Request) => {
         const w = font.widthOfTextAtSize(ident[k], 7);
         p.drawText(ident[k], { x: Math.max(M, (W - w) / 2), y: ly, size: 7, font, color: ink });
         ly += 9.5;
+      }
+      // RIB, centré juste au-dessus de l'identification de l'organisme.
+      if (rib.length) {
+        ly += 2;
+        for (let k = rib.length - 1; k >= 0; k--) {
+          const w = font.widthOfTextAtSize(rib[k], 7);
+          p.drawText(rib[k], { x: Math.max(M, (W - w) / 2), y: ly, size: 7, font, color: ink });
+          ly += 9.5;
+        }
       }
       p.drawLine({ start: { x: M, y: ly + 1 }, end: { x: W - M, y: ly + 1 }, thickness: 0.4, color: line });
       const pn = `Page ${i + 1} / ${allPages.length}`;
