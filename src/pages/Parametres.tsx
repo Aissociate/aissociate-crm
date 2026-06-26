@@ -12,8 +12,6 @@ type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
   code_postal?: string; ville?: string; siret?: string; nda?: string; tva_intra?: string;
   forme_juridique?: string; capital?: string; logo_url?: string; naf?: string; pays?: string;
-  // Coordonnées bancaires (RIB) — affichées en pied de page des devis.
-  iban?: string; bic?: string; banque?: string; titulaire?: string;
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
@@ -286,21 +284,6 @@ export default function Parametres() {
             <Field label="TVA intracommunautaire" hint="Laisser vide si exonéré"><input className="input" value={organisme.tva_intra ?? ''} onChange={(e) => setOrganisme({ ...organisme, tva_intra: e.target.value })} /></Field>
             <Field label="Forme juridique" hint="ex. SARL, SAS"><input className="input" value={organisme.forme_juridique ?? ''} onChange={(e) => setOrganisme({ ...organisme, forme_juridique: e.target.value })} /></Field>
             <Field label="Capital social"><input className="input" value={organisme.capital ?? ''} onChange={(e) => setOrganisme({ ...organisme, capital: e.target.value })} /></Field>
-
-            {/* Coordonnées bancaires (RIB) — affichées en pied de page des devis */}
-            <div className="rounded-lg border border-line bg-surface-2/40 p-3">
-              <p className="mb-2 text-sm font-medium text-fg">Coordonnées bancaires (RIB)</p>
-              <p className="mb-3 text-xs text-muted">Affichées en pied de page des devis pour le règlement par virement.</p>
-              <div className="space-y-3">
-                <Field label="IBAN"><input className="input" value={organisme.iban ?? ''} onChange={(e) => setOrganisme({ ...organisme, iban: e.target.value })} placeholder="FR76 1695 8000 0127 0918 7727 194" /></Field>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="BIC / SWIFT"><input className="input" value={organisme.bic ?? ''} onChange={(e) => setOrganisme({ ...organisme, bic: e.target.value })} placeholder="QNTOFRP1XXX" /></Field>
-                  <Field label="Banque" hint="Domiciliation"><input className="input" value={organisme.banque ?? ''} onChange={(e) => setOrganisme({ ...organisme, banque: e.target.value })} placeholder="Qonto" /></Field>
-                </div>
-                <Field label="Titulaire" hint="Laisser vide pour utiliser le nom de l'organisme"><input className="input" value={organisme.titulaire ?? ''} onChange={(e) => setOrganisme({ ...organisme, titulaire: e.target.value })} placeholder={organisme.nom ?? 'AISSOCIATE'} /></Field>
-              </div>
-            </div>
-
             <div className="sm:col-span-2">
               <Field label="Logo" hint="Affiché en en-tête des devis (PNG/JPG)">
                 <div className="flex items-center gap-3">
