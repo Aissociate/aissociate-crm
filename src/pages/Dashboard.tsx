@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, initials } from '@/lib/utils';
-import type { Dossier, Opportunite, Profile, PageView, ContactRequest, Email } from '@/lib/database.types';
+import type { Dossier, Opportunite, Profile, PageView, ContactRequest, Email, Contact } from '@/lib/database.types';
 
 type MetaCampaign = { name: string; spend: number; impressions: number; clicks: number; leads: number };
 type MetaInsights = {
@@ -110,6 +110,7 @@ export default function Dashboard() {
   const dossiers = useCollection<Dossier>('dossiers');
   const views = useCollection<PageView>('page_views');
   const leads = useCollection<ContactRequest>('contact_requests');
+  const contacts = useCollection<Contact>('contacts');
   const profiles = useCollection<Profile>('profiles');
   const emails = useCollection<Email>('emails');
 
@@ -160,9 +161,16 @@ export default function Dashboard() {
   const visiteursPrev = uniq(views.data, prevStart, prevEnd);
   const vuesCur = views.data.filter((v) => inRange(v.created_at, start, now)).length;
 
-  // ── KPI : formulaires web ──
+  // ── KPI : leads totaux = formulaires web + nouveaux prospects (import/manuel) ──
+  // Anti double-comptage : un lead du formulaire crée déjà un contact prospect
+  // (trigger) ; on ne recompte donc que les prospects créés HORS formulaire.
+  const formContactIds = new Set(leads.data.map((l) => l.contact_id).filter(Boolean) as string[]);
+  const newProspects = (a: Date, b: Date) =>
+    contacts.data.filter((c) => c.type === 'prospect' && !formContactIds.has(c.id) && inRange(c.created_at, a, b)).length;
   const formCur = leads.data.filter((l) => inRange(l.created_at, start, now)).length;
   const formPrev = leads.data.filter((l) => inRange(l.created_at, prevStart, prevEnd)).length;
+  const leadsCur = formCur + newProspects(start, now);
+  const leadsPrev = formPrev + newProspects(prevStart, prevEnd);
 
   // ── KPI : opportunités créées ──
   const oppsCreesCur = opps.data.filter((o) => inRange(o.created_at, start, now));
@@ -192,7 +200,7 @@ export default function Dashboard() {
     return {
       label: bucketLabel(gran, bStart),
       Visiteurs: uniq(views.data, bStart, bEnd),
-      Formulaires: leads.data.filter((l) => inRange(l.created_at, bStart, bEnd)).length,
+      Leads: leads.data.filter((l) => inRange(l.created_at, bStart, bEnd)).length + newProspects(bStart, bEnd),
       Opportunités: opps.data.filter((o) => inRange(o.created_at, bStart, bEnd)).length,
     };
   });
@@ -258,8 +266,9 @@ export default function Dashboard() {
         )}
         {isManager && (
           <Kpi
-            icon={<ClipboardList className="h-5 w-5" />} label="Formulaires web" value={formCur}
-            delta={<Delta cur={formCur} prev={formPrev} label={cmp} />}
+            icon={<ClipboardList className="h-5 w-5" />} label="Leads (total)" value={leadsCur}
+            hint="Formulaire web + nouveaux prospects (import ou manuel)"
+            delta={<Delta cur={leadsCur} prev={leadsPrev} label={cmp} />}
           />
         )}
         <Kpi
@@ -303,7 +312,7 @@ export default function Dashboard() {
               <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid rgb(148 163 184 / 0.3)', fontSize: 12 }} />
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
               {isManager && <Area type="monotone" dataKey="Visiteurs" stroke="#0ea5e9" fill="url(#gV)" strokeWidth={2} />}
-              {isManager && <Area type="monotone" dataKey="Formulaires" stroke="#10b981" fill="url(#gF)" strokeWidth={2} />}
+              {isManager && <Area type="monotone" dataKey="Leads" stroke="#10b981" fill="url(#gF)" strokeWidth={2} />}
               <Area type="monotone" dataKey="Opportunités" stroke="#ea6a1e" fill="url(#gO)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
