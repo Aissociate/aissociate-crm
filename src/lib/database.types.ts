@@ -28,6 +28,7 @@ export type Profile = Timestamps & {
   id: string; email: string; nom: string; prenom: string;
   role: UserRole; telephone: string | null; actif: boolean; approved: boolean;
   is_admin: boolean; statut_conseiller: string | null; date_recrutement: string | null;
+  signature: string | null;
 };
 export type Financeur = Timestamps & {
   id: string; code: string; nom: string; type: FinancementType;

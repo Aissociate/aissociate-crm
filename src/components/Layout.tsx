@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -70,7 +71,24 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
 export default function Layout() {
   const { profile, role, isAdmin, isManager, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+
+  // Badge « mails entrants non lus » (RLS : chacun ne compte que ses mails ;
+  // la direction voit tout). Rafraîchi périodiquement et à chaque navigation.
+  const [unreadMails, setUnreadMails] = useState(0);
+  useEffect(() => {
+    let on = true;
+    const load = async () => {
+      const { count } = await supabase.from('emails')
+        .select('id', { count: 'exact', head: true })
+        .eq('direction', 'entrant').eq('lu', false).neq('canal', 'whatsapp');
+      if (on) setUnreadMails(count ?? 0);
+    };
+    void load();
+    const t = setInterval(load, 60000);
+    return () => { on = false; clearInterval(t); };
+  }, [location.pathname]);
 
   const visible = (item: NavItem) =>
     (!item.managerOnly || isManager) && (!item.adminOnly || isAdmin);
@@ -122,7 +140,12 @@ export default function Layout() {
                       }
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
-                      {item.label}
+                      <span className="flex-1">{item.label}</span>
+                      {item.to === '/messagerie' && unreadMails > 0 && (
+                        <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white" title={`${unreadMails} mail(s) entrant(s) non lu(s)`}>
+                          {unreadMails > 99 ? '99+' : unreadMails}
+                        </span>
+                      )}
                     </NavLink>
                   ))}
                 </div>

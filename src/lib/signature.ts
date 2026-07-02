@@ -16,6 +16,7 @@ export type SignatureCfg = {
 export type SignatureSender = {
   prenom?: string | null; nom?: string | null;
   telephone?: string | null; email?: string | null;
+  signature?: string | null; // signature libre propre à l'utilisateur
 };
 
 const esc = (s: string): string =>
@@ -38,8 +39,11 @@ export function buildSignatureHtml(
   const o = org ?? {};
   const lines: string[] = [];
 
-  // Préfixe « expéditeur » (nom + coordonnées du conseiller) — activé par défaut.
-  if (c.include_sender !== false && sender && (sender.prenom || sender.nom)) {
+  // Préfixe « expéditeur » — activé par défaut. Priorité à la signature personnelle
+  // (texte libre propre à l'utilisateur) ; à défaut, nom + coordonnées.
+  if (c.include_sender !== false && sender?.signature && sender.signature.trim()) {
+    lines.push(`<div style="color:#0f172a">${esc(sender.signature.trim()).replace(/\n/g, '<br>')}</div>`);
+  } else if (c.include_sender !== false && sender && (sender.prenom || sender.nom)) {
     lines.push(`<div style="font-weight:600;color:#0f172a">${esc([sender.prenom, sender.nom].filter(Boolean).join(' '))}</div>`);
     const sub = [sender.telephone, sender.email].filter(Boolean).map((s) => esc(String(s))).join(' · ');
     if (sub) lines.push(`<div style="color:#475569">${sub}</div>`);

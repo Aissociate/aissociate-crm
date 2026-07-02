@@ -365,6 +365,9 @@ export default function Parametres() {
           </div>
         </Card>
 
+        {/* Signatures propres à chaque utilisateur */}
+        <UserSignaturesCard />
+
         {/* Modèles de messages — réponses rapides (e-mail / WhatsApp) */}
         <Card className="lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
@@ -697,5 +700,68 @@ export default function Parametres() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Éditeur des signatures propres à chaque utilisateur (ajoutées à leurs e-mails).
+type ProfSig = { id: string; prenom: string; nom: string; email: string; signature: string | null };
+function UserSignaturesCard() {
+  const [profs, setProfs] = useState<ProfSig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.from('profiles').select('id, prenom, nom, email, signature').order('nom')
+      .then(({ data }) => { setProfs((data ?? []) as ProfSig[]); setLoading(false); });
+  }, []);
+
+  const saveOne = async (p: ProfSig) => {
+    setSavingId(p.id);
+    const val = (drafts[p.id] ?? p.signature ?? '').trim();
+    const { error } = await supabase.from('profiles').update({ signature: val || null }).eq('id', p.id);
+    setSavingId(null);
+    if (error) { alert(error.message); return; }
+    setProfs((prev) => prev.map((x) => (x.id === p.id ? { ...x, signature: val || null } : x)));
+    setSavedId(p.id); setTimeout(() => setSavedId((s) => (s === p.id ? null : s)), 1500);
+  };
+
+  return (
+    <Card className="lg:col-span-2">
+      <div className="mb-4 flex items-center gap-2">
+        <Send className="h-5 w-5 text-brand-600" />
+        <h2 className="font-semibold text-fg">Signatures par utilisateur</h2>
+      </div>
+      <p className="mb-4 text-sm text-muted">
+        Signature propre à chaque utilisateur, insérée dans ses e-mails à la place du préfixe générique
+        (nom + coordonnées). Une ligne par utilisateur ; laissez vide pour utiliser le préfixe automatique.
+      </p>
+      {loading ? (
+        <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
+      ) : (
+        <div className="space-y-4">
+          {profs.map((p) => (
+            <div key={p.id} className="rounded-lg border border-line p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-fg">{p.prenom} {p.nom} <span className="text-xs font-normal text-muted">· {p.email}</span></p>
+                <div className="flex items-center gap-2">
+                  {savedId === p.id && <span className="text-xs text-emerald-600">Enregistré ✓</span>}
+                  <Button variant="secondary" onClick={() => saveOne(p)} disabled={savingId === p.id} className="py-1 text-sm">
+                    <Save className="h-3.5 w-3.5" /> {savingId === p.id ? '…' : 'Enregistrer'}
+                  </Button>
+                </div>
+              </div>
+              <textarea
+                className="input min-h-[90px] text-sm"
+                placeholder={`ex.\n${p.prenom} ${p.nom}\nAIssociate\nChargé(e) de formation\nTél : 06 …\nwww.aissociate.re`}
+                value={drafts[p.id] ?? p.signature ?? ''}
+                onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
