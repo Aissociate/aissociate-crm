@@ -15,7 +15,7 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 function clean(s: unknown): string {
-  return String(s ?? "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...").replace(/[•·]/g, "-").replace(/ /g, " ").replace(/[^\x09\x0A\x0D\x20-\xFF]/g, "");
+  return String(s ?? "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...").replace(/[•·]/g, "-").replace(/ /g, " ").replace(/[^\x09\x0A\x0D\x20-\xFF€]/g, "");
 }
 const eur = (n: number) => `${(Number(n) || 0).toFixed(2).replace(".", ",")} €`;
 const frDate = (d: string | null) => d ? new Date(d).toLocaleDateString("fr-FR") : "—";
@@ -34,7 +34,13 @@ Deno.serve(async (req: Request) => {
     if (!devis) return json({ error: "Devis introuvable" }, 404);
     const { data: lignes } = await sb.from("devis_lignes").select("*").eq("devis_id", devisId).order("ordre");
     const { data: contact } = devis.contact_id ? await sb.from("contacts").select("*").eq("id", devis.contact_id).maybeSingle() : { data: null };
-    const { data: entreprise } = devis.entreprise_id ? await sb.from("entreprises").select("*").eq("id", devis.entreprise_id).maybeSingle() : { data: null };
+    let { data: entreprise } = devis.entreprise_id ? await sb.from("entreprises").select("*").eq("id", devis.entreprise_id).maybeSingle() : { data: null };
+    // Repli : devis non relié à une entreprise mais contact rattaché à une entreprise
+    // → on récupère l'entreprise du contact (l'adresse/SIRET remontent quand même).
+    if (!entreprise && contact?.entreprise_id) {
+      const r = await sb.from("entreprises").select("*").eq("id", contact.entreprise_id).maybeSingle();
+      entreprise = r.data;
+    }
     const { data: financeur } = devis.financeur_id ? await sb.from("financeurs").select("*").eq("id", devis.financeur_id).maybeSingle() : { data: null };
     const { data: formation } = devis.formation_id ? await sb.from("formations").select("reference, code_certification").eq("id", devis.formation_id).maybeSingle() : { data: null };
     // Référence affichée dans le tableau : référence de la formation, sinon « SUR-MESURE ».
@@ -143,7 +149,8 @@ Deno.serve(async (req: Request) => {
     y -= 14;
 
     // 4) Tableau
-    const cRefX = M + 4, cDesX = M + 70, cQtyR = W - M - 200, cPuR = W - M - 120, cTvaR = W - M - 64, cMtR = W - M - 4;
+    // Colonnes numériques resserrées et décalées à droite pour élargir « Désignation ».
+    const cRefX = M + 4, cDesX = M + 70, cQtyR = W - M - 167, cPuR = W - M - 107, cTvaR = W - M - 62, cMtR = W - M - 4;
     page.drawRectangle({ x: M, y: y - 5, width: W - 2 * M, height: 18, color: grayLight });
     T("Référence", cRefX, y, { size: 8.5, f: bold, color: muted });
     T("Désignation", cDesX, y, { size: 8.5, f: bold, color: muted });
@@ -204,7 +211,7 @@ Deno.serve(async (req: Request) => {
       `NDA ${org.nda ?? ""} DEETS La Réunion - RCS ${org.rcs ?? ""} - APE ${org.naf ?? ""}`,
     ].map(clean).filter((s) => s.replace(/[-\s]/g, "").length > 2);
     const legal = clean(
-      "CLAUSE DE RÉSERVE DE PROPRIÉTÉ : Conformément à la loi 80-335 du 12 mai 1980, nous réservons la propriété des produits jusqu'au paiement intégral du prix. " +
+      "CLAUSE DE RÉSERVE DE PROPRIÉTÉ INTELLECTUELLE : Conformément à la loi 80-335 du 12 mai 1980, nous réservons la propriété des produits jusqu'au paiement intégral du prix. " +
       "Pénalité de retard : 3 fois le taux d'intérêt légal après la date d'échéance. Escompte pour règlement anticipé : néant. " +
       "Indemnité forfaitaire pour frais de recouvrement (art. L441-10 du Code de commerce) : 40 €.",
     );

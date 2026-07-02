@@ -33,7 +33,7 @@ function clean(s: string): string {
     .replace(/…/g, "...")
     .replace(/[•·]/g, "-")
     .replace(/ /g, " ")
-    .replace(/[^\x09\x0A\x0D\x20-\xFF]/g, "");
+    .replace(/[^\x09\x0A\x0D\x20-\xFF€]/g, "");
 }
 
 function parseContent(content: string): { titre: string; sections: { titre: string; contenu: string }[] } {
@@ -137,7 +137,7 @@ Deno.serve(async (req: Request) => {
       const x0 = M + indent, maxW = W - M - x0;
       const runs: { text: string; bold: boolean }[] = [];
       let b = false;
-      for (const part of clean(raw).split("**")) { if (part) runs.push({ text: part, bold: o.allBold ? true : b }); b = !b; }
+      for (const part of clean(raw).replace(/#/g, "").split("**")) { if (part) runs.push({ text: part, bold: o.allBold ? true : b }); b = !b; }
       const words: { t: string; bold: boolean; sp: boolean }[] = [];
       for (const r of runs) for (const seg of r.text.split(/(\s+)/)) if (seg) words.push({ t: seg, bold: r.bold, sp: /^\s+$/.test(seg) });
       let cur: typeof words = [], curW = 0;
@@ -160,7 +160,7 @@ Deno.serve(async (req: Request) => {
         const l = line.replace(/\s+$/, "");
         if (!l.trim()) { y -= 5; continue; }
         if (/^([-*_])\1{2,}$/.test(l.trim())) { needSpace(12); y -= 2; page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.6, color: ruleCol }); y -= 10; continue; }
-        const h = l.match(/^\s*(#{1,4})\s+(.*)$/);
+        const h = l.match(/^\s*(#{1,6})\s+(.*)$/);
         if (h) { const sz = h[1].length <= 1 ? 13 : h[1].length === 2 ? 12 : 11; needSpace(sz + 12); y -= 4; drawRich(h[2], { size: sz, color: brand, allBold: true, gap: 3 }); continue; }
         const bl = l.match(/^\s*[-*]\s+(.*)$/);
         if (bl) { needSpace(16); page.drawText("-", { x: M + 8, y, size: 10.5, font: bold, color: brand }); drawRich(bl[1], { size: 10.5, indent: 20 }); continue; }
@@ -182,7 +182,10 @@ Deno.serve(async (req: Request) => {
     // ── Titre + métadonnées ──
     drawRich(titre, { size: 20, color: rgb(0.08, 0.08, 0.12), allBold: true });
     y -= 2; page.drawLine({ start: { x: M, y }, end: { x: M + 96, y }, thickness: 2.5, color: brand }); y -= 16;
+    const planRef = m.reference ? String(m.reference) : (m.planId ? "PDF-" + String(m.planId).slice(0, 8).toUpperCase() : "PDF-" + new Date().toISOString().slice(0, 10));
     for (const ml of [
+      `Référence : ${planRef}`,
+      `Version : ${m.version ?? "1"}`,
       m.apprenant ? `Apprenant : ${m.apprenant}` : "",
       m.clientSiret ? `SIRET : ${m.clientSiret}` : "",
       m.organismePartenaire ? `Partenaire : ${m.organismePartenaire}` : "",
@@ -203,13 +206,30 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Pied de page sur toutes les pages (avec total) ──
+    // Mention de clôture (fin de corps de texte)
+    {
+      const entName = ((clientContext?.entreprise as Record<string, unknown> | null)?.raison_sociale as string) || "concernée";
+      needSpace(64);
+      y -= 12;
+      page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.6, color: ruleCol });
+      y -= 14;
+      drawRich("Document élaboré par " + (org.nom ?? "AIssociate") + " - Organisme de formation certifié Qualiopi", { size: 10, color: ink, allBold: true, gap: 4 });
+      drawRich("Ce plan de formation constitue un document personnalisé, conçu sur la base d'un diagnostic des besoins, d'une analyse du contexte organisationnel et des objectifs de développement des compétences du bénéficiaire. Il reflète les spécificités de l'entreprise " + entName + " et les modalités pédagogiques retenues pour répondre à ses enjeux opérationnels.", { size: 9.5, color: muted });
+    }
+
     const allPages = pdf.getPages();
     const total = allPages.length;
+    const footLines = [
+      `${org.nom ?? "AISSOCIATE"} - ${org.forme_juridique ?? "SARL"} au capital de ${org.capital ?? "100 €"} - ${org.adresse ?? ""} ${[org.code_postal, org.ville].filter(Boolean).join(" ")}`,
+      `Tél ${org.telephone ?? ""} - ${org.email ?? ""} - ${org.site_web ?? ""}`,
+      `NDA ${org.nda ?? ""} DEETS La Réunion - RCS ${org.rcs ?? ""} - APE ${org.naf ?? ""}`,
+    ].map(clean).filter((s) => s.replace(/[-\s]/g, "").length > 2);
     allPages.forEach((p, i) => {
-      p.drawLine({ start: { x: M, y: M - 10 }, end: { x: W - M, y: M - 10 }, thickness: 0.6, color: ruleCol });
-      p.drawText(clean(org.nom ?? ""), { x: M, y: M - 22, size: 8, font, color: muted });
+      p.drawLine({ start: { x: M, y: M - 8 }, end: { x: W - M, y: M - 8 }, thickness: 0.6, color: ruleCol });
+      let fy = M - 18;
+      for (const fl of footLines) { p.drawText(fl, { x: M, y: fy, size: 6.5, font, color: muted }); fy -= 8; }
       const pn = `Page ${i + 1} / ${total}`;
-      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 8), y: M - 22, size: 8, font, color: muted });
+      p.drawText(pn, { x: W - M - font.widthOfTextAtSize(pn, 8), y: M - 18, size: 8, font, color: muted });
     });
 
     const bytes = await pdf.save();
