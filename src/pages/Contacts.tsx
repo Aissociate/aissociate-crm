@@ -85,6 +85,10 @@ export default function Contacts() {
   // Pagination (côté client, sur le résultat filtré)
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  // Tri par colonne (Nom / Type / Affectation)
+  const [sort, setSort] = useState<{ col: 'nom' | 'type' | 'aff' | null; dir: 'asc' | 'desc' }>({ col: null, dir: 'asc' });
+  const toggleSort = (col: 'nom' | 'type' | 'aff') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
+  const sortArrow = (col: 'nom' | 'type' | 'aff') => (sort.col === col ? (sort.dir === 'asc' ? '↑' : '↓') : '↕');
   // Saisie interne (formulaire de demande) — création/mise à jour d'un contact
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [intake, setIntake] = useState(emptyIntake());
@@ -140,7 +144,7 @@ export default function Contacts() {
   }, [refresh]);
 
   // Retour à la première page dès qu'un filtre / la recherche / la taille change
-  useEffect(() => { setPage(1); }, [q, typeFilter, affFilter, tagFilter, statutFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [q, typeFilter, affFilter, tagFilter, statutFilter, pageSize, sort.col, sort.dir]);
 
   const [distributing, setDistributing] = useState(false);
   // Sélection multiple + répartition round-robin (managers)
@@ -370,10 +374,20 @@ export default function Contacts() {
     return matchQ && matchType && matchAff && matchTag && matchStatut;
   });
 
+  // Tri optionnel par colonne (Nom / Type / Affectation)
+  const sortKey = (c: Contact) => {
+    if (sort.col === 'type') return CONTACT_TYPE_LABELS[c.type] ?? '';
+    if (sort.col === 'aff') return c.owner_id ? ownerName(c.owner_id) : '';
+    return `${c.nom ?? ''} ${c.prenom ?? ''}`.trim();
+  };
+  const sorted = sort.col
+    ? [...filtered].sort((a, b) => sortKey(a).localeCompare(sortKey(b), 'fr', { sensitivity: 'base' }) * (sort.dir === 'asc' ? 1 : -1))
+    : filtered;
+
   // Découpage en pages (currentPage borné : la page reste valide si la liste rétrécit)
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const paged = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // ── Sélection multiple (managers) ──
   const selectableIds = filtered.map((c) => c.id);
@@ -510,10 +524,10 @@ export default function Contacts() {
             {isManager && (
               <th className="px-4 py-3 w-0"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} title="Tout sélectionner (résultat filtré, toutes pages)" /></th>
             )}
-            <th className="px-4 py-3">Nom</th>
-            <th className="px-4 py-3">Type</th>
+            <th className="px-4 py-3"><button onClick={() => toggleSort('nom')} className="inline-flex items-center gap-1 hover:text-fg">Nom <span className="text-xs text-muted">{sortArrow('nom')}</span></button></th>
+            <th className="px-4 py-3"><button onClick={() => toggleSort('type')} className="inline-flex items-center gap-1 hover:text-fg">Type <span className="text-xs text-muted">{sortArrow('type')}</span></button></th>
             <th className="px-4 py-3">Coordonnées</th>
-            <th className="px-4 py-3">Affectation</th>
+            <th className="px-4 py-3"><button onClick={() => toggleSort('aff')} className="inline-flex items-center gap-1 hover:text-fg">Affectation <span className="text-xs text-muted">{sortArrow('aff')}</span></button></th>
             <th className="px-4 py-3">Pilotage</th>
             <th className="px-4 py-3 text-right">Actions</th>
           </tr>

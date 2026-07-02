@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState } from '@/components/ui';
 import type { Entreprise } from '@/lib/database.types';
 
+const STATUTS_JURIDIQUES = ['', 'EI', 'EURL', 'SARL', 'SASU', 'SAS', 'SA', 'SCI', 'Association', 'Autre'];
+
 const empty = (): Partial<Entreprise> => ({
-  raison_sociale: '', siret: '', naf: '', secteur: '', effectif: null,
+  raison_sociale: '', siret: '', naf: '', secteur: '', statut_juridique: '', effectif: null,
   adresse: '', code_postal: '', ville: '', telephone: '', email: '', site_web: '', notes: '',
 });
 
@@ -107,9 +109,25 @@ export default function Entreprises() {
       >
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2"><Field label="Raison sociale" required><input className="input" value={form.raison_sociale ?? ''} onChange={(e) => set('raison_sociale', e.target.value)} /></Field></div>
-          <Field label="SIRET"><input className="input" value={form.siret ?? ''} onChange={(e) => set('siret', e.target.value)} /></Field>
+          <Field label="SIRET">
+            <div className="flex gap-2">
+              <input className="input" value={form.siret ?? ''} onChange={(e) => set('siret', e.target.value)} />
+              <button
+                type="button"
+                disabled={!form.siret}
+                title="Ouvrir la fiche Pappers de ce SIRET"
+                onClick={() => { const s = (form.siret ?? '').replace(/\s/g, ''); if (s) window.open(`https://www.pappers.fr/recherche?q=${encodeURIComponent(s)}`, '_blank', 'noopener'); }}
+                className="btn-secondary shrink-0 whitespace-nowrap disabled:opacity-50"
+              >Pappers</button>
+            </div>
+          </Field>
           <Field label="Code NAF"><input className="input" value={form.naf ?? ''} onChange={(e) => set('naf', e.target.value)} /></Field>
-          <Field label="Secteur"><input className="input" value={form.secteur ?? ''} onChange={(e) => set('secteur', e.target.value)} /></Field>
+          <Field label="Secteur d'activité"><input className="input" value={form.secteur ?? ''} onChange={(e) => set('secteur', e.target.value)} /></Field>
+          <Field label="Statut juridique">
+            <select className="input" value={form.statut_juridique ?? ''} onChange={(e) => set('statut_juridique', e.target.value)}>
+              {STATUTS_JURIDIQUES.map((s) => <option key={s} value={s}>{s || 'Non défini'}</option>)}
+            </select>
+          </Field>
           <Field label="Effectif"><input className="input" type="number" value={form.effectif ?? ''} onChange={(e) => set('effectif', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Adresse"><input className="input" value={form.adresse ?? ''} onChange={(e) => set('adresse', e.target.value)} /></Field></div>
           <Field label="Code postal"><input className="input" value={form.code_postal ?? ''} onChange={(e) => set('code_postal', e.target.value)} /></Field>

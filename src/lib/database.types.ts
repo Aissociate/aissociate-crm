@@ -38,6 +38,7 @@ export type Entreprise = Timestamps & {
   secteur: string | null; effectif: number | null; adresse: string | null;
   code_postal: string | null; ville: string | null; telephone: string | null;
   email: string | null; site_web: string | null; notes: string | null; owner_id: string | null;
+  statut_juridique: string | null;
 };
 export type Contact = Timestamps & {
   id: string; type: ContactType; civilite: string | null; nom: string; prenom: string | null;

@@ -131,11 +131,20 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
   };
   const total5 = CRITERES.reduce((s, cr) => s + (Number((proc as Record<string, unknown>)[cr.key]) || 0), 0);
   const score100 = Math.round((total5 / 25) * 100);
-  const toggleContract = async (key: keyof Candidat, val: boolean) => {
-    await supabase.from('candidats').update({ [key]: !val } as Partial<Candidat>).eq('id', c.id);
+  // État local des étapes de contractualisation : la prop `c` n'étant pas
+  // rafraîchie après onUpdated, on pilote les cases via un état local (sinon
+  // la case reste visuellement décochée et se re-coche à chaque clic).
+  const [contract, setContract] = useState<Record<string, boolean>>({
+    contract_etape1: !!c.contract_etape1, contract_etape2: !!c.contract_etape2,
+    contract_etape3: !!c.contract_etape3, contract_etape4: !!c.contract_etape4,
+  });
+  const toggleContract = async (key: keyof Candidat) => {
+    const next = !contract[key as string];
+    setContract((p) => ({ ...p, [key]: next }));
+    await supabase.from('candidats').update({ [key]: next } as Partial<Candidat>).eq('id', c.id);
     onUpdated();
   };
-  const contractDone = CONTRACT_STEPS.filter((s) => c[s.key]).length;
+  const contractDone = CONTRACT_STEPS.filter((s) => contract[s.key]).length;
 
   // ── Documents de recrutement (coffre dédié, transférable au conseiller) ────────
   const [docs, setDocs] = useState<CandidatDocument[]>([]);
@@ -489,7 +498,7 @@ export default function CandidatFiche({ candidat: c, offres, onClose, onEdit, on
             <div className="space-y-1.5">
               {CONTRACT_STEPS.map((s) => (
                 <label key={s.key} className="flex items-center gap-2 text-sm text-fg">
-                  <input type="checkbox" checked={c[s.key]} onChange={() => toggleContract(s.key, c[s.key])} />
+                  <input type="checkbox" checked={!!contract[s.key]} onChange={() => toggleContract(s.key)} />
                   {s.label}
                 </label>
               ))}
