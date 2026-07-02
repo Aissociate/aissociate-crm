@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
@@ -197,30 +198,33 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   const sortActions = (list: ContactAction[]) => [...list].sort((x, y) => actionSortKey(y).localeCompare(actionSortKey(x)));
   const addAction = async () => {
     if (!na.description.trim()) return;
+    // Détrompeur : une action datée dans le futur ne peut pas être « réalisée ».
+    const faite = na.faite && na.date_action <= ymd(new Date());
     const { data } = await supabase.from('contact_actions')
-      .insert({ contact_id: c.id, date_action: na.date_action, heure_action: na.heure_action || null, type: na.type, description: na.description.trim(), faite: na.faite })
+      .insert({ contact_id: c.id, date_action: na.date_action, heure_action: na.heure_action || null, type: na.type, description: na.description.trim(), faite })
       .select().single();
     if (data) setActions((p) => sortActions([data, ...p]));
     setNa({ ...na, description: '' });
   };
 
-  // Actions rapides : crée immédiatement une action horodatée (rappels, appel fait…).
-  const quickAction = async (opts: { type: string; faite: boolean; when: Date; description: string }) => {
-    const { data } = await supabase.from('contact_actions')
-      .insert({ contact_id: c.id, date_action: ymd(opts.when), heure_action: hm(opts.when), type: opts.type, description: opts.description, faite: opts.faite })
-      .select().single();
-    if (data) setActions((p) => sortActions([data, ...p]));
-  };
+  // Raccourcis : pré-remplissent le formulaire (type, description, date, heure)
+  // SANS valider — l'utilisateur ajuste la description puis clique « Ajouter ».
+  const prefillAction = (opts: { type: string; faite: boolean; when: Date; description: string }) =>
+    setNa({
+      type: opts.type, description: opts.description,
+      date_action: ymd(opts.when), heure_action: hm(opts.when),
+      faite: opts.faite && ymd(opts.when) <= ymd(new Date()),
+    });
   const inMinutes = (m: number) => new Date(Date.now() + m * 60000);
   const atToday = (h: number) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d; };
   const tomorrowAt = (h: number) => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(h, 0, 0, 0); return d; };
   const QUICK_ACTIONS: { label: string; run: () => void }[] = [
-    { label: 'Appel fait', run: () => quickAction({ type: 'appel', faite: true, when: new Date(), description: 'Appel réalisé' }) },
-    { label: 'Mail à envoyer', run: () => quickAction({ type: 'email', faite: false, when: new Date(), description: 'Envoyer un e-mail (ASAP)' }) },
-    { label: 'Rappel +15 min', run: () => quickAction({ type: 'relance', faite: false, when: inMinutes(15), description: 'Rappeler' }) },
-    { label: 'Rappel +1 h', run: () => quickAction({ type: 'relance', faite: false, when: inMinutes(60), description: 'Rappeler' }) },
-    { label: 'Cet après-midi', run: () => quickAction({ type: 'relance', faite: false, when: atToday(14), description: 'Rappeler' }) },
-    { label: 'Demain matin', run: () => quickAction({ type: 'relance', faite: false, when: tomorrowAt(9), description: 'Rappeler' }) },
+    { label: 'Appel fait', run: () => prefillAction({ type: 'appel', faite: true, when: new Date(), description: 'Appel réalisé' }) },
+    { label: 'Mail à envoyer', run: () => prefillAction({ type: 'email', faite: false, when: new Date(), description: 'Envoyer un e-mail (ASAP)' }) },
+    { label: 'Rappel +15 min', run: () => prefillAction({ type: 'relance', faite: false, when: inMinutes(15), description: 'Rappeler' }) },
+    { label: 'Rappel +1 h', run: () => prefillAction({ type: 'relance', faite: false, when: inMinutes(60), description: 'Rappeler' }) },
+    { label: 'Cet après-midi', run: () => prefillAction({ type: 'relance', faite: false, when: atToday(14), description: 'Rappeler' }) },
+    { label: 'Demain matin', run: () => prefillAction({ type: 'relance', faite: false, when: tomorrowAt(9), description: 'Rappeler' }) },
   ];
   const toggleAction = async (a: ContactAction) => {
     setActions((p) => p.map((x) => (x.id === a.id ? { ...x, faite: !x.faite } : x)));
@@ -341,11 +345,16 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               {!c.email && !c.telephone && (
                 <p className="text-sm text-muted italic">Aucune coordonnée renseignée</p>
               )}
-              <div>
-                <label className="label">SIRET (client) {savedField === 'siret' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
-                <input className="input" placeholder="N° SIRET — figure sur le devis et le plan de formation"
-                  value={form.siret} onChange={(e) => setFf('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
-              </div>
+              {entreprise ? (
+                <InfoRow icon={<Building2 className="h-4 w-4" />} label="SIRET (entreprise)"
+                  value={entreprise.siret || <span className="italic text-muted">non renseigné sur la fiche entreprise</span>} />
+              ) : (
+                <div>
+                  <label className="label">SIRET (client) {savedField === 'siret' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
+                  <input className="input" placeholder="N° SIRET du client — utilisé sur le devis / plan si aucune entreprise n'est reliée"
+                    value={form.siret} onChange={(e) => setFf('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
+                </div>
+              )}
               <div>
                 <label className="label">Autres coordonnées {savedField === 'autres' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
                 <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
@@ -437,9 +446,9 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
               <select className="input w-[90px] py-1.5" value={na.type} onChange={(e) => setNa({ ...na, type: e.target.value })}>{ACTION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
               <input className="input min-w-[140px] flex-1 py-1.5" placeholder="Description…" value={na.description} onChange={(e) => setNa({ ...na, description: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addAction()} />
-              <input className="input w-[130px] py-1.5" type="date" value={na.date_action} onChange={(e) => setNa({ ...na, date_action: e.target.value })} />
+              <input className="input w-[130px] py-1.5" type="date" value={na.date_action} onChange={(e) => setNa((n) => ({ ...n, date_action: e.target.value, faite: e.target.value > ymd(new Date()) ? false : n.faite }))} />
               <input className="input w-[90px] py-1.5" type="time" value={na.heure_action} onChange={(e) => setNa({ ...na, heure_action: e.target.value })} title="Heure" />
-              <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={na.faite} onChange={(e) => setNa({ ...na, faite: e.target.checked })} /> Réalisée</label>
+              <label className="flex items-center gap-1.5 text-xs text-muted" title={na.date_action > ymd(new Date()) ? 'Une action datée dans le futur ne peut pas être déjà réalisée' : undefined}><input type="checkbox" checked={na.faite} disabled={na.date_action > ymd(new Date())} onChange={(e) => setNa({ ...na, faite: e.target.checked })} /> Réalisée</label>
               <button onClick={addAction} disabled={!na.description.trim()} className="btn-secondary py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
             </div>
           </section>
@@ -497,9 +506,12 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{dossiers.length}</span><button onClick={() => setAddPanel(addPanel === 'doss' ? null : 'doss')} title="Créer un dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
               <ul className="space-y-1.5">{dossiers.map((d) => (
-                <li key={d.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
-                  <span className="text-fg">{d.intitule}</span>
-                  <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                <li key={d.id} className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <span className="min-w-0 truncate text-fg">{d.intitule}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                    <Link to={`/dossiers/${d.id}`} onClick={onClose} title="Ouvrir le dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><FileText className="h-3.5 w-3.5" /></Link>
+                  </span>
                 </li>))}
               </ul>
             )}
