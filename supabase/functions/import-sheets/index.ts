@@ -39,6 +39,78 @@ function notesFrom(row: Row, skip: Set<string>): string {
     .join("\n");
 }
 
+// — Détection des champs par contenu (insensible à l'ordre des colonnes) —
+// Meta peut écrire les leads dans un ordre différent de la ligne d'en-tête du
+// Google Sheet ; on retombe alors sur ces heuristiques pour ne pas « décaler »
+// les valeurs (email = valeur avec @, tél = p:/+chiffres, nom = texte, etc.).
+const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v ?? "").trim());
+const PHONE_PREFIX = /^p:\s*/i;
+const normalizePhone = (v: string) => (v ?? "").replace(PHONE_PREFIX, "").trim();
+function isPhone(v: string): boolean {
+  const s = (v ?? "").trim();
+  if (PHONE_PREFIX.test(s)) return true;
+  const digits = s.replace(/[^\d]/g, "");
+  return digits.length >= 8 && /^[+\d][\d\s().+-]+$/.test(s);
+}
+const isPrefixedId = (v: string) => /^[a-z]{1,3}:\d/i.test((v ?? "").trim()); // l:, ag:, as:, c:, f:
+const isIsoDate = (v: string) => /^\d{4}-\d{2}-\d{2}t/i.test((v ?? "").trim());
+function isMetaToken(v: string): boolean {
+  const s = (v ?? "").trim().toLowerCase();
+  return s === "" || s === "true" || s === "false" || s === "fb" || s === "ig"
+    || s === "facebook" || s === "instagram" || s === "created" || /^\d{9,}$/.test(s);
+}
+function looksLikeName(v: string): boolean {
+  const s = (v ?? "").trim();
+  if (!s) return false;
+  if (isEmail(s) || isPhone(s) || isPrefixedId(s) || isIsoDate(s) || isMetaToken(s)) return false;
+  return /\p{L}/u.test(s); // contient au moins une lettre
+}
+
+// Extrait nom/email/téléphone/société d'une ligne quel que soit l'ordre des colonnes.
+function extractProspect(r: Row): {
+  nom: string; prenom: string | null; email: string | null;
+  telephone: string | null; company: string; ville: string; misaligned: boolean;
+} {
+  const vals = Object.values(r).map((v) => (v ?? "").toString());
+  // Ligne « décalée » = l'en-tête ne décrit plus les valeurs de cette ligne.
+  const misaligned = isPrefixedId(r.full_name ?? "") || !isEmail(r.email ?? "");
+
+  const email = (isEmail(r.email ?? "") ? (r.email as string) : (vals.find(isEmail) ?? "")).trim();
+  const phoneRaw = (r.phone && isPhone(r.phone)) ? r.phone : (vals.find(isPhone) ?? "");
+  const telephone = normalizePhone(phoneRaw) || null;
+
+  const emailIdx = vals.findIndex(isEmail);
+
+  // Nom : priorité à l'en-tête s'il est valide, sinon détection autour de l'email.
+  let fullName = "";
+  if (looksLikeName(r.full_name ?? "")) {
+    fullName = (r.full_name as string).trim();
+  } else if (emailIdx >= 0) {
+    const near: string[] = [];
+    for (const j of [emailIdx + 1, emailIdx - 1, emailIdx + 2, emailIdx - 2]) {
+      const v = vals[j];
+      if (v && looksLikeName(v) && !isPhone(v)) near.push(v.trim());
+    }
+    fullName = near.find((v) => /\s/.test(v)) ?? near[0]
+      ?? (vals.find((v) => looksLikeName(v) && /\s/.test(v.trim()))?.trim() ?? "");
+  }
+
+  // Société : en-tête si valide, sinon texte proche du bloc contact (≠ nom).
+  let company = "";
+  if (r.company_name && looksLikeName(r.company_name) && r.company_name.trim() !== fullName) {
+    company = r.company_name.trim();
+  } else if (emailIdx >= 0) {
+    for (const j of [emailIdx + 3, emailIdx + 2, emailIdx - 3]) {
+      const v = vals[j];
+      if (v && looksLikeName(v) && !isPhone(v) && v.trim() !== fullName) { company = v.trim(); break; }
+    }
+  }
+
+  const ville = (r.ville && looksLikeName(r.ville)) ? r.ville.trim() : "";
+  const { prenom, nom } = splitName(fullName || (r.full_name ?? ""));
+  return { nom, prenom, email: email || null, telephone, company, ville, misaligned };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -74,6 +146,19 @@ Deno.serve(async (req: Request) => {
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const source: string = body.source ?? "all";
+
+    const isCron = bearer === SERVICE;
+    // « force » = re-synchroniser depuis le Sheet des contacts DÉJÀ présents.
+    // Réservé au déclenchement MANUEL : le cron n'écrase jamais les données du CRM
+    // (modifications / réaffectations conservées). Les suppressions restent exclues
+    // dans tous les cas — un contact supprimé ne réapparaît jamais.
+    const force = body.force === true && !isCron;
+
+    // external_id supprimés du CRM → jamais réimportés (cron comme manuel).
+    async function excludedIds(src: string): Promise<Set<string>> {
+      const { data } = await sb.from("import_exclusions").select("external_id").eq("source", src);
+      return new Set((data ?? []).map((e: { external_id: string }) => e.external_id));
+    }
 
     const result: Record<string, unknown> = {};
 
@@ -124,16 +209,19 @@ Deno.serve(async (req: Request) => {
           };
         });
 
+      const excl = await excludedIds("candidats");
+      const kept = payloads.filter((p) => !excl.has(p.external_id));
+
       let imported = 0;
-      if (payloads.length) {
+      if (kept.length) {
         const { data: ins, error } = await sb
           .from("candidats")
-          .upsert(payloads, { onConflict: "external_id", ignoreDuplicates: true })
+          .upsert(kept, { onConflict: "external_id", ignoreDuplicates: !force })
           .select("id");
         if (error) throw new Error(`candidats: ${error.message}`);
         imported = ins?.length ?? 0;
       }
-      result.candidats = { lus: rows.length, importes: imported };
+      result.candidats = { lus: rows.length, importes: imported, exclus: payloads.length - kept.length };
     }
 
     if (source === "all" || source === "prospects") {
@@ -146,25 +234,58 @@ Deno.serve(async (req: Request) => {
       const conseillers = (cons ?? []).map((c: { id: string }) => c.id);
       let rr = 0;
 
-      const skip = new Set(["full_name", "company_name", "phone", "", "email", "ville", "lead_status"]);
+      // Colonnes techniques Meta ignorées dans les notes (lignes alignées).
+      const skip = new Set([
+        "full_name", "company_name", "phone", "", "email", "ville", "lead_status",
+        "id", "created_time", "ad_id", "ad_name", "adset_id", "adset_name",
+        "campaign_id", "campaign_name", "form_id", "form_name", "is_organic",
+        "platform", "inbox_url",
+      ]);
 
       const payloads = rows
-        .filter((r) => r.full_name && r.full_name.trim() && r.full_name.trim() !== "full_name")
+        .filter((r) => {
+          if (!r || typeof r !== "object") return false;
+          if ((r.full_name ?? "").trim() === "full_name") return false; // ligne d'en-tête dupliquée
+          if (/test lead/i.test(JSON.stringify(r))) return false;
+          const vals = Object.values(r).map((v) => (v ?? "").toString());
+          return vals.some(isEmail) || looksLikeName(r.full_name ?? "");
+        })
         .map((r) => {
-          const { prenom, nom } = splitName(r.full_name);
+          const p = extractProspect(r);
           const entete: string[] = [];
-          if (r.company_name) entete.push(`Entreprise : ${r.company_name}`);
-          if (r.ville) entete.push(`Ville : ${r.ville}`);
-          const commentaires = notesFrom(r, skip);
+          if (p.company) entete.push(`Entreprise : ${p.company}`);
+          if (p.ville) entete.push(`Ville : ${p.ville}`);
+
+          let commentaires: string;
+          if (p.misaligned) {
+            // En-tête non fiable pour cette ligne : on évite les libellés erronés
+            // et on conserve les réponses lisibles sans étiquette.
+            const used = new Set(
+              [p.nom, p.prenom, p.email, p.telephone, p.company, p.ville]
+                .map((x) => (x ?? "").toString().trim().toLowerCase())
+                .filter(Boolean),
+            );
+            const answers = Object.values(r)
+              .map((v) => (v ?? "").toString().trim())
+              .filter((s) =>
+                s && !isEmail(s) && !isPhone(s) && !isPrefixedId(s) &&
+                !isIsoDate(s) && !isMetaToken(s) && !used.has(s.toLowerCase())
+              );
+            const uniq = [...new Set(answers)];
+            commentaires = uniq.length ? `Réponses formulaire : ${uniq.join(" | ")}` : "";
+          } else {
+            commentaires = notesFrom(r, skip);
+          }
+
           const notes = [entete.join("\n"), commentaires].filter(Boolean).join("\n");
-          const key = (r.email || r.phone || r.full_name).toLowerCase().trim();
+          const key = (p.email || p.telephone || `${p.prenom ?? ""} ${p.nom}`).toLowerCase().trim();
           return {
             external_id: `pros:${key}`,
             type: "prospect" as const,
-            nom,
-            prenom,
-            email: r.email || null,
-            telephone: r.phone || null,
+            nom: p.nom,
+            prenom: p.prenom,
+            email: p.email,
+            telephone: p.telephone,
             notes: notes || null,
             // round-robin sur les conseillers ; sinon « non affecté » (admin)
             owner_id: conseillers.length ? conseillers[rr++ % conseillers.length] : null,
@@ -172,16 +293,19 @@ Deno.serve(async (req: Request) => {
           };
         });
 
+      const excl = await excludedIds("contacts");
+      const kept = payloads.filter((p) => !excl.has(p.external_id));
+
       let imported = 0;
-      if (payloads.length) {
+      if (kept.length) {
         const { data: ins, error } = await sb
           .from("contacts")
-          .upsert(payloads, { onConflict: "external_id", ignoreDuplicates: true })
+          .upsert(kept, { onConflict: "external_id", ignoreDuplicates: !force })
           .select("id");
         if (error) throw new Error(`contacts: ${error.message}`);
         imported = ins?.length ?? 0;
       }
-      result.prospects = { lus: rows.length, importes: imported };
+      result.prospects = { lus: rows.length, importes: imported, exclus: payloads.length - kept.length };
     }
 
     return new Response(JSON.stringify({ ok: true, ...result }), {
