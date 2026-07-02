@@ -8,7 +8,7 @@ import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, Se
 import { FileLink } from '@/components/FileUpload';
 import { formatDate, fullName, formatMoney } from '@/lib/utils';
 import { ensureDossierClient } from '@/lib/dossierClient';
-import type { Devis, DevisLigne, DevisStatut, Contact, Entreprise, Financeur, Formation, Dossier } from '@/lib/database.types';
+import type { Devis, DevisLigne, DevisStatut, Contact, Entreprise, Financeur, Formation, Dossier, Profile } from '@/lib/database.types';
 
 const STATUT_LABELS: Record<DevisStatut, string> = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté', refuse: 'Refusé', expire: 'Expiré' };
 const STATUT_TONES: Record<DevisStatut, Tone> = {
@@ -32,6 +32,7 @@ export default function Devis() {
   const financeurs = useCollection<Financeur>('financeurs');
   const formations = useCollection<Formation>('formations');
   const dossiers = useCollection<Dossier>('dossiers');
+  const profiles = useCollection<Profile>('profiles');
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Devis | null>(null);
@@ -46,6 +47,9 @@ export default function Devis() {
 
   const setF = (k: keyof typeof form, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const cName = (id: string | null) => { const c = contacts.data.find((x) => x.id === id); return c ? fullName(c.prenom, c.nom) : '—'; };
+  const uName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : '—'; };
+  // Conseiller affecté = propriétaire du contact lié au devis.
+  const conseillerName = (contactId: string | null) => { const c = contacts.data.find((x) => x.id === contactId); return c?.owner_id ? uName(c.owner_id) : '—'; };
   const totalHT = lines.reduce((s, l) => s + (Number(l.quantite) || 0) * (Number(l.prix_unitaire_ht) || 0), 0);
 
   const openNew = () => {
@@ -154,6 +158,7 @@ export default function Devis() {
         <Table head={
           <tr>
             <th className="px-4 py-3">Numéro</th><th className="px-4 py-3">Client</th>
+            <th className="px-4 py-3">Créateur devis</th><th className="px-4 py-3">Conseiller affecté</th>
             <th className="px-4 py-3">Date</th><th className="px-4 py-3 text-right">Total HT</th>
             <th className="px-4 py-3">Statut</th><th className="px-4 py-3 text-right">Actions</th>
           </tr>
@@ -162,6 +167,8 @@ export default function Devis() {
             <tr key={d.id} className="hover:bg-surface-2">
               <td className="px-4 py-3 font-medium text-fg">{d.numero}</td>
               <td className="px-4 py-3 text-muted">{cName(d.contact_id)}</td>
+              <td className="px-4 py-3 text-muted">{uName(d.owner_id)}</td>
+              <td className="px-4 py-3 text-muted">{conseillerName(d.contact_id)}</td>
               <td className="px-4 py-3 text-muted">{formatDate(d.date_emission)}</td>
               <td className="px-4 py-3 text-right text-fg">{formatMoney(d.total_ht)}</td>
               <td className="px-4 py-3"><Badge tone={STATUT_TONES[d.statut]}>{STATUT_LABELS[d.statut]}</Badge></td>
