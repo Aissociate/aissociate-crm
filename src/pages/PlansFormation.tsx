@@ -40,6 +40,7 @@ export default function PlansFormation() {
   const eName = (id: string | null) => entreprises.data.find((x) => x.id === id)?.raison_sociale ?? '';
   const fName = (id: string | null) => financeurs.data.find((x) => x.id === id)?.nom ?? '';
   const formName = (id: string | null) => formations.data.find((x) => x.id === id)?.intitule ?? '';
+  const planOf = (planId: string | null) => data.find((p) => p.id === planId);
 
   // Génère un PDF structuré via l'IA (OpenRouter, côté serveur) à présenter au partenaire
   const generatePdf = async (p: PlanFormation) => {
@@ -207,9 +208,20 @@ export default function PlansFormation() {
                 <td className="px-4 py-3 text-muted">{d.apprenant || '—'}</td>
                 <td className="px-4 py-3 text-muted">{d.organisme || '—'}</td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1">
                     {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
-                    <button onClick={() => removePdf(d)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    {(() => {
+                      const src = planOf(d.plan_id);
+                      if (!src) return null;
+                      return (
+                        <>
+                          <button onClick={() => generatePdf(src)} disabled={genId === src.id} title="Régénérer le PDF depuis le plan source" className="rounded p-1.5 text-muted hover:text-brand-600"><Sparkles className={`h-4 w-4 ${genId === src.id ? 'animate-pulse' : ''}`} /></button>
+                          <button onClick={() => duplicate(src)} title="Dupliquer le plan (copie modifiable)" className="rounded p-1.5 text-muted hover:text-brand-600"><Copy className="h-4 w-4" /></button>
+                          <button onClick={() => openEdit(src)} title="Modifier le plan puis régénérer" className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                        </>
+                      );
+                    })()}
+                    <button onClick={() => removePdf(d)} title="Supprimer ce PDF" className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </td>
               </tr>
