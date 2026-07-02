@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Building2, Search } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +23,17 @@ export default function Entreprises() {
   const [form, setForm] = useState<Partial<Entreprise>>(empty());
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Ouverture directe d'une entreprise via ?open=<id> (lien depuis la fiche contact).
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId || loading) return;
+    const ent = data.find((e) => e.id === openId);
+    if (ent) { setForm(ent); setOpen(true); }
+    searchParams.delete('open');
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, data, loading, setSearchParams]);
 
   const set = (k: keyof Entreprise, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 

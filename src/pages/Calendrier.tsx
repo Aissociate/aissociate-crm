@@ -5,6 +5,7 @@ import {
   startOfDay, endOfDay, isWithinInterval,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, Users, MapPin, Clock, CalendarDays,
 } from 'lucide-react';
@@ -42,7 +43,13 @@ const emptyForm = (day?: Date): Form => ({
 
 export default function Calendrier() {
   const { session } = useAuth();
-  const [month, setMonth] = useState<Date>(() => new Date());
+  const [searchParams] = useSearchParams();
+  // Ouverture sur le mois d'une session via ?date=YYYY-MM-DD (lien depuis la fiche contact).
+  const [month, setMonth] = useState<Date>(() => {
+    const d = searchParams.get('date');
+    const parsed = d ? parseISO(d) : null;
+    return parsed && !isNaN(parsed.getTime()) ? parsed : new Date();
+  });
   const { data: sessions, loading, refresh } = useCollection<SessionFormation>('sessions_formation', {
     orderBy: { column: 'date_debut' },
   });

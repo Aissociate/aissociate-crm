@@ -9,6 +9,7 @@ import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
 import { formatMoney, formatDate } from '@/lib/utils';
+import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type {
   Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
   Devis, PlanFormation, PlanPdf, Document, ContactDocument,
@@ -129,13 +130,25 @@ export default function DossierDetail() {
     setHistPiece(p);
   };
 
-  const addPiece = async () => {
-    if (!newPiece.trim() || !dossier) return;
-    const { data } = await supabase.from('dossier_pieces')
-      .insert({ dossier_id: dossier.id, libelle: newPiece.trim(), obligatoire: true, statut: 'manquante' })
+  const insertPiece = async (libelle: string) => {
+    if (!libelle.trim() || !dossier) return;
+    const { data, error } = await supabase.from('dossier_pieces')
+      .insert({ dossier_id: dossier.id, libelle: libelle.trim(), obligatoire: true, statut: 'manquante' })
       .select().single();
+    if (error) { alert(`Ajout impossible : ${error.message}`); return; }
     if (data) setPieces((prev) => [...prev, data]);
-    setNewPiece('');
+  };
+  const addPiece = async () => { await insertPiece(newPiece); setNewPiece(''); };
+  // Pièces de la checklist standard non présentes → ré-ajoutables en un clic
+  // (utile quand une pièce a été supprimée par erreur).
+  const missingStd = DEFAULT_PIECES.filter((l) => !pieces.some((p) => p.libelle === l));
+
+  const removeDossier = async () => {
+    if (!dossier) return;
+    if (!confirm(`Supprimer définitivement le dossier « ${dossier.intitule} » (${dossier.reference}) ?\nCette action est irréversible.`)) return;
+    const { error } = await supabase.from('dossiers').delete().eq('id', dossier.id);
+    if (error) { alert(`Suppression impossible : ${error.message}`); return; }
+    navigate('/dossiers');
   };
 
   const removePiece = async (p: DossierPiece) => {
@@ -230,10 +243,16 @@ export default function DossierDetail() {
                 </li>
               ))}
             </ul>
-            <div className="mt-3 flex gap-2">
-              <input className="input" placeholder="Ajouter une pièce…" value={newPiece}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input className="input min-w-[160px] flex-1" placeholder="Ajouter une pièce…" value={newPiece}
                 onChange={(e) => setNewPiece(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addPiece()} />
               <Button variant="secondary" onClick={addPiece}><Plus className="h-4 w-4" /></Button>
+              {missingStd.length > 0 && (
+                <select className="input max-w-[260px]" value="" onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) void insertPiece(v); }} title="Ré-ajouter une pièce de la checklist standard">
+                  <option value="">+ Pièce standard (checklist)…</option>
+                  {missingStd.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              )}
             </div>
           </Card>
 
@@ -347,6 +366,10 @@ export default function DossierDetail() {
               <Button onClick={saveMeta} disabled={saving} className="w-full">
                 <Save className="h-4 w-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
               </Button>
+              <button onClick={removeDossier}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10">
+                <Trash2 className="h-4 w-4" /> Supprimer le dossier
+              </button>
             </div>
           </Card>
         </div>

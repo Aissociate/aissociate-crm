@@ -369,7 +369,8 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Relations</h3>
               <div className="space-y-3">
                 {entreprise && (
-                  <InfoRow icon={<Building2 className="h-4 w-4" />} label="Entreprise" value={entreprise.raison_sociale} />
+                  <InfoRow icon={<Building2 className="h-4 w-4" />} label="Entreprise"
+                    value={<Link to={`/entreprises?open=${entreprise.id}`} onClick={onClose} title="Ouvrir la fiche entreprise" className="text-brand-600 hover:underline dark:text-brand-400">{entreprise.raison_sociale}</Link>} />
                 )}
                 {financeur && (
                   <InfoRow icon={<Tag className="h-4 w-4" />} label="Financeur" value={financeur.nom} />
@@ -486,7 +487,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 return (
                   <li key={s.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                     <span className="flex items-center gap-2 text-fg"><span className="h-2.5 w-2.5 rounded-full" style={{ background: s.couleur }} />{s.titre}</span>
-                    <span className="flex items-center gap-2"><span className="text-xs text-muted">{formatDate(s.date_debut, 'dd/MM/yyyy')}</span><Badge tone={passee ? 'success' : 'warning'}>{passee ? 'Réalisée' : 'Programmée'}</Badge></span>
+                    <span className="flex items-center gap-2"><span className="text-xs text-muted">{formatDate(s.date_debut, 'dd/MM/yyyy')}</span><Badge tone={passee ? 'success' : 'warning'}>{passee ? 'Réalisée' : 'Programmée'}</Badge><Link to={`/calendrier?date=${(s.date_debut ?? '').slice(0, 10)}`} onClick={onClose} title="Voir dans le calendrier" className="rounded p-0.5 text-muted hover:text-brand-600"><CalendarDays className="h-3.5 w-3.5" /></Link></span>
                   </li>);
               })}</ul>
             )}
