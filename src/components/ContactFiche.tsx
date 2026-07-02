@@ -396,6 +396,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => setFf('financement_envisage', e.target.value)} onBlur={(e) => blurSave('financement_envisage', e.target.value)} /></div>
                 <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => setFf('interet', e.target.value)} onBlur={(e) => blurSave('interet', e.target.value)} /></div>
                 <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => setFf('effectif', e.target.value)} onBlur={(e) => blurSave('effectif', e.target.value)} /></div>
+                <div><label className="label">SIRET</label><input className="input" placeholder="14 chiffres" value={form.siret} onChange={(e) => setFf('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} /></div>
               </div>
               <p className="text-xs text-muted">Enregistrement automatique à la sortie du champ {savedField && <span className="text-emerald-600">— enregistré ✓</span>}</p>
             </div>

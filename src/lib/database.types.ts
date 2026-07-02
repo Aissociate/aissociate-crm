@@ -78,6 +78,11 @@ export type Newsletter = {
   statut: 'brouillon' | 'en_cours' | 'envoye'; recipients_count: number;
   created_by: string | null; created_at: string; sent_at: string | null;
 };
+export type NewsletterQueue = {
+  id: string; newsletter_id: string; email: string;
+  status: 'pending' | 'sent' | 'failed'; error: string | null;
+  retry_count: number; created_at: string; sent_at: string | null;
+};
 export type ContactAction = {
   id: string; contact_id: string; date_action: string; heure_action: string | null; type: string; description: string;
   faite: boolean; auteur_id: string | null; created_at: string;
@@ -291,6 +296,7 @@ export type Database = {
       candidat_documents: TableShape<CandidatDocument>;
       import_batches: TableShape<ImportBatch>;
       newsletters: TableShape<Newsletter>;
+      newsletter_queue: TableShape<NewsletterQueue>;
       audit_log: TableShape<AuditLog>;
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;
