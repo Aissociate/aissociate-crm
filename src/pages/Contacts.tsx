@@ -82,6 +82,9 @@ export default function Contacts() {
   const [affFilter, setAffFilter] = useState<string>('');
   const [tagFilter, setTagFilter] = useState<string>('');
   const [statutFilter, setStatutFilter] = useState<string>('');
+  // Pagination (côté client, sur le résultat filtré)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   // Saisie interne (formulaire de demande) — création/mise à jour d'un contact
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [intake, setIntake] = useState(emptyIntake());
@@ -135,6 +138,9 @@ export default function Contacts() {
     const t = setInterval(() => { void refresh(); }, REFRESH_MS);
     return () => clearInterval(t);
   }, [refresh]);
+
+  // Retour à la première page dès qu'un filtre / la recherche / la taille change
+  useEffect(() => { setPage(1); }, [q, typeFilter, affFilter, tagFilter, statutFilter, pageSize]);
 
   const [distributing, setDistributing] = useState(false);
   // Sélection multiple + répartition round-robin (managers)
@@ -364,6 +370,11 @@ export default function Contacts() {
     return matchQ && matchType && matchAff && matchTag && matchStatut;
   });
 
+  // Découpage en pages (currentPage borné : la page reste valide si la liste rétrécit)
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   // ── Sélection multiple (managers) ──
   const selectableIds = filtered.map((c) => c.id);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
@@ -493,10 +504,11 @@ export default function Contacts() {
       ) : filtered.length === 0 ? (
         <EmptyState title="Aucun contact" message="Créez votre premier contact pour démarrer." />
       ) : (
+        <>
         <Table head={
           <tr>
             {isManager && (
-              <th className="px-4 py-3 w-0"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} title="Tout sélectionner (page filtrée)" /></th>
+              <th className="px-4 py-3 w-0"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} title="Tout sélectionner (résultat filtré, toutes pages)" /></th>
             )}
             <th className="px-4 py-3">Nom</th>
             <th className="px-4 py-3">Type</th>
@@ -506,7 +518,7 @@ export default function Contacts() {
             <th className="px-4 py-3 text-right">Actions</th>
           </tr>
         }>
-          {filtered.map((c) => (
+          {paged.map((c) => (
             <tr
               key={c.id}
               className={`cursor-pointer hover:bg-surface-2 ${selected.has(c.id) ? 'bg-brand-500/5' : ''}`}
@@ -589,6 +601,21 @@ export default function Contacts() {
             </tr>
           ))}
         </Table>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted">
+            {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} sur {filtered.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <select className="input max-w-[110px] py-1 text-xs" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} title="Contacts par page">
+              {[25, 50, 100].map((n) => <option key={n} value={n}>{n} / page</option>)}
+            </select>
+            <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>Précédent</Button>
+            <span className="text-muted whitespace-nowrap">Page {currentPage} / {pageCount}</span>
+            <Button variant="secondary" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>Suivant</Button>
+          </div>
+        </div>
+        </>
       )}
 
       {/* Répartition round-robin (cibles = sélection ou prospects non affectés) */}
