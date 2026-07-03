@@ -134,6 +134,7 @@ export type Document = Timestamps & {
   parent_id: string | null; tags: string[]; owner_id: string | null;
   contenu_texte: string | null; chat_direction: boolean; chat_conseiller: boolean;
   dossier: string | null; dossier_id: string | null;
+  date_validite: string | null;
 };
 export type KanbanBoard = Timestamps & {
   id: string; nom: string; description: string | null; owner_id: string | null;
@@ -250,6 +251,46 @@ export type PageView = {
   id: string; path: string; visitor_id: string | null; referrer: string | null; created_at: string;
 };
 
+// ─── Module Qualiopi (justificatifs & preuves d'audit) ───────────────────────
+export type QualiopiApplicable = 'oui' | 'si_certifiante' | 'non_applicable';
+export type QualiopiNiveau = 'organisme' | 'dossier' | 'mixte';
+export type QualiopiConformite = 'conforme' | 'a_completer' | 'non_applicable' | 'a_verifier';
+export type QualiopiDocStatut = 'a_generer' | 'genere' | 'envoye' | 'signe' | 'recu' | 'valide' | 'non_applicable';
+export type QuestionnaireStatut = 'a_envoyer' | 'envoye' | 'relance' | 'repondu' | 'expire';
+
+export type QualiopiCritere = { numero: number; libelle: string };
+export type QualiopiIndicateur = {
+  numero: number; critere: number; intitule: string;
+  applicable: QualiopiApplicable; niveau: QualiopiNiveau;
+  preuves_attendues: string | null; nouvel_entrant: boolean;
+  statut: QualiopiConformite; commentaire: string | null; updated_at: string;
+};
+export type QualiopiPreuveDocument = {
+  id: string; indicateur_numero: number; document_id: string; created_at: string;
+};
+export type QualiopiDossierDoc = Timestamps & {
+  id: string; session_id: string; participant_id: string | null;
+  indicateur_numero: number | null; type_doc: string; libelle: string;
+  statut: QualiopiDocStatut; obligatoire: boolean;
+  fichier_url: string | null; genere_at: string | null;
+};
+export type QuestionnaireModele = {
+  code: string; titre: string; description: string | null; moment: string;
+  schema: Json; actif: boolean; updated_at: string;
+};
+export type QuestionnaireEnvoi = {
+  id: string; modele_code: string; session_id: string | null;
+  participant_id: string | null; contact_id: string | null;
+  destinataire_nom: string | null; destinataire_email: string | null;
+  token: string; statut: QuestionnaireStatut;
+  sent_at: string | null; relance_at: string | null; responded_at: string | null;
+  owner_id: string | null; created_at: string;
+};
+export type QuestionnaireReponse = {
+  id: string; envoi_id: string; reponses: Json; note_globale: number | null;
+  commentaire: string | null; created_at: string;
+};
+
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -303,9 +344,18 @@ export type Database = {
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;
       page_views: TableShape<PageView>;
+      qualiopi_criteres: TableShape<QualiopiCritere>;
+      qualiopi_indicateurs: TableShape<QualiopiIndicateur>;
+      qualiopi_preuve_document: TableShape<QualiopiPreuveDocument>;
+      qualiopi_dossier_docs: TableShape<QualiopiDossierDoc>;
+      questionnaire_modeles: TableShape<QuestionnaireModele>;
+      questionnaire_envois: TableShape<QuestionnaireEnvoi>;
+      questionnaire_reponses: TableShape<QuestionnaireReponse>;
     };
     Views: EmptyMap;
-    Functions: EmptyMap;
+    Functions: {
+      qualiopi_prepare_session: { Args: { p_session: string }; Returns: undefined };
+    };
     Enums: {
       user_role: UserRole;
       contact_type: ContactType;
