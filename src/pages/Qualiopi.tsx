@@ -36,6 +36,19 @@ export default function Qualiopi() {
   const indicateurs = useCollection<QualiopiIndicateur>('qualiopi_indicateurs', { orderBy: { column: 'numero' } });
   const documents = useCollection<DocRow>('documents', { orderBy: { column: 'titre' } });
   const preuves = useCollection<QualiopiPreuveDocument>('qualiopi_preuve_document');
+  const dossierDocs = useCollection<QualiopiDossierDoc>('qualiopi_dossier_docs');
+
+  // Couverture par preuve : nb de preuves organisme (documents rattachés) +
+  // pièces de dossier « faites » (générées/reçues/signées/validées) par indicateur.
+  const coverage = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const p of preuves.data) m.set(p.indicateur_numero, (m.get(p.indicateur_numero) ?? 0) + 1);
+    for (const d of dossierDocs.data) {
+      if (d.indicateur_numero && ['valide', 'signe', 'recu', 'genere'].includes(d.statut))
+        m.set(d.indicateur_numero, (m.get(d.indicateur_numero) ?? 0) + 1);
+    }
+    return m;
+  }, [preuves.data, dossierDocs.data]);
 
   const exportZip = async () => {
     setExporting(true);
@@ -60,15 +73,18 @@ export default function Qualiopi() {
   const stats = useMemo(() => {
     const rows = indicateurs.data;
     const applicables = rows.filter((i) => i.statut !== 'non_applicable');
-    const conformes = rows.filter((i) => i.statut === 'conforme').length;
+    // Conformité RÉELLE : « conforme » ET couvert par au moins une preuve.
+    const conformes = rows.filter((i) => i.statut === 'conforme' && (coverage.get(i.numero) ?? 0) > 0).length;
+    const sansPreuve = rows.filter((i) => i.statut === 'conforme' && (coverage.get(i.numero) ?? 0) === 0).length;
     return {
       total: rows.length,
       conformes,
+      sansPreuve,
       aCompleter: rows.filter((i) => i.statut === 'a_completer' || i.statut === 'a_verifier').length,
       na: rows.filter((i) => i.statut === 'non_applicable').length,
       pct: applicables.length ? Math.round((conformes / applicables.length) * 100) : 0,
     };
-  }, [indicateurs.data]);
+  }, [indicateurs.data, coverage]);
 
   return (
     <div>
@@ -84,9 +100,9 @@ export default function Qualiopi() {
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <StatCard label="Conformité globale" value={`${stats.pct}%`} icon={<ShieldCheck className="h-5 w-5" />} hint={`${stats.conformes}/${stats.total - stats.na} indicateurs applicables`} />
-        <StatCard label="Conformes" value={stats.conformes} icon={<CheckCircle2 className="h-5 w-5" />} />
-        <StatCard label="À compléter" value={stats.aCompleter} icon={<AlertTriangle className="h-5 w-5" />} />
+        <StatCard label="Conformité réelle" value={`${stats.pct}%`} icon={<ShieldCheck className="h-5 w-5" />} hint={`${stats.conformes}/${stats.total - stats.na} indicateurs applicables (preuve requise)`} />
+        <StatCard label="Conformes avec preuve" value={stats.conformes} icon={<CheckCircle2 className="h-5 w-5" />} />
+        <StatCard label="À compléter" value={stats.aCompleter} icon={<AlertTriangle className="h-5 w-5" />} hint={stats.sansPreuve > 0 ? `dont ${stats.sansPreuve} « conforme » sans preuve` : undefined} />
         <StatCard label="Non applicables" value={stats.na} icon={<FileCheck2 className="h-5 w-5" />} />
       </div>
 
@@ -115,9 +131,10 @@ export default function Qualiopi() {
           indicateurs={indicateurs.data}
           documents={documents.data}
           preuves={preuves.data}
+          coverage={coverage}
           loading={indicateurs.loading}
           userId={session?.user.id ?? null}
-          onRefresh={() => { indicateurs.refresh(); preuves.refresh(); documents.refresh(); }}
+          onRefresh={() => { indicateurs.refresh(); preuves.refresh(); documents.refresh(); dossierDocs.refresh(); }}
         />
       )}
       {tab === 'dossiers' && <Dossiers userId={session?.user.id ?? null} />}
@@ -130,10 +147,11 @@ export default function Qualiopi() {
 // TAB 1 — RÉFÉRENTIEL
 // ─────────────────────────────────────────────────────────────────────────────
 function Referentiel({
-  criteres, indicateurs, documents, preuves, loading, userId, onRefresh,
+  criteres, indicateurs, documents, preuves, coverage, loading, userId, onRefresh,
 }: {
   criteres: QualiopiCritere[]; indicateurs: QualiopiIndicateur[];
   documents: DocRow[]; preuves: QualiopiPreuveDocument[];
+  coverage: Map<number, number>;
   loading: boolean; userId: string | null; onRefresh: () => void;
 }) {
   const [openCrit, setOpenCrit] = useState<number | null>(criteres[0]?.numero ?? 1);
@@ -173,8 +191,33 @@ function Referentiel({
 
   const docOptions: SearchOption[] = documents.map((d) => ({ value: d.id, label: d.titre, sub: d.categorie }));
 
+  // Auto-évaluation fondée sur les preuves : un indicateur couvert (≥1 preuve)
+  // et encore « à compléter » passe « conforme » ; un « conforme » sans preuve
+  // est rétrogradé « à vérifier ». Les non-applicables sont laissés tels quels.
+  const autoEval = async () => {
+    const updates: { numero: number; statut: QualiopiConformite }[] = [];
+    for (const ind of indicateurs) {
+      if (ind.applicable === 'non_applicable') continue;
+      const cov = coverage.get(ind.numero) ?? 0;
+      if (cov > 0 && ind.statut === 'a_completer') updates.push({ numero: ind.numero, statut: 'conforme' });
+      else if (cov === 0 && ind.statut === 'conforme') updates.push({ numero: ind.numero, statut: 'a_verifier' });
+    }
+    if (updates.length === 0) { alert('Rien à ajuster : la conformité est déjà cohérente avec les preuves.'); return; }
+    if (!confirm(`Auto-évaluer ${updates.length} indicateur(s) selon les preuves rattachées ?`)) return;
+    for (const u of updates) await supabase.from('qualiopi_indicateurs').update({ statut: u.statut }).eq('numero', u.numero);
+    onRefresh();
+  };
+
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 px-4 py-2.5">
+        <p className="text-xs text-muted">
+          La conformité est <span className="font-semibold">fondée sur les preuves</span> : un indicateur n'est réellement conforme que s'il a au moins une preuve rattachée.
+        </p>
+        <Button variant="secondary" className="h-8 py-0 text-xs" onClick={autoEval}>
+          <Sparkles className="h-3.5 w-3.5" /> Auto-évaluer selon les preuves
+        </Button>
+      </div>
       {criteres.map((crit) => {
         const inds = indicateurs.filter((i) => i.critere === crit.numero);
         const applicable = inds.filter((i) => i.statut !== 'non_applicable');
@@ -200,6 +243,8 @@ function Referentiel({
               <div className="divide-y divide-line border-t border-line">
                 {inds.map((ind) => {
                   const links = preuvesByInd(ind.numero);
+                  const cov = coverage.get(ind.numero) ?? 0;
+                  const sansPreuve = ind.statut === 'conforme' && cov === 0;
                   const expanded = openInd === ind.numero;
                   return (
                     <div key={ind.numero} className="px-5 py-3">
@@ -209,7 +254,8 @@ function Referentiel({
                           <span className="text-sm text-fg">{ind.intitule}</span>
                         </button>
                         {ind.applicable === 'si_certifiante' && <Badge tone="info">Si certifiante</Badge>}
-                        {links.length > 0 && <Badge tone="neutral"><Paperclip className="h-3 w-3" /> {links.length}</Badge>}
+                        {cov > 0 && <Badge tone="neutral"><Paperclip className="h-3 w-3" /> {cov}</Badge>}
+                        {sansPreuve && <Badge tone="danger"><AlertTriangle className="h-3 w-3" /> Sans preuve</Badge>}
                         <Badge tone={CONFORMITE_TONES[ind.statut]}>{CONFORMITE_LABELS[ind.statut]}</Badge>
                         <ChevronDown className={cn('h-4 w-4 text-muted transition', expanded && 'rotate-180')} onClick={() => setOpenInd(expanded ? null : ind.numero)} />
                       </div>

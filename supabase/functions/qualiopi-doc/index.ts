@@ -1,11 +1,11 @@
-// Edge Function — generation d'un justificatif Qualiopi (dossier de formation)
-// en PDF, personnalise avec les donnees de la session / de l'apprenant / de
-// l'organisme. Rendu 100% serveur (pdf-lib), upload bucket prive « qualiopi »,
-// mise a jour de qualiopi_dossier_docs (statut = genere + fichier_url).
+// Edge Function — génération d'un justificatif Qualiopi (dossier de formation)
+// en PDF, personnalisé avec les données de la session / de l'apprenant / de
+// l'organisme. Rendu 100% serveur (pdf-lib), upload bucket privé « qualiopi »,
+// mise à jour de qualiopi_dossier_docs (statut = généré + fichier_url).
 //
-// NB : le texte des modeles est volontairement en ASCII simple (deploiement
-// via MCP). clean() preserve les accents Latin-1 (<=255) : on peut les
-// reintroduire dans buildContent() sans risque cote rendu PDF.
+// Logo & signature : si `parametres.organisme` contient `logo_url` et/ou
+// `signature_url` (image PNG/JPG accessible en HTTP), elles sont incrustées.
+// Sinon on retombe proprement sur l'en-tête texte + la zone de signature vide.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
@@ -22,6 +22,8 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+// Normalise vers WinAnsi (Latin-1) : conserve les accents et « », convertit
+// les caractères typographiques non supportés.
 function clean(s: unknown): string {
   const str = String(s ?? "");
   let out = "";
@@ -31,15 +33,14 @@ function clean(s: unknown): string {
     else if (c === 8220 || c === 8221) out += '"';
     else if (c === 8211 || c === 8212) out += "-";
     else if (c === 8230) out += "...";
-    else if (c === 8226 || c === 183) out += "-";
-    else if (c === 160) out += " ";
+    else if (c === 8226) out += "-";
     else if (c === 9 || c === 10 || c === 13 || (c >= 32 && c <= 255) || c === 8364) out += str[i];
   }
   return out;
 }
 
 function fmtDate(d: string | null | undefined): string {
-  if (!d) return "......";
+  if (!d) return "……………";
   try { return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }); }
   catch { return String(d); }
 }
@@ -52,17 +53,20 @@ interface Ctx {
   libelle: string;
 }
 
+// Types de documents portant une signature de l'organisme.
+const SIGNED = new Set(["convention", "attestation_fin", "certificat_realisation"]);
+
 function buildContent(type: string, c: Ctx): { title: string; blocks: string[] } {
   const orgNom = c.org.nom || "AIssociate";
-  const nda = c.org.nda ? `Declaration d'activite enregistree sous le n ${c.org.nda}` : "";
-  const app = c.participant ? `${c.participant.prenom ?? ""} ${c.participant.nom ?? ""}`.trim() : "......";
+  const nda = c.org.nda ? `Déclaration d'activité enregistrée sous le n° ${c.org.nda}` : "";
+  const app = c.participant ? `${c.participant.prenom ?? ""} ${c.participant.nom ?? ""}`.trim() : "……………";
   const intitule = (c.formation?.intitule as string) ?? (c.session.titre as string) ?? "";
-  const duree = c.formation?.duree_heures ? `${c.formation.duree_heures} heures` : "... heures";
-  const modalite = (c.session.modalite as string) ?? (c.formation?.modalite as string) ?? "presentiel";
-  const lieu = (c.session.lieu as string) || "......";
+  const duree = c.formation?.duree_heures ? `${c.formation.duree_heures} heures` : "……… heures";
+  const modalite = (c.session.modalite as string) ?? (c.formation?.modalite as string) ?? "présentiel";
+  const lieu = (c.session.lieu as string) || "……………";
   const debut = fmtDate(c.session.date_debut as string);
   const fin = fmtDate(c.session.date_fin as string);
-  const formateur = (c.session.formateur as string) || "......";
+  const formateur = (c.session.formateur as string) || "……………";
   const objectifs = (c.formation?.objectifs as string) || "";
 
   const entete = [
@@ -78,34 +82,34 @@ function buildContent(type: string, c: Ctx): { title: string; blocks: string[] }
         title: "Convention de formation professionnelle",
         blocks: [
           ...entete, "",
-          "Entre les soussignes :",
+          "Entre les soussignés :",
           `1) ${orgNom}, organisme de formation, ${nda}`,
-          `2) Le beneficiaire : ${app}`, "",
-          "## Article 1 - Objet",
-          `En execution de la presente convention, l'organisme organise l'action de formation intitulee \"${intitule}\".`,
-          "## Article 2 - Nature et caracteristiques",
-          `Objectifs : ${objectifs || "voir programme annexe"}.`,
-          `Duree : ${duree}. Modalite : ${modalite}. Dates : du ${debut} au ${fin}. Lieu : ${lieu}.`,
-          "## Article 3 - Modalites de deroulement et de sanction",
-          "L'action est sanctionnee par une attestation de fin de formation et un certificat de realisation. L'assiduite est justifiee par les feuilles d'emargement.",
-          "## Article 4 - Dispositions financieres",
-          "Le prix est precise au devis / bon de commande annexe.", "", "",
-          "Fait a ......, le ...... en deux exemplaires.",
-          "Pour l'organisme :                                Le beneficiaire :",
+          `2) Le bénéficiaire : ${app}`, "",
+          "## Article 1 — Objet",
+          `En exécution de la présente convention, l'organisme organise l'action de formation intitulée « ${intitule} ».`,
+          "## Article 2 — Nature et caractéristiques",
+          `Objectifs : ${objectifs || "voir programme annexé"}.`,
+          `Durée : ${duree}. Modalité : ${modalite}. Dates : du ${debut} au ${fin}. Lieu : ${lieu}.`,
+          "## Article 3 — Modalités de déroulement et de sanction",
+          "L'action est sanctionnée par une attestation de fin de formation et un certificat de réalisation. L'assiduité est justifiée par les feuilles d'émargement.",
+          "## Article 4 — Dispositions financières",
+          "Le prix est précisé au devis / bon de commande annexé.", "", "",
+          "Fait à ……………, le …………… en deux exemplaires.",
+          "Pour l'organisme :                                Le bénéficiaire :",
         ],
       };
     case "convocation":
       return {
-        title: "Convocation a une action de formation",
+        title: "Convocation à une action de formation",
         blocks: [
-          ...entete, "", `A l'attention de : ${app}`, "",
-          `Nous avons le plaisir de vous convoquer a la formation \"${intitule}\".`, "",
+          ...entete, "", `À l'attention de : ${app}`, "",
+          `Nous avons le plaisir de vous convoquer à la formation « ${intitule} ».`, "",
           `Dates : du ${debut} au ${fin}`,
-          `Duree : ${duree}`,
-          `Modalite : ${modalite}`,
+          `Durée : ${duree}`,
+          `Modalité : ${modalite}`,
           `Lieu : ${lieu}`,
           `Formateur : ${formateur}`, "",
-          "Merci de vous presenter muni(e) de cette convocation. En cas d'empechement ou de besoin d'amenagement (situation de handicap), contactez notre referent handicap.", "",
+          "Merci de vous présenter muni(e) de cette convocation. En cas d'empêchement ou de besoin d'aménagement (situation de handicap), contactez notre référent handicap.", "",
           `${c.org.email ? "Contact : " + c.org.email : ""}`,
         ],
       };
@@ -114,31 +118,31 @@ function buildContent(type: string, c: Ctx): { title: string; blocks: string[] }
         title: "Attestation de fin de formation",
         blocks: [
           ...entete, "",
-          `Je soussigne(e), representant l'organisme ${orgNom}, atteste que :`, "",
+          `Je soussigné(e), représentant l'organisme ${orgNom}, atteste que :`, "",
           `${app}`, "",
-          `a suivi l'action de formation \"${intitule}\",`,
-          `d'une duree de ${duree}, du ${debut} au ${fin}, en ${modalite}.`, "",
+          `a suivi l'action de formation « ${intitule} »,`,
+          `d'une durée de ${duree}, du ${debut} au ${fin}, en ${modalite}.`, "",
           "## Objectifs de la formation",
           objectifs || "Voir programme de formation.", "",
-          "## Resultats de l'evaluation des acquis",
-          "Les acquis ont ete evalues (voir document d'evaluation des acquis). Niveau d'atteinte des objectifs : Acquis / Partiellement acquis / Non acquis.", "", "",
-          `Fait a ${c.org.ville || "......"}, le ${fmtDate(c.session.date_fin as string)}.`,
+          "## Résultats de l'évaluation des acquis",
+          "Les acquis ont été évalués (voir document d'évaluation des acquis). Niveau d'atteinte des objectifs : Acquis / Partiellement acquis / Non acquis.", "", "",
+          `Fait à ${c.org.ville || "……………"}, le ${fmtDate(c.session.date_fin as string)}.`,
           "Signature et cachet de l'organisme :",
         ],
       };
     case "certificat_realisation":
       return {
-        title: "Certificat de realisation",
+        title: "Certificat de réalisation",
         blocks: [
           ...entete, "",
-          `Je soussigne(e), representant l'organisme concourant au developpement des competences ${orgNom}, atteste que :`, "",
+          `Je soussigné(e), représentant l'organisme concourant au développement des compétences ${orgNom}, atteste que :`, "",
           `${app}`, "",
-          `a realise l'action \"${intitule}\" (action de formation).`, "",
+          `a réalisé l'action « ${intitule} » (action de formation).`, "",
           `Nature : action de formation`,
           `Dates : du ${debut} au ${fin}`,
-          `Duree totale : ${duree}`, "", "",
+          `Durée totale : ${duree}`, "", "",
           "Pour valoir ce que de droit.",
-          `Fait a ${c.org.ville || "......"}, le ${fmtDate(c.session.date_fin as string)}.`,
+          `Fait à ${c.org.ville || "……………"}, le ${fmtDate(c.session.date_fin as string)}.`,
           "Cachet et signature :",
         ],
       };
@@ -148,49 +152,49 @@ function buildContent(type: string, c: Ctx): { title: string; blocks: string[] }
         blocks: [
           ...entete, "", `Formation : ${intitule}`, "",
           "## Bienvenue",
-          `Ce livret vous informe sur le deroulement de votre formation au sein de ${orgNom}.`,
-          "## Deroulement",
-          `Dates : du ${debut} au ${fin} - Duree : ${duree} - Modalite : ${modalite} - Lieu : ${lieu}.`,
-          "## Reglement interieur",
-          "Les regles de fonctionnement, d'hygiene et de securite sont applicables durant toute la formation.",
-          "## Accessibilite et handicap",
-          "Un referent handicap est a votre disposition pour toute demande d'adaptation.",
-          "## Reclamations",
-          "Toute reclamation peut etre adressee a l'organisme, qui s'engage a la traiter selon sa procedure dediee.",
+          `Ce livret vous informe sur le déroulement de votre formation au sein de ${orgNom}.`,
+          "## Déroulement",
+          `Dates : du ${debut} au ${fin} — Durée : ${duree} — Modalité : ${modalite} — Lieu : ${lieu}.`,
+          "## Règlement intérieur",
+          "Les règles de fonctionnement, d'hygiène et de sécurité sont applicables durant toute la formation.",
+          "## Accessibilité et handicap",
+          "Un référent handicap est à votre disposition pour toute demande d'adaptation.",
+          "## Réclamations",
+          "Toute réclamation peut être adressée à l'organisme, qui s'engage à la traiter selon sa procédure dédiée.",
           "## Contacts",
-          `${orgNom} - ${c.org.email ?? ""} ${c.org.adresse ?? ""}`,
+          `${orgNom} — ${c.org.email ?? ""} ${c.org.adresse ?? ""}`,
         ],
       };
     case "livret_suivi":
       return {
-        title: "Livret de suivi pedagogique individualise",
+        title: "Livret de suivi pédagogique individualisé",
         blocks: [
           ...entete, "", `Apprenant : ${app}`, `Formation : ${intitule}`, "",
-          "## Positionnement a l'entree",
-          "Niveau initial et objectifs individualises : ......",
-          "## Suivi des seances",
-          "Seance 1 - Date : ... Acquis / difficultes : ......",
-          "Seance 2 - Date : ... Acquis / difficultes : ......",
-          "Seance 3 - Date : ... Acquis / difficultes : ......",
-          "## Adaptations pedagogiques mises en oeuvre",
-          "......",
+          "## Positionnement à l'entrée",
+          "Niveau initial et objectifs individualisés : ……………………………………………………",
+          "## Suivi des séances",
+          "Séance 1 — Date : ……… Acquis / difficultés : …………………………………",
+          "Séance 2 — Date : ……… Acquis / difficultés : …………………………………",
+          "Séance 3 — Date : ……… Acquis / difficultés : …………………………………",
+          "## Adaptations pédagogiques mises en œuvre",
+          "……………………………………………………………………………………………",
           "## Bilan de fin de parcours",
-          "Atteinte des objectifs : Acquis / Partiellement / Non acquis. Suites envisagees : ......",
+          "Atteinte des objectifs : Acquis / Partiellement / Non acquis. Suites envisagées : …………",
         ],
       };
     case "emargement":
       return {
-        title: "Etat d'emargement",
+        title: "État d'émargement",
         blocks: [
           ...entete, "", `Formation : ${intitule}`,
-          `Dates : du ${debut} au ${fin} - Duree : ${duree} - Modalite : ${modalite}`,
+          `Dates : du ${debut} au ${fin} — Durée : ${duree} — Modalité : ${modalite}`,
           `Formateur : ${formateur}`, "",
-          "Demi-journee | Date | Nom de l'apprenant | Signature apprenant | Signature formateur",
-          "Matin      | ... | ...... | ...... | ......",
-          "Apres-midi  | ... | ...... | ...... | ......",
-          "Matin      | ... | ...... | ...... | ......",
-          "Apres-midi  | ... | ...... | ...... | ......", "",
-          "L'emargement atteste de la presence effective des participants.",
+          "Demi-journée | Date | Nom de l'apprenant | Signature apprenant | Signature formateur",
+          "Matin      | ……… | ……………………… | ………………… | …………………",
+          "Après-midi  | ……… | ……………………… | ………………… | …………………",
+          "Matin      | ……… | ……………………… | ………………… | …………………",
+          "Après-midi  | ……… | ……………………… | ………………… | …………………", "",
+          "L'émargement atteste de la présence effective des participants.",
         ],
       };
     default:
@@ -199,6 +203,19 @@ function buildContent(type: string, c: Ctx): { title: string; blocks: string[] }
         blocks: [...entete, "", `Formation : ${intitule}`, `Apprenant : ${app}`, `Dates : du ${debut} au ${fin}`],
       };
   }
+}
+
+// Télécharge et incruste une image PNG/JPG. Renvoie null si absente/illisible.
+async function embedImage(pdf: PDFDocument, url: string | undefined) {
+  if (!url) return null;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf[0] === 0x89 && buf[1] === 0x50) return await pdf.embedPng(buf);
+    if (buf[0] === 0xFF && buf[1] === 0xD8) return await pdf.embedJpg(buf);
+    return null;
+  } catch { return null; }
 }
 
 Deno.serve(async (req: Request) => {
@@ -232,6 +249,9 @@ Deno.serve(async (req: Request) => {
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const fontB = await pdf.embedFont(StandardFonts.HelveticaBold);
     const brand = rgb(0.917, 0.416, 0.118);
+    const logo = await embedImage(pdf, org.logo_url);
+    const signature = SIGNED.has(doc.type_doc) ? await embedImage(pdf, org.signature_url) : null;
+
     let page = pdf.addPage([595, 842]);
     const margin = 56;
     const width = 595 - margin * 2;
@@ -252,6 +272,11 @@ Deno.serve(async (req: Request) => {
       return lines.length ? lines : [""];
     };
 
+    // En-tête : logo à droite si dispo.
+    if (logo) {
+      const w = 110; const h = (logo.height / logo.width) * w;
+      page.drawImage(logo, { x: 595 - margin - w, y: 842 - margin - h + 8, width: w, height: h });
+    }
     page.drawText(clean((org.nom || "AIssociate").toUpperCase()), { x: margin, y, size: 16, font: fontB, color: brand });
     y -= 26;
     page.drawText(clean(title), { x: margin, y, size: 15, font: fontB, color: rgb(0.1, 0.1, 0.15) });
@@ -274,8 +299,16 @@ Deno.serve(async (req: Request) => {
       if (isHead) y -= 3;
     }
 
+    // Signature de l'organisme (documents signés).
+    if (signature) {
+      const w = 150; const h = (signature.height / signature.width) * w;
+      newPageIfNeeded(h + 10);
+      page.drawImage(signature, { x: margin, y: y - h, width: w, height: h });
+      y -= h + 6;
+    }
+
     y = margin - 20;
-    const foot = clean(`${org.nom || "AIssociate"} - ${org.email ?? ""} - SIRET ${org.siret ?? ""} - NDA ${org.nda ?? ""}`);
+    const foot = clean(`${org.nom || "AIssociate"} — ${org.email ?? ""} — SIRET ${org.siret ?? ""} — NDA ${org.nda ?? ""}`);
     page.drawText(foot.slice(0, 120), { x: margin, y, size: 7.5, font, color: rgb(0.5, 0.5, 0.55) });
 
     const bytes = await pdf.save();
