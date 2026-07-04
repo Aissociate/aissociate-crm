@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ShieldCheck, ChevronDown, FileCheck2, FolderArchive, MessageSquare, Download,
   Sparkles, Send, Link2, Eye, Paperclip, AlertTriangle, Loader2, RefreshCw, CheckCircle2,
+  FileText, Check, X,
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
@@ -19,10 +20,10 @@ import {
 import type {
   QualiopiCritere, QualiopiIndicateur, QualiopiConformite, QualiopiDossierDoc, QualiopiDocStatut,
   QualiopiPreuveDocument, QuestionnaireEnvoi, QuestionnaireModele, QuestionnaireReponse,
-  Document as DocRow, SessionFormation, SessionParticipant,
+  QualiopiModeleDoc, Document as DocRow, SessionFormation, SessionParticipant,
 } from '@/lib/database.types';
 
-type Tab = 'referentiel' | 'dossiers' | 'questionnaires';
+type Tab = 'referentiel' | 'dossiers' | 'questionnaires' | 'modeles';
 
 const CONFORMITES: QualiopiConformite[] = ['conforme', 'a_completer', 'non_applicable', 'a_verifier'];
 const DOC_STATUTS: QualiopiDocStatut[] = ['a_generer', 'genere', 'envoye', 'signe', 'recu', 'valide', 'non_applicable'];
@@ -111,6 +112,7 @@ export default function Qualiopi() {
           ['referentiel', 'Référentiel', ShieldCheck],
           ['dossiers', 'Dossiers de formation', FolderArchive],
           ['questionnaires', 'Questionnaires', MessageSquare],
+          ['modeles', 'Modèles de documents', FileText],
         ] as [Tab, string, typeof ShieldCheck][]).map(([id, label, Icon]) => (
           <button
             key={id}
@@ -139,6 +141,7 @@ export default function Qualiopi() {
       )}
       {tab === 'dossiers' && <Dossiers userId={session?.user.id ?? null} />}
       {tab === 'questionnaires' && <Questionnaires />}
+      {tab === 'modeles' && <Modeles />}
     </div>
   );
 }
@@ -350,8 +353,12 @@ function Dossiers({ userId }: { userId: string | null }) {
   const sessions = useCollection<SessionFormation>('sessions_formation', { orderBy: { column: 'date_debut', ascending: false } });
   const docs = useCollection<QualiopiDossierDoc>('qualiopi_dossier_docs');
   const participants = useCollection<SessionParticipant>('session_participants');
+  const modeles = useCollection<QualiopiModeleDoc>('qualiopi_modeles_doc');
   const [openSession, setOpenSession] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Types de pièces disposant d'un modèle .docx actif → publipostage possible.
+  const modelTypes = new Set(modeles.data.filter((m) => m.actif && m.fichier_url).map((m) => m.type_doc));
 
   const refresh = () => { docs.refresh(); };
 
@@ -371,15 +378,17 @@ function Dossiers({ userId }: { userId: string | null }) {
     await supabase.from('qualiopi_dossier_docs').update({ fichier_url: value, statut: 'recu' }).eq('id', id);
     docs.refresh();
   };
-  const generateDoc = async (id: string) => {
+  // Publipostage sur modèle .docx si dispo, sinon génération pdf-lib générique.
+  const generateDoc = async (id: string, typeDoc: string) => {
+    const fn = modelTypes.has(typeDoc) ? 'qualiopi-doc-tpl' : 'qualiopi-doc';
     setBusy(id);
     try {
-      const { data, error } = await supabase.functions.invoke('qualiopi-doc', { body: { docId: id } });
+      const { data, error } = await supabase.functions.invoke(fn, { body: { docId: id } });
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
       docs.refresh();
     } catch (e) {
-      alert("Génération indisponible : déployez l'Edge Function « qualiopi-doc ». " + (e instanceof Error ? e.message : ''));
+      alert("Génération indisponible : déployez l'Edge Function « " + fn + " ». " + (e instanceof Error ? e.message : ''));
     } finally { setBusy(null); }
   };
 
@@ -423,13 +432,14 @@ function Dossiers({ userId }: { userId: string | null }) {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <DocGroup title="Documents collectifs" docs={collectifs} busy={busy} onGenerate={generateDoc} onUpload={uploadDoc} onStatut={setDocStatut} />
+                    <DocGroup title="Documents collectifs" docs={collectifs} busy={busy} modelTypes={modelTypes} onGenerate={generateDoc} onUpload={uploadDoc} onStatut={setDocStatut} />
                     {parts.map((p) => (
                       <DocGroup
                         key={p.id}
                         title={`${p.prenom ?? ''} ${p.nom}`.trim()}
                         docs={sDocs.filter((d) => d.participant_id === p.id)}
                         busy={busy}
+                        modelTypes={modelTypes}
                         onGenerate={generateDoc}
                         onUpload={uploadDoc}
                         onStatut={setDocStatut}
@@ -450,10 +460,10 @@ function Dossiers({ userId }: { userId: string | null }) {
 }
 
 function DocGroup({
-  title, docs, busy, onGenerate, onUpload, onStatut,
+  title, docs, busy, modelTypes, onGenerate, onUpload, onStatut,
 }: {
-  title: string; docs: QualiopiDossierDoc[]; busy: string | null;
-  onGenerate: (id: string) => void; onUpload: (id: string, v: string) => void;
+  title: string; docs: QualiopiDossierDoc[]; busy: string | null; modelTypes: Set<string>;
+  onGenerate: (id: string, typeDoc: string) => void; onUpload: (id: string, v: string) => void;
   onStatut: (id: string, s: QualiopiDocStatut) => void;
 }) {
   if (docs.length === 0) return null;
@@ -461,13 +471,16 @@ function DocGroup({
     <div>
       <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
       <div className="overflow-hidden rounded-lg border border-line">
-        {docs.map((d) => (
+        {docs.map((d) => {
+          const canGenerate = GENERABLE_DOC_TYPES.has(d.type_doc) || modelTypes.has(d.type_doc);
+          return (
           <div key={d.id} className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2 last:border-0">
             <span className="flex-1 text-sm text-fg">{d.libelle}</span>
+            {modelTypes.has(d.type_doc) && <Badge tone="info">modèle</Badge>}
             <Badge tone={DOC_STATUT_TONES[d.statut]}>{DOC_STATUT_LABELS[d.statut]}</Badge>
             {d.fichier_url && <FileLink bucket="qualiopi" value={d.fichier_url} />}
-            {GENERABLE_DOC_TYPES.has(d.type_doc) && (
-              <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => onGenerate(d.id)} disabled={busy === d.id}>
+            {canGenerate && (
+              <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => onGenerate(d.id, d.type_doc)} disabled={busy === d.id}>
                 {busy === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Générer
               </Button>
             )}
@@ -476,7 +489,8 @@ function DocGroup({
               {DOC_STATUTS.map((s) => <option key={s} value={s}>{DOC_STATUT_LABELS[s]}</option>)}
             </select>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -617,6 +631,102 @@ function Questionnaires() {
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB 4 — MODÈLES DE DOCUMENTS (publipostage)
+// ─────────────────────────────────────────────────────────────────────────────
+const MERGE_TOKENS = [
+  'NOM ORGANISME', 'SIRET', 'ADRESSE', 'VILLE', 'NUMERO DECLARATION', 'REPRESENTANT', 'REGION',
+  'NOM ENTREPRISE', 'INTITULE FORMATION', 'OBJECTIFS PEDAGOGIQUES', 'NOMBRE HEURES',
+  'DATE DEBUT', 'DATE FIN DE FORMATION', 'DATES', 'LIEU', 'ADRESSE SALLE', 'MODALITE',
+  'FORMATEUR', 'PRENOM NOM', 'NOM', 'PRENOM', 'TARIF', 'DATE DU JOUR',
+];
+
+function Modeles() {
+  const modeles = useCollection<QualiopiModeleDoc>('qualiopi_modeles_doc', { orderBy: { column: 'titre' } });
+
+  const setModele = async (type_doc: string, patch: Partial<QualiopiModeleDoc>) => {
+    await supabase.from('qualiopi_modeles_doc').update(patch).eq('type_doc', type_doc);
+    modeles.refresh();
+  };
+  const onUpload = async (type_doc: string, value: string) => {
+    await supabase.from('qualiopi_modeles_doc').update({ fichier_url: value, actif: true }).eq('type_doc', type_doc);
+    modeles.refresh();
+  };
+
+  if (modeles.loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+
+  return (
+    <div className="space-y-4">
+      <Card className="bg-surface-2">
+        <p className="text-sm font-semibold text-fg">Publipostage sur vos modèles Word</p>
+        <p className="mt-1 text-xs text-muted">
+          Téléversez votre modèle <code>.docx</code> par type de pièce. Insérez les champs de fusion entre crochets, ex.
+          <code> [NOM ORGANISME]</code>, <code>[PRENOM NOM]</code>, <code>[DATES]</code>. À la génération, ils sont remplacés
+          par les données du dossier et un <code>.docx</code> personnalisé est produit (fidèle à votre charte). Sans modèle
+          actif, la génération reste en PDF générique.
+        </p>
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-medium text-brand-600 dark:text-brand-400">Voir les champs de fusion disponibles</summary>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {MERGE_TOKENS.map((t) => (
+              <code key={t} className="rounded bg-surface px-1.5 py-0.5 text-[11px] text-muted">[{t}]</code>
+            ))}
+          </div>
+        </details>
+      </Card>
+
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-line bg-surface-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-4 py-2.5">Type de pièce</th>
+                <th className="px-4 py-2.5">Modèle</th>
+                <th className="px-4 py-2.5">Actif</th>
+                <th className="px-4 py-2.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {modeles.data.map((m) => (
+                <tr key={m.type_doc}>
+                  <td className="px-4 py-2.5 font-medium text-fg">{m.titre}</td>
+                  <td className="px-4 py-2.5">
+                    {m.fichier_url
+                      ? <Badge tone="success"><Check className="h-3 w-3" /> Téléversé</Badge>
+                      : <Badge tone="neutral">Aucun</Badge>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button
+                      onClick={() => setModele(m.type_doc, { actif: !m.actif })}
+                      disabled={!m.fichier_url}
+                      className={cn('inline-flex h-5 w-9 items-center rounded-full transition disabled:opacity-40',
+                        m.actif ? 'bg-brand-500' : 'bg-surface-2')}
+                      title={m.actif ? 'Désactiver' : 'Activer'}
+                    >
+                      <span className={cn('h-4 w-4 rounded-full bg-white transition', m.actif ? 'translate-x-4' : 'translate-x-0.5')} />
+                    </button>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-end gap-2">
+                      {m.fichier_url && <FileLink bucket="qualiopi" value={m.fichier_url} />}
+                      <FileUpload bucket="qualiopi" label={m.fichier_url ? 'Remplacer' : 'Téléverser .docx'} onUploaded={(v) => onUpload(m.type_doc, v)} />
+                      {m.fichier_url && (
+                        <button onClick={() => setModele(m.type_doc, { fichier_url: null, actif: false })} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-red-500" title="Retirer le modèle">
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

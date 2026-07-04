@@ -290,6 +290,9 @@ export type QuestionnaireReponse = {
   id: string; envoi_id: string; reponses: Json; note_globale: number | null;
   commentaire: string | null; created_at: string;
 };
+export type QualiopiModeleDoc = Timestamps & {
+  type_doc: string; titre: string; fichier_url: string | null; actif: boolean;
+};
 
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;
@@ -351,6 +354,7 @@ export type Database = {
       questionnaire_modeles: TableShape<QuestionnaireModele>;
       questionnaire_envois: TableShape<QuestionnaireEnvoi>;
       questionnaire_reponses: TableShape<QuestionnaireReponse>;
+      qualiopi_modeles_doc: TableShape<QualiopiModeleDoc>;
     };
     Views: EmptyMap;
     Functions: {
