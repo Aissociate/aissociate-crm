@@ -21,7 +21,6 @@ import Calendrier from '@/pages/Calendrier';
 import Formateurs from '@/pages/Formateurs';
 import Kanban from '@/pages/Kanban';
 import Documents from '@/pages/Documents';
-import Qualiopi from '@/pages/Qualiopi';
 import Messagerie from '@/pages/Messagerie';
 import Assistant from '@/pages/Assistant';
 import BlogAdmin from '@/pages/BlogAdmin';
@@ -50,7 +49,6 @@ import SiteMentionsLegales from '@/site/pages/MentionsLegales';
 import SiteConfidentialite from '@/site/pages/Confidentialite';
 import SiteAccessibilite from '@/site/pages/Accessibilite';
 import SiteReclamations from '@/site/pages/Reclamations';
-import SiteQuestionnaire from '@/site/pages/Questionnaire';
 
 export default function App() {
   const { configured } = useAuth();
@@ -76,9 +74,6 @@ export default function App() {
         <Route path="/reclamations" element={<SiteReclamations />} />
       </Route>
 
-      {/* ── Questionnaire public (lien tokenisé, hors chrome du site) ── */}
-      <Route path="/q/:token" element={<SiteQuestionnaire />} />
-
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
       <Route path="/reset-password" element={configured ? <ResetPassword /> : <SupabaseNotice />} />
@@ -98,7 +93,6 @@ export default function App() {
         <Route path="/formateurs" element={<Formateurs />} />
         <Route path="/kanban" element={<Kanban />} />
         <Route path="/documents" element={<Documents />} />
-        <Route path="/qualiopi" element={<Qualiopi />} />
         <Route path="/messagerie" element={<Messagerie />} />
         <Route path="/assistant" element={<Assistant />} />
         <Route path="/blog-admin" element={<ProtectedRoute managerOnly><BlogAdmin /></ProtectedRoute>} />

@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Clock } from 'lucide-react';
-import { differenceInCalendarDays } from 'date-fns';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState, type Tone } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState } from '@/components/ui';
 import { CONTACT_TYPE_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
 import { fullName, formatDate } from '@/lib/utils';
 import {
@@ -59,10 +58,6 @@ export default function Contacts() {
   // Maps contact_id -> info de pilotage
   const nextAction: Record<string, ContactAction> = {};
   for (const a of actionsCol.data) if (!a.faite && !nextAction[a.contact_id]) nextAction[a.contact_id] = a;
-  // Dernière interaction = action RÉALISÉE la plus récente par contact.
-  // actionsCol est trié par date_action croissante → la dernière rencontrée est la plus récente.
-  const lastInteraction: Record<string, ContactAction> = {};
-  for (const a of actionsCol.data) if (a.faite) lastInteraction[a.contact_id] = a;
   const stageOf: Record<string, Opportunite['stage']> = {};
   for (const o of oppsCol.data) if (o.contact_id && !['gagne', 'perdu'].includes(o.stage) && !stageOf[o.contact_id]) stageOf[o.contact_id] = o.stage;
   const sessById = Object.fromEntries(sessCol.data.map((s) => [s.id, s]));
@@ -402,21 +397,6 @@ export default function Contacts() {
 
   const set = (k: keyof Contact, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Décompte « dernière interaction » — prospects uniquement.
-  const interactionCell = (c: Contact) => {
-    if (c.type !== 'prospect') return <span className="text-muted/50">—</span>;
-    const la = lastInteraction[c.id];
-    if (!la) return <Badge tone="warning"><Clock className="mr-1 h-3 w-3" />Jamais</Badge>;
-    const days = differenceInCalendarDays(new Date(), new Date(`${la.date_action}T00:00:00`));
-    const tone: Tone = days <= 7 ? 'success' : days <= 14 ? 'warning' : 'danger';
-    const label = days <= 0 ? "Aujourd'hui" : days === 1 ? 'Hier' : `Il y a ${days} j`;
-    return (
-      <span title={`Dernière action réalisée : ${la.description} · ${formatDate(la.date_action)}`}>
-        <Badge tone={tone}><Clock className="mr-1 h-3 w-3" />{label}</Badge>
-      </span>
-    );
-  };
-
   return (
     <div>
       <PageHeader
@@ -548,7 +528,6 @@ export default function Contacts() {
             <th className="px-4 py-3"><button onClick={() => toggleSort('type')} className="inline-flex items-center gap-1 hover:text-fg">Type <span className="text-xs text-muted">{sortArrow('type')}</span></button></th>
             <th className="px-4 py-3">Coordonnées</th>
             <th className="px-4 py-3"><button onClick={() => toggleSort('aff')} className="inline-flex items-center gap-1 hover:text-fg">Affectation <span className="text-xs text-muted">{sortArrow('aff')}</span></button></th>
-            <th className="px-4 py-3" title="Temps écoulé depuis la dernière action réalisée (prospects)">Dernière interaction</th>
             <th className="px-4 py-3">Pilotage</th>
             <th className="px-4 py-3 text-right">Actions</th>
           </tr>
@@ -608,7 +587,6 @@ export default function Contacts() {
                   <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge tone="warning">Non affecté</Badge>}</span>
                 )}
               </td>
-              <td className="px-4 py-3">{interactionCell(c)}</td>
               <td className="px-4 py-3 text-xs">
                 <div className="flex flex-col gap-1">
                   {nextAction[c.id] ? (
@@ -850,7 +828,7 @@ export default function Contacts() {
           profiles={profiles.data}
           onClose={() => setFiche(null)}
           onEdit={(c) => { setFiche(null); openEdit(c); }}
-          onUpdated={() => { refresh(); actionsCol.refresh(); }}
+          onUpdated={refresh}
         />
       )}
     </div>

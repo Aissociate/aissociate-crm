@@ -18,8 +18,6 @@ Disallow: /dashboard
 Disallow: /admin
 Disallow: /onboarding
 Disallow: /qualiopi
-Disallow: /q/
-Disallow: /q
 Disallow: /contacts
 Disallow: /entreprises
 Disallow: /pipeline
