@@ -682,6 +682,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
       <ComposeMessageModal
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
+        onSent={() => { void loadRefs(); onUpdated(); }}
         initial={{ canal: 'email', dest: c.email ?? '', contactId: c.id }}
       />
     </>

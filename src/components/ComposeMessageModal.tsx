@@ -24,6 +24,12 @@ export type ComposeInitial = {
 };
 
 const digits = (s: string | null): string => (s ?? '').replace(/[^\d]/g, '');
+const pad2 = (n: number) => String(n).padStart(2, '0');
+// Date « YYYY-MM-DD » + heure « HH:MM » locales, pour journaliser une action.
+const nowParts = () => {
+  const d = new Date();
+  return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, heure: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
+};
 const channelIcon = (c: EmailCanal, cls = 'h-4 w-4') => (c === 'whatsapp' ? <MessageCircle className={cls} /> : <Mail className={cls} />);
 
 // Modale de composition e-mail / WhatsApp, partagée entre la Messagerie et la
@@ -103,6 +109,19 @@ export default function ComposeMessageModal({
   };
   const removeExtraAttachment = (url: string) => setExtraAttachments((prev) => prev.filter((a) => a.url !== url));
 
+  // Journalise l'envoi comme action RÉALISÉE sur le contact lié, pour que le
+  // décompte « dernière interaction » (liste Contacts) reparte à zéro.
+  const logInteraction = async (kind: 'email' | 'whatsapp') => {
+    if (!contactId) return;
+    const { date, heure } = nowParts();
+    await supabase.from('contact_actions').insert({
+      contact_id: contactId, date_action: date, heure_action: heure,
+      type: kind === 'whatsapp' ? 'autre' : 'email',
+      description: kind === 'whatsapp' ? 'WhatsApp envoyé' : `E-mail envoyé${sujet ? ` : ${sujet}` : ''}`,
+      faite: true,
+    });
+  };
+
   const send = async (statut: 'brouillon' | 'envoye') => {
     setSaving(true);
     const docAttachments = availableDocs.filter((d) => attachIds.has(d.id) && d.fichier_url).map((d) => ({ filename: d.titre, url: d.fichier_url! }));
@@ -120,6 +139,7 @@ export default function ComposeMessageModal({
       });
       setSaving(false);
       if (error) { alert(error.message); return; }
+      await logInteraction('whatsapp');
       onClose(); onSent?.();
       return;
     }
@@ -146,6 +166,7 @@ export default function ComposeMessageModal({
     });
     setSaving(false);
     if (error) { alert(error.message); return; }
+    if (finalStatut === 'envoye') await logInteraction('email');
     onClose(); onSent?.();
   };
 
