@@ -21,6 +21,8 @@ export type ComposeInitial = {
   corps?: string;
   dossierId?: string;
   contactId?: string | null;  // pour rattacher le message au contact (table emails)
+  draftId?: string | null;    // reprise d'un brouillon existant : on met à jour la ligne au lieu d'en créer une
+  attachments?: Attachment[]; // PJ déjà associées au brouillon repris
 };
 
 const digits = (s: string | null): string => (s ?? '').replace(/[^\d]/g, '');
@@ -71,6 +73,7 @@ export default function ComposeMessageModal({
   const [corps, setCorps] = useState('');
   const [dossierId, setDossierId] = useState('');
   const [contactId, setContactId] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [attachIds, setAttachIds] = useState<Set<string>>(new Set());
   const [extraAttachments, setExtraAttachments] = useState<Attachment[]>([]);
   const [uploadingAttach, setUploadingAttach] = useState(false);
@@ -86,8 +89,9 @@ export default function ComposeMessageModal({
     setCorps(initial?.corps ?? '');
     setDossierId(initial?.dossierId ?? '');
     setContactId(initial?.contactId ?? null);
+    setDraftId(initial?.draftId ?? null);
     setAttachIds(new Set());
-    setExtraAttachments([]);
+    setExtraAttachments(initial?.attachments ?? []);
     setIncludeSig(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -157,13 +161,18 @@ export default function ComposeMessageModal({
         alert('Envoi SMTP échoué. Vérifiez la configuration SMTP dans Paramètres.\nLe message a été enregistré en brouillon.');
       }
     }
-    const { error } = await supabase.from('emails').insert({
-      destinataires, sujet, corps, statut: finalStatut, attachments, canal: 'email',
+    const row = {
+      destinataires, sujet, corps, statut: finalStatut, attachments, canal: 'email' as const,
       expediteur: smtpFrom ?? profile?.email ?? null,
       dossier_id: dossierId || null, contact_id: contactId,
       sent_at: finalStatut === 'envoye' ? new Date().toISOString() : null,
       owner_id: session?.user.id,
-    });
+    };
+    // Reprise d'un brouillon : on met à jour la ligne existante plutôt que d'en
+    // créer une seconde (sinon le brouillon initial restait orphelin).
+    const { error } = draftId
+      ? await supabase.from('emails').update(row).eq('id', draftId)
+      : await supabase.from('emails').insert(row);
     setSaving(false);
     if (error) { alert(error.message); return; }
     if (finalStatut === 'envoye') await logInteraction('email');
@@ -199,7 +208,7 @@ export default function ComposeMessageModal({
   return (
     <Modal
       open={open} onClose={onClose} wide
-      title={canal === 'whatsapp' ? 'Nouveau message WhatsApp' : 'Nouveau message'}
+      title={canal === 'whatsapp' ? 'Nouveau message WhatsApp' : draftId ? 'Reprendre le brouillon' : 'Nouveau message'}
       footer={
         canal === 'whatsapp'
           ? <Button onClick={() => send('envoye')} disabled={saving || !waValid}><MessageCircle className="h-4 w-4" /> Ouvrir WhatsApp</Button>

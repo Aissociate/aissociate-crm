@@ -30,6 +30,19 @@ export function fullName(prenom?: string | null, nom?: string | null): string {
   return [prenom, nom].filter(Boolean).join(' ') || '—';
 }
 
+/**
+ * Un conseiller « sorti des effectifs » : compte désactivé, non approuvé, ou
+ * statut RH « inactif » / « ancien ». Ses contacts ne doivent plus générer de
+ * notification de mail non lu (ticket Benjamin « notifications messagerie »).
+ */
+export function isConseillerInactif(
+  p: { actif?: boolean | null; approved?: boolean | null; statut_conseiller?: string | null } | null | undefined,
+): boolean {
+  if (!p) return false;
+  if (p.actif === false || p.approved === false) return true;
+  return p.statut_conseiller === 'inactif' || p.statut_conseiller === 'ancien';
+}
+
 /** Reference dossier lisible, deterministe a partir de l'id. */
 export function genReference(prefix = 'DOS'): string {
   const stamp = format(new Date(), 'yyMMdd-HHmmss');

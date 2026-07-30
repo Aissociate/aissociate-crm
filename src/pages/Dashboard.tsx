@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
-import { formatMoney, initials } from '@/lib/utils';
+import { formatMoney, initials, isConseillerInactif } from '@/lib/utils';
 import type { Dossier, Opportunite, Profile, PageView, ContactRequest, Email, Contact } from '@/lib/database.types';
 
 type MetaCampaign = { name: string; spend: number; impressions: number; clicks: number; leads: number };
@@ -116,9 +116,13 @@ export default function Dashboard() {
 
   // Mails entrants non lus par intervenant (owner du mail). Voir RLS : un
   // conseiller ne voit que les siens, la direction voit tout.
+  // Les conseillers devenus inactifs sont exclus : leurs mails ne doivent plus
+  // remonter comme notifications (ticket Benjamin « notifications messagerie »).
+  const inactifIds = new Set(profiles.data.filter(isConseillerInactif).map((p) => p.id));
   const unreadByOwner = new Map<string, number>();
   for (const e of emails.data) {
     if (e.canal === 'whatsapp' || e.direction !== 'entrant' || e.lu) continue;
+    if (e.owner_id && inactifIds.has(e.owner_id)) continue;
     const k = e.owner_id ?? '—';
     unreadByOwner.set(k, (unreadByOwner.get(k) ?? 0) + 1);
   }

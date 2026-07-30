@@ -75,5 +75,7 @@ export function signatureSummary(cfg: SignatureCfg | null | undefined, org: Orga
   if (c.mode === 'custom') return 'Signature personnalisée (HTML)';
   const o = org ?? {};
   const bits = [o.nom, o.telephone, o.email].filter(Boolean);
-  return bits.length ? bits.join(' · ') : 'Coordonnées de l\'organisme';
+  const base = bits.length ? bits.join(' · ') : 'Coordonnées de l\'organisme';
+  // Rend visible dans la modale que le logo (Paramètres → Organisme) sera joint.
+  return o.logo_url ? `${base} · logo inclus` : base;
 }

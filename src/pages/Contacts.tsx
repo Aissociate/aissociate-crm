@@ -844,7 +844,10 @@ export default function Contacts() {
 
       {fiche && (
         <ContactFiche
-          contact={fiche}
+          /* `key` : remonte la fiche (et ses champs éditables) quand on change de contact.
+             `contact` : version fraîche issue de la liste rechargée, sinon l'instantané. */
+          key={fiche.id}
+          contact={data.find((x) => x.id === fiche.id) ?? fiche}
           entreprises={entreprises.data}
           financeurs={financeurs.data}
           profiles={profiles.data}

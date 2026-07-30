@@ -175,14 +175,6 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     setSavingSec(null);
     onUpdated();
   };
-  // Auto-enregistrement d'un champ à la perte de focus (silencieux, sans recharger la liste).
-  const [savedField, setSavedField] = useState<string | null>(null);
-  const blurSave = async (field: keyof Contact, value: string) => {
-    if ((c[field] ?? '') === value) return; // pas de changement
-    await supabase.from('contacts').update({ [field]: value || null } as Partial<Contact>).eq('id', c.id);
-    setSavedField(field as string);
-    setTimeout(() => setSavedField((s) => (s === field ? null : s)), 1500);
-  };
   // Miroir local optimiste (la prop `c` reste figée tant que la liste n'est pas rechargée)
   const [over, setOver] = useState<Partial<Contact>>({});
   useEffect(() => { setOver({}); }, [c.id]);
@@ -190,6 +182,22 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   const patch = async (fields: Partial<Contact>) => {
     setOver((o) => ({ ...o, ...fields }));
     await supabase.from('contacts').update(fields).eq('id', c.id);
+    onUpdated();
+  };
+
+  // Auto-enregistrement d'un champ à la perte de focus.
+  // La comparaison porte sur le miroir `cc` (et non sur la prop `c`, figée) sans quoi
+  // un retour à la valeur d'origine était considéré « inchangé » et n'était pas réécrit.
+  // `onUpdated()` est indispensable : sans lui la liste parente restait périmée et la
+  // fiche rouverte réaffichait les anciennes valeurs (ticket « qualification non enregistrée »).
+  const [savedField, setSavedField] = useState<string | null>(null);
+  const blurSave = async (field: keyof Contact, value: string) => {
+    if ((cc[field] ?? '') === value) return; // pas de changement
+    setOver((o) => ({ ...o, [field]: value || null }));
+    const { error } = await supabase.from('contacts').update({ [field]: value || null } as Partial<Contact>).eq('id', c.id);
+    if (error) { alert(`Enregistrement impossible : ${error.message}`); return; }
+    setSavedField(field as string);
+    setTimeout(() => setSavedField((s) => (s === field ? null : s)), 1500);
     onUpdated();
   };
 

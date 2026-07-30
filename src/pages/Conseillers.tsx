@@ -72,16 +72,17 @@ export default function Conseillers() {
   const selDocs = selected ? coffre.data.filter((cd) => cd.conseiller_id === selected.id) : [];
 
   // ── Profil RH éditable du conseiller sélectionné (téléphone, statut, date) ──
-  const [hr, setHr] = useState({ telephone: '', statut_conseiller: 'actif', date_recrutement: '' });
+  const [hr, setHr] = useState({ telephone: '', statut_conseiller: 'actif', date_recrutement: '', notes: '' });
   const [hrSaving, setHrSaving] = useState(false);
   useEffect(() => {
-    if (selected) setHr({ telephone: selected.telephone ?? '', statut_conseiller: selected.statut_conseiller ?? 'actif', date_recrutement: selected.date_recrutement ?? '' });
+    if (selected) setHr({ telephone: selected.telephone ?? '', statut_conseiller: selected.statut_conseiller ?? 'actif', date_recrutement: selected.date_recrutement ?? '', notes: selected.notes ?? '' });
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveHr = async () => {
     if (!selected) return;
     setHrSaving(true);
     const { error } = await supabase.from('profiles').update({
       telephone: hr.telephone || null, statut_conseiller: hr.statut_conseiller, date_recrutement: hr.date_recrutement || null,
+      notes: hr.notes || null,
     }).eq('id', selected.id);
     setHrSaving(false);
     if (error) { alert(error.message); return; }
@@ -172,6 +173,11 @@ export default function Conseillers() {
                   </Field>
                   <Field label="Date de recrutement">
                     <input type="date" className="input" value={hr.date_recrutement} onChange={(e) => setHr((h) => ({ ...h, date_recrutement: e.target.value }))} />
+                  </Field>
+                </div>
+                <div className="mt-3">
+                  <Field label="Notes" hint="Informations diverses sur le conseiller (visible par la direction)">
+                    <textarea className="input" rows={3} value={hr.notes} onChange={(e) => setHr((h) => ({ ...h, notes: e.target.value }))} placeholder="Disponibilités, spécialités, points de vigilance…" />
                   </Field>
                 </div>
                 <div className="mt-3">

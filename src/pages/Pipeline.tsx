@@ -114,9 +114,11 @@ export default function Pipeline() {
                         {contact && o.titre && <p className="mt-1 truncate text-xs text-muted">{o.titre}</p>}
                         <p className="mt-1 text-sm font-semibold text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</p>
                         <p className="text-xs text-muted">{o.probabilite}% de probabilité</p>
+                        {/* Les titres sont portés par les boutons eux-mêmes, sinon
+                            l'infobulle « Ouvrir la fiche client » de la carte est héritée. */}
                         <div className="mt-2 flex justify-between" onClick={(e) => e.stopPropagation()}>
-                          <button disabled={idx === 0} onClick={() => move(o, -1)} className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-                          <button disabled={idx === OPP_STAGE_ORDER.length - 1} onClick={() => move(o, 1)} className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+                          <button disabled={idx === 0} onClick={() => move(o, -1)} title="Déplacer l'opportunité à l'étape précédente" aria-label="Déplacer l'opportunité à l'étape précédente" className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+                          <button disabled={idx === OPP_STAGE_ORDER.length - 1} onClick={() => move(o, 1)} title="Déplacer l'opportunité à l'étape suivante" aria-label="Déplacer l'opportunité à l'étape suivante" className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
                         </div>
                       </div>
                     );
@@ -165,7 +167,8 @@ export default function Pipeline() {
 
       {ficheContact && (
         <ContactFiche
-          contact={ficheContact}
+          key={ficheContact.id}
+          contact={contacts.data.find((x) => x.id === ficheContact.id) ?? ficheContact}
           entreprises={entreprises.data}
           financeurs={financeurs.data}
           profiles={profiles.data}

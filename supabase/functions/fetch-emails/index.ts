@@ -243,15 +243,36 @@ Deno.serve(async (req: Request) => {
       }
 
       await imap.close();
+      await recordSync(sb, { ok: true, imported, skipped });
       return json({ ok: true, imported, skipped, since: sinceStr, total_unseen: uids.length });
     } catch (err) {
       try { await imap.close(); } catch { /**/ }
       throw err;
     }
   } catch (err) {
-    return json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    const message = err instanceof Error ? err.message : String(err);
+    try {
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await recordSync(sb, { ok: false, error: message });
+    } catch { /**/ }
+    return json({ ok: false, error: message });
   }
 });
+
+// Journalise l'horodatage de la dernière synchronisation IMAP dans `parametres`
+// (clé `imap_sync`), pour affichage dans la Messagerie — ticket Benjamin
+// « synchronisation messagerie ». Ne doit jamais faire échouer la synchro.
+// deno-lint-ignore no-explicit-any
+async function recordSync(sb: any, info: { ok: boolean; imported?: number; skipped?: number; error?: string }) {
+  try {
+    await sb.from("parametres").upsert(
+      { cle: "imap_sync", valeur: { last_at: new Date().toISOString(), ...info } },
+      { onConflict: "cle" },
+    );
+  } catch (e) {
+    console.error("recordSync", e);
+  }
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Mail, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle } from 'lucide-react';
+import { Plus, Mail, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -9,7 +9,10 @@ import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMe
 import type { Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
+type SyncInfo = { last_at?: string; ok?: boolean; imported?: number; skipped?: number; error?: string };
 type View = 'conversations' | 'orphelins';
+// Fréquence du cron `imap-sync` (pg_cron) — informatif pour l'utilisateur.
+const SYNC_EVERY = '5 minutes';
 
 // Adresse e-mail nue de « Nom <a@b.com> », normalisée.
 const emailAddr = (s: string | null): string => {
@@ -45,6 +48,10 @@ export default function Messagerie() {
   const candidats = useCollection<Candidat>('candidats');
   const [smtpOk, setSmtpOk] = useState<boolean | null>(null);
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [sync, setSync] = useState<SyncInfo | null>(null);
+  // Ordre d'affichage : décroissant (plus récent d'abord) par défaut,
+  // croissant = ordre chronologique (ticket Benjamin « tri chronologique »).
+  const [chrono, setChrono] = useState(false);
 
   const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
 
@@ -86,9 +93,10 @@ export default function Messagerie() {
       if (e.owner_id) cv.owners.add(e.owner_id);
       if (p.ownerId) cv.owners.add(p.ownerId);
     });
+    const dir = chrono ? -1 : 1; // chrono = plus ancien d'abord
     return [...map.values()]
-      .map((cv) => { cv.emails.sort((a, b) => ((a.sent_at ?? a.created_at) < (b.sent_at ?? b.created_at) ? 1 : -1)); return cv; })
-      .sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
+      .map((cv) => { cv.emails.sort((a, b) => (((a.sent_at ?? a.created_at) < (b.sent_at ?? b.created_at) ? 1 : -1) * dir)); return cv; })
+      .sort((a, b) => ((a.lastAt < b.lastAt ? 1 : -1) * dir));
   };
 
   const allConvos = buildConvos();
@@ -115,13 +123,23 @@ export default function Messagerie() {
     refresh();
   };
 
+  // Statut SMTP (bandeau) + horodatage de la dernière synchronisation IMAP,
+  // écrit par la fonction « fetch-emails » à chaque passage (manuel ou cron).
+  const loadSyncInfo = () =>
+    supabase.from('parametres').select('valeur').eq('cle', 'imap_sync').maybeSingle()
+      .then(({ data }) => setSync((data?.valeur ?? null) as SyncInfo | null));
+
   useEffect(() => {
-    // Statut SMTP pour le bandeau (la composition charge sa propre config).
     supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle().then(({ data }) => {
       if (!data) { setSmtpOk(false); return; }
       const c = (data.valeur ?? {}) as SmtpCfg;
       setSmtpOk(!!(c.host && c.user && c.password && c.from));
     });
+    void loadSyncInfo();
+    // Le cron tourne toutes les 5 min : on rafraîchit l'indicateur régulièrement.
+    const t = setInterval(() => void loadSyncInfo(), 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [view, setView] = useState<View>('conversations');
@@ -142,16 +160,21 @@ export default function Messagerie() {
   // ── Répondre à une conversation (même canal que le dernier message) ──
   const affectationLabel = (c: Convo): string | null =>
     c.owners.size > 0 ? [...c.owners].map(ownerName).filter(Boolean).join(', ') : (c.matched ? 'Direction' : null);
-  const lastEmail = (c: Convo) => c.emails.find((e) => e.canal !== 'whatsapp');
+  // Le fil peut être affiché en ordre chronologique : les recherches de « dernier
+  // message » doivent rester indépendantes de l'ordre d'affichage.
+  const newestFirst = (c: Convo) =>
+    chrono ? [...c.emails].reverse() : c.emails;
+  const lastEmail = (c: Convo) => newestFirst(c).find((e) => e.canal !== 'whatsapp');
   const replyEmailTarget = (c: Convo): string => {
-    const lastIn = c.emails.find((e) => e.direction === 'entrant' && e.canal !== 'whatsapp' && e.expediteur);
+    const list = newestFirst(c);
+    const lastIn = list.find((e) => e.direction === 'entrant' && e.canal !== 'whatsapp' && e.expediteur);
     if (lastIn?.expediteur) return emailAddr(lastIn.expediteur);
     if (c.contactId) { const ct = contacts.data.find((x) => x.id === c.contactId); if (ct?.email) return ct.email; }
-    return c.emails.find((e) => e.direction === 'sortant' && e.canal !== 'whatsapp')?.destinataires[0] ?? '';
+    return list.find((e) => e.direction === 'sortant' && e.canal !== 'whatsapp')?.destinataires[0] ?? '';
   };
   const replyPhone = (c: Convo): string => {
     if (c.contactId) { const ct = contacts.data.find((x) => x.id === c.contactId); if (ct?.telephone) return ct.telephone; }
-    const m = c.emails.find((e) => e.canal === 'whatsapp');
+    const m = newestFirst(c).find((e) => e.canal === 'whatsapp');
     return m ? ((m.direction === 'entrant' ? m.expediteur : m.destinataires[0]) ?? '') : '';
   };
   const reply = (c: Convo) => {
@@ -161,6 +184,22 @@ export default function Messagerie() {
       const le = lastEmail(c);
       setComposeInitial({ canal: 'email', dest: replyEmailTarget(c), sujet: le ? reSubject(le.sujet) : '', contactId: c.contactId });
     }
+    setOpen(true);
+  };
+
+  // Reprise d'un brouillon : rouvre la modale de composition pré-remplie et
+  // rattachée à la ligne existante (ticket Benjamin « brouillon impossible à rouvrir »).
+  const editDraft = (e: Email) => {
+    setComposeInitial({
+      canal: e.canal === 'whatsapp' ? 'whatsapp' : 'email',
+      dest: e.destinataires.join(', '),
+      sujet: e.sujet ?? '',
+      corps: e.corps ?? '',
+      dossierId: e.dossier_id ?? undefined,
+      contactId: e.contact_id,
+      draftId: e.id,
+      attachments: e.attachments ?? [],
+    });
     setOpen(true);
   };
 
@@ -183,6 +222,7 @@ export default function Messagerie() {
       return;
     }
     const n = (result.data as { imported?: number; skipped?: number; error?: string } | null);
+    void loadSyncInfo();
     if (n?.error) { alert(`Réception : ${n.error}`); return; }
     refresh();
     alert(`${n?.imported ?? 0} nouveau(x) message(s) importé(s).${n?.skipped ? ` ${n.skipped} ignoré(s) (expéditeur inconnu).` : ''}`);
@@ -229,18 +269,32 @@ export default function Messagerie() {
         }
       />
 
-      {smtpOk === false && (
+      {/* Les bandeaux SMTP ne concernent que l'admin : `parametres` lui est réservée,
+          un conseiller lisait `null` et voyait à tort « configuration incomplète ». */}
+      {isAdmin && smtpOk === false && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <p>Configuration SMTP incomplète. Renseignez l'hôte, l'utilisateur, le mot de passe et l'adresse d'expédition dans <strong>Paramètres → Serveur SMTP sortant</strong>.</p>
         </div>
       )}
-      {smtpOk === true && (
+      {isAdmin && smtpOk === true && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <p>SMTP configuré — l'envoi d'e-mails est opérationnel.</p>
         </div>
       )}
+
+      {/* Synchronisation IMAP : automatique via cron, plus horodatage du dernier passage. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-2/50 px-3 py-2 text-sm text-muted">
+        <Clock className="h-4 w-4 shrink-0" />
+        <span>
+          Réception automatique toutes les <strong className="text-fg">{SYNC_EVERY}</strong>.
+          {' '}Dernière synchronisation :{' '}
+          <strong className="text-fg">{sync?.last_at ? formatDate(sync.last_at, 'dd/MM/yyyy à HH:mm') : 'jamais'}</strong>
+          {sync?.ok === false && sync.error ? <span className="text-red-600 dark:text-red-400"> — échec : {sync.error}</span> : null}
+          {sync?.ok !== false && typeof sync?.imported === 'number' ? ` — ${sync.imported} message(s) importé(s)` : ''}
+        </span>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-line">
         <div className="flex gap-1">
@@ -252,13 +306,23 @@ export default function Messagerie() {
             </button>
           ))}
         </div>
-        {view === 'conversations' && isManager && (
-          <select className="input mb-1 max-w-[200px] py-1 text-sm" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
-            <option value="">Tous les conseillers</option>
-            <option value="none">Direction (non affectés)</option>
-            {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
-          </select>
-        )}
+        <div className="mb-1 flex items-center gap-2">
+          <button
+            onClick={() => setChrono((v) => !v)}
+            title={chrono ? 'Actuellement : ordre chronologique (plus ancien en premier)' : 'Actuellement : plus récent en premier'}
+            className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-sm text-muted transition hover:border-brand-400 hover:text-brand-600"
+          >
+            <ArrowDownUp className="h-4 w-4" />
+            {chrono ? 'Chronologique' : 'Plus récent d’abord'}
+          </button>
+          {view === 'conversations' && isManager && (
+            <select className="input max-w-[200px] py-1 text-sm" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+              <option value="">Tous les conseillers</option>
+              <option value="none">Direction (non affectés)</option>
+              {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       {view === 'orphelins' && (
@@ -294,7 +358,7 @@ export default function Messagerie() {
         <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {convos.map((c) => {
             const expanded = openThreads.has(c.key);
-            const last = c.emails[0];
+            const last = newestFirst(c)[0];
             const aff = affectationLabel(c);
             return (
               <div key={c.key} className={convoSelected(c) ? 'bg-brand-500/5' : ''}>
@@ -327,6 +391,8 @@ export default function Messagerie() {
                             <Badge tone={c.owners.size > 0 ? 'neutral' : 'info'}>{aff ?? 'Direction'}</Badge>
                           </>
                         ) : c.hasInbound ? <Badge tone="warning">Non rattaché</Badge> : null}
+                        {/* Repère visuel : un brouillon attend d'être finalisé dans ce fil. */}
+                        {c.emails.some((e) => e.statut === 'brouillon') && <Badge tone="warning">Brouillon à finaliser</Badge>}
                       </div>
                     </div>
                   </button>
@@ -375,6 +441,11 @@ export default function Messagerie() {
                                 </div>
                               )}
                               <div className="mt-2 flex items-center justify-end gap-1">
+                                {e.direction === 'sortant' && e.statut === 'brouillon' && (
+                                  <button onClick={() => editDraft(e)} title="Reprendre le brouillon" className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 dark:text-brand-400">
+                                    <Pencil className="h-3.5 w-3.5" /> Reprendre
+                                  </button>
+                                )}
                                 {e.direction === 'entrant' && !wa && <button onClick={() => openAssign(e)} title="Affecter à un contact/conseiller" className="rounded p-1 text-muted hover:text-brand-600"><UserCog className="h-4 w-4" /></button>}
                                 <button onClick={() => remove(e)} title="Supprimer ce message" className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                               </div>

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
-import { initials, cn } from '@/lib/utils';
+import { initials, cn, isConseillerInactif } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
 import BugReporter from '@/components/BugReporter';
@@ -77,13 +77,21 @@ export default function Layout() {
 
   // Badge « mails entrants non lus » (RLS : chacun ne compte que ses mails ;
   // la direction voit tout). Rafraîchi périodiquement et à chaque navigation.
+  // Les mails rattachés à un conseiller devenu inactif sont exclus du décompte.
   const [unreadMails, setUnreadMails] = useState(0);
   useEffect(() => {
     let on = true;
     const load = async () => {
-      const { count } = await supabase.from('emails')
+      const { data: profs } = await supabase.from('profiles')
+        .select('id, actif, approved, statut_conseiller');
+      const inactifs = (profs ?? []).filter(isConseillerInactif).map((p) => p.id);
+
+      let q = supabase.from('emails')
         .select('id', { count: 'exact', head: true })
         .eq('direction', 'entrant').eq('lu', false).neq('canal', 'whatsapp');
+      // `owner_id is null` = non affecté (direction) : reste notifié.
+      if (inactifs.length) q = q.or(`owner_id.is.null,owner_id.not.in.(${inactifs.join(',')})`);
+      const { count } = await q;
       if (on) setUnreadMails(count ?? 0);
     };
     void load();
