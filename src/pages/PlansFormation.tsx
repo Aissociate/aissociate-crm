@@ -5,11 +5,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
+import AddToDossierButton from '@/components/AddToDossierButton';
 import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
 import { formatDate, fullName } from '@/lib/utils';
 import { generatePlanPdf } from '@/lib/generatePlanPdf';
 import { ensureDossierClient } from '@/lib/dossierClient';
-import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur, PlanPdf } from '@/lib/database.types';
+import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur, PlanPdf, Dossier } from '@/lib/database.types';
 
 const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
 const empty = (): Partial<PlanFormation> => ({
@@ -28,6 +29,7 @@ export default function PlansFormation() {
   const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
   const pdfs = useCollection<PlanPdf>('plan_pdfs', { orderBy: { column: 'created_at', ascending: false } });
+  const dossiers = useCollection<Dossier>('dossiers');
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<PlanFormation>>(empty());
@@ -210,6 +212,13 @@ export default function PlansFormation() {
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
+                    {/* Le contact du PDF est celui du plan source (plan_pdfs ne le porte pas). */}
+                    <AddToDossierButton
+                      contactId={planOf(d.plan_id)?.contact_id ?? null}
+                      dossiers={dossiers.data} fichierUrl={d.fichier_url}
+                      pieceLibelle="Programme de formation" documentLabel="plan de formation"
+                      onDone={() => dossiers.refresh()}
+                    />
                     {(() => {
                       const src = planOf(d.plan_id);
                       if (!src) return null;

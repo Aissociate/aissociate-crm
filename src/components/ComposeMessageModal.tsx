@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Button, Modal, Field } from '@/components/ui';
 import { uploadFile } from '@/lib/storage';
-import { fullName } from '@/lib/utils';
+import { fullName, prochaineHeureOuvrable } from '@/lib/utils';
 import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
 import { applyTemplateVars, templatesForCanal, DEFAULT_TEMPLATES, type MessageTemplate, type TemplateVars } from '@/lib/messageTemplates';
 import type { Dossier, Document, Contact, EmailCanal } from '@/lib/database.types';
@@ -114,16 +114,26 @@ export default function ComposeMessageModal({
   const removeExtraAttachment = (url: string) => setExtraAttachments((prev) => prev.filter((a) => a.url !== url));
 
   // Journalise l'envoi comme action RÉALISÉE sur le contact lié, pour que le
-  // décompte « dernière interaction » (liste Contacts) reparte à zéro.
+  // décompte « dernière interaction » (liste Contacts) reparte à zéro, et
+  // programme la relance de suivi (ticket « création automatique d'actions »).
+  // Pas de résumé IA ici : l'utilisateur vient d'écrire le message lui-même.
   const logInteraction = async (kind: 'email' | 'whatsapp') => {
     if (!contactId) return;
     const { date, heure } = nowParts();
-    await supabase.from('contact_actions').insert({
-      contact_id: contactId, date_action: date, heure_action: heure,
-      type: kind === 'whatsapp' ? 'autre' : 'email',
-      description: kind === 'whatsapp' ? 'WhatsApp envoyé' : `E-mail envoyé${sujet ? ` : ${sujet}` : ''}`,
-      faite: true,
-    });
+    const suite = prochaineHeureOuvrable();
+    await supabase.from('contact_actions').insert([
+      {
+        contact_id: contactId, date_action: date, heure_action: heure,
+        type: kind === 'whatsapp' ? 'autre' : 'email',
+        description: kind === 'whatsapp' ? 'WhatsApp envoyé' : `E-mail envoyé${sujet ? ` : ${sujet}` : ''}`,
+        faite: true,
+      },
+      {
+        contact_id: contactId, date_action: suite.date, heure_action: suite.heure,
+        type: 'relance', faite: false,
+        description: `Relance ASAP — vérifier la réponse à « ${sujet || (kind === 'whatsapp' ? 'WhatsApp' : 'message')} »`,
+      },
+    ]);
   };
 
   const send = async (statut: 'brouillon' | 'envoye') => {

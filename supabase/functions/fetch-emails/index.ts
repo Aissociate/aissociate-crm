@@ -114,6 +114,61 @@ function imapDate(d: Date): string {
   return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
 
+// ── Actions automatiques sur mail entrant ────────────────────────────────────
+// Ticket Benjamin « création automatique d'actions dans contacts » : chaque mail
+// entrant rattaché à un contact produit (1) une action RÉALISÉE horodatée, dont
+// la description porte un résumé du message, et (2) une relance ASAP à traiter.
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const ymdLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/** Première heure ouvrable à venir : 9 h le prochain jour ouvré (lun-ven). */
+function prochaineHeureOuvrable(from = new Date()): { date: string; heure: string } {
+  const d = new Date(from);
+  const ouvre = (x: Date) => x.getDay() >= 1 && x.getDay() <= 5;
+  if (!ouvre(d) || d.getHours() >= 9) {
+    do { d.setDate(d.getDate() + 1); } while (!ouvre(d));
+  }
+  return { date: ymdLocal(d), heure: "09:00" };
+}
+
+/**
+ * Résumé court du mail par l'IA. Jamais bloquant : en cas d'absence de clé,
+ * d'erreur réseau ou de dépassement du délai, on retombe sur un extrait brut du
+ * corps du message — l'action est créée dans tous les cas.
+ */
+async function resumeMail(apiKey: string, model: string, sujet: string, corps: string): Promise<string> {
+  const extrait = corps.replace(/\s+/g, " ").trim().slice(0, 4000);
+  const repli = extrait.slice(0, 180) + (extrait.length > 180 ? "…" : "");
+  if (!apiKey || !extrait) return repli;
+  try {
+    const resp = await Promise.race([
+      fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json",
+          "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM Formation AIssociate",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: "Tu résumes des e-mails professionnels en français pour un CRM de formation. Réponds par UNE seule phrase de 25 mots maximum, factuelle, sans formule de politesse ni préambule." },
+            { role: "user", content: `Objet : ${sujet}\n\n${extrait}` },
+          ],
+          temperature: 0.2, max_tokens: 120,
+        }),
+      }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
+    ]);
+    if (!resp.ok) return repli;
+    const data = await resp.json();
+    const txt = String(data?.choices?.[0]?.message?.content ?? "").replace(/\s+/g, " ").trim();
+    return txt || repli;
+  } catch (e) {
+    console.error("resumeMail", e);
+    return repli;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -167,6 +222,18 @@ Deno.serve(async (req: Request) => {
       sinceDate.setDate(sinceDate.getDate() - 1); // marge même-jour
     }
     const sinceStr = imapDate(sinceDate);
+
+    // Réglages des actions automatiques (Paramètres → IA). Activées par défaut ;
+    // `resume_ia: false` conserve les actions mais se passe de l'appel payant.
+    const { data: mailActRow } = await sb.from("parametres").select("valeur").eq("cle", "mail_actions").maybeSingle();
+    const mailAct = (mailActRow?.valeur ?? {}) as { enabled?: boolean; resume_ia?: boolean; max_par_passage?: number };
+    const actionsEnabled = mailAct.enabled !== false;
+    const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
+    const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
+    const aiKey = mailAct.resume_ia === false ? "" : (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
+    const aiModel = (ai.model_resume || ai.model || "anthropic/claude-opus-4.8").replace(/:online$/, "");
+    // Garde-fou de coût et de temps : nombre de résumés IA par passage du cron.
+    let resumesRestants = Number(mailAct.max_par_passage ?? 10);
 
     // TLS connection with timeout
     const conn = await Promise.race([
@@ -236,7 +303,37 @@ Deno.serve(async (req: Request) => {
           if (error) {
             console.error("upsert error", error.message);
           } else {
-            if (rows && rows.length > 0) imported++;
+            const nouveau = !!rows && rows.length > 0;
+            if (nouveau) imported++;
+            // Journalisation dans le suivi du contact — uniquement pour un mail
+            // réellement nouveau (l'upsert ignore les doublons) et rattaché.
+            if (nouveau && actionsEnabled && contact?.id) {
+              try {
+                const recu = parsed.date ? new Date(parsed.date) : new Date();
+                const sujet = parsed.subject ?? "(sans objet)";
+                const corps = String(parsed.text ?? parsed.html ?? "");
+                const resume = resumesRestants > 0
+                  ? await resumeMail(aiKey, aiModel, sujet, corps)
+                  : corps.replace(/\s+/g, " ").trim().slice(0, 180);
+                if (resumesRestants > 0) resumesRestants--;
+                const suite = prochaineHeureOuvrable();
+                await sb.from("contact_actions").insert([
+                  {
+                    contact_id: contact.id, date_action: ymdLocal(recu),
+                    heure_action: `${pad2(recu.getHours())}:${pad2(recu.getMinutes())}`,
+                    type: "email", faite: true,
+                    description: `E-mail reçu : ${sujet}${resume ? ` — ${resume}` : ""}`,
+                  },
+                  {
+                    contact_id: contact.id, date_action: suite.date, heure_action: suite.heure,
+                    type: "relance", faite: false,
+                    description: `Relance ASAP — répondre à « ${sujet} »`,
+                  },
+                ]);
+              } catch (e) {
+                console.error("actions auto", e); // ne doit jamais bloquer l'import
+              }
+            }
             await imap.cmd(`UID STORE ${uid} +FLAGS (\\Seen)`);
           }
         }

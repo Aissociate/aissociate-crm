@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone, Send, MessageSquareText, Plus, Trash2 } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone, Send, MessageSquareText, Plus, Trash2, ListTodo } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
@@ -15,7 +15,8 @@ type Organisme = {
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
-type Ai = { provider?: string; model?: string; openrouter_key?: string; plan_prompt?: string };
+type Ai = { provider?: string; model?: string; model_resume?: string; openrouter_key?: string; plan_prompt?: string };
+type MailActionsCfg = { enabled?: boolean; resume_ia?: boolean; max_par_passage?: number };
 type Droits = {
   documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;
   pipeline?: boolean; entreprises?: boolean; devis?: boolean; agenda?: boolean;
@@ -72,6 +73,8 @@ export default function Parametres() {
   const [smtp, setSmtp] = useState<Smtp>({});
   const [imap, setImap] = useState<Imap>({});
   const [ai, setAi] = useState<Ai>({ model: 'anthropic/claude-opus-4.8' });
+  // Actions créées automatiquement à la réception d'un mail (ticket Benjamin).
+  const [mailActions, setMailActions] = useState<MailActionsCfg>({ enabled: true, resume_ia: true, max_par_passage: 10 });
   const [chatbot, setChatbot] = useState<Chatbot>({});
   const [blog, setBlog] = useState<Blog>({});
   const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
@@ -91,12 +94,13 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature', 'brevo', 'message_templates']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'mail_actions', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature', 'brevo', 'message_templates']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
         if (row.cle === 'imap') setImap({ port: 993, ...((row.valeur as Imap) ?? {}) });
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
+        if (row.cle === 'mail_actions') setMailActions({ enabled: true, resume_ia: true, max_par_passage: 10, ...((row.valeur as MailActionsCfg) ?? {}) });
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
         if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
         if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
@@ -485,6 +489,52 @@ export default function Parametres() {
               <Save className="h-4 w-4" /> {saving === 'ai' ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
             {savedMsg === 'ai' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+          </div>
+        </Card>
+
+        {/* Actions automatiques créées à partir des messages */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <ListTodo className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">Actions automatiques depuis la messagerie</h2>
+          </div>
+          <p className="mb-4 text-sm text-muted">
+            À chaque e-mail <strong>entrant</strong> rattaché à un contact, deux actions sont créées dans son suivi :
+            l'e-mail reçu (marqué réalisé, horodaté, avec un résumé du message) et une <strong>relance ASAP</strong>
+            {' '}planifiée à la première heure ouvrable. Les e-mails et WhatsApp <strong>sortants</strong> suivent la même règle,
+            sans appel à l'IA (vous venez d'écrire le message).
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <label className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
+              <input type="checkbox" className="mt-0.5" checked={mailActions.enabled !== false}
+                onChange={(e) => setMailActions({ ...mailActions, enabled: e.target.checked })} />
+              <span>
+                <span className="font-medium text-fg">Créer les actions automatiquement</span>
+                <span className="mt-0.5 block text-xs text-muted">Décoché : aucune action n'est créée à la réception.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
+              <input type="checkbox" className="mt-0.5" checked={mailActions.resume_ia !== false}
+                onChange={(e) => setMailActions({ ...mailActions, resume_ia: e.target.checked })} />
+              <span>
+                <span className="font-medium text-fg">Résumer le message par l'IA</span>
+                <span className="mt-0.5 block text-xs text-muted">Décoché : un extrait du corps du message est utilisé, sans coût IA.</span>
+              </span>
+            </label>
+            <Field label="Résumés IA par synchronisation" hint="Garde-fou de coût : au-delà, un simple extrait est utilisé">
+              <input className="input" type="number" min={0} max={50} value={mailActions.max_par_passage ?? 10}
+                onChange={(e) => setMailActions({ ...mailActions, max_par_passage: Number(e.target.value) })} />
+            </Field>
+            <Field label="Modèle de résumé" hint="Vide = le modèle ci-dessus. Un petit modèle suffit et coûte moins cher.">
+              <input className="input" value={ai.model_resume ?? ''} onChange={(e) => setAi({ ...ai, model_resume: e.target.value })} placeholder="ex. anthropic/claude-haiku-4.5" />
+            </Field>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={() => persist('mail_actions', { ...mailActions })} disabled={saving === 'mail_actions'}>
+              <Save className="h-4 w-4" /> {saving === 'mail_actions' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+            {savedMsg === 'mail_actions' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+            <span className="text-xs text-muted">Le modèle de résumé se règle avec le bloc IA ci-dessus.</span>
           </div>
         </Card>
 

@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Plus, Mail, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Mail, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
 import { formatDate, fullName, cn } from '@/lib/utils';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
-import type { Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat } from '@/lib/database.types';
+import ContactFiche from '@/components/ContactFiche';
+import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
+import type {
+  Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat,
+  Opportunite, OpportuniteStage, ConversationClose, Entreprise, Financeur,
+} from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
 type SyncInfo = { last_at?: string; ok?: boolean; imported?: number; skipped?: number; error?: string };
@@ -37,10 +43,25 @@ type Convo = {
   emails: Email[]; owners: Set<string>; channels: Set<EmailCanal>;
   lastAt: string; lastDir: EmailDirection; lastCanal: EmailCanal;
   hasInbound: boolean; hasOutbound: boolean; unread: boolean; matched: boolean;
+  /** Un message sortant existe après le dernier message entrant. */
+  answered: boolean;
+  /** Discussion marquée « close » : aucune réponse n'est attendue. */
+  closed: boolean;
+  /** Étape de l'opportunité du contact lié, `null` s'il n'en a pas. */
+  oppStage: OpportuniteStage | null;
 };
 
+// Périmètres de recherche activables (ticket « Messagerie fonction de recherche »).
+type Scope = 'expediteur' | 'destinataire' | 'objet' | 'corps' | 'piece_jointe';
+const SCOPE_LABELS: Record<Scope, string> = {
+  expediteur: 'Expéditeurs', destinataire: 'Destinataires', objet: 'Objet',
+  corps: 'Corps du texte', piece_jointe: 'Pièces jointes',
+};
+const ALL_SCOPES = Object.keys(SCOPE_LABELS) as Scope[];
+
 export default function Messagerie() {
-  const { isManager, isAdmin } = useAuth();
+  const { isManager, isAdmin, session } = useAuth();
+  const navigate = useNavigate();
   const { data, loading, refresh } = useCollection<Email>('emails', { orderBy: { column: 'created_at', ascending: false } });
   const contacts = useCollection<Contact>('contacts');
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
@@ -52,6 +73,22 @@ export default function Messagerie() {
   // Ordre d'affichage : décroissant (plus récent d'abord) par défaut,
   // croissant = ordre chronologique (ticket Benjamin « tri chronologique »).
   const [chrono, setChrono] = useState(false);
+
+  // ── Recherche & filtres (tickets « recherche », « réponse apportée », « statut opportunité ») ──
+  const [search, setSearch] = useState('');
+  const [scopes, setScopes] = useState<Set<Scope>>(new Set(ALL_SCOPES));
+  const [reponseFilter, setReponseFilter] = useState<'' | 'repondu' | 'non_repondu' | 'closes'>('');
+  const [oppFilter, setOppFilter] = useState('');           // '' | 'aucune' | <stage>
+  const [sortBy, setSortBy] = useState<'date' | 'conseiller'>('date');
+
+  const opportunites = useCollection<Opportunite>('opportunites');
+  const closes = useCollection<ConversationClose>('conversations_closes');
+  const closedKeys = new Set(closes.data.map((c) => c.cle));
+  // Opportunité la plus récente par contact (une conversation = un interlocuteur).
+  const oppByContact = new Map<string, OpportuniteStage>();
+  for (const o of opportunites.data) {
+    if (o.contact_id && !oppByContact.has(o.contact_id)) oppByContact.set(o.contact_id, o.stage);
+  }
 
   const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
 
@@ -84,7 +121,7 @@ export default function Messagerie() {
     data.forEach((e) => {
       const p = resolvePeer(e);
       let cv = map.get(p.key);
-      if (!cv) { cv = { key: p.key, label: p.label, kind: p.kind, contactId: p.contactId, emails: [], owners: new Set(), channels: new Set(), lastAt: '', lastDir: 'sortant', lastCanal: 'email', hasInbound: false, hasOutbound: false, unread: false, matched: p.kind !== null }; map.set(p.key, cv); }
+      if (!cv) { cv = { key: p.key, label: p.label, kind: p.kind, contactId: p.contactId, emails: [], owners: new Set(), channels: new Set(), lastAt: '', lastDir: 'sortant', lastCanal: 'email', hasInbound: false, hasOutbound: false, unread: false, matched: p.kind !== null, answered: false, closed: false, oppStage: null }; map.set(p.key, cv); }
       cv.emails.push(e);
       cv.channels.add(e.canal === 'whatsapp' ? 'whatsapp' : 'email');
       const t = e.sent_at ?? e.created_at;
@@ -94,8 +131,18 @@ export default function Messagerie() {
       if (p.ownerId) cv.owners.add(p.ownerId);
     });
     const dir = chrono ? -1 : 1; // chrono = plus ancien d'abord
+    const at = (e: Email) => e.sent_at ?? e.created_at;
     return [...map.values()]
-      .map((cv) => { cv.emails.sort((a, b) => (((a.sent_at ?? a.created_at) < (b.sent_at ?? b.created_at) ? 1 : -1) * dir)); return cv; })
+      .map((cv) => {
+        cv.emails.sort((a, b) => ((at(a) < at(b) ? 1 : -1) * dir));
+        // « Répondu » = un sortant postérieur au dernier entrant. Une conversation
+        // sans aucun message entrant n'attend rien : elle est considérée traitée.
+        const lastIn = cv.emails.filter((e) => e.direction === 'entrant').map(at).sort().at(-1);
+        cv.answered = !lastIn || cv.emails.some((e) => e.direction === 'sortant' && at(e) > lastIn);
+        cv.closed = closedKeys.has(cv.key);
+        cv.oppStage = cv.contactId ? (oppByContact.get(cv.contactId) ?? null) : null;
+        return cv;
+      })
       .sort((a, b) => ((a.lastAt < b.lastAt ? 1 : -1) * dir));
   };
 
@@ -228,8 +275,104 @@ export default function Messagerie() {
     alert(`${n?.imported ?? 0} nouveau(x) message(s) importé(s).${n?.skipped ? ` ${n.skipped} ignoré(s) (expéditeur inconnu).` : ''}`);
   };
 
+  // ── Recherche plein texte, restreinte aux périmètres cochés ──
+  const needle = search.trim().toLowerCase();
+  const matchesSearch = (c: Convo): boolean => {
+    if (!needle) return true;
+    // Le nom de l'interlocuteur reste toujours interrogeable.
+    if (c.label.toLowerCase().includes(needle)) return true;
+    return c.emails.some((e) => {
+      if (scopes.has('expediteur') && (e.expediteur ?? '').toLowerCase().includes(needle)) return true;
+      if (scopes.has('destinataire') && e.destinataires.some((d) => d.toLowerCase().includes(needle))) return true;
+      if (scopes.has('objet') && (e.sujet ?? '').toLowerCase().includes(needle)) return true;
+      if (scopes.has('corps') && (e.corps ?? '').toLowerCase().includes(needle)) return true;
+      if (scopes.has('piece_jointe') && (e.attachments ?? []).some((a) => (a.filename ?? '').toLowerCase().includes(needle))) return true;
+      return false;
+    });
+  };
+
+  const matchesReponse = (c: Convo): boolean => {
+    if (reponseFilter === 'closes') return c.closed;
+    if (c.closed) return false; // une discussion close sort des listes « à traiter »
+    if (reponseFilter === 'repondu') return c.answered;
+    if (reponseFilter === 'non_repondu') return !c.answered;
+    return true;
+  };
+
+  const matchesOpp = (c: Convo): boolean => {
+    if (!oppFilter) return true;
+    if (oppFilter === 'aucune') return c.oppStage === null;
+    return c.oppStage === oppFilter;
+  };
+
+  // Tri « par conseiller » : regroupement alphabétique, puis date à l'intérieur.
+  const convoOwnerLabel = (c: Convo) =>
+    c.owners.size > 0 ? [...c.owners].map(ownerName).filter(Boolean).sort().join(', ') : 'Direction';
+
   const convos = (view === 'orphelins' ? orphanConvos : mainConvos)
-    .filter((c) => view === 'orphelins' || !ownerFilter || (ownerFilter === 'none' ? c.owners.size === 0 : c.owners.has(ownerFilter)));
+    .filter((c) => view === 'orphelins' || !ownerFilter || (ownerFilter === 'none' ? c.owners.size === 0 : c.owners.has(ownerFilter)))
+    .filter(matchesSearch)
+    .filter((c) => view === 'orphelins' || matchesReponse(c))
+    .filter((c) => view === 'orphelins' || matchesOpp(c))
+    .sort((a, b) => {
+      if (sortBy !== 'conseiller') return 0; // déjà trié par date dans buildConvos
+      const cmp = convoOwnerLabel(a).localeCompare(convoOwnerLabel(b), 'fr');
+      return cmp !== 0 ? cmp : (a.lastAt < b.lastAt ? 1 : -1);
+    });
+
+  // ── Lien vers la fiche Contact (ticket « Messagerie : lien vers fiche dans contacts ») ──
+  // Interlocuteur connu : ouverture de sa fiche par-dessus la messagerie.
+  // Interlocuteur inconnu : bascule vers Contacts, formulaire « Nouveau contact »
+  // pré-rempli avec l'adresse (et le nom si l'en-tête en porte un). Contacts se
+  // charge d'y ajouter les deux actions demandées à l'enregistrement.
+  const [fiche, setFiche] = useState<Contact | null>(null);
+  const entreprises = useCollection<Entreprise>('entreprises');
+  const financeurs = useCollection<Financeur>('financeurs');
+
+  /** « Jean Dupont <j@d.fr> » → { prenom: 'Jean', nom: 'Dupont' } ; vide si absent. */
+  const parseDisplayName = (raw: string | null): { prenom: string; nom: string } => {
+    const m = (raw ?? '').match(/^\s*"?([^"<]+?)"?\s*</);
+    const parts = (m?.[1] ?? '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { prenom: '', nom: '' };
+    if (parts.length === 1) return { prenom: '', nom: parts[0] };
+    return { prenom: parts[0], nom: parts.slice(1).join(' ') };
+  };
+
+  const openPeer = (c: Convo) => {
+    if (c.contactId) {
+      const ct = contacts.data.find((x) => x.id === c.contactId);
+      if (ct) { setFiche(ct); return; }
+    }
+    const firstIn = newestFirst(c).find((e) => e.direction === 'entrant');
+    const raw = firstIn?.expediteur ?? null;
+    const email = emailAddr(raw) || (c.key.startsWith('addr:') ? c.key.slice(5) : '');
+    const { prenom, nom } = parseDisplayName(raw);
+    navigate('/contacts', {
+      state: {
+        nouveauContact: {
+          email,
+          prenom,
+          nom: nom || email.split('@')[0] || 'Inconnu',
+          telephone: c.key.startsWith('wa:') ? c.key.slice(3) : '',
+          // Journalise le mail entrant reçu + la réponse à faire à la première heure ouvrable.
+          actionsMessagerie: { sujet: firstIn?.sujet ?? null, recuLe: firstIn?.sent_at ?? firstIn?.created_at ?? null },
+        },
+      },
+    });
+  };
+
+  // ── Clore / rouvrir une discussion ──
+  const toggleClose = async (c: Convo) => {
+    if (c.closed) {
+      const { error } = await supabase.from('conversations_closes').delete().eq('cle', c.key);
+      if (error) { alert(error.message); return; }
+    } else {
+      const { error } = await supabase.from('conversations_closes')
+        .insert({ cle: c.key, closed_by: session?.user.id ?? null });
+      if (error) { alert(error.message); return; }
+    }
+    closes.refresh();
+  };
 
   // Sélection (par conversation -> tous ses messages)
   const convoIds = (c: Convo) => c.emails.map((e) => e.id);
@@ -332,6 +475,55 @@ export default function Messagerie() {
         </div>
       )}
 
+      {/* ── Recherche & filtres ─────────────────────────────────────────────── */}
+      <div className="mb-4 space-y-3 rounded-xl border border-line bg-surface p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted" />
+            <input
+              className="input pl-9" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher dans les messages…"
+            />
+          </div>
+          {search && (
+            <button onClick={() => setSearch('')} className="rounded-lg border border-line px-2.5 py-2 text-sm text-muted hover:text-fg">
+              Effacer
+            </button>
+          )}
+          <select className="input max-w-[210px] py-2 text-sm" value={reponseFilter} onChange={(e) => setReponseFilter(e.target.value as typeof reponseFilter)}>
+            <option value="">Réponse : toutes</option>
+            <option value="non_repondu">Sans réponse apportée</option>
+            <option value="repondu">Réponse apportée</option>
+            <option value="closes">Discussions closes</option>
+          </select>
+          <select className="input max-w-[210px] py-2 text-sm" value={oppFilter} onChange={(e) => setOppFilter(e.target.value)}>
+            <option value="">Opportunité : toutes</option>
+            <option value="aucune">Sans opportunité</option>
+            {OPP_STAGE_ORDER.map((s) => <option key={s} value={s}>{OPP_STAGE_LABELS[s]}</option>)}
+          </select>
+          <select className="input max-w-[190px] py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+            <option value="date">Trier par date</option>
+            <option value="conseiller">Trier par conseiller</option>
+          </select>
+        </div>
+
+        {/* Périmètre de la recherche : à restreindre ou étendre au besoin. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
+          <span className="font-medium">Rechercher dans :</span>
+          {ALL_SCOPES.map((s) => (
+            <label key={s} className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox" checked={scopes.has(s)}
+                onChange={() => setScopes((prev) => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n; })}
+              />
+              {SCOPE_LABELS[s]}
+            </label>
+          ))}
+          <button onClick={() => setScopes(new Set(ALL_SCOPES))} className="underline hover:text-fg">tout</button>
+          <button onClick={() => setScopes(new Set())} className="underline hover:text-fg">aucun</button>
+        </div>
+      </div>
+
       {!loading && convos.length > 0 && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
@@ -391,11 +583,34 @@ export default function Messagerie() {
                             <Badge tone={c.owners.size > 0 ? 'neutral' : 'info'}>{aff ?? 'Direction'}</Badge>
                           </>
                         ) : c.hasInbound ? <Badge tone="warning">Non rattaché</Badge> : null}
+                        {/* Statut de traitement : réponse apportée / attendue / discussion close. */}
+                        {c.closed
+                          ? <Badge tone="neutral">Discussion close</Badge>
+                          : c.answered ? <Badge tone="success">Répondu</Badge> : <Badge tone="warning">Sans réponse</Badge>}
+                        {c.oppStage && <Badge tone="info">Opportunité · {OPP_STAGE_LABELS[c.oppStage]}</Badge>}
                         {/* Repère visuel : un brouillon attend d'être finalisé dans ce fil. */}
                         {c.emails.some((e) => e.statut === 'brouillon') && <Badge tone="warning">Brouillon à finaliser</Badge>}
                       </div>
                     </div>
                   </button>
+
+                  {/* Accès direct à la fiche du contact, ou création si l'interlocuteur est inconnu. */}
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      onClick={() => openPeer(c)}
+                      title={c.contactId ? 'Ouvrir la fiche du contact' : 'Créer ce contact dans Contacts'}
+                      className="rounded p-1.5 text-muted hover:text-brand-600"
+                    >
+                      {c.contactId ? <UserRound className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                    </button>
+                    <button
+                      onClick={() => toggleClose(c)}
+                      title={c.closed ? 'Rouvrir la discussion' : 'Clore la discussion (aucune réponse attendue)'}
+                      className={cn('rounded p-1.5 hover:text-brand-600', c.closed ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted')}
+                    >
+                      {c.closed ? <CircleSlash2 className="h-4 w-4" /> : <CheckCheck className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Détail déplié : tag interlocuteur + Répondre, puis fil façon chat */}
@@ -484,6 +699,20 @@ export default function Messagerie() {
           </label>
         </div>
       </Modal>
+
+      {/* Fiche du contact ouverte depuis une conversation */}
+      {fiche && (
+        <ContactFiche
+          key={fiche.id}
+          contact={contacts.data.find((x) => x.id === fiche.id) ?? fiche}
+          entreprises={entreprises.data}
+          financeurs={financeurs.data}
+          profiles={profiles.data}
+          onClose={() => setFiche(null)}
+          onEdit={() => { setFiche(null); navigate('/contacts'); }}
+          onUpdated={() => contacts.refresh()}
+        />
+      )}
     </div>
   );
 }

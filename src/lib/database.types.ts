@@ -196,7 +196,8 @@ export type PlanPdf = {
   id: string; plan_id: string | null; titre: string; apprenant: string | null;
   organisme: string | null; fichier_url: string | null; created_by: string | null; created_at: string;
 };
-export type BlogCategory = { id: string; name: string; slug: string; description: string | null; color: string | null; icon: string | null; created_at: string; updated_at: string };
+export type ConversationClose = { cle: string; closed_at: string; closed_by: string | null };
+export type BlogCategory ={ id: string; name: string; slug: string; description: string | null; color: string | null; icon: string | null; created_at: string; updated_at: string };
 export type BlogArticle = {
   id: string; title: string; slug: string; excerpt: string; content: string;
   category_id: string | null; image_url: string | null; author: string | null; read_time: number | null;
@@ -322,6 +323,7 @@ export type Database = {
       kanban_colonnes: TableShape<KanbanColonne>;
       kanban_cartes: TableShape<KanbanCarte>;
       emails: TableShape<Email>;
+      conversations_closes: TableShape<ConversationClose>;
       piece_versions: TableShape<PieceVersion>;
       offres_recrutement: TableShape<OffreRecrutement>;
       candidats: TableShape<Candidat>;

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Clock } from 'lucide-react';
 import { differenceInCalendarDays } from 'date-fns';
 import { useCollection } from '@/hooks/useCollection';
@@ -6,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState, type Tone } from '@/components/ui';
 import { CONTACT_TYPE_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
-import { fullName, formatDate } from '@/lib/utils';
+import { fullName, formatDate, ymdLocal, prochaineHeureOuvrable } from '@/lib/utils';
 import {
   importProspectsFile, parseSpreadsheetWithHeaders, importContactsMapped,
   guessMapping, CONTACT_IMPORT_FIELDS, type ColumnMapping,
@@ -41,6 +42,34 @@ const empty = (): Partial<Contact> => ({
 });
 
 const emptyIntake = () => ({ firstName: '', lastName: '', email: '', phone: '', company: '', requestType: '', message: '' });
+
+// ── Contact créé depuis la Messagerie (ticket « lien vers fiche dans contacts ») ──
+// Données transmises par la page Messagerie via l'état de navigation.
+type MailSeed = { sujet: string | null; recuLe: string | null };
+export type NouveauContactState = {
+  email: string; prenom: string; nom: string; telephone: string;
+  actionsMessagerie: MailSeed;
+};
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** Les deux actions demandées à la création d'un contact depuis un mail entrant. */
+function seedActionsFromMail(contactId: string, seed: MailSeed) {
+  const recu = seed.recuLe ? new Date(seed.recuLe) : new Date();
+  const suite = prochaineHeureOuvrable();
+  return [
+    {
+      contact_id: contactId, date_action: ymdLocal(recu), heure_action: `${pad2(recu.getHours())}:${pad2(recu.getMinutes())}`,
+      type: 'email', faite: true,
+      description: `E-mail entrant reçu${seed.sujet ? ` : ${seed.sujet}` : ''}`,
+    },
+    {
+      contact_id: contactId, date_action: suite.date, heure_action: suite.heure,
+      type: 'email', faite: false,
+      description: 'Répondre à l\'e-mail entrant (première heure ouvrable)',
+    },
+  ];
+}
 
 export default function Contacts() {
   const { session, isManager } = useAuth();
@@ -81,6 +110,22 @@ export default function Contacts() {
   const [form, setForm] = useState<Partial<Contact>>(empty());
   const [tagsText, setTagsText] = useState('');
   const [saving, setSaving] = useState(false);
+  // Mail à journaliser en actions dès que le contact issu de la Messagerie est créé.
+  const [pendingActions, setPendingActions] = useState<MailSeed | null>(null);
+
+  // Arrivée depuis la Messagerie : ouvre « Nouveau contact » pré-rempli.
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const seed = (location.state as { nouveauContact?: NouveauContactState } | null)?.nouveauContact;
+    if (!seed) return;
+    setForm({ ...empty(), nom: seed.nom, prenom: seed.prenom, email: seed.email, telephone: seed.telephone });
+    setTagsText('');
+    setPendingActions(seed.actionsMessagerie);
+    setOpen(true);
+    // L'état de navigation est consommé : un rafraîchissement ne doit pas rouvrir la modale.
+    navigate('.', { replace: true, state: null });
+  }, [location.state, navigate]);
   const [q, setQ] = useState('');
   // Affichage par défaut : les prospects (cœur du travail de prospection).
   const [typeFilter, setTypeFilter] = useState<string>('prospect');
@@ -313,9 +358,22 @@ export default function Contacts() {
     setSaving(true);
     const tags = tagsText.split(',').map((t) => t.trim()).filter(Boolean);
     const payload = { ...form, tags, owner_id: form.owner_id ?? session?.user.id };
-    const { error } = form.id
-      ? await supabase.from('contacts').update(payload).eq('id', form.id)
-      : await supabase.from('contacts').insert(payload);
+    let newId: string | null = null;
+    let error;
+    if (form.id) {
+      ({ error } = await supabase.from('contacts').update(payload).eq('id', form.id));
+    } else {
+      const { data: ins, error: insErr } = await supabase.from('contacts').insert(payload).select('id').single();
+      error = insErr;
+      newId = ins?.id ?? null;
+    }
+    // Contact créé depuis la Messagerie : on journalise le mail entrant (déjà
+    // traité) et la réponse à effectuer à la première heure ouvrable.
+    if (!error && newId && pendingActions) {
+      await supabase.from('contact_actions').insert(seedActionsFromMail(newId, pendingActions));
+      setPendingActions(null);
+      actionsCol.refresh();
+    }
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
