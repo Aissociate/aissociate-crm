@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, FileText, Wand as Wand2, Sparkles, Copy } from 'l
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { functionErrorMessage } from '@/lib/invokeError';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
@@ -13,6 +14,21 @@ import { ensureDossierClient } from '@/lib/dossierClient';
 import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur, PlanPdf, Dossier } from '@/lib/database.types';
 
 const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
+
+// Documents AGEFICE, dans l'ordre du parcours du stagiaire. `piece` désigne la
+// pièce justificative du dossier que le document vient renseigner.
+type AgeficeKind = 'demande' | 'convention' | 'emargement' | 'attestation';
+const AGEFICE_DOCS: { kind: AgeficeKind; label: string; etape: string; piece: string }[] = [
+  { kind: 'demande', label: 'Demande préalable de financement', etape: 'Avant — montage du dossier', piece: 'Demande de prise en charge' },
+  { kind: 'convention', label: 'Convention de formation', etape: 'Avant — contractualisation', piece: 'Convention / contrat de formation' },
+  { kind: 'emargement', label: "Feuille d'émargement", etape: 'Pendant — séance', piece: "Feuille d'émargement" },
+  { kind: 'attestation', label: "Attestation d'assiduité et de règlement", etape: 'Après — solde', piece: "Attestation d'assiduité" },
+];
+// Pièce du dossier visée selon la nature du document généré.
+const PIECE_POUR: Record<string, string> = {
+  plan: 'Programme de formation',
+  ...Object.fromEntries(AGEFICE_DOCS.map((d) => [d.kind, d.piece])),
+};
 const empty = (): Partial<PlanFormation> => ({
   nom: '', formation_id: null, contact_id: null, entreprise_id: null, financeur_id: null,
   objectifs: '', contenu: [], duree_heures: 0, modalite: 'presentiel', statut: 'brouillon', version: 1, dossier_id: null,
@@ -69,6 +85,28 @@ export default function PlansFormation() {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
       setGenId(null);
+    }
+  };
+
+  // ── Documents AGEFICE, aux quatre moments du parcours ──────────────────────
+  // Le formulaire de demande préalable est un PDF officiel remplissable : il est
+  // pré-rempli mais reste éditable pour que le stagiaire complète sa partie.
+  const [agefId, setAgefId] = useState<string | null>(null);
+  const generateAgefice = async (p: PlanFormation, kind: AgeficeKind) => {
+    setAgefId(`${p.id}:${kind}`);
+    try {
+      const { data: res, error } = await supabase.functions.invoke('generate-agefice', {
+        body: { planId: p.id, type: kind, userId: session?.user.id ?? null },
+      });
+      if (error) throw new Error(await functionErrorMessage(error));
+      const err = (res as { error?: string } | null)?.error;
+      if (err) throw new Error(err);
+      pdfs.refresh();
+      alert(`${AGEFICE_DOCS.find((d) => d.kind === kind)?.label} généré.`);
+    } catch (e) {
+      alert(`Génération impossible : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAgefId(null);
     }
   };
 
@@ -176,6 +214,19 @@ export default function PlansFormation() {
                   <Button variant="secondary" onClick={() => generatePdf(p)} disabled={genId === p.id} title="Générer un PDF structuré (IA)">
                     <Sparkles className={`h-4 w-4 ${genId === p.id ? 'animate-pulse' : ''}`} /> {genId === p.id ? 'Génération…' : 'PDF'}
                   </Button>
+                  {/* Documents AGEFICE : proposés dans l'ordre du parcours du stagiaire. */}
+                  <select
+                    className="input max-w-[210px] py-1 text-sm"
+                    value=""
+                    disabled={!!agefId && agefId.startsWith(p.id)}
+                    onChange={(e) => { const v = e.target.value as AgeficeKind | ''; e.target.value = ''; if (v) void generateAgefice(p, v); }}
+                    title="Générer un document AGEFICE à partir de ce plan"
+                  >
+                    <option value="">{agefId?.startsWith(p.id) ? 'Génération…' : '+ Document AGEFICE…'}</option>
+                    {AGEFICE_DOCS.map((d) => (
+                      <option key={d.kind} value={d.kind}>{d.label} · {d.etape}</option>
+                    ))}
+                  </select>
                   <button onClick={() => duplicate(p)} title="Reprendre ce plan (créer une copie modifiable)" className="rounded p-1.5 text-muted hover:text-brand-600"><Copy className="h-4 w-4" /></button>
                   <button onClick={() => openEdit(p)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(p)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
@@ -206,17 +257,24 @@ export default function PlansFormation() {
             {pdfs.data.map((d) => (
               <tr key={d.id} className="hover:bg-surface-2">
                 <td className="px-4 py-3 text-muted">{formatDate(d.created_at, 'dd/MM/yyyy HH:mm')}</td>
-                <td className="px-4 py-3 font-medium text-fg">{d.titre}</td>
+                <td className="px-4 py-3">
+                  <span className="font-medium text-fg">{d.titre}</span>
+                  {d.kind && d.kind !== 'plan' && (
+                    <Badge tone="info" className="ml-2">{AGEFICE_DOCS.find((a) => a.kind === d.kind)?.etape ?? d.kind}</Badge>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-muted">{d.apprenant || '—'}</td>
                 <td className="px-4 py-3 text-muted">{d.organisme || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
-                    {/* Le contact du PDF est celui du plan source (plan_pdfs ne le porte pas). */}
+                    {/* Le contact du PDF est celui du plan source (plan_pdfs ne le porte pas).
+                        La pièce visée dépend de la nature du document produit. */}
                     <AddToDossierButton
                       contactId={planOf(d.plan_id)?.contact_id ?? null}
                       dossiers={dossiers.data} fichierUrl={d.fichier_url}
-                      pieceLibelle="Programme de formation" documentLabel="plan de formation"
+                      pieceLibelle={PIECE_POUR[d.kind] ?? 'Programme de formation'}
+                      documentLabel={(AGEFICE_DOCS.find((a) => a.kind === d.kind)?.label ?? 'plan de formation').toLowerCase()}
                       onDone={() => dossiers.refresh()}
                     />
                     {(() => {

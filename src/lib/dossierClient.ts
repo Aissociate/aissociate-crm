@@ -8,6 +8,8 @@ import { genReference } from './utils';
 export const DEFAULT_PIECES = [
   'Devis signé', 'Programme de formation', 'Convention / contrat de formation',
   "Pièce d'identité du bénéficiaire", "Justificatif d'éligibilité", 'Demande de prise en charge',
+  // Exigées au remboursement par l'AGEFICE, produites en fin de parcours.
+  "Feuille d'émargement", "Attestation d'assiduité",
 ];
 
 export type DossierRef = { id: string; reference: string; intitule: string };

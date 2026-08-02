@@ -192,9 +192,12 @@ export type SessionFormation = Timestamps & {
   formateur: string | null; formateur_id: string | null; couleur: string; notes: string | null;
   created_by: string | null;
 };
+/** Nature d'un document produit depuis un plan (détermine la pièce du dossier). */
+export type PlanPdfKind = 'plan' | 'demande' | 'convention' | 'emargement' | 'attestation';
 export type PlanPdf = {
   id: string; plan_id: string | null; titre: string; apprenant: string | null;
   organisme: string | null; fichier_url: string | null; created_by: string | null; created_at: string;
+  kind: PlanPdfKind;
 };
 export type ConversationClose = { cle: string; closed_at: string; closed_by: string | null };
 /** Document libre rattaché à un dossier (hors pièces justificatives du financeur). */

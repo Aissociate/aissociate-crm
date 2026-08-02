@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone, Send, MessageSquareText, Plus, Trash2, ListTodo } from 'lucide-react';
+import { Save, Building2, Mail, Inbox, ShieldAlert, CircleCheck as CheckCircle2, Circle as XCircle, Sparkles, Bot, Newspaper, Linkedin, Megaphone, Send, MessageSquareText, Plus, Trash2, ListTodo, BadgeCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, Button, Field } from '@/components/ui';
@@ -17,6 +17,11 @@ type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; fro
 type Imap = { host?: string; port?: number; user?: string; password?: string };
 type Ai = { provider?: string; model?: string; model_resume?: string; openrouter_key?: string; plan_prompt?: string };
 type MailActionsCfg = { enabled?: boolean; resume_ia?: boolean; max_par_passage?: number };
+type AgeficeCfg = {
+  demande_url?: string; prefet_region?: string;
+  responsable_civilite?: string; responsable_nom?: string; responsable_prenom?: string;
+  responsable_qualite?: string; responsable_tel?: string; responsable_email?: string;
+};
 type Droits = {
   documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;
   pipeline?: boolean; entreprises?: boolean; devis?: boolean; agenda?: boolean;
@@ -75,6 +80,8 @@ export default function Parametres() {
   const [ai, setAi] = useState<Ai>({ model: 'anthropic/claude-opus-4.8' });
   // Actions créées automatiquement à la réception d'un mail (ticket Benjamin).
   const [mailActions, setMailActions] = useState<MailActionsCfg>({ enabled: true, resume_ia: true, max_par_passage: 10 });
+  // Informations reprises dans les documents AGEFICE générés depuis un plan.
+  const [agefice, setAgefice] = useState<AgeficeCfg>({});
   const [chatbot, setChatbot] = useState<Chatbot>({});
   const [blog, setBlog] = useState<Blog>({});
   const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
@@ -94,13 +101,14 @@ export default function Parametres() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'mail_actions', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature', 'brevo', 'message_templates']);
+      const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'mail_actions', 'agefice', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature', 'brevo', 'message_templates']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});
         if (row.cle === 'smtp') setSmtp((row.valeur as Smtp) ?? {});
         if (row.cle === 'imap') setImap({ port: 993, ...((row.valeur as Imap) ?? {}) });
         if (row.cle === 'ai') setAi((row.valeur as Ai) ?? {});
         if (row.cle === 'mail_actions') setMailActions({ enabled: true, resume_ia: true, max_par_passage: 10, ...((row.valeur as MailActionsCfg) ?? {}) });
+        if (row.cle === 'agefice') setAgefice((row.valeur as AgeficeCfg) ?? {});
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
         if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
         if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
@@ -489,6 +497,60 @@ export default function Parametres() {
               <Save className="h-4 w-4" /> {saving === 'ai' ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
             {savedMsg === 'ai' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
+          </div>
+        </Card>
+
+        {/* AGEFICE — données reprises dans les documents officiels */}
+        <Card className="lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <BadgeCheck className="h-5 w-5 text-brand-600" />
+            <h2 className="font-semibold text-fg">AGEFICE — documents de financement</h2>
+          </div>
+          <p className="mb-4 text-sm text-muted">
+            Renseignées une fois, ces informations alimentent automatiquement la demande préalable de
+            financement, la convention, la feuille d'émargement et l'attestation d'assiduité, générées
+            depuis un plan de formation. Le reste provient du contact, de l'entreprise, du plan et du devis.
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Field label="Civilité du représentant légal">
+              <select className="input" value={agefice.responsable_civilite ?? ''} onChange={(e) => setAgefice({ ...agefice, responsable_civilite: e.target.value })}>
+                <option value="">—</option><option value="M.">M.</option><option value="Mme">Mme</option>
+              </select>
+            </Field>
+            <Field label="Prénom du représentant légal">
+              <input className="input" value={agefice.responsable_prenom ?? ''} onChange={(e) => setAgefice({ ...agefice, responsable_prenom: e.target.value })} />
+            </Field>
+            <Field label="Nom du représentant légal">
+              <input className="input" value={agefice.responsable_nom ?? ''} onChange={(e) => setAgefice({ ...agefice, responsable_nom: e.target.value })} />
+            </Field>
+            <Field label="Qualité" hint="ex. Gérant, Président — figure sur l'attestation d'assiduité">
+              <input className="input" value={agefice.responsable_qualite ?? ''} onChange={(e) => setAgefice({ ...agefice, responsable_qualite: e.target.value })} placeholder="ex. Gérant" />
+            </Field>
+            <Field label="Téléphone du représentant">
+              <input className="input" value={agefice.responsable_tel ?? ''} onChange={(e) => setAgefice({ ...agefice, responsable_tel: e.target.value })} placeholder="défaut : téléphone de l'organisme" />
+            </Field>
+            <Field label="E-mail du représentant">
+              <input className="input" value={agefice.responsable_email ?? ''} onChange={(e) => setAgefice({ ...agefice, responsable_email: e.target.value })} placeholder="défaut : e-mail de l'organisme" />
+            </Field>
+            <Field label="DREETS / préfet de région" hint="Autorité auprès de laquelle le NDA est enregistré">
+              <input className="input" value={agefice.prefet_region ?? ''} onChange={(e) => setAgefice({ ...agefice, prefet_region: e.target.value })} placeholder="ex. DEETS La Réunion" />
+            </Field>
+            <div className="lg:col-span-2">
+              <Field label="Adresse du formulaire officiel" hint="AGEFICE republie le formulaire chaque campagne : collez ici la nouvelle adresse le moment venu">
+                <input className="input" value={agefice.demande_url ?? ''} onChange={(e) => setAgefice({ ...agefice, demande_url: e.target.value })} placeholder="https://communication-agefice.fr/…-Editable.pdf" />
+              </Field>
+            </div>
+          </div>
+          <p className="mt-3 rounded-lg bg-surface-2 p-3 text-xs text-muted">
+            Le formulaire officiel est téléchargé une fois puis conservé dans l'espace de stockage :
+            les générations suivantes ne dépendent plus du site de l'AGEFICE. Changer l'adresse
+            ci-dessus déclenche automatiquement un nouveau téléchargement.
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={() => persist('agefice', { ...agefice })} disabled={saving === 'agefice'}>
+              <Save className="h-4 w-4" /> {saving === 'agefice' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+            {savedMsg === 'agefice' && <span className="text-sm text-emerald-600">Enregistré ✓</span>}
           </div>
         </Card>
 
