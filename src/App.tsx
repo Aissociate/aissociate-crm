@@ -18,6 +18,7 @@ import Devis from '@/pages/Devis';
 import Dossiers from '@/pages/Dossiers';
 import DossierDetail from '@/pages/DossierDetail';
 import Calendrier from '@/pages/Calendrier';
+import Emargement from '@/pages/Emargement';
 import Formateurs from '@/pages/Formateurs';
 import Kanban from '@/pages/Kanban';
 import Documents from '@/pages/Documents';
@@ -51,6 +52,8 @@ import SiteConfidentialite from '@/site/pages/Confidentialite';
 import SiteAccessibilite from '@/site/pages/Accessibilite';
 import SiteReclamations from '@/site/pages/Reclamations';
 import SiteQuestionnaire from '@/site/pages/Questionnaire';
+import SiteSignature from '@/site/pages/Signature';
+import SiteEmargement from '@/site/pages/Emargement';
 
 export default function App() {
   const { configured } = useAuth();
@@ -76,8 +79,10 @@ export default function App() {
         <Route path="/reclamations" element={<SiteReclamations />} />
       </Route>
 
-      {/* ── Questionnaire public (lien tokenisé, hors chrome du site) ── */}
+      {/* ── Pages publiques tokenisées (hors chrome du site, non indexées) ── */}
       <Route path="/q/:token" element={<SiteQuestionnaire />} />
+      <Route path="/signature/:token" element={<SiteSignature />} />
+      <Route path="/emargement/:token" element={<SiteEmargement />} />
 
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
@@ -95,6 +100,7 @@ export default function App() {
         <Route path="/dossiers" element={<Dossiers />} />
         <Route path="/dossiers/:id" element={<DossierDetail />} />
         <Route path="/calendrier" element={<Calendrier />} />
+        <Route path="/emargement" element={<Emargement />} />
         <Route path="/formateurs" element={<Formateurs />} />
         <Route path="/kanban" element={<Kanban />} />
         <Route path="/documents" element={<Documents />} />

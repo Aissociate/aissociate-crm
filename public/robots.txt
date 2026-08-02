@@ -20,6 +20,10 @@ Disallow: /onboarding
 Disallow: /qualiopi
 Disallow: /q/
 Disallow: /q
+Disallow: /signature/
+Disallow: /signature
+Disallow: /emargement/
+Disallow: /emargement
 Disallow: /contacts
 Disallow: /entreprises
 Disallow: /pipeline

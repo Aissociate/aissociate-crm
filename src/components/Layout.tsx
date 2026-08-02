@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn, isConseillerInactif } from '@/lib/utils';
@@ -44,6 +44,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/devis', label: 'Devis', icon: ReceiptText },
       { to: '/dossiers', label: 'Dossiers', icon: FolderKanban },
       { to: '/calendrier', label: 'Calendrier', icon: CalendarDays },
+      { to: '/emargement', label: 'Émargement', icon: CalendarCheck },
       { to: '/formateurs', label: 'Formateurs', icon: Presentation },
       { to: '/qualiopi', label: 'Conformité Qualiopi', icon: BadgeCheck },
     ],

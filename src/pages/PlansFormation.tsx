@@ -7,6 +7,7 @@ import { functionErrorMessage } from '@/lib/invokeError';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
+import SignatureButton from '@/components/SignatureButton';
 import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
 import { formatDate, fullName } from '@/lib/utils';
 import { generatePlanPdf } from '@/lib/generatePlanPdf';
@@ -277,6 +278,18 @@ export default function PlansFormation() {
                       documentLabel={(AGEFICE_DOCS.find((a) => a.kind === d.kind)?.label ?? 'plan de formation').toLowerCase()}
                       onDone={() => dossiers.refresh()}
                     />
+                    {(() => {
+                      const ct = contacts.data.find((x) => x.id === planOf(d.plan_id)?.contact_id);
+                      return (
+                        <SignatureButton
+                          libelle={d.titre} bucket="plans" fichierUrl={d.fichier_url}
+                          planPdfId={d.id} dossierId={planOf(d.plan_id)?.dossier_id ?? null}
+                          contactId={ct?.id ?? null}
+                          defautNom={ct ? fullName(ct.prenom, ct.nom) : (d.apprenant ?? '')}
+                          defautEmail={ct?.email ?? ''}
+                        />
+                      );
+                    })()}
                     {(() => {
                       const src = planOf(d.plan_id);
                       if (!src) return null;

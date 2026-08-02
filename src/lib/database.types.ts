@@ -200,6 +200,35 @@ export type PlanPdf = {
   kind: PlanPdfKind;
 };
 export type ConversationClose = { cle: string; closed_at: string; closed_by: string | null };
+
+/** Demande de signature électronique d'un document (lien tokenisé + code). */
+export type SignatureStatut = 'en_attente' | 'signee' | 'annulee';
+export type Signature = {
+  id: string; token: string; libelle: string; bucket: string; fichier_url: string;
+  plan_pdf_id: string | null; devis_id: string | null; dossier_id: string | null;
+  contact_id: string | null; signataire_nom: string; signataire_email: string;
+  code_envoye_at: string | null; code_expire_at: string | null; tentatives: number;
+  statut: SignatureStatut; signe_at: string | null; signature_nom: string | null;
+  fichier_signe_url: string | null; hash_avant: string | null; hash_apres: string | null;
+  ip: string | null; user_agent: string | null;
+  expire_at: string; created_by: string | null; created_at: string;
+};
+export type DemiJournee = 'matin' | 'apres_midi';
+export type EmargementCreneau = {
+  id: string; session_id: string; date: string; demi_journee: DemiJournee;
+  heures: number; created_at: string;
+};
+export type EmargementAcces = {
+  id: string; token: string; session_id: string; participant_id: string;
+  code_envoye_at: string | null; code_expire_at: string | null; tentatives: number;
+  expire_at: string; created_at: string;
+};
+export type EmargementSignature = {
+  id: string; creneau_id: string; participant_id: string;
+  statut: 'present' | 'absent' | 'excuse'; mode: 'code' | 'declaratif';
+  signe_at: string; code_at: string | null; declare_par: string | null;
+  motif: string | null; ip: string | null; user_agent: string | null;
+};
 /** Document libre rattaché à un dossier (hors pièces justificatives du financeur). */
 export type DossierDocument = {
   id: string; dossier_id: string; titre: string; description: string | null;
@@ -333,6 +362,10 @@ export type Database = {
       kanban_cartes: TableShape<KanbanCarte>;
       emails: TableShape<Email>;
       conversations_closes: TableShape<ConversationClose>;
+      signatures: TableShape<Signature>;
+      emargement_creneaux: TableShape<EmargementCreneau>;
+      emargement_acces: TableShape<EmargementAcces>;
+      emargement_signatures: TableShape<EmargementSignature>;
       piece_versions: TableShape<PieceVersion>;
       offres_recrutement: TableShape<OffreRecrutement>;
       candidats: TableShape<Candidat>;
