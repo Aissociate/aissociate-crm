@@ -141,11 +141,39 @@ Deno.serve(async (req: Request) => {
       devis = r.data;
     }
     // Sessions planifiées du dossier → dates réelles de l'action de formation.
-    let sessions: { date_debut: string; date_fin: string | null; lieu: string | null; formateur: string | null }[] = [];
+    let sessions: { id: string; date_debut: string; date_fin: string | null; lieu: string | null; formateur: string | null }[] = [];
     if (plan.dossier_id) {
       const r = await sb.from("sessions_formation")
-        .select("date_debut, date_fin, lieu, formateur").eq("dossier_id", plan.dossier_id).order("date_debut");
+        .select("id, date_debut, date_fin, lieu, formateur").eq("dossier_id", plan.dossier_id).order("date_debut");
       sessions = r.data ?? [];
+    }
+
+    // Émargements réellement collectés : demi-journées, participants et
+    // signatures (par code du stagiaire ou déclarées par le formateur). La
+    // feuille d'émargement générée les reprend, plutôt que d'imprimer une
+    // grille vierge quand la présence a déjà été recueillie en ligne.
+    type Creneau = { id: string; session_id: string; date: string; demi_journee: string; heures: number };
+    type Participant = { id: string; session_id: string; nom: string; prenom: string | null };
+    type Presence = { creneau_id: string; participant_id: string; statut: string; mode: string; signe_at: string };
+    let creneaux: Creneau[] = [];
+    let participants: Participant[] = [];
+    let presences: Presence[] = [];
+    const sessionIds = sessions.map((s) => s.id);
+    if (type === "emargement" && sessionIds.length) {
+      const [rc, rp] = await Promise.all([
+        sb.from("emargement_creneaux").select("id, session_id, date, demi_journee, heures")
+          .in("session_id", sessionIds).order("date").order("demi_journee"),
+        sb.from("session_participants").select("id, session_id, nom, prenom")
+          .in("session_id", sessionIds).order("nom"),
+      ]);
+      creneaux = rc.data ?? [];
+      participants = rp.data ?? [];
+      if (creneaux.length) {
+        const rs = await sb.from("emargement_signatures")
+          .select("creneau_id, participant_id, statut, mode, signe_at")
+          .in("creneau_id", creneaux.map((c) => c.id));
+        presences = rs.data ?? [];
+      }
     }
     const { data: orgRow } = await sb.from("parametres").select("valeur").eq("cle", "organisme").maybeSingle();
     const org = (orgRow?.valeur ?? {}) as Org;
@@ -484,52 +512,86 @@ Deno.serve(async (req: Request) => {
         champ("Lieu de l'action de formation :", lieuFormation);
         saut(0.8);
 
-        // Une colonne par journée : dates fournies, sinon celles des sessions,
-        // sinon trois colonnes vierges à compléter à la main.
-        const joursSaisis: string[] = Array.isArray(body.dates) && body.dates.length
-          ? (body.dates as string[]).map((d) => frDate(d))
-          : sessions.map((s) => frDate(s.date_debut));
-        const jours = (joursSaisis.length ? joursSaisis : ["", "", ""]).slice(0, 3);
+        // Colonnes = journées réellement planifiées (demi-journées créées dans
+        // le CRM), sinon les dates fournies ou celles des sessions, sinon une
+        // grille vierge à signer à la main.
+        const joursReels = [...new Set(creneaux.map((c) => c.date))].sort();
+        const joursSaisis: string[] = joursReels.length
+          ? joursReels
+          : Array.isArray(body.dates) && body.dates.length
+            ? (body.dates as string[])
+            : sessions.map((s) => String(s.date_debut).slice(0, 10));
+        const jours = (joursSaisis.length ? joursSaisis : ["", "", ""]).slice(0, 4);
 
-        const xNom = M, wNom = 230;
+        // Lignes = participants inscrits, sinon le bénéficiaire du plan.
+        const lignes = participants.length
+          ? participants.map((p) => ({ id: p.id, nom: [p.prenom, p.nom].filter(Boolean).join(" ") }))
+          : [{ id: "", nom: apprenant || "" }];
+
+        const creneauDe = new Map(creneaux.map((c) => [`${c.date}:${c.demi_journee}`, c.id]));
+        const presenceDe = new Map(presences.map((s) => [`${s.creneau_id}:${s.participant_id}`, s]));
+        const aDesSignatures = presences.length > 0;
+
+        const xNom = M, wNom = 210;
         const wJour = (W - 2 * M - wNom) / jours.length;
         const xJour = (i: number) => M + wNom + i * wJour;
 
-        // En-têtes du tableau
-        const yTop = y;
         page.drawRectangle({ x: M, y: y - 6, width: W - 2 * M, height: 30, color: zebra });
         T("Nom et prénom", xNom + 4, y + 12, { size: 9, f: bold });
         jours.forEach((j, i) => {
-          T(`Date : ${j}`, xJour(i) + 4, y + 12, { size: 9, f: bold });
+          T(j ? `Date : ${frDate(j)}` : "Date :", xJour(i) + 4, y + 12, { size: 9, f: bold });
           T("Matin", xJour(i) + 4, y, { size: 8, color: muted });
           T("Après-midi", xJour(i) + wJour / 2 + 4, y, { size: 8, color: muted });
         });
         saut(1.6);
 
-        const ligneSig = (nom: string, hauteur = 34) => {
+        /** Contenu d'une demi-journée : signature recueillie, ou case à signer. */
+        const cellule = (participantId: string, jour: string, demi: string, x: number, yb: number, w: number) => {
+          const cid = creneauDe.get(`${jour}:${demi}`);
+          const s = cid && participantId ? presenceDe.get(`${cid}:${participantId}`) : undefined;
+          if (!s) return;
+          if (s.statut !== "present") {
+            T(s.statut === "absent" ? "Absent" : "Excusé", x + 3, yb + 20, { size: 7.5, color: muted });
+            return;
+          }
+          const quand = new Date(s.signe_at);
+          const heure = `${String(quand.getHours()).padStart(2, "0")}:${String(quand.getMinutes()).padStart(2, "0")}`;
+          T(s.mode === "code" ? "Signé en ligne" : "Déclaré par l'OF", x + 3, yb + 22, { size: 7, f: bold });
+          T(`${frDate(s.signe_at)} ${heure}`, x + 3, yb + 13, { size: 6.5, color: muted });
+          void w;
+        };
+
+        const ligneSig = (nom: string, participantId: string, hauteur = 34) => {
           const yb = y - hauteur + 12;
           page.drawRectangle({ x: M, y: yb, width: W - 2 * M, height: hauteur, borderColor: line, borderWidth: 0.6 });
           T(nom, xNom + 4, y, { size: 9 });
           for (let i = 0; i < jours.length; i++) {
             page.drawLine({ start: { x: xJour(i), y: yb }, end: { x: xJour(i), y: yb + hauteur }, thickness: 0.6, color: line });
             page.drawLine({ start: { x: xJour(i) + wJour / 2, y: yb }, end: { x: xJour(i) + wJour / 2, y: yb + hauteur }, thickness: 0.6, color: line });
+            if (jours[i]) {
+              cellule(participantId, jours[i], "matin", xJour(i), yb, wJour / 2);
+              cellule(participantId, jours[i], "apres_midi", xJour(i) + wJour / 2, yb, wJour / 2);
+            }
           }
           y = yb - 2;
           if (y < M + 90) { page = pdf.addPage(format); y = H - M; }
         };
 
         T("Formateur(s)", M, y, { size: 9, f: bold, color: muted }); saut(0.9);
-        ligneSig(formateur || "");
+        ligneSig(formateur || "", "");
         saut(0.4);
         T("Stagiaire(s)", M, y, { size: 9, f: bold, color: muted }); saut(0.9);
-        ligneSig(apprenant || "");
-        // Lignes vierges pour d'éventuels participants supplémentaires.
-        ligneSig("");
-        ligneSig("");
-        void yTop;
+        for (const l of lignes) ligneSig(l.nom, l.id);
+        // Une ligne vierge pour un participant ajouté sur place.
+        if (!aDesSignatures) ligneSig("", "");
 
         saut(0.6);
-        para("Nombre d'heures par demi-journée à reporter sous chaque colonne.", { size: 8, color: muted });
+        para(
+          aDesSignatures
+            ? "Les mentions « Signé en ligne » attestent d'un émargement électronique horodaté (lien privé et code à usage unique adressés au stagiaire). Les mentions « Déclaré par l'OF » signalent une présence attestée par le formateur. Le détail des preuves est conservé par l'organisme."
+            : "Nombre d'heures par demi-journée à reporter sous chaque colonne.",
+          { size: 8, color: muted },
+        );
         saut(0.4);
         champ("Fait à :", org.ville);
         champ("Le :", aujourdhui());

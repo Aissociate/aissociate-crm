@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, Paperclip, UserRound } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, Paperclip, UserRound, PenLine, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCollection } from '@/hooks/useCollection';
 import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, TONE_BADGE } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import ContactFiche from '@/components/ContactFiche';
+import SignatureButton from '@/components/SignatureButton';
 import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
@@ -15,7 +16,7 @@ import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type {
   Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
   Devis, PlanFormation, PlanPdf, Document, ContactDocument, DossierDocument,
-  Contact, Entreprise, Profile,
+  Contact, Entreprise, Profile, Signature as SignatureDemande,
 } from '@/lib/database.types';
 
 const STATUTS: DossierStatut[] = [
@@ -52,6 +53,8 @@ export default function DossierDetail() {
   const [autres, setAutres] = useState<DossierDocument[]>([]);
   const [autreTitre, setAutreTitre] = useState('');
   const [autreDesc, setAutreDesc] = useState('');
+  // Demandes de signature électronique rattachées au dossier.
+  const [sigs, setSigs] = useState<SignatureDemande[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -97,6 +100,9 @@ export default function DossierDetail() {
     const { data: ad } = await supabase.from('dossier_documents').select('*')
       .eq('dossier_id', id).order('created_at', { ascending: false });
     setAutres(ad ?? []);
+    const { data: sg } = await supabase.from('signatures').select('*')
+      .eq('dossier_id', id).order('created_at', { ascending: false });
+    setSigs(sg ?? []);
     setLoading(false);
   }, [id]);
 
@@ -196,6 +202,21 @@ export default function DossierDetail() {
     setAutreTitre(''); setAutreDesc('');
   };
 
+  // Renvoi du code au signataire, sans recréer de demande : le lien reste le même.
+  const [relanceId, setRelanceId] = useState<string | null>(null);
+  const relancerSignature = async (s: SignatureDemande) => {
+    setRelanceId(s.id);
+    const { data, error } = await supabase.functions.invoke('signature', {
+      body: { action: 'code', token: s.token },
+    });
+    setRelanceId(null);
+    if (error) { alert("Envoi impossible. Vérifiez la configuration SMTP."); return; }
+    const err = (data as { error?: string } | null)?.error;
+    if (err) { alert(err); return; }
+    void load();
+    alert(`Nouveau code envoyé à ${s.signataire_email}.`);
+  };
+
   const removeAutreDoc = async (d: DossierDocument) => {
     if (!confirm(`Retirer « ${d.titre} » des autres documents ?`)) return;
     const { error } = await supabase.from('dossier_documents').delete().eq('id', d.id);
@@ -279,6 +300,14 @@ export default function DossierDetail() {
                   {p.fichier_url
                     ? <span className="inline-flex items-center gap-2">
                         <FileLink bucket="pieces" value={p.fichier_url} onClear={() => setPieceFichier(p, null)} />
+                        <SignatureButton
+                          libelle={`${p.libelle} — ${dossier.reference}`}
+                          bucket="pieces" fichierUrl={p.fichier_url}
+                          dossierId={dossier.id} contactId={dossier.contact_id}
+                          defautNom={contact ? fullName(contact.prenom, contact.nom) : ''}
+                          defautEmail={contact?.email ?? ''}
+                          onDone={() => void load()}
+                        />
                         <FileUpload bucket="pieces" label="Nouvelle version" onUploaded={(v) => setPieceFichier(p, v)} />
                         {p.version > 1 && (
                           <button onClick={() => openHistory(p)} title="Historique des versions"
@@ -338,6 +367,14 @@ export default function DossierDetail() {
                       </span>
                     </span>
                     {d.fichier_url && <FileLink bucket="pieces" value={d.fichier_url} />}
+                    <SignatureButton
+                      libelle={`${d.titre} — ${dossier.reference}`}
+                      bucket="pieces" fichierUrl={d.fichier_url}
+                      dossierId={dossier.id} contactId={dossier.contact_id}
+                      defautNom={contact ? fullName(contact.prenom, contact.nom) : ''}
+                      defautEmail={contact?.email ?? ''}
+                      onDone={() => void load()}
+                    />
                     <button onClick={() => removeAutreDoc(d)} title="Retirer ce document"
                       className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </li>
@@ -356,6 +393,60 @@ export default function DossierDetail() {
                 <FileUpload bucket="pieces" label="Déposer un document" onUploaded={addAutreDoc} />
               </div>
             </div>
+          </Card>
+
+          {/* Suivi des signatures électroniques du dossier */}
+          <Card>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 font-semibold text-fg">
+                <PenLine className="h-4 w-4 text-brand-500" /> Signatures électroniques
+              </h2>
+              <Badge className="bg-surface-2 text-muted">
+                {sigs.filter((s) => s.statut === 'signee').length}/{sigs.length} signée(s)
+              </Badge>
+            </div>
+            <p className="mb-4 text-sm text-muted">
+              Demandes envoyées depuis les pièces du dossier ou les documents générés.
+              Le bouton stylo, sur une pièce, lance une nouvelle demande.
+            </p>
+            {sigs.length === 0 ? (
+              <p className="text-xs text-muted">Aucune demande de signature pour ce dossier.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {sigs.map((s) => {
+                  const perime = s.statut === 'en_attente' && new Date(s.expire_at) < new Date();
+                  return (
+                    <li key={s.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-fg">{s.libelle}</p>
+                        <p className="truncate text-xs text-muted">
+                          {s.signataire_nom} · {s.signataire_email}
+                          {s.statut === 'signee' && s.signe_at
+                            ? ` · signé le ${formatDate(s.signe_at, 'dd/MM/yyyy HH:mm')}`
+                            : ` · expire le ${formatDate(s.expire_at)}`}
+                        </p>
+                      </div>
+                      {s.statut === 'signee'
+                        ? <Badge tone="success">Signé</Badge>
+                        : perime ? <Badge tone="danger">Lien expiré</Badge> : <Badge tone="warning">En attente</Badge>}
+                      {s.statut === 'signee' && s.fichier_signe_url && (
+                        <FileLink bucket={s.bucket as 'pieces'} value={s.fichier_signe_url} />
+                      )}
+                      {s.statut === 'en_attente' && (
+                        <button
+                          onClick={() => relancerSignature(s)}
+                          disabled={relanceId === s.id}
+                          title="Renvoyer le code au signataire"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 disabled:opacity-40 dark:text-brand-400"
+                        >
+                          <Send className="h-3.5 w-3.5" /> {relanceId === s.id ? 'Envoi…' : 'Renvoyer'}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </Card>
 
           {/* Centralisation client : production générée + documents téléversés */}
