@@ -197,6 +197,11 @@ export type PlanPdf = {
   organisme: string | null; fichier_url: string | null; created_by: string | null; created_at: string;
 };
 export type ConversationClose = { cle: string; closed_at: string; closed_by: string | null };
+/** Document libre rattaché à un dossier (hors pièces justificatives du financeur). */
+export type DossierDocument = {
+  id: string; dossier_id: string; titre: string; description: string | null;
+  fichier_url: string | null; created_by: string | null; created_at: string;
+};
 export type BlogCategory ={ id: string; name: string; slug: string; description: string | null; color: string | null; icon: string | null; created_at: string; updated_at: string };
 export type BlogArticle = {
   id: string; title: string; slug: string; excerpt: string; content: string;
@@ -318,6 +323,7 @@ export type Database = {
       workflow_etapes: TableShape<WorkflowEtape>;
       dossiers: TableShape<Dossier>;
       dossier_pieces: TableShape<DossierPiece>;
+      dossier_documents: TableShape<DossierDocument>;
       documents: TableShape<Document>;
       kanban_boards: TableShape<KanbanBoard>;
       kanban_colonnes: TableShape<KanbanColonne>;

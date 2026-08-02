@@ -1,18 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, Paperclip, UserRound } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCollection } from '@/hooks/useCollection';
 import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, TONE_BADGE } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
+import ContactFiche from '@/components/ContactFiche';
 import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
-import { formatMoney, formatDate } from '@/lib/utils';
+import { formatMoney, formatDate, fullName } from '@/lib/utils';
 import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type {
   Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
-  Devis, PlanFormation, PlanPdf, Document, ContactDocument,
+  Devis, PlanFormation, PlanPdf, Document, ContactDocument, DossierDocument,
+  Contact, Entreprise, Profile,
 } from '@/lib/database.types';
 
 const STATUTS: DossierStatut[] = [
@@ -39,6 +42,16 @@ export default function DossierDetail() {
   const [planPdfs, setPlanPdfs] = useState<PlanPdf[]>([]);
   const [docs, setDocs] = useState<Document[]>([]);
   const [coffre, setCoffre] = useState<ContactDocument[]>([]);
+  // Contact du dossier : raccourci d'ouverture de sa fiche depuis le dossier.
+  const [contact, setContact] = useState<Contact | null>(null);
+  const [ficheOpen, setFicheOpen] = useState(false);
+  const entreprises = useCollection<Entreprise>('entreprises');
+  const financeurs = useCollection<Financeur>('financeurs');
+  const profiles = useCollection<Profile>('profiles');
+  // Autres documents : dépôt libre, distinct des pièces justificatives.
+  const [autres, setAutres] = useState<DossierDocument[]>([]);
+  const [autreTitre, setAutreTitre] = useState('');
+  const [autreDesc, setAutreDesc] = useState('');
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -61,10 +74,14 @@ export default function DossierDetail() {
       setPlanPdfs(pp ?? []);
     } else setPlanPdfs([]);
     if (d?.contact_id) {
-      const { data: cd } = await supabase.from('contact_documents').select('*')
-        .eq('contact_id', d.contact_id).order('created_at', { ascending: false });
+      const [{ data: cd }, { data: ct }] = await Promise.all([
+        supabase.from('contact_documents').select('*')
+          .eq('contact_id', d.contact_id).order('created_at', { ascending: false }),
+        supabase.from('contacts').select('*').eq('id', d.contact_id).maybeSingle(),
+      ]);
       setCoffre(cd ?? []);
-    } else setCoffre([]);
+      setContact(ct);
+    } else { setCoffre([]); setContact(null); }
     if (d?.workflow_id) {
       const { data: e } = await supabase.from('workflow_etapes').select('*')
         .eq('workflow_id', d.workflow_id).order('ordre');
@@ -77,6 +94,9 @@ export default function DossierDetail() {
     const { data: p } = await supabase.from('dossier_pieces').select('*')
       .eq('dossier_id', id).order('created_at');
     setPieces(p ?? []);
+    const { data: ad } = await supabase.from('dossier_documents').select('*')
+      .eq('dossier_id', id).order('created_at', { ascending: false });
+    setAutres(ad ?? []);
     setLoading(false);
   }, [id]);
 
@@ -93,6 +113,10 @@ export default function DossierDetail() {
     if (!dossier) return;
     setSaving(true);
     const { error } = await supabase.from('dossiers').update({
+      // « Montant demandé » était affiché en lecture seule ici alors qu'il est
+      // librement saisissable depuis la liste des dossiers : il est désormais
+      // éditable des deux côtés (ticket « champ inopérant »).
+      montant_demande: Number(dossier.montant_demande ?? 0),
       montant_accorde: Number(dossier.montant_accorde ?? 0),
       notes: dossier.notes,
     }).eq('id', dossier.id);
@@ -157,6 +181,28 @@ export default function DossierDetail() {
     setPieces((prev) => prev.filter((x) => x.id !== p.id));
   };
 
+  // ── Autres documents : dépôt libre, hors checklist du financeur ─────────────
+  const addAutreDoc = async (fichier_url: string, file?: File) => {
+    if (!dossier) return;
+    const { data, error } = await supabase.from('dossier_documents').insert({
+      dossier_id: dossier.id,
+      titre: autreTitre.trim() || file?.name || 'Document',
+      description: autreDesc.trim() || null,
+      fichier_url,
+      created_by: session?.user.id ?? null,
+    }).select().single();
+    if (error) { alert(`Ajout impossible : ${error.message}`); return; }
+    if (data) setAutres((prev) => [data, ...prev]);
+    setAutreTitre(''); setAutreDesc('');
+  };
+
+  const removeAutreDoc = async (d: DossierDocument) => {
+    if (!confirm(`Retirer « ${d.titre} » des autres documents ?`)) return;
+    const { error } = await supabase.from('dossier_documents').delete().eq('id', d.id);
+    if (error) { alert(error.message); return; }
+    setAutres((prev) => prev.filter((x) => x.id !== d.id));
+  };
+
   if (loading) return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
   if (!dossier) return <div className="py-20 text-center text-muted">Dossier introuvable.</div>;
 
@@ -170,7 +216,16 @@ export default function DossierDetail() {
       <PageHeader
         title={dossier.intitule}
         subtitle={`${dossier.reference}${financeur ? ` · ${financeur.nom}` : ''}`}
-        actions={<Badge tone={DOSSIER_STATUT_TONES[dossier.statut]}>{DOSSIER_STATUT_LABELS[dossier.statut]}</Badge>}
+        actions={
+          <>
+            {contact && (
+              <Button variant="secondary" onClick={() => setFicheOpen(true)} title="Ouvrir la fiche du contact">
+                <UserRound className="h-4 w-4" /> {fullName(contact.prenom, contact.nom)}
+              </Button>
+            )}
+            <Badge tone={DOSSIER_STATUT_TONES[dossier.statut]}>{DOSSIER_STATUT_LABELS[dossier.statut]}</Badge>
+          </>
+        }
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -253,6 +308,53 @@ export default function DossierDetail() {
                   {missingStd.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
               )}
+            </div>
+          </Card>
+
+          {/* Autres documents : dépôt libre, hors dossier financeur */}
+          <Card>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 font-semibold text-fg">
+                <Paperclip className="h-4 w-4 text-brand-500" /> Autres documents
+              </h2>
+              <Badge className="bg-surface-2 text-muted">{autres.length}</Badge>
+            </div>
+            <p className="mb-4 text-sm text-muted">
+              Documents informatifs, brouillons, versions non finalisées… Ils n'entrent pas dans
+              la checklist du financeur et ne comptent pas dans les pièces validées.
+            </p>
+
+            {autres.length === 0 ? (
+              <p className="mb-3 text-xs text-muted">Aucun document pour l'instant.</p>
+            ) : (
+              <ul className="mb-3 space-y-1.5">
+                {autres.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
+                    <FileText className="h-4 w-4 shrink-0 text-muted" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-fg">{d.titre}</span>
+                      <span className="block truncate text-xs text-muted">
+                        {d.description ? `${d.description} · ` : ''}{formatDate(d.created_at, 'dd/MM/yyyy HH:mm')}
+                      </span>
+                    </span>
+                    {d.fichier_url && <FileLink bucket="pieces" value={d.fichier_url} />}
+                    <button onClick={() => removeAutreDoc(d)} title="Retirer ce document"
+                      className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="rounded-lg border border-dashed border-line p-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input className="input" placeholder="Titre (par défaut : nom du fichier)" value={autreTitre}
+                  onChange={(e) => setAutreTitre(e.target.value)} />
+                <input className="input" placeholder="Description (optionnelle)" value={autreDesc}
+                  onChange={(e) => setAutreDesc(e.target.value)} />
+              </div>
+              <div className="mt-2">
+                <FileUpload bucket="pieces" label="Déposer un document" onUploaded={addAutreDoc} />
+              </div>
             </div>
           </Card>
 
@@ -352,10 +454,11 @@ export default function DossierDetail() {
                   {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
                 </select>
               </Field>
-              <Field label="Montant demandé">
-                <div className="input bg-surface-2">{formatMoney(dossier.montant_demande)}</div>
+              <Field label="Montant demandé (€)">
+                <input className="input" type="number" value={dossier.montant_demande ?? 0}
+                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} />
               </Field>
-              <Field label="Montant accordé">
+              <Field label="Montant accordé (€)">
                 <input className="input" type="number" value={dossier.montant_accorde ?? 0}
                   onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} />
               </Field>
@@ -374,6 +477,20 @@ export default function DossierDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Fiche du contact du dossier, ouverte en surcouche */}
+      {ficheOpen && contact && (
+        <ContactFiche
+          key={contact.id}
+          contact={contact}
+          entreprises={entreprises.data}
+          financeurs={financeurs.data}
+          profiles={profiles.data}
+          onClose={() => setFicheOpen(false)}
+          onEdit={() => { setFicheOpen(false); navigate('/contacts'); }}
+          onUpdated={() => void load()}
+        />
+      )}
 
       <Modal
         open={!!histPiece} onClose={() => setHistPiece(null)}

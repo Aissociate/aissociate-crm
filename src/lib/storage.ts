@@ -32,6 +32,31 @@ export async function uploadFile(
   return { value: path, error: null };
 }
 
+/**
+ * `true` si la valeur pointe vers le Storage du projet, c'est-à-dire un fichier
+ * téléversé depuis l'application — par opposition à un lien collé vers un site
+ * tiers. Les buckets publics stockent une URL complète : sans ce test, un
+ * fichier pourtant hébergé chez nous ressemble à une ressource externe
+ * (ticket Benjamin « Base documentaire téléverser un fichier »).
+ */
+export function isHebergeParApp(value: string | null | undefined): boolean {
+  if (!value) return false;
+  if (!/^https?:\/\//i.test(value)) return true; // chemin nu = bucket privé du projet
+  const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? '';
+  return Boolean(base) && value.toLowerCase().startsWith(base.toLowerCase());
+}
+
+/** Nom de fichier lisible extrait d'une URL ou d'un chemin de stockage. */
+export function fileNameOf(value: string | null | undefined): string {
+  if (!value) return '';
+  try {
+    const path = /^https?:\/\//i.test(value) ? new URL(value).pathname : value;
+    return decodeURIComponent(path.split('/').filter(Boolean).pop() ?? '');
+  } catch {
+    return value.split('/').filter(Boolean).pop() ?? '';
+  }
+}
+
 /** Ouvre un fichier : URL directe si http, sinon URL signée temporaire. */
 export async function openFile(bucket: Bucket, value: string): Promise<void> {
   if (/^https?:\/\//i.test(value)) {

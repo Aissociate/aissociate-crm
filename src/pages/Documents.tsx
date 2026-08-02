@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Lock, Search, Folder, Bot, FileSearch, Loader as Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, FileText, Lock, Search, Folder, Bot, FileSearch, Loader as Loader2, HardDrive, Link2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
+import { isHebergeParApp, fileNameOf } from '@/lib/storage';
 import { formatDate, fullName } from '@/lib/utils';
 import { ensureDossierClient } from '@/lib/dossierClient';
 import { isPdf, extractPdfTextFromFile, extractPdfTextFromUrl } from '@/lib/pdfText';
@@ -176,6 +177,10 @@ export default function Documents() {
               <td className="px-4 py-3">
                 <span className="flex items-center gap-2 font-medium text-fg"><FileText className="h-4 w-4 text-brand-500" />{d.titre}</span>
                 <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                  {/* Provenance du fichier : repérage direct des vrais liens externes. */}
+                  {d.fichier_url && (isHebergeParApp(d.fichier_url)
+                    ? <Badge tone="success"><HardDrive className="mr-1 h-3 w-3" />Hébergé</Badge>
+                    : <Badge tone="warning"><Link2 className="mr-1 h-3 w-3" />Lien externe</Badge>)}
                   {d.dossier && <Badge tone="warning"><Folder className="mr-1 h-3 w-3" />{d.dossier}</Badge>}
                   {d.chat_direction && <Badge tone="info"><Bot className="mr-1 h-3 w-3" />Direction</Badge>}
                   {d.chat_conseiller && <Badge tone="brand"><Bot className="mr-1 h-3 w-3" />Conseiller</Badge>}
@@ -218,13 +223,47 @@ export default function Documents() {
           <Field label="Version"><input className="input" type="number" value={form.version ?? 1} onChange={(e) => set('version', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Description"><textarea className="input" rows={2} value={form.description ?? ''} onChange={(e) => set('description', e.target.value)} /></Field></div>
           <div className="col-span-2">
-            <Field label="Fichier" hint="Téléversez un fichier ou collez une URL externe">
-              <div className="flex items-center gap-3">
+            <Field label="Fichier" hint="Téléversez un fichier depuis votre ordinateur, ou référencez un lien externe">
+              <div className="flex flex-wrap items-center gap-3">
                 <FileUpload bucket="documents" onUploaded={onFileUploaded} />
                 {form.fichier_url && <FileLink bucket="documents" value={form.fichier_url} onClear={() => set('fichier_url', '')} />}
                 {extracting && <span className="inline-flex items-center gap-1 text-xs text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Extraction du texte…</span>}
               </div>
-              <input className="input mt-2" placeholder="https://…" value={form.fichier_url ?? ''} onChange={(e) => set('fichier_url', e.target.value)} />
+
+              {/* Provenance explicite : un fichier téléversé est stocké sur l'espace
+                  AIssociate, même si son adresse ressemble à un lien externe. */}
+              {form.fichier_url && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2">
+                  {isHebergeParApp(form.fichier_url) ? (
+                    <>
+                      <HardDrive className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <span className="min-w-0 text-sm">
+                        <span className="font-medium text-fg">Fichier hébergé sur l'espace AIssociate</span>
+                        <span className="block truncate text-xs text-muted">{fileNameOf(form.fichier_url)}</span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                      <span className="min-w-0 text-sm">
+                        <span className="font-medium text-fg">Lien externe</span>
+                        <span className="block truncate text-xs text-muted">{form.fichier_url}</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-muted hover:text-fg">Adresse du fichier (avancé)</summary>
+                <input className="input mt-2" placeholder="https://…" value={form.fichier_url ?? ''} onChange={(e) => set('fichier_url', e.target.value)} />
+                <p className="mt-1 text-xs text-muted">
+                  Un fichier téléversé reçoit une adresse de la forme <code>{'{votre projet}'}.supabase.co/storage/…</code> :
+                  c'est le stockage de l'application, pas un site tiers. Ne modifiez ce champ que pour référencer un document
+                  réellement hébergé ailleurs.
+                </p>
+              </details>
+
               {isPdf(form.fichier_url) && (
                 <p className="mt-1 text-xs text-muted">Le texte du PDF est extrait automatiquement à l'upload pour l'assistant IA.</p>
               )}

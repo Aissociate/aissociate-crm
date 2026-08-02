@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, ChevronRight } from 'lucide-react';
+import { Plus, Search, ChevronRight, UserRound } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS } from '@/lib/constants';
-import { formatMoney, genReference } from '@/lib/utils';
+import ContactFiche from '@/components/ContactFiche';
+import { formatMoney, genReference, fullName } from '@/lib/utils';
 import { DEFAULT_PIECES } from '@/lib/dossierClient';
-import type { Dossier, DossierStatut, Contact, Entreprise, Financeur, Formation, Workflow } from '@/lib/database.types';
+import type { Dossier, DossierStatut, Contact, Entreprise, Financeur, Formation, Workflow, Profile } from '@/lib/database.types';
 
 const STATUTS: DossierStatut[] = [
   'brouillon', 'montage', 'depose', 'en_instruction', 'accorde', 'refuse', 'en_cours', 'solde', 'cloture',
@@ -37,6 +38,9 @@ export default function Dossiers() {
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
   const [statutFilter, setStatutFilter] = useState('');
+  // Fiche du contact ouverte en surcouche depuis la liste des dossiers.
+  const [fiche, setFiche] = useState<Contact | null>(null);
+  const profiles = useCollection<Profile>('profiles');
   const set = (k: keyof Dossier, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   // Sélection du financeur => workflow associé
@@ -101,22 +105,38 @@ export default function Dossiers() {
           <tr>
             <th className="px-4 py-3">Référence</th>
             <th className="px-4 py-3">Intitulé</th>
+            <th className="px-4 py-3">Contact</th>
             <th className="px-4 py-3">Financeur</th>
             <th className="px-4 py-3">Montant</th>
             <th className="px-4 py-3">Statut</th>
             <th className="px-4 py-3"></th>
           </tr>
         }>
-          {filtered.map((d) => (
-            <tr key={d.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/dossiers/${d.id}`)}>
-              <td className="px-4 py-3 font-mono text-xs text-muted">{d.reference}</td>
-              <td className="px-4 py-3 font-medium text-fg">{d.intitule}</td>
-              <td className="px-4 py-3 text-muted">{finName(d.financeur_id)}</td>
-              <td className="px-4 py-3 text-muted">{formatMoney(d.montant_accorde || d.montant_demande)}</td>
-              <td className="px-4 py-3"><Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge></td>
-              <td className="px-4 py-3 text-right"><ChevronRight className="ml-auto h-4 w-4 text-muted" /></td>
-            </tr>
-          ))}
+          {filtered.map((d) => {
+            const ct = d.contact_id ? contacts.data.find((c) => c.id === d.contact_id) : null;
+            return (
+              <tr key={d.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/dossiers/${d.id}`)}>
+                <td className="px-4 py-3 font-mono text-xs text-muted">{d.reference}</td>
+                <td className="px-4 py-3 font-medium text-fg">{d.intitule}</td>
+                {/* Raccourci vers la fiche du contact, sans passer par le dossier. */}
+                <td className="px-4 py-3">
+                  {ct ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setFiche(ct); }}
+                      title="Ouvrir la fiche du contact"
+                      className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline dark:text-brand-400"
+                    >
+                      <UserRound className="h-3.5 w-3.5" /> {fullName(ct.prenom, ct.nom)}
+                    </button>
+                  ) : <span className="text-sm text-muted">—</span>}
+                </td>
+                <td className="px-4 py-3 text-muted">{finName(d.financeur_id)}</td>
+                <td className="px-4 py-3 text-muted">{formatMoney(d.montant_accorde || d.montant_demande)}</td>
+                <td className="px-4 py-3"><Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge></td>
+                <td className="px-4 py-3 text-right"><ChevronRight className="ml-auto h-4 w-4 text-muted" /></td>
+              </tr>
+            );
+          })}
         </Table>
       )}
 
@@ -154,6 +174,20 @@ export default function Dossiers() {
         </div>
         <p className="mt-3 text-xs text-muted">Une checklist de pièces justificatives sera générée automatiquement.</p>
       </Modal>
+
+      {/* Fiche du contact, ouverte depuis la colonne « Contact » */}
+      {fiche && (
+        <ContactFiche
+          key={fiche.id}
+          contact={contacts.data.find((x) => x.id === fiche.id) ?? fiche}
+          entreprises={entreprises.data}
+          financeurs={financeurs.data}
+          profiles={profiles.data}
+          onClose={() => setFiche(null)}
+          onEdit={() => { setFiche(null); navigate('/contacts'); }}
+          onUpdated={() => contacts.refresh()}
+        />
+      )}
     </div>
   );
 }
