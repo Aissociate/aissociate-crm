@@ -104,6 +104,37 @@ class DenoImap {
   }
 }
 
+// ── Avis de non-remise (bounce / DSN) ───────────────────────────────────────
+// Ces messages viennent de MAILER-DAEMON, jamais d'un contact connu : ils
+// étaient donc écartés par le filtre des expéditeurs connus et l'utilisateur ne
+// voyait jamais qu'un envoi avait échoué (ticket Benjamin « messages d'erreur »).
+const BOUNCE_FROM = /^(mailer-daemon|postmaster|no-?reply|bounce)/i;
+const BOUNCE_SUBJECT =
+  /(undelivered|undeliverable|delivery (status notification|has failed|failure)|returned mail|mail delivery (failed|system)|failure notice|non[- ]remis|échec de (la )?remise|message non distribué)/i;
+
+type BounceInfo = { recipient: string | null; originalId: string | null; diagnostic: string | null };
+
+/** Reconnaît un avis de non-remise à ses en-têtes / objet / type MIME. */
+function isBounce(headersRaw: string, subject: string, fromAddr: string | null): boolean {
+  if (/content-type:\s*multipart\/report[^\n]*report-type=\s*"?delivery-status/i.test(headersRaw)) return true;
+  if (fromAddr && BOUNCE_FROM.test(fromAddr)) return true;
+  return BOUNCE_SUBJECT.test(subject ?? "");
+}
+
+/** Extrait du corps DSN l'adresse en échec, le motif et l'id du message d'origine. */
+function bounceInfo(raw: string): BounceInfo {
+  const recipient =
+    raw.match(/^Final-Recipient:\s*(?:rfc822;)?\s*<?([^\s<>]+@[^\s<>]+)>?/im)?.[1] ??
+    raw.match(/^Original-Recipient:\s*(?:rfc822;)?\s*<?([^\s<>]+@[^\s<>]+)>?/im)?.[1] ??
+    raw.match(/^X-Failed-Recipients:\s*<?([^\s<>,]+@[^\s<>,]+)>?/im)?.[1] ??
+    null;
+  const diagnostic = raw.match(/^Diagnostic-Code:\s*(?:[^;]*;)?\s*(.+)$/im)?.[1]?.trim().slice(0, 300) ?? null;
+  // L'en-tête du message d'origine est réinclus dans la partie message/rfc822 :
+  // le dernier Message-ID rencontré est donc celui de l'envoi qui a échoué.
+  const ids = [...raw.matchAll(/^Message-ID:\s*<([^>]+)>/gim)].map((m) => m[1]);
+  return { recipient: recipient?.toLowerCase() ?? null, originalId: ids.length > 1 ? ids[ids.length - 1] : null, diagnostic };
+}
+
 function imapStr(s: string): string {
   return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
@@ -270,6 +301,17 @@ Deno.serve(async (req: Request) => {
         for (const [uid, raw] of rawMap) {
           const parsed = await simpleParser(Buffer.from(raw));
           const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() ?? null;
+          const rawText = new TextDecoder("utf-8", { fatal: false }).decode(raw);
+
+          // Avis de non-remise : traité avant le filtre des expéditeurs connus,
+          // puisqu'il arrive toujours de MAILER-DAEMON.
+          if (isBounce(rawText.split(/\r?\n\r?\n/)[0] ?? "", parsed.subject ?? "", fromAddr)) {
+            const info = bounceInfo(rawText);
+            const traite = await handleBounce(sb, info, parsed, parsed.messageId ?? `imap-${uid}`);
+            if (traite) imported++; else skipped++;
+            await imap.cmd(`UID STORE ${uid} +FLAGS (\\Seen)`);
+            continue;
+          }
 
           // On n'ingère que les expéditeurs connus (contact, formateur ou candidat).
           const contact = fromAddr ? contactMap.get(fromAddr) : undefined;
@@ -355,6 +397,70 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: message });
   }
 });
+
+/**
+ * Enregistre un avis de non-remise et le rattache à l'envoi concerné.
+ * L'adresse en échec n'est pas celle d'un contact (c'est souvent une faute de
+ * frappe) : on retrouve donc le contact via l'e-mail sortant qui la visait.
+ * Renvoie `true` si un nouvel avis a été enregistré.
+ */
+// deno-lint-ignore no-explicit-any
+async function handleBounce(sb: any, info: BounceInfo, parsed: any, messageId: string): Promise<boolean> {
+  type Origine = { id: string; contact_id: string | null; owner_id: string | null; dossier_id: string | null; sujet: string | null };
+  const COLS = "id, contact_id, owner_id, dossier_id, sujet";
+  let origine: Origine | null = null;
+  if (info.originalId) {
+    const { data } = await sb.from("emails").select(COLS).eq("message_id", info.originalId).maybeSingle();
+    origine = (data as Origine) ?? null;
+  }
+  if (!origine && info.recipient) {
+    const { data } = await sb.from("emails").select(COLS)
+      .eq("direction", "sortant").contains("destinataires", [info.recipient])
+      .order("sent_at", { ascending: false, nullsFirst: false }).limit(1);
+    origine = ((data ?? [])[0] as Origine) ?? null;
+  }
+
+  const corps = [
+    info.recipient ? `Adresse en échec : ${info.recipient}` : "",
+    info.diagnostic ? `Motif : ${info.diagnostic}` : "",
+    origine?.sujet ? `Message d'origine : « ${origine.sujet} »` : "",
+    "",
+    String(parsed.text ?? "").trim().slice(0, 4000),
+  ].filter(Boolean).join("\n");
+
+  const { data: rows, error } = await sb.from("emails").upsert({
+    direction: "entrant",
+    message_id: messageId,
+    expediteur: parsed.from?.text ?? "MAILER-DAEMON",
+    destinataires: (parsed.to?.value ?? []).map((a: { address?: string }) => a.address).filter(Boolean),
+    contact_id: origine?.contact_id ?? null,
+    dossier_id: origine?.dossier_id ?? null,
+    owner_id: origine?.owner_id ?? null,
+    sujet: `Non délivré : ${parsed.subject ?? "échec de remise"}`,
+    corps,
+    statut: "echec",
+    lu: false,
+    sent_at: parsed.date ? new Date(parsed.date).toISOString() : new Date().toISOString(),
+  }, { onConflict: "message_id", ignoreDuplicates: true }).select("id");
+
+  if (error) { console.error("bounce upsert", error.message); return false; }
+  if (!rows || rows.length === 0) return false; // déjà importé
+
+  // L'envoi d'origine passe en échec ; le contact garde une trace de l'incident.
+  if (origine?.id) await sb.from("emails").update({ statut: "echec" }).eq("id", origine.id);
+  if (origine?.contact_id) {
+    const now = new Date();
+    try {
+      await sb.from("contact_actions").insert({
+        contact_id: origine.contact_id, date_action: ymdLocal(now),
+        heure_action: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
+        type: "email", faite: true,
+        description: `E-mail NON DÉLIVRÉ à ${info.recipient ?? "destinataire inconnu"}${info.diagnostic ? ` — ${info.diagnostic}` : ""}`,
+      });
+    } catch (e) { console.error("bounce action", e); }
+  }
+  return true;
+}
 
 // Journalise l'horodatage de la dernière synchronisation IMAP dans `parametres`
 // (clé `imap_sync`), pour affichage dans la Messagerie — ticket Benjamin

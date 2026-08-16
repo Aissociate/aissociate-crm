@@ -36,12 +36,88 @@ function clean(s: string): string {
     .replace(/[^\x09\x0A\x0D\x20-\xFF€]/g, "");
 }
 
-function parseContent(content: string): { titre: string; sections: { titre: string; contenu: string }[] } {
-  const tryParse = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
-  let obj = tryParse(content);
-  if (!obj) { const m = content.match(/\{[\s\S]*\}/); if (m) obj = tryParse(m[0]); }
-  if (obj && Array.isArray(obj.sections)) return { titre: obj.titre ?? "Plan de formation", sections: obj.sections };
-  return { titre: "Plan de formation", sections: [{ titre: "Plan de formation", contenu: content }] };
+// Les modèles à raisonnement (minimax, deepseek, qwen…) préfixent parfois leur
+// réponse par leurs réflexions. Elles ne doivent JAMAIS atteindre le PDF remis
+// au financeur : on les retire avant toute analyse.
+function stripReasoning(s: string): string {
+  return (s ?? "")
+    .replace(/<(think|thinking|reasoning|analysis)>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(think|thinking|reasoning|analysis)>[\s\S]*$/i, "")
+    .replace(/^[\s\S]*?<\/(think|thinking|reasoning|analysis)>/i, "")
+    .replace(/```(?:json)?/gi, "")
+    .trim();
+}
+
+// Extrait le dernier objet JSON *équilibré* du texte. Le repérage naïf
+// (/\{[\s\S]*\}/) échouait dès que le préambule du modèle contenait une
+// accolade : le parse ratait et tout le texte brut — réflexions comprises —
+// se retrouvait imprimé en première page.
+function extractJson(raw: string): { titre?: string; sections?: { titre: string; contenu: string }[] } | null {
+  const s = stripReasoning(raw);
+  const tryParse = (t: string) => { try { return JSON.parse(t); } catch { return null; } };
+  const direct = tryParse(s);
+  if (direct && Array.isArray(direct.sections)) return direct;
+
+  const candidates: string[] = [];
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== "{") continue;
+    let depth = 0, inStr = false, esc = false;
+    for (let j = i; j < s.length; j++) {
+      const c = s[j];
+      if (esc) { esc = false; continue; }
+      if (c === "\\") { esc = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === "{") depth++;
+      else if (c === "}") { depth--; if (depth === 0) { candidates.push(s.slice(i, j + 1)); i = j; break; } }
+    }
+  }
+  for (const c of candidates.reverse()) {
+    const obj = tryParse(c);
+    if (obj && Array.isArray(obj.sections)) return obj;
+  }
+  return null;
+}
+
+// Libellés contractuels des modalités (la valeur stockée est un code).
+const MODALITE_LABELS: Record<string, string> = {
+  presentiel: "Présentiel",
+  distanciel: "À distance (classe virtuelle)",
+  mixte: "Hybride (présentiel et à distance)",
+  "e-learning": "E-learning (formation en ligne)",
+};
+const modaliteLabel = (code: unknown) => MODALITE_LABELS[String(code ?? "").trim().toLowerCase()] ?? "";
+
+// Formes rédigées, pour réécrire une phrase sans la casser (`avec` conserve la
+// préposition trouvée dans le texte d'origine).
+const MODALITE_PHRASES: Record<string, { nom: string; avec: string }> = {
+  presentiel: { nom: "présentiel", avec: "en présentiel" },
+  distanciel: { nom: "à distance", avec: "à distance" },
+  mixte: { nom: "hybride (présentiel et à distance)", avec: "en format hybride (présentiel et à distance)" },
+  "e-learning": { nom: "e-learning", avec: "en e-learning" },
+};
+
+// Filet de sécurité : même briefé, le modèle glisse régulièrement des
+// formulations « au choix » qui rendent le document non contractuel. On les
+// remplace par la modalité réellement retenue pour la session.
+function enforceModalite(text: string, code: unknown): string {
+  const key = String(code ?? "").trim().toLowerCase();
+  const phrase = MODALITE_PHRASES[key];
+  if (!phrase) return text;
+  // Pas de \b : les alternatives commencent parfois par un accent (« à distance »),
+  // devant lequel \b ne produit aucune frontière.
+  const alt = String.raw`(?:le |en |la )?(?:présentiel|distanciel|classe (?:virtuelle|à distance)|visioconférence|à distance|hybride|mixte)`;
+  return text
+    // « présentiel ou à distance », « distanciel / présentiel », « en présentiel ou en visio »…
+    .replace(
+      new RegExp(String.raw`(?<![\p{L}])${alt} ?(?:,|/|ou bien|et/ou|ou) ?${alt}(?![\p{L}])`, "giu"),
+      (match) => {
+        const out = /^(?:le |en |la )/i.test(match) ? phrase.avec : phrase.nom;
+        return /^\p{Lu}/u.test(match) ? out[0].toUpperCase() + out.slice(1) : out;
+      },
+    )
+    .replace(/,? ?\b(?:au|selon le) choix du (?:bénéficiaire|stagiaire|participant|client)\b/gi, "")
+    .replace(/[ \t]{2,}/g, " ");
 }
 
 Deno.serve(async (req: Request) => {
@@ -81,39 +157,70 @@ Deno.serve(async (req: Request) => {
       clientContext = { contact, entreprise, financeur, dossiers: dossiers ?? [], historique_suivi: actions ?? [] };
     }
 
+    // Modalité : donnée contractuelle. Elle est répétée hors du JSON du plan
+    // pour que le modèle ne puisse pas la « négocier » ni proposer d'alternative.
+    const modCode = (plan as Record<string, unknown>).modalite;
+    const modLabel = modaliteLabel(modCode);
+
     // Message utilisateur : données du plan + contexte client total.
     const userContent = [
       "Données du plan de formation (JSON) :\n" + JSON.stringify(plan),
+      modLabel
+        ? `MODALITÉ CONTRACTUELLE DE LA SESSION : ${modLabel}. C'est la seule modalité autorisée dans le document. ` +
+          "N'évoque aucune autre modalité, même à titre d'option : jamais « ou à distance », « ou en présentiel », " +
+          "« au choix du bénéficiaire », ni aucune formulation laissant un choix."
+        : "",
       clientContext
         ? "Contexte client complet (JSON) — prends-le pleinement en compte pour personnaliser le plan (situation, besoins, entreprise, financement, dossiers, historique de suivi) :\n" + JSON.stringify(clientContext)
         : "",
     ].filter(Boolean).join("\n\n");
 
-    // 1) Génération du contenu
-    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://aissociate.crm",
-        "X-Title": "CRM Formation AIssociate",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt +
-              " Mets en forme le champ 'contenu' de chaque section en Markdown : sous-titres avec ## , listes à puces avec - , listes numérotées avec 1. , **gras** pour les points clés, et une ligne vide entre les paragraphes.",
-          },
-          { role: "user", content: userContent },
-        ],
-        temperature: 0.4,
-      }),
-    });
-    if (!resp.ok) return json({ error: `OpenRouter ${resp.status}: ${(await resp.text()).slice(0, 300)}` }, 502);
-    const data = await resp.json();
-    const { titre, sections } = parseContent(data?.choices?.[0]?.message?.content ?? "");
+    const sysContent = systemPrompt +
+      " Mets en forme le champ 'contenu' de chaque section en Markdown : sous-titres avec ## , listes à puces avec - , listes numérotées avec 1. , **gras** pour les points clés, et une ligne vide entre les paragraphes." +
+      " Ta réponse doit être UNIQUEMENT l'objet JSON demandé : aucun préambule, aucun commentaire, aucune explication de ta démarche," +
+      " aucune balise de réflexion, aucun bloc de code. Le document est remis tel quel à un financeur.";
+
+    // 1) Génération du contenu. `reasoning.exclude` empêche OpenRouter de
+    //    renvoyer les traces de réflexion des modèles qui en produisent.
+    const callModel = async (extra: string) => {
+      const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://aissociate.crm",
+          "X-Title": "CRM Formation AIssociate",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: sysContent + extra },
+            { role: "user", content: userContent },
+          ],
+          temperature: 0.4,
+          reasoning: { exclude: true },
+          response_format: { type: "json_object" },
+        }),
+      });
+      if (!resp.ok) throw new Error(`OpenRouter ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
+      const data = await resp.json();
+      return String(data?.choices?.[0]?.message?.content ?? "");
+    };
+
+    let parsed = extractJson(await callModel(""));
+    // Une seconde tentative plutôt qu'un PDF contenant les réflexions du modèle.
+    if (!parsed) {
+      parsed = extractJson(await callModel(
+        ' RAPPEL IMPÉRATIF : réponds par le seul objet JSON {"titre": string, "sections": [{"titre": string, "contenu": string}]}, rien avant, rien après.',
+      ));
+    }
+    if (!parsed) return json({ error: "La réponse de l'IA n'est pas exploitable (format inattendu). Relancez la génération." }, 502);
+
+    const titre = enforceModalite(String(parsed.titre ?? "Plan de formation"), modCode);
+    const sections = (parsed.sections ?? []).map((s) => ({
+      titre: enforceModalite(String(s?.titre ?? ""), modCode),
+      contenu: enforceModalite(String(s?.contenu ?? ""), modCode),
+    }));
 
     // 2) Rendu PDF (pdf-lib) — moteur Markdown + mise en page soignée
     const pdf = await PDFDocument.create();
@@ -190,6 +297,9 @@ Deno.serve(async (req: Request) => {
       m.clientSiret ? `SIRET : ${m.clientSiret}` : "",
       m.organismePartenaire ? `Partenaire : ${m.organismePartenaire}` : "",
       m.datesSession ? `Dates de session : ${m.datesSession}` : "",
+      // Modalité imprimée depuis la donnée de session, pas depuis le texte de l'IA.
+      modLabel ? `Modalité : ${modLabel}` : "",
+      Number((plan as Record<string, unknown>).duree_heures) > 0 ? `Durée : ${Number((plan as Record<string, unknown>).duree_heures)} heures` : "",
       `Date d'édition : ${new Date().toLocaleDateString("fr-FR")}`,
     ].filter(Boolean)) drawRich(clean(ml as string), { size: 10, color: muted });
     y -= 12;

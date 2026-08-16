@@ -37,6 +37,22 @@ export default function Pipeline() {
     if (c) setFicheContact(c);
   };
 
+  // ── Filtre par conseiller ───────────────────────────────────────────────────
+  // Le conseiller d'une opportunité est celui affecté au contact lié (c'est lui
+  // qui suit le client) ; à défaut, le propriétaire de l'opportunité.
+  const [conseillerId, setConseillerId] = useState('');
+  const conseillerDe = (o: Opportunite): string | null => {
+    const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
+    return contact?.responsable_id ?? contact?.owner_id ?? o.owner_id ?? null;
+  };
+  const nomConseiller = (id: string | null) => {
+    const p = id ? profiles.data.find((x) => x.id === id) : null;
+    return p ? fullName(p.prenom, p.nom) : '';
+  };
+  const visibles = conseillerId
+    ? data.filter((o) => (conseillerId === 'aucun' ? !conseillerDe(o) : conseillerDe(o) === conseillerId))
+    : data;
+
   const save = async () => {
     setSaving(true);
     const payload = {
@@ -75,7 +91,20 @@ export default function Pipeline() {
       <PageHeader
         title="Pipeline commercial"
         subtitle="Suivi des opportunités de la qualification à la signature (4.1)"
-        actions={<Button onClick={() => { setForm(empty()); setOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle opportunité</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <select
+              className="input max-w-[15rem] py-1.5 text-sm" value={conseillerId}
+              onChange={(e) => setConseillerId(e.target.value)}
+              title="Filtrer les opportunités par conseiller affecté au contact"
+            >
+              <option value="">Tous les conseillers</option>
+              {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+              <option value="aucun">— Non affecté —</option>
+            </select>
+            <Button onClick={() => { setForm(empty()); setOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle opportunité</Button>
+          </div>
+        }
       />
 
       {loading ? (
@@ -83,7 +112,7 @@ export default function Pipeline() {
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {OPP_STAGE_ORDER.map((stage) => {
-            const items = data.filter((o) => o.stage === stage);
+            const items = visibles.filter((o) => o.stage === stage);
             const total = items.reduce((s, o) => s + Number(o.montant ?? 0), 0);
             return (
               <div key={stage} className="flex w-72 shrink-0 flex-col">
@@ -103,6 +132,13 @@ export default function Pipeline() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-fg">{title}</p>
+                            {/* Le conseiller n'est utile que dans la vue « tous les
+                                conseillers » : filtrée, l'information est redondante. */}
+                            {!conseillerId && (
+                              <p className="truncate text-xs font-medium text-brand-600 dark:text-brand-400">
+                                {nomConseiller(conseillerDe(o)) || 'Non affecté'}
+                              </p>
+                            )}
                             {entreprise && <p className="truncate text-xs text-muted">{entreprise.raison_sociale}</p>}
                           </div>
                           <div className="flex shrink-0 gap-0.5" onClick={(e) => e.stopPropagation()}>

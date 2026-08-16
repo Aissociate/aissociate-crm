@@ -11,9 +11,38 @@ import { formatMoney, genReference, fullName } from '@/lib/utils';
 import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type { Dossier, DossierStatut, Contact, Entreprise, Financeur, Formation, Workflow, Profile } from '@/lib/database.types';
 
+// « en_instruction » a été fusionné avec « depose » : il n'est plus proposé.
 const STATUTS: DossierStatut[] = [
-  'brouillon', 'montage', 'depose', 'en_instruction', 'accorde', 'refuse', 'en_cours', 'solde', 'cloture',
+  'brouillon', 'montage', 'depose', 'accorde', 'refuse', 'en_cours', 'solde', 'cloture',
 ];
+
+/**
+ * Badge de synthèse : les cinq premières lignes sont visibles, le reste est
+ * accessible à l'ascenseur (ticket Benjamin « tableau de synthèse Dossiers »).
+ */
+function SyntheseBadge({ titre, lignes, total }: { titre: string; lignes: [string, number][]; total: number }) {
+  return (
+    <div className="card p-4">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{titre}</h3>
+        <span className="text-lg font-bold text-brand-600 dark:text-brand-400">{total}</span>
+      </div>
+      {lignes.length === 0 ? (
+        <p className="py-2 text-xs text-muted">Aucun dossier.</p>
+      ) : (
+        // ~5 lignes visibles (28 px chacune), le surplus défile.
+        <ul className="max-h-[8.75rem] divide-y divide-line overflow-y-auto pr-1">
+          {lignes.map(([label, n]) => (
+            <li key={label} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+              <span className="min-w-0 truncate text-muted" title={label}>{label}</span>
+              <span className="shrink-0 font-semibold text-fg">{n}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const empty = (): Partial<Dossier> => ({
   intitule: '', contact_id: null, entreprise_id: null, financeur_id: null, formation_id: null,
@@ -38,6 +67,8 @@ export default function Dossiers() {
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState('');
   const [statutFilter, setStatutFilter] = useState('');
+  const [financeurFilter, setFinanceurFilter] = useState('');
+  const [conseillerFilter, setConseillerFilter] = useState('');
   // Fiche du contact ouverte en surcouche depuis la liste des dossiers.
   const [fiche, setFiche] = useState<Contact | null>(null);
   const profiles = useCollection<Profile>('profiles');
@@ -72,10 +103,38 @@ export default function Dossiers() {
   };
 
   const finName = (id: string | null) => financeurs.data.find((f) => f.id === id)?.nom ?? '—';
+
+  // Conseiller d'un dossier = celui affecté au contact bénéficiaire ; à défaut,
+  // le propriétaire du dossier.
+  const conseillerDe = (d: Dossier): string | null => {
+    const ct = d.contact_id ? contacts.data.find((c) => c.id === d.contact_id) : null;
+    return ct?.responsable_id ?? ct?.owner_id ?? d.owner_id ?? null;
+  };
+  const consName = (id: string | null) => {
+    const p = id ? profiles.data.find((x) => x.id === id) : null;
+    return p ? fullName(p.prenom, p.nom) : 'Non affecté';
+  };
+
   const filtered = data.filter((d) =>
     (`${d.reference} ${d.intitule}`.toLowerCase().includes(q.toLowerCase())) &&
-    (!statutFilter || d.statut === statutFilter),
+    (!statutFilter || d.statut === statutFilter) &&
+    (!financeurFilter || (financeurFilter === 'aucun' ? !d.financeur_id : d.financeur_id === financeurFilter)) &&
+    (!conseillerFilter || (conseillerFilter === 'aucun' ? !conseillerDe(d) : conseillerDe(d) === conseillerFilter)),
   );
+
+  // ── Tableau de synthèse ─────────────────────────────────────────────────────
+  // « En cours » au sens du suivi commercial : brouillon + déposé + accordé.
+  const EN_COURS: DossierStatut[] = ['brouillon', 'depose', 'accorde'];
+  const enCours = data.filter((d) => EN_COURS.includes(d.statut));
+  const compte = (rows: Dossier[], cle: (d: Dossier) => string) => {
+    const m = new Map<string, number>();
+    for (const d of rows) m.set(cle(d), (m.get(cle(d)) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  const parAvancement = EN_COURS.map((s) => [DOSSIER_STATUT_LABELS[s], enCours.filter((d) => d.statut === s).length] as [string, number]);
+  const parFinanceur = compte(enCours, (d) => finName(d.financeur_id));
+  const parConseiller = compte(enCours, (d) => consName(conseillerDe(d)));
+  const soldesParConseiller = compte(data.filter((d) => d.statut === 'solde'), (d) => consName(conseillerDe(d)));
 
   return (
     <div>
@@ -85,6 +144,14 @@ export default function Dossiers() {
         actions={<Button onClick={() => { setForm(empty()); setOpen(true); }}><Plus className="h-4 w-4" /> Nouveau dossier</Button>}
       />
 
+      {/* ── Synthèse : dossiers en cours (brouillon + déposé + accordé) ─────── */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SyntheseBadge titre="En cours par avancement" lignes={parAvancement} total={enCours.length} />
+        <SyntheseBadge titre="En cours par financeur" lignes={parFinanceur} total={enCours.length} />
+        <SyntheseBadge titre="En cours par conseiller" lignes={parConseiller} total={enCours.length} />
+        <SyntheseBadge titre="Soldés par conseiller" lignes={soldesParConseiller} total={soldesParConseiller.reduce((s, [, n]) => s + n, 0)} />
+      </div>
+
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
@@ -93,6 +160,16 @@ export default function Dossiers() {
         <select className="input max-w-[220px]" value={statutFilter} onChange={(e) => setStatutFilter(e.target.value)}>
           <option value="">Tous les statuts</option>
           {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
+        </select>
+        <select className="input max-w-[220px]" value={financeurFilter} onChange={(e) => setFinanceurFilter(e.target.value)} title="Filtrer par financeur">
+          <option value="">Tous les financeurs</option>
+          {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+          <option value="aucun">— Sans financeur —</option>
+        </select>
+        <select className="input max-w-[220px]" value={conseillerFilter} onChange={(e) => setConseillerFilter(e.target.value)} title="Filtrer par conseiller affecté au contact">
+          <option value="">Tous les conseillers</option>
+          {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+          <option value="aucun">— Non affecté —</option>
         </select>
       </div>
 
@@ -107,6 +184,7 @@ export default function Dossiers() {
             <th className="px-4 py-3">Intitulé</th>
             <th className="px-4 py-3">Contact</th>
             <th className="px-4 py-3">Financeur</th>
+            <th className="px-4 py-3">Conseiller</th>
             <th className="px-4 py-3">Montant</th>
             <th className="px-4 py-3">Statut</th>
             <th className="px-4 py-3"></th>
@@ -131,6 +209,7 @@ export default function Dossiers() {
                   ) : <span className="text-sm text-muted">—</span>}
                 </td>
                 <td className="px-4 py-3 text-muted">{finName(d.financeur_id)}</td>
+                <td className="px-4 py-3 text-muted">{consName(conseillerDe(d))}</td>
                 <td className="px-4 py-3 text-muted">{formatMoney(d.montant_accorde || d.montant_demande)}</td>
                 <td className="px-4 py-3"><Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge></td>
                 <td className="px-4 py-3 text-right"><ChevronRight className="ml-auto h-4 w-4 text-muted" /></td>

@@ -4,7 +4,7 @@
 
 export type OrganismeInfo = {
   nom?: string; email?: string; telephone?: string; adresse?: string;
-  code_postal?: string; ville?: string; logo_url?: string;
+  code_postal?: string; ville?: string; logo_url?: string; site_web?: string;
 };
 
 export type SignatureCfg = {
@@ -21,6 +21,17 @@ export type SignatureSender = {
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Liens de la signature : e-mail, téléphone et site web doivent être cliquables
+// dans le message reçu (ticket Benjamin « liens cliquables »).
+const A = (href: string, label: string): string =>
+  `<a href="${esc(href)}" style="color:#2563eb;text-decoration:underline">${esc(label)}</a>`;
+const mailLink = (v: string): string => A(`mailto:${v.trim()}`, v.trim());
+const telLink = (v: string): string => A(`tel:${v.replace(/[^\d+]/g, '')}`, v.trim());
+const webLink = (v: string): string => {
+  const url = /^https?:\/\//i.test(v.trim()) ? v.trim() : `https://${v.trim()}`;
+  return A(url, v.trim().replace(/^https?:\/\//i, ''));
+};
 
 /**
  * Renvoie le bloc HTML de signature à concaténer au corps de l'e-mail.
@@ -45,7 +56,10 @@ export function buildSignatureHtml(
     lines.push(`<div style="color:#0f172a">${esc(sender.signature.trim()).replace(/\n/g, '<br>')}</div>`);
   } else if (c.include_sender !== false && sender && (sender.prenom || sender.nom)) {
     lines.push(`<div style="font-weight:600;color:#0f172a">${esc([sender.prenom, sender.nom].filter(Boolean).join(' '))}</div>`);
-    const sub = [sender.telephone, sender.email].filter(Boolean).map((s) => esc(String(s))).join(' · ');
+    const sub = [
+      sender.telephone ? telLink(String(sender.telephone)) : '',
+      sender.email ? mailLink(String(sender.email)) : '',
+    ].filter(Boolean).join(' · ');
     if (sub) lines.push(`<div style="color:#475569">${sub}</div>`);
   }
 
@@ -54,8 +68,11 @@ export function buildSignatureHtml(
   const addr = [o.adresse, [o.code_postal, o.ville].filter(Boolean).join(' ')]
     .filter(Boolean).map((s) => esc(String(s))).join(', ');
   if (addr) lines.push(`<div style="color:#475569">${addr}</div>`);
-  const contact = [o.telephone ? `Tél. ${o.telephone}` : '', o.email]
-    .filter(Boolean).map((s) => esc(String(s))).join(' · ');
+  const contact = [
+    o.telephone ? `Tél. ${telLink(String(o.telephone))}` : '',
+    o.email ? mailLink(String(o.email)) : '',
+    o.site_web ? webLink(String(o.site_web)) : '',
+  ].filter(Boolean).join(' · ');
   if (contact) lines.push(`<div style="color:#475569">${contact}</div>`);
 
   const logo = o.logo_url

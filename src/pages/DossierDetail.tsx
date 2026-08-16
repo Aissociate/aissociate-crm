@@ -19,8 +19,10 @@ import type {
   Contact, Entreprise, Profile, Signature as SignatureDemande,
 } from '@/lib/database.types';
 
+// « en_instruction » a été fusionné avec « depose » (impossible de savoir si le
+// financeur a réellement ouvert l'instruction) — ticket Benjamin.
 const STATUTS: DossierStatut[] = [
-  'brouillon', 'montage', 'depose', 'en_instruction', 'accorde', 'refuse', 'en_cours', 'solde', 'cloture',
+  'brouillon', 'montage', 'depose', 'accorde', 'refuse', 'en_cours', 'solde', 'cloture',
 ];
 const PIECE_STATUTS: PieceStatut[] = ['manquante', 'recue', 'validee', 'rejetee'];
 

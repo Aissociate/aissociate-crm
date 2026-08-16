@@ -20,7 +20,7 @@ import type { Dossier, DossierPiece } from '@/lib/database.types';
  * pas encore dans le dossier, elle est créée.
  */
 export default function AddToDossierButton({
-  contactId, dossiers, fichierUrl, pieceLibelle, documentLabel, onDone,
+  contactId, dossiers, fichierUrl, pieceLibelle, documentLabel, onDone, lierDossier,
 }: {
   contactId: string | null;
   dossiers: Dossier[];
@@ -30,6 +30,12 @@ export default function AddToDossierButton({
   /** Nom du document dans les messages, ex. « devis », « plan de formation ». */
   documentLabel: string;
   onDone?: () => void;
+  /**
+   * Rattachement sans PDF : quand le document n'a pas encore été généré, le
+   * bouton se contente de le relier au dossier. Renvoie un message d'erreur,
+   * ou null si tout s'est bien passé.
+   */
+  lierDossier?: (dossier: Dossier) => Promise<string | null>;
 }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
@@ -39,7 +45,7 @@ export default function AddToDossierButton({
   const [replacing, setReplacing] = useState<{ dossier: Dossier; piece: DossierPiece } | null>(null);
 
   const candidates = contactId ? dossiers.filter((d) => d.contact_id === contactId) : [];
-  const disabled = !fichierUrl || busy;
+  const disabled = busy || (!fichierUrl && !lierDossier);
 
   /** Dépose (ou remplace) le fichier dans la pièce du dossier. */
   const attach = async (dossier: Dossier, existing: DossierPiece | null) => {
@@ -59,6 +65,17 @@ export default function AddToDossierButton({
 
   /** Cherche la pièce cible du dossier, puis dépose ou demande confirmation. */
   const applyTo = async (dossier: Dossier) => {
+    // Pas encore de PDF : on se contente de relier le document au dossier.
+    if (!fichierUrl && lierDossier) {
+      setBusy(true);
+      const err = await lierDossier(dossier);
+      setBusy(false);
+      setInfo(err
+        ? `Rattachement impossible : ${err}`
+        : `${documentLabel.charAt(0).toUpperCase()}${documentLabel.slice(1)} rattaché au dossier ${dossier.reference}. Générez le PDF pour le déposer dans les pièces.`);
+      if (!err) onDone?.();
+      return;
+    }
     setBusy(true);
     const { data: pieces, error } = await supabase.from('dossier_pieces')
       .select('*').eq('dossier_id', dossier.id).eq('libelle', pieceLibelle);
@@ -80,7 +97,9 @@ export default function AddToDossierButton({
       <button
         onClick={start}
         disabled={disabled}
-        title={fichierUrl ? `Ajouter le ${documentLabel} aux pièces du dossier` : `Générez d'abord le PDF du ${documentLabel}`}
+        title={fichierUrl
+          ? `Ajouter le ${documentLabel} aux pièces du dossier`
+          : lierDossier ? `Rattacher le ${documentLabel} à un dossier` : `Générez d'abord le PDF du ${documentLabel}`}
         className="rounded p-1.5 text-muted transition hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-30"
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}

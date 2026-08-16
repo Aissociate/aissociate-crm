@@ -179,7 +179,12 @@ export default function Devis() {
                   <button onClick={() => generate(d.id)} disabled={genId === d.id} title="Générer le PDF" className="rounded p-1.5 text-muted hover:text-brand-600">{genId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}</button>
                   <AddToDossierButton
                     contactId={d.contact_id} dossiers={dossiers.data} fichierUrl={d.fichier_url}
-                    pieceLibelle="Devis signé" documentLabel="devis" onDone={() => dossiers.refresh()}
+                    pieceLibelle="Devis signé" documentLabel="devis" onDone={() => { dossiers.refresh(); refresh(); }}
+                    // Sans PDF généré, le bouton relie simplement le devis au dossier.
+                    lierDossier={async (dos) => {
+                      const { error } = await supabase.from('devis').update({ dossier_id: dos.id }).eq('id', d.id);
+                      return error?.message ?? null;
+                    }}
                   />
                   <button onClick={() => openEdit(d)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(d)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>

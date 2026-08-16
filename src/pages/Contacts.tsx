@@ -193,6 +193,15 @@ export default function Contacts() {
     return () => clearInterval(t);
   }, [refresh]);
 
+  // « /contacts?contact=<id> » ouvre directement la fiche : utilisé par la
+  // Capture mobile pour renvoyer vers le contact qui vient d'être enrichi.
+  const cibleFiche = new URLSearchParams(location.search).get('contact');
+  useEffect(() => {
+    if (!cibleFiche) return;
+    const c = data.find((x) => x.id === cibleFiche);
+    if (c) setFiche(c);
+  }, [cibleFiche, data]);
+
   // Retour à la première page dès qu'un filtre / la recherche / la taille change
   useEffect(() => { setPage(1); }, [q, typeFilter, affFilter, tagFilter, statutFilter, pageSize, sort.col, sort.dir]);
 

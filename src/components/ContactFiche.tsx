@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
@@ -10,10 +10,14 @@ import { CONTACT_TYPE_LABELS, DOSSIER_STATUT_LABELS, DOSSIER_STATUT_TONES, OPP_S
 import { Badge, type Tone } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import ComposeMessageModal from '@/components/ComposeMessageModal';
+import ConversationsContact from '@/components/ConversationsContact';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
 const STATUTS_PROSPECT = ['', 'non assigné', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
-const ACTION_TYPES = ['appel', 'email', 'rdv', 'relance', 'note', 'autre'];
+// « note » n'a jamais servi ; « relance » est redondant (une relance est un appel
+// ou un mail) — les deux ont été retirés des choix, ticket Benjamin
+// « modifications des types d'action ».
+const ACTION_TYPES = ['appel', 'email', 'rdv', 'autre'];
 
 // ── Helpers date/heure pour le suivi des actions ────────────────────────────
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -21,6 +25,10 @@ const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.
 const hm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 // Heure « HH:MM:SS » → « HH:MM » pour l'affichage.
 const shortHeure = (h: string | null) => (h ? h.slice(0, 5) : '');
+// Jour de la semaine abrégé, affiché devant chaque date d'action.
+// Midi pour rester insensible au fuseau lors de la conversion.
+const JOURS_COURTS = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam'];
+const jourCourt = (d: string) => (d ? JOURS_COURTS[new Date(`${d}T12:00:00`).getDay()] ?? '' : '');
 // Clé de tri chronologique (date + heure, heure vide triée en dernier).
 const actionSortKey = (a: { date_action: string; heure_action: string | null }) => `${a.date_action}T${a.heure_action ?? '99:99'}`;
 
@@ -162,6 +170,8 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   const [form, setForm] = useState({
     statut_entreprise: c.statut_entreprise ?? '', ville: c.ville ?? '', effectif: c.effectif ?? '',
     siret: c.siret ?? '', autres: c.autres ?? '',
+    email2: c.email2 ?? '', email2_libelle: c.email2_libelle ?? '',
+    email3: c.email3 ?? '', email3_libelle: c.email3_libelle ?? '',
     besoin_resume: c.besoin_resume ?? '', formation_envisagee: c.formation_envisagee ?? '',
     financement_envisage: c.financement_envisage ?? '', interet: c.interet ?? '',
     responsable_id: c.responsable_id ?? '', date_formation: c.date_formation ?? '',
@@ -169,37 +179,79 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   });
   const setFf = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const [savingSec, setSavingSec] = useState<string | null>(null);
-  const saveSection = async (key: string, fields: Partial<Contact>) => {
-    setSavingSec(key);
-    await supabase.from('contacts').update(fields).eq('id', c.id);
-    setSavingSec(null);
-    onUpdated();
-  };
   // Miroir local optimiste (la prop `c` reste figée tant que la liste n'est pas rechargée)
   const [over, setOver] = useState<Partial<Contact>>({});
   useEffect(() => { setOver({}); }, [c.id]);
   const cc = { ...c, ...over } as Contact;
-  const patch = async (fields: Partial<Contact>) => {
-    setOver((o) => ({ ...o, ...fields }));
-    await supabase.from('contacts').update(fields).eq('id', c.id);
-    onUpdated();
+
+  // `onUpdated` change d'identité à chaque rendu du parent : on le lit via une ref
+  // pour garder `flushSave` stable (sinon l'effet de démontage se relancerait sans cesse).
+  const updatedRef = useRef(onUpdated);
+  updatedRef.current = onUpdated;
+
+  // Un UPDATE refusé par les droits (RLS) ne renvoie PAS d'erreur : il ne touche
+  // simplement aucune ligne. On demande donc l'id en retour pour le détecter.
+  const writeContact = async (fields: Partial<Contact>, id: string): Promise<boolean> => {
+    const { data, error } = await supabase.from('contacts').update(fields).eq('id', id).select('id');
+    if (error) { alert(`Enregistrement impossible : ${error.message}`); return false; }
+    if (!data || data.length === 0) { alert("Enregistrement refusé : ce contact ne vous est pas attribué."); return false; }
+    return true;
   };
 
-  // Auto-enregistrement d'un champ à la perte de focus.
-  // La comparaison porte sur le miroir `cc` (et non sur la prop `c`, figée) sans quoi
-  // un retour à la valeur d'origine était considéré « inchangé » et n'était pas réécrit.
-  // `onUpdated()` est indispensable : sans lui la liste parente restait périmée et la
-  // fiche rouverte réaffichait les anciennes valeurs (ticket « qualification non enregistrée »).
-  const [savedField, setSavedField] = useState<string | null>(null);
-  const blurSave = async (field: keyof Contact, value: string) => {
-    if ((cc[field] ?? '') === value) return; // pas de changement
-    setOver((o) => ({ ...o, [field]: value || null }));
-    const { error } = await supabase.from('contacts').update({ [field]: value || null } as Partial<Contact>).eq('id', c.id);
-    if (error) { alert(`Enregistrement impossible : ${error.message}`); return; }
-    setSavedField(field as string);
-    setTimeout(() => setSavedField((s) => (s === field ? null : s)), 1500);
-    onUpdated();
+  const saveSection = async (key: string, fields: Partial<Contact>) => {
+    setSavingSec(key);
+    const ok = await writeContact(fields, c.id);
+    setSavingSec(null);
+    if (ok) onUpdated();
   };
+  const patch = async (fields: Partial<Contact>) => {
+    setOver((o) => ({ ...o, ...fields }));
+    if (await writeContact(fields, c.id)) onUpdated();
+  };
+
+  // ── Enregistrement des champs libres ────────────────────────────────────────
+  // Écriture à la sortie du champ, MAIS aussi après une pause de frappe et à la
+  // fermeture de la fiche : se fier au seul `onBlur` perdait la saisie dès que la
+  // fiche disparaissait alors que le champ avait encore le focus (clic sur un lien
+  // interne, navigation, onglet fermé) — ticket « qualification non enregistrée ».
+  const [savedField, setSavedField] = useState<string | null>(null);
+  const pending = useRef<Partial<Contact>>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contactId = c.id;
+
+  const flushSave = useCallback(async () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    const fields = pending.current;
+    const keys = Object.keys(fields);
+    if (!keys.length) return;
+    pending.current = {};
+    if (!(await writeContact(fields, contactId))) return;
+    setSavedField(keys[keys.length - 1]);
+    setTimeout(() => setSavedField((s) => (s && keys.includes(s) ? null : s)), 1500);
+    updatedRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactId]);
+
+  const queueSave = useCallback((field: keyof Contact, value: string) => {
+    setOver((o) => ({ ...o, [field]: value || null }));
+    (pending.current as Record<string, unknown>)[field as string] = value || null;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { void flushSave(); }, 1200);
+  }, [flushSave]);
+
+  // Saisie : met à jour le champ affiché et programme l'écriture.
+  const editField = (field: keyof Contact, value: string) => {
+    setFf(field as string, value);
+    queueSave(field, value);
+  };
+  const blurSave = (field: keyof Contact, value: string) => {
+    // La comparaison porte sur le miroir `cc` (et non sur la prop `c`, figée) sans quoi
+    // un retour à la valeur d'origine était considéré « inchangé » et n'était pas réécrit.
+    if ((cc[field] ?? '') !== value) queueSave(field, value);
+    void flushSave();
+  };
+  // Dernier filet : ce qui reste en attente part au démontage de la fiche.
+  useEffect(() => () => { void flushSave(); }, [flushSave]);
 
   // ── Journal d'actions ───────────────────────────────────────────────────────
   const [na, setNa] = useState(() => { const d = new Date(); return { date_action: ymd(d), heure_action: hm(d), type: 'appel', description: '', faite: true }; });
@@ -229,14 +281,41 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   const QUICK_ACTIONS: { label: string; run: () => void }[] = [
     { label: 'Appel fait', run: () => prefillAction({ type: 'appel', faite: true, when: new Date(), description: 'Appel réalisé' }) },
     { label: 'Mail à envoyer', run: () => prefillAction({ type: 'email', faite: false, when: new Date(), description: 'Envoyer un e-mail (ASAP)' }) },
-    { label: 'Rappel +15 min', run: () => prefillAction({ type: 'relance', faite: false, when: inMinutes(15), description: 'Rappeler' }) },
-    { label: 'Rappel +1 h', run: () => prefillAction({ type: 'relance', faite: false, when: inMinutes(60), description: 'Rappeler' }) },
-    { label: 'Cet après-midi', run: () => prefillAction({ type: 'relance', faite: false, when: atToday(14), description: 'Rappeler' }) },
-    { label: 'Demain matin', run: () => prefillAction({ type: 'relance', faite: false, when: tomorrowAt(9), description: 'Rappeler' }) },
+    // Une relance se fait par téléphone : ces rappels sont des appels.
+    { label: 'Rappel +15 min', run: () => prefillAction({ type: 'appel', faite: false, when: inMinutes(15), description: 'Rappeler' }) },
+    { label: 'Rappel +1 h', run: () => prefillAction({ type: 'appel', faite: false, when: inMinutes(60), description: 'Rappeler' }) },
+    { label: 'Cet après-midi', run: () => prefillAction({ type: 'appel', faite: false, when: atToday(14), description: 'Rappeler' }) },
+    { label: 'Demain matin', run: () => prefillAction({ type: 'appel', faite: false, when: tomorrowAt(9), description: 'Rappeler' }) },
   ];
+  // Détrompeur : une action consignée comme réalisée l'est définitivement — on ne
+  // peut plus la décocher (il reste la suppression). Et une action future ne peut
+  // pas être cochée « réalisée ».
   const toggleAction = async (a: ContactAction) => {
-    setActions((p) => p.map((x) => (x.id === a.id ? { ...x, faite: !x.faite } : x)));
-    await supabase.from('contact_actions').update({ faite: !a.faite }).eq('id', a.id);
+    if (a.faite) { alert("Une action déjà réalisée ne peut plus être décochée. Supprimez-la si elle a été saisie par erreur."); return; }
+    if (a.date_action > ymd(new Date())) { alert("Cette action est datée dans le futur : elle ne peut pas être notée comme réalisée."); return; }
+    setActions((p) => p.map((x) => (x.id === a.id ? { ...x, faite: true } : x)));
+    await supabase.from('contact_actions').update({ faite: true }).eq('id', a.id);
+  };
+
+  // ── Édition d'une action existante ──────────────────────────────────────────
+  // Mêmes règles qu'à la saisie : pas d'action future marquée réalisée.
+  const [editAction, setEditAction] = useState<ContactAction | null>(null);
+  const saveEditAction = async () => {
+    const a = editAction;
+    if (!a) return;
+    if (!a.description.trim()) { alert('La description est obligatoire.'); return; }
+    if (a.faite && a.date_action > ymd(new Date())) {
+      alert("Modification refusée : une action datée dans le futur ne peut pas être notée comme réalisée.");
+      return;
+    }
+    const fields = {
+      type: a.type, description: a.description.trim(),
+      date_action: a.date_action, heure_action: a.heure_action || null, faite: a.faite,
+    };
+    const { error } = await supabase.from('contact_actions').update(fields).eq('id', a.id);
+    if (error) { alert(`Modification impossible : ${error.message}`); return; }
+    setActions((p) => sortActions(p.map((x) => (x.id === a.id ? { ...x, ...fields } : x))));
+    setEditAction(null);
   };
   const removeAction = async (a: ContactAction) => {
     await supabase.from('contact_actions').delete().eq('id', a.id);
@@ -345,6 +424,14 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                   }
                 />
               ) : null}
+              {/* Adresses complémentaires : autres services de l'organisation. */}
+              {([['email2', 'email2_libelle'], ['email3', 'email3_libelle']] as const).map(([champ, libelle]) =>
+                cc[champ] ? (
+                  <InfoRow key={champ} icon={<Mail className="h-4 w-4" />} label={cc[libelle] || 'Autre e-mail'}
+                    value={<a href={`mailto:${cc[champ]}`} className="text-brand-600 hover:underline dark:text-brand-400">{cc[champ]}</a>}
+                  />
+                ) : null,
+              )}
               {c.telephone ? (
                 <InfoRow icon={<Phone className="h-4 w-4" />} label="Téléphone"
                   value={<a href={`tel:${c.telephone}`} className="text-brand-600 hover:underline dark:text-brand-400">{c.telephone}</a>}
@@ -360,13 +447,29 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 <div>
                   <label className="label">SIRET (client) {savedField === 'siret' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
                   <input className="input" placeholder="N° SIRET du client — utilisé sur le devis / plan si aucune entreprise n'est reliée"
-                    value={form.siret} onChange={(e) => setFf('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
+                    value={form.siret} onChange={(e) => editField('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
                 </div>
               )}
+              {/* Deux adresses complémentaires, chacune avec son libellé : une
+                  organisation peut avoir plusieurs services interlocuteurs. */}
+              {([['email2', 'email2_libelle'], ['email3', 'email3_libelle']] as const).map(([champ, libelle], i) => (
+                <div key={champ} className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">E-mail complémentaire {i + 1} {savedField === champ && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
+                    <input className="input" type="email" placeholder="adresse@exemple.fr"
+                      value={form[champ]} onChange={(e) => editField(champ, e.target.value)} onBlur={(e) => blurSave(champ, e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label">À quoi correspond cette adresse</label>
+                    <input className="input" placeholder="ex. comptabilité, service formation…"
+                      value={form[libelle]} onChange={(e) => editField(libelle, e.target.value)} onBlur={(e) => blurSave(libelle, e.target.value)} />
+                  </div>
+                </div>
+              ))}
               <div>
                 <label className="label">Autres coordonnées {savedField === 'autres' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
                 <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
-                  value={form.autres} onChange={(e) => setFf('autres', e.target.value)} onBlur={(e) => blurSave('autres', e.target.value)} />
+                  value={form.autres} onChange={(e) => editField('autres', e.target.value)} onBlur={(e) => blurSave('autres', e.target.value)} />
               </div>
             </div>
           </section>
@@ -407,16 +510,16 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               </select>
             </div>
             <div className="space-y-2">
-              <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => setFf('besoin_resume', e.target.value)} onBlur={(e) => blurSave('besoin_resume', e.target.value)} /></div>
+              <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => editField('besoin_resume', e.target.value)} onBlur={(e) => blurSave('besoin_resume', e.target.value)} /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => setFf('ville', e.target.value)} onBlur={(e) => blurSave('ville', e.target.value)} /></div>
-                <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => setFf('formation_envisagee', e.target.value)} onBlur={(e) => blurSave('formation_envisagee', e.target.value)} /></div>
-                <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => setFf('financement_envisage', e.target.value)} onBlur={(e) => blurSave('financement_envisage', e.target.value)} /></div>
-                <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => setFf('interet', e.target.value)} onBlur={(e) => blurSave('interet', e.target.value)} /></div>
-                <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => setFf('effectif', e.target.value)} onBlur={(e) => blurSave('effectif', e.target.value)} /></div>
-                <div><label className="label">SIRET</label><input className="input" placeholder="14 chiffres" value={form.siret} onChange={(e) => setFf('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} /></div>
+                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => editField('ville', e.target.value)} onBlur={(e) => blurSave('ville', e.target.value)} /></div>
+                <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => editField('formation_envisagee', e.target.value)} onBlur={(e) => blurSave('formation_envisagee', e.target.value)} /></div>
+                <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => editField('financement_envisage', e.target.value)} onBlur={(e) => blurSave('financement_envisage', e.target.value)} /></div>
+                <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => editField('interet', e.target.value)} onBlur={(e) => blurSave('interet', e.target.value)} /></div>
+                <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => editField('effectif', e.target.value)} onBlur={(e) => blurSave('effectif', e.target.value)} /></div>
+                <div><label className="label">SIRET</label><input className="input" placeholder="14 chiffres" value={form.siret} onChange={(e) => editField('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} /></div>
               </div>
-              <p className="text-xs text-muted">Enregistrement automatique à la sortie du champ {savedField && <span className="text-emerald-600">— enregistré ✓</span>}</p>
+              <p className="text-xs text-muted">Enregistrement automatique pendant la saisie et à la fermeture de la fiche {savedField && <span className="text-emerald-600">— enregistré ✓</span>}</p>
             </div>
           </section>
 
@@ -425,21 +528,38 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <div className="mb-3 flex items-center gap-2"><ClipboardList className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Suivi des actions</h3></div>
             {(derniere || prochaine) && (
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-surface-2 p-2"><p className="text-muted">Dernière action</p><p className="font-medium text-fg">{derniere ? `${derniere.description} · ${formatDate(derniere.date_action)}${shortHeure(derniere.heure_action) ? ` ${shortHeure(derniere.heure_action)}` : ''}` : '—'}</p></div>
-                <div className="rounded-lg bg-amber-500/10 p-2"><p className="text-amber-700 dark:text-amber-400">Prochaine action</p><p className="font-medium text-fg">{prochaine ? `${prochaine.description} · ${formatDate(prochaine.date_action)}${shortHeure(prochaine.heure_action) ? ` ${shortHeure(prochaine.heure_action)}` : ''}` : '—'}</p></div>
+                <div className="rounded-lg bg-surface-2 p-2"><p className="text-muted">Dernière action</p><p className="font-medium text-fg">{derniere ? `${derniere.description} · ${jourCourt(derniere.date_action)} ${formatDate(derniere.date_action)}${shortHeure(derniere.heure_action) ? ` ${shortHeure(derniere.heure_action)}` : ''}` : '—'}</p></div>
+                <div className="rounded-lg bg-amber-500/10 p-2"><p className="text-amber-700 dark:text-amber-400">Prochaine action</p><p className="font-medium text-fg">{prochaine ? `${prochaine.description} · ${jourCourt(prochaine.date_action)} ${formatDate(prochaine.date_action)}${shortHeure(prochaine.heure_action) ? ` ${shortHeure(prochaine.heure_action)}` : ''}` : '—'}</p></div>
               </div>
             )}
             <ul className="space-y-1.5">
               {actions.map((a) => (
-                <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
-                  <button onClick={() => toggleAction(a)} title={a.faite ? 'Faite' : 'À faire'}
-                    className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', a.faite ? 'bg-emerald-500 text-white' : 'border border-line text-transparent')}>
-                    <CheckCircle2 className="h-3 w-3" />
-                  </button>
-                  <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
-                  <span className="flex-1 text-fg">{a.description}</span>
-                  <span className="shrink-0 text-xs text-muted">{formatDate(a.date_action)}{shortHeure(a.heure_action) ? ` · ${shortHeure(a.heure_action)}` : ''}</span>
-                  <button onClick={() => removeAction(a)} className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                <li key={a.id} className="rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggleAction(a)} title={a.faite ? 'Réalisée (non modifiable)' : 'Marquer comme réalisée'}
+                      className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', a.faite ? 'bg-emerald-500 text-white' : 'border border-line text-transparent hover:border-emerald-500')}>
+                      <CheckCircle2 className="h-3 w-3" />
+                    </button>
+                    <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
+                    <span className="flex-1 text-fg">{a.description}</span>
+                    <span className="shrink-0 text-xs text-muted">{jourCourt(a.date_action)} {formatDate(a.date_action)}{shortHeure(a.heure_action) ? ` · ${shortHeure(a.heure_action)}` : ''}</span>
+                    <button onClick={() => setEditAction(editAction?.id === a.id ? null : a)} title="Modifier cette action" className="rounded p-0.5 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => removeAction(a)} title="Supprimer cette action" className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                  {editAction?.id === a.id && (
+                    <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
+                      <select className="input w-[90px] py-1.5" value={editAction.type} onChange={(e) => setEditAction({ ...editAction, type: e.target.value })}>
+                        {/* Le type d'origine reste proposé s'il ne fait plus partie des choix. */}
+                        {[...new Set([...ACTION_TYPES, editAction.type])].map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <input className="input min-w-[140px] flex-1 py-1.5" value={editAction.description} onChange={(e) => setEditAction({ ...editAction, description: e.target.value })} />
+                      <input className="input w-[130px] py-1.5" type="date" value={editAction.date_action} onChange={(e) => setEditAction({ ...editAction, date_action: e.target.value })} />
+                      <input className="input w-[90px] py-1.5" type="time" value={shortHeure(editAction.heure_action)} onChange={(e) => setEditAction({ ...editAction, heure_action: e.target.value })} title="Heure" />
+                      <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={editAction.faite} onChange={(e) => setEditAction({ ...editAction, faite: e.target.checked })} /> Réalisée</label>
+                      <button onClick={saveEditAction} className="btn-secondary py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> Enregistrer</button>
+                      <button onClick={() => setEditAction(null)} className="py-1.5 text-sm text-muted hover:text-fg">Annuler</button>
+                    </div>
+                  )}
                 </li>
               ))}
               {actions.length === 0 && <li className="text-sm text-muted">Aucune action enregistrée.</li>}
@@ -461,6 +581,9 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <button onClick={addAction} disabled={!na.description.trim()} className="btn-secondary py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
             </div>
           </section>
+
+          {/* Conversations enregistrées depuis la Capture mobile (masqué s'il n'y en a pas) */}
+          <ConversationsContact contactId={c.id} />
 
           {/* Pipeline, Sessions, Dossiers & Coffre — regroupés dans un même cadre */}
           <section className="space-y-5 rounded-xl border border-line bg-surface-2/40 p-4">

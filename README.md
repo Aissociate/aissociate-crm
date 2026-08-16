@@ -99,6 +99,26 @@ toutes les 15 min via `pg_cron` + `pg_net`. Prérequis — créer deux secrets d
 `project_url` (= `https://<ref>.supabase.co`) et `service_role_key`. Si absents, la migration ne
 plante pas (NOTICE) ; rejouez-la après avoir ajouté les secrets.
 
+## Capture mobile (`/mobile`)
+
+Page plein écran destinée au téléphone du conseiller, derrière le login CRM et installable sur
+l'écran d'accueil Android (`public/manifest.webmanifest`, icônes régénérables par
+`node scripts/gen-icons.mjs`).
+
+Déroulé : choix de l'interlocuteur (numéro composé, contact existant ou nouveau prospect) →
+enregistrement au micro → transcription → compte-rendu déversé dans la fiche contact
+(action « appel » réalisée + relance planifiée + champs de qualification restés vides).
+
+- **Limite Android** : aucun navigateur n'accède au flux d'un appel téléphonique. On enregistre
+  le **micro** : l'appel doit être en haut-parleur, ou l'entretien en présentiel.
+- L'audio est découpé en **segments de 4 minutes** (`src/lib/audioRecorder.ts`) téléversés au fil
+  de l'eau dans le bucket privé `conversations` : un onglet tué ne perd que le morceau en cours.
+- `supabase/functions/conversation/index.ts` transcrit segment par segment
+  (OpenRouter `/audio/transcriptions`, modèle `parametres.ai.model_stt`, défaut `openai/whisper-1`)
+  puis rédige le compte-rendu avec le modèle de chat habituel. Le traitement tourne en **tâche de
+  fond** ; la page suit l'avancement en relisant la ligne `conversations`.
+- Réécoute et transcription complète depuis la fiche contact (`ConversationsContact.tsx`).
+
 ## Intégration continue (GitHub Actions)
 
 `.github/workflows/ci.yml` exécute `npm ci` + `npm run build` (typecheck Vite/tsc) à chaque push

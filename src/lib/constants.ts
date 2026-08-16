@@ -23,8 +23,11 @@ export const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
 export const DOSSIER_STATUT_LABELS: Record<DossierStatut, string> = {
   brouillon: 'Brouillon',
   montage: 'En montage',
-  depose: 'Déposé',
-  en_instruction: 'En instruction',
+  // Une fois le dossier déposé, impossible de savoir si le financeur l'a
+  // réellement mis à l'instruction : les deux étapes sont fusionnées et
+  // « en_instruction » n'est plus proposé à la saisie (ticket Benjamin).
+  depose: 'Déposé / en instruction',
+  en_instruction: 'Déposé / en instruction',
   accorde: 'Accordé',
   refuse: 'Refusé',
   en_cours: 'En cours',

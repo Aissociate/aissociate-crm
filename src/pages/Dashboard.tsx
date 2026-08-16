@@ -6,7 +6,7 @@ import {
 import { fr } from 'date-fns/locale';
 import {
   Eye, ClipboardList, TrendingUp, Clock, Euro, Landmark, Trophy, Megaphone,
-  ArrowUpRight, ArrowDownRight, Minus, Mail,
+  ArrowUpRight, ArrowDownRight, Minus, Mail, ListTodo,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, initials, isConseillerInactif } from '@/lib/utils';
-import type { Dossier, Opportunite, Profile, PageView, ContactRequest, Email, Contact } from '@/lib/database.types';
+import type { Dossier, DossierStatut, Opportunite, Profile, PageView, ContactRequest, Email, Contact, ContactAction } from '@/lib/database.types';
 
 type MetaCampaign = { name: string; spend: number; impressions: number; clicks: number; leads: number };
 type MetaInsights = {
@@ -84,20 +84,34 @@ function Delta({ cur, prev, invert = false, label }: { cur: number; prev: number
 }
 
 // ─── Carte KPI ───────────────────────────────────────────────────────────────
-function Kpi({ icon, label, value, hint, delta }: {
-  icon: ReactNode; label: string; value: ReactNode; hint?: string; delta?: ReactNode;
+// `compact` : version resserrée pour que les 6 indicateurs de performance
+// tiennent sur une seule ligne (ticket Benjamin « ergonomie tableau de bord »).
+function Kpi({ icon, label, value, hint, delta, compact = false }: {
+  icon: ReactNode; label: string; value: ReactNode; hint?: string; delta?: ReactNode; compact?: boolean;
 }) {
   return (
-    <div className="card flex flex-col gap-3 p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted">{label}</span>
-        <span className="rounded-lg bg-brand-500/10 p-2 text-brand-500">{icon}</span>
+    <div className={`card flex flex-col ${compact ? 'gap-1.5 p-3' : 'gap-3 p-5'}`}>
+      <div className="flex items-center justify-between gap-1">
+        <span className={`${compact ? 'text-xs leading-tight' : 'text-sm'} text-muted`}>{label}</span>
+        <span className={`shrink-0 rounded-lg bg-brand-500/10 text-brand-500 ${compact ? 'p-1.5' : 'p-2'}`}>{icon}</span>
       </div>
       <div>
-        <p className="text-2xl font-bold tracking-tight text-fg">{value}</p>
-        {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
+        <p className={`font-bold tracking-tight text-fg ${compact ? 'text-lg' : 'text-2xl'}`}>{value}</p>
+        {hint && <p className="mt-0.5 text-[11px] leading-snug text-muted">{hint}</p>}
       </div>
-      {delta && <div className="border-t border-line pt-2">{delta}</div>}
+      {delta && <div className={`border-t border-line ${compact ? 'pt-1.5' : 'pt-2'}`}>{delta}</div>}
+    </div>
+  );
+}
+
+// Ligne « libellé — valeur » des badges de prospection.
+function Ligne({ label, value, sub, alerte = false }: { label: string; value: ReactNode; sub?: string; alerte?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-1">
+      <span className="min-w-0 text-sm text-muted">
+        {label}{sub && <span className="block text-[11px] text-muted/80">{sub}</span>}
+      </span>
+      <span className={`shrink-0 text-lg font-bold ${alerte ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}>{value}</span>
     </div>
   );
 }
@@ -113,6 +127,7 @@ export default function Dashboard() {
   const contacts = useCollection<Contact>('contacts');
   const profiles = useCollection<Profile>('profiles');
   const emails = useCollection<Email>('emails');
+  const actionsCol = useCollection<ContactAction>('contact_actions');
 
   // Mails entrants non lus par intervenant (owner du mail). Voir RLS : un
   // conseiller ne voit que les siens, la direction voit tout.
@@ -130,6 +145,7 @@ export default function Dashboard() {
   const unreadList = [...unreadByOwner.entries()]
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
+  const totalNonLus = unreadList.reduce((s, [, n]) => s + n, 0);
 
   // Performances publicitaires Meta (lues côté serveur via l'Edge Function meta-ads).
   const [meta, setMeta] = useState<MetaInsights | null>(null);
@@ -192,10 +208,44 @@ export default function Dashboard() {
   const traitementCur = avgDays(closedIn(start, now));
   const traitementPrev = avgDays(closedIn(prevStart, prevEnd));
 
-  // ── KPI : dossiers chez le financeur (à l'étude / en instruction) — instantané ──
-  const depose = dossiers.data.filter((d) => d.statut === 'depose').length;
-  const enInstruction = dossiers.data.filter((d) => d.statut === 'en_instruction').length;
-  const chezFinanceur = depose + enInstruction;
+  // ── KPI : dossiers en vie chez le financeur — instantané ──
+  // Ordre chronologique du parcours ; brouillon, refusé et clôturé sont exclus
+  // (ticket Benjamin « badge dossier chez le financeur »).
+  const ETAPES_FINANCEUR: DossierStatut[] = ['montage', 'depose', 'en_instruction', 'accorde', 'en_cours', 'solde'];
+  const parEtape = ETAPES_FINANCEUR.map((s) => ({
+    statut: s, label: DOSSIER_STATUT_LABELS[s],
+    n: dossiers.data.filter((d) => d.statut === s).length,
+  }));
+  const chezFinanceur = parEtape.reduce((s, e) => s + e.n, 0);
+
+  // ── Suivi de la prospection : actions à faire ──
+  const todayStr = format(now, 'yyyy-MM-dd');
+  const aFaire = actionsCol.data.filter((a) => !a.faite);
+  const appelsEnRetard = aFaire.filter((a) => a.type === 'appel' && a.date_action < todayStr).length;
+  const appelsAujourdhui = aFaire.filter((a) => a.type === 'appel' && a.date_action === todayStr).length;
+  const mailsAEnvoyer = aFaire.filter((a) => a.type === 'email').length;
+  const rdvAujourdhui = aFaire.filter((a) => a.type === 'rdv' && a.date_action === todayStr).length;
+
+  // ── Suivi de la prospection : opportunités en cours ──
+  // « Stand-by » = opportunité toujours ouverte, sans mouvement depuis 30 / 90 jours.
+  const ouvertes = opps.data.filter((o) => o.stage !== 'gagne' && o.stage !== 'perdu');
+  const jours = (o: Opportunite) => (now.getTime() - new Date(o.updated_at ?? o.created_at).getTime()) / 86400000;
+  const somme = (arr: Opportunite[]) => arr.reduce((s, o) => s + Number(o.montant ?? 0), 0);
+  const oppNouveau = ouvertes.filter((o) => o.stage === 'nouveau');
+  const oppEnCours = ouvertes.filter((o) => o.stage === 'qualifie' || o.stage === 'negociation');
+  const oppStandby30 = ouvertes.filter((o) => jours(o) > 30 && jours(o) <= 90);
+  const oppStandby90 = ouvertes.filter((o) => jours(o) > 90);
+
+  // ── Suivi de la prospection : mails entrants à qualifier ──
+  // La synchronisation IMAP n'ingère que des expéditeurs connus : un mail sans
+  // contact rattaché vient d'un individu non référencé comme contact.
+  const contactById = new Map(contacts.data.map((c) => [c.id, c]));
+  const entrantsNonLus = emails.data.filter((e) => e.direction === 'entrant' && !e.lu && e.canal !== 'whatsapp');
+  const nonReference = entrantsNonLus.filter((e) => !e.contact_id).length;
+  const nonAffecte = entrantsNonLus.filter((e) => {
+    const c = e.contact_id ? contactById.get(e.contact_id) : null;
+    return !!c && !c.owner_id && !c.responsable_id;
+  }).length;
 
   // ── Courbe de tendance ──
   const starts = bucketStarts(gran, now, gran === 'jour' ? 14 : 12);
@@ -259,46 +309,107 @@ export default function Dashboard() {
         }
       />
 
-      {/* ── KPI ─────────────────────────────────────────────────────────────── */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/* ── Suivi de la prospection (en tête de page) ───────────────────────── */}
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">Suivi de la prospection</h2>
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Mails entrants */}
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 font-semibold text-fg"><Mail className="h-5 w-5 text-brand-500" /> Mails entrants</h3>
+            <Badge tone={(isManager ? totalNonLus : myUnread) > 0 ? 'warning' : 'neutral'}>
+              {isManager ? totalNonLus : myUnread} non lu{(isManager ? totalNonLus : myUnread) > 1 ? 's' : ''}
+            </Badge>
+          </div>
+          <div className="divide-y divide-line">
+            {isManager ? (
+              unreadList.length === 0
+                ? <p className="py-4 text-center text-sm text-muted">Aucun mail entrant non lu.</p>
+                : unreadList.map(([id, n]) => <Ligne key={id} label={pName(id)} value={n} />)
+            ) : (
+              <Ligne label="Vos mails non lus" value={myUnread} />
+            )}
+          </div>
+          {/* Mails à qualifier : expéditeur sans conseiller, ou inconnu de la base. */}
+          {(nonAffecte > 0 || nonReference > 0) && (
+            <div className="mt-3 space-y-1 border-t border-line pt-3">
+              {nonAffecte > 0 && <Ligne label="Individu non affecté" sub="expéditeur connu, sans conseiller" value={nonAffecte} alerte />}
+              {nonReference > 0 && <Ligne label="Individu non référencé" sub="contact spontané, absent de la base" value={nonReference} alerte />}
+            </div>
+          )}
+        </Card>
+
+        {/* Actions à faire */}
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 font-semibold text-fg"><ListTodo className="h-5 w-5 text-amber-500" /> Actions à faire</h3>
+            <Badge tone={appelsEnRetard > 0 ? 'danger' : 'neutral'}>{aFaire.length} au total</Badge>
+          </div>
+          <div className="divide-y divide-line">
+            <Ligne label="Appels en retard" value={appelsEnRetard} alerte={appelsEnRetard > 0} />
+            <Ligne label="Appels à passer aujourd'hui" value={appelsAujourdhui} />
+            <Ligne label="Mails à envoyer" value={mailsAEnvoyer} />
+            <Ligne label="RDV prévus aujourd'hui" value={rdvAujourdhui} />
+          </div>
+        </Card>
+
+        {/* Opportunités en cours */}
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 font-semibold text-fg"><TrendingUp className="h-5 w-5 text-brand-600" /> Opportunités en cours</h3>
+            <Badge tone="brand">{formatMoney(somme(ouvertes))}</Badge>
+          </div>
+          <div className="divide-y divide-line">
+            <Ligne label="Nouvelles" sub={formatMoney(somme(oppNouveau))} value={oppNouveau.length} />
+            <Ligne label="Qualifiées et en négociation" sub={formatMoney(somme(oppEnCours))} value={oppEnCours.length} />
+            <Ligne label="En attente > 30 j" sub={formatMoney(somme(oppStandby30))} value={oppStandby30.length} alerte={oppStandby30.length > 0} />
+            <Ligne label="En attente > 90 j" sub={formatMoney(somme(oppStandby90))} value={oppStandby90.length} alerte={oppStandby90.length > 0} />
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Suivi des performances (6 indicateurs sur une ligne) ─────────────── */}
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">Suivi des performances</h2>
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {isManager && (
           <Kpi
-            icon={<Eye className="h-5 w-5" />} label="Visiteurs site web" value={visiteursCur}
+            compact icon={<Eye className="h-4 w-4" />} label="Visiteurs site" value={visiteursCur}
             hint={`${vuesCur} pages vues`}
             delta={<Delta cur={visiteursCur} prev={visiteursPrev} label={cmp} />}
           />
         )}
         {isManager && (
           <Kpi
-            icon={<ClipboardList className="h-5 w-5" />} label="Leads (total)" value={leadsCur}
-            hint="Formulaire web + nouveaux prospects (import ou manuel)"
+            compact icon={<ClipboardList className="h-4 w-4" />} label="Leads (total)" value={leadsCur}
+            hint="Formulaire + nouveaux prospects"
             delta={<Delta cur={leadsCur} prev={leadsPrev} label={cmp} />}
           />
         )}
         <Kpi
-          icon={<TrendingUp className="h-5 w-5" />} label="Opportunités créées" value={oppsCreesCur.length}
+          compact icon={<TrendingUp className="h-4 w-4" />} label="Opportunités créées" value={oppsCreesCur.length}
           delta={<Delta cur={oppsCreesCur.length} prev={oppsCreesPrev.length} label={cmp} />}
         />
         <Kpi
-          icon={<Clock className="h-5 w-5" />} label="Temps de traitement moyen"
+          compact icon={<Clock className="h-4 w-4" />} label="Temps de traitement"
           value={fmtDays(traitementCur)} hint="ouverture → gagné/perdu"
           delta={<Delta cur={traitementCur} prev={traitementPrev} invert label={cmp} />}
         />
         <Kpi
-          icon={<Euro className="h-5 w-5" />} label="Valeur moyenne / opportunité"
+          compact icon={<Euro className="h-4 w-4" />} label="Valeur moy. / opp."
           value={formatMoney(valMoyCur)}
           delta={<Delta cur={valMoyCur} prev={valMoyPrev} label={cmp} />}
         />
         <Kpi
-          icon={<Landmark className="h-5 w-5" />} label="Dossiers chez le financeur"
+          compact icon={<Landmark className="h-4 w-4" />} label="Dossiers chez le financeur"
           value={chezFinanceur}
-          hint={`${depose} déposés · ${enInstruction} en instruction`}
+          hint={parEtape.filter((e) => e.n > 0).map((e) => `${e.n} ${e.label.toLowerCase()}`).join(' · ') || 'aucun dossier en cours'}
         />
       </div>
 
-      {/* ── Tendance + répartition ──────────────────────────────────────────── */}
-      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      {/* ── Tendance ────────────────────────────────────────────────────────── */}
+      {/* La carte « Chez le financeur » qui occupait la colonne de droite faisait
+          doublon avec l'indicateur « Dossiers chez le financeur » : supprimée. */}
+      <div className="mb-6">
+        <Card>
           <h2 className="mb-1 font-semibold text-fg">Activité</h2>
           <p className="mb-4 text-xs text-muted">
             {gran === 'jour' ? '14 derniers jours' : gran === 'semaine' ? '12 dernières semaines' : '12 derniers mois'}
@@ -320,32 +431,6 @@ export default function Dashboard() {
               <Area type="monotone" dataKey="Opportunités" stroke="#ea6a1e" fill="url(#gO)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
-        </Card>
-
-        <Card>
-          <div className="mb-4 flex items-center gap-2">
-            <Landmark className="h-5 w-5 text-amber-500" />
-            <h2 className="font-semibold text-fg">Chez le financeur</h2>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-end justify-between">
-              <span className="text-sm text-muted">{DOSSIER_STATUT_LABELS.depose}</span>
-              <span className="text-xl font-bold text-fg">{depose}</span>
-            </div>
-            <div className="flex items-end justify-between">
-              <span className="text-sm text-muted">{DOSSIER_STATUT_LABELS.en_instruction}</span>
-              <span className="text-xl font-bold text-fg">{enInstruction}</span>
-            </div>
-            <div className="border-t border-line pt-3">
-              <div className="flex items-end justify-between">
-                <span className="text-sm font-medium text-fg">Total à l'étude</span>
-                <span className="text-2xl font-bold text-brand-600">{chezFinanceur}</span>
-              </div>
-            </div>
-          </div>
-          <p className="mt-4 rounded-lg bg-surface-2 p-3 text-xs text-muted">
-            Dossiers déposés et en cours d'instruction chez les financeurs (OPCO, CPF, France Travail…).
-          </p>
         </Card>
       </div>
 
@@ -405,32 +490,6 @@ export default function Dashboard() {
           )}
         </Card>
       )}
-
-      {/* ── Mails entrants non lus par intervenant ───────────────────────────── */}
-      <Card className="mb-6">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 font-semibold text-fg"><Mail className="h-5 w-5 text-brand-500" /> Mails entrants non lus</h2>
-          <Badge tone={(isManager ? unreadList.reduce((s, [, n]) => s + n, 0) : myUnread) > 0 ? 'warning' : 'neutral'}>
-            {isManager ? unreadList.reduce((s, [, n]) => s + n, 0) : myUnread} au total
-          </Badge>
-        </div>
-        {isManager ? (
-          unreadList.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted">Aucun mail entrant non lu.</p>
-          ) : (
-            <ul className="divide-y divide-line">
-              {unreadList.map(([id, n]) => (
-                <li key={id} className="flex items-center justify-between py-2 text-sm">
-                  <span className="text-fg">{pName(id)}</span>
-                  <Badge tone="warning">{n} non lu{n > 1 ? 's' : ''}</Badge>
-                </li>
-              ))}
-            </ul>
-          )
-        ) : (
-          <p className="text-sm text-fg">Vous avez <strong>{myUnread}</strong> mail{myUnread > 1 ? 's' : ''} entrant{myUnread > 1 ? 's' : ''} non lu{myUnread > 1 ? 's' : ''}.</p>
-        )}
-      </Card>
 
       {/* ── Classement des conseillers (CA des opportunités gagnées) ─────────── */}
       {isManager && (

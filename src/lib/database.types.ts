@@ -36,6 +36,8 @@ export type Financeur = Timestamps & {
 };
 export type Entreprise = Timestamps & {
   id: string; raison_sociale: string; siret: string | null; naf: string | null;
+  /** Code de la convention collective applicable (4 chiffres). */
+  idcc: string | null;
   secteur: string | null; effectif: number | null; adresse: string | null;
   code_postal: string | null; ville: string | null; telephone: string | null;
   email: string | null; site_web: string | null; notes: string | null; owner_id: string | null;
@@ -44,6 +46,9 @@ export type Entreprise = Timestamps & {
 export type Contact = Timestamps & {
   id: string; type: ContactType; civilite: string | null; nom: string; prenom: string | null;
   email: string | null; telephone: string | null; fonction: string | null;
+  /** Adresses complémentaires (autres services de l'organisation) + leur libellé. */
+  email2: string | null; email2_libelle: string | null;
+  email3: string | null; email3_libelle: string | null;
   entreprise_id: string | null; financeur_id: string | null; owner_id: string | null;
   rgpd_consent: boolean; notes: string | null; external_id: string | null;
   metadata: Record<string, string> | null;
@@ -200,6 +205,27 @@ export type PlanPdf = {
   kind: PlanPdfKind;
 };
 export type ConversationClose = { cle: string; closed_at: string; closed_by: string | null };
+
+/** Conversation enregistrée depuis la page mobile (/mobile). */
+export type ConversationStatut = 'en_cours' | 'a_traiter' | 'traitement' | 'traitee' | 'erreur';
+export type ConversationSegment = {
+  index: number; path: string; duree: number; taille: number; mime: string;
+};
+export type ConversationAnalyse = {
+  resume: string; points_cles: string[]; besoin_resume: string;
+  formation_envisagee: string; financement_envisage: string; interet: string;
+  objections: string[]; engagements: string[];
+  prochaine_action: { description: string; delai_jours: number };
+};
+export type Conversation = Timestamps & {
+  id: string; contact_id: string | null; telephone: string; titre: string | null;
+  auteur_id: string | null; source: 'micro' | 'import'; statut: ConversationStatut;
+  demarree_at: string; duree_secondes: number; segments: ConversationSegment[];
+  transcription: string | null; resume: string | null;
+  /** `compte_rendu` et non `analyse` : ANALYSE est un mot réservé de PostgreSQL. */
+  compte_rendu: ConversationAnalyse | null;
+  action_id: string | null; erreur: string | null;
+};
 
 /** Demande de signature électronique d'un document (lien tokenisé + code). */
 export type SignatureStatut = 'en_attente' | 'signee' | 'annulee';
@@ -362,6 +388,7 @@ export type Database = {
       kanban_cartes: TableShape<KanbanCarte>;
       emails: TableShape<Email>;
       conversations_closes: TableShape<ConversationClose>;
+      conversations: TableShape<Conversation>;
       signatures: TableShape<Signature>;
       emargement_creneaux: TableShape<EmargementCreneau>;
       emargement_acces: TableShape<EmargementAcces>;

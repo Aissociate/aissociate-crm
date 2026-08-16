@@ -228,6 +228,18 @@ export default function PlansFormation() {
                       <option key={d.kind} value={d.kind}>{d.label} · {d.etape}</option>
                     ))}
                   </select>
+                  {/* Rattachement au dossier depuis la liste des plans : dépose le
+                      dernier PDF généré, ou relie le plan au dossier s'il n'y en a pas. */}
+                  <AddToDossierButton
+                    contactId={p.contact_id} dossiers={dossiers.data}
+                    fichierUrl={pdfs.data.find((d) => d.plan_id === p.id)?.fichier_url ?? null}
+                    pieceLibelle="Programme de formation" documentLabel="plan de formation"
+                    onDone={() => { dossiers.refresh(); refresh(); }}
+                    lierDossier={async (dos) => {
+                      const { error } = await supabase.from('plans_formation').update({ dossier_id: dos.id }).eq('id', p.id);
+                      return error?.message ?? null;
+                    }}
+                  />
                   <button onClick={() => duplicate(p)} title="Reprendre ce plan (créer une copie modifiable)" className="rounded p-1.5 text-muted hover:text-brand-600"><Copy className="h-4 w-4" /></button>
                   <button onClick={() => openEdit(p)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(p)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>

@@ -127,13 +127,23 @@ export default function Entreprises() {
               <button
                 type="button"
                 disabled={!form.siret}
-                title="Ouvrir la fiche Pappers de ce SIRET"
-                onClick={() => { const s = (form.siret ?? '').replace(/\s/g, ''); if (s) window.open(`https://www.pappers.fr/recherche?q=${encodeURIComponent(s)}`, '_blank', 'noopener'); }}
+                title="Ouvrir la fiche Pappers (recherche sur le SIREN, 9 premiers chiffres)"
+                // Pappers ne trouve rien sur les 14 chiffres du SIRET : la recherche
+                // se fait sur le SIREN, c'est-à-dire les 9 premiers chiffres.
+                onClick={() => {
+                  const siren = (form.siret ?? '').replace(/\D/g, '').slice(0, 9);
+                  if (siren) window.open(`https://www.pappers.fr/recherche?q=${encodeURIComponent(siren)}`, '_blank', 'noopener');
+                }}
                 className="btn-secondary shrink-0 whitespace-nowrap disabled:opacity-50"
               >Pappers</button>
             </div>
           </Field>
-          <Field label="Code NAF"><input className="input" value={form.naf ?? ''} onChange={(e) => set('naf', e.target.value)} /></Field>
+          {/* NAF et IDCC (convention collective) : deux codes courts, côte à côte
+              dans l'emplacement occupé jusque-là par le seul code NAF. */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Code NAF"><input className="input" maxLength={6} value={form.naf ?? ''} onChange={(e) => set('naf', e.target.value)} /></Field>
+            <Field label="IDCC"><input className="input" maxLength={5} placeholder="ex. 1486" value={form.idcc ?? ''} onChange={(e) => set('idcc', e.target.value)} /></Field>
+          </div>
           <Field label="Secteur d'activité"><input className="input" value={form.secteur ?? ''} onChange={(e) => set('secteur', e.target.value)} /></Field>
           <Field label="Statut juridique">
             <select className="input" value={form.statut_juridique ?? ''} onChange={(e) => set('statut_juridique', e.target.value)}>

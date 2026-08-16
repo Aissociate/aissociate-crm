@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Mail, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2 } from 'lucide-react';
+import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
 import { formatDate, fullName, cn } from '@/lib/utils';
+import { LinkedText } from '@/lib/linkify';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
 import ContactFiche from '@/components/ContactFiche';
 import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
@@ -253,6 +254,13 @@ export default function Messagerie() {
   const remove = async (e: Email) => {
     if (!confirm('Supprimer ce message ?')) return;
     const { error } = await supabase.from('emails').delete().eq('id', e.id);
+    if (error) { alert(error.message); return; }
+    refresh();
+  };
+
+  // Lu / non lu : permet de remettre un message dans les « à traiter ».
+  const toggleLu = async (e: Email) => {
+    const { error } = await supabase.from('emails').update({ lu: !e.lu }).eq('id', e.id);
     if (error) { alert(error.message); return; }
     refresh();
   };
@@ -640,12 +648,15 @@ export default function Messagerie() {
                                   {e.direction === 'entrant' ? `De ${e.expediteur ?? '—'}` : `À ${e.destinataires.join(', ') || '—'}`}
                                 </span>
                                 <span className="flex shrink-0 items-center gap-2">
-                                  {e.direction === 'sortant' && !wa && <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
+                                  {/* Un avis de non-remise arrive en « entrant » : il doit rester visible. */}
+                                  {e.statut === 'echec'
+                                    ? <Badge tone="danger">non délivré</Badge>
+                                    : e.direction === 'sortant' && !wa && <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
                                   {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
                                 </span>
                               </div>
                               {!wa && e.sujet && <p className="mb-1 text-sm font-medium text-fg">{e.sujet}</p>}
-                              {e.corps && <p className="whitespace-pre-wrap break-words text-sm text-fg">{e.corps}</p>}
+                              {e.corps && <p className="whitespace-pre-wrap break-words text-sm text-fg"><LinkedText text={e.corps} /></p>}
                               {e.attachments && e.attachments.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                   {e.attachments.map((a, i) => (
@@ -659,6 +670,16 @@ export default function Messagerie() {
                                 {e.direction === 'sortant' && e.statut === 'brouillon' && (
                                   <button onClick={() => editDraft(e)} title="Reprendre le brouillon" className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 dark:text-brand-400">
                                     <Pencil className="h-3.5 w-3.5" /> Reprendre
+                                  </button>
+                                )}
+                                {/* Lu / non lu : le message peut être remis en « à traiter ». */}
+                                {e.direction === 'entrant' && (
+                                  <button
+                                    onClick={() => toggleLu(e)}
+                                    title={e.lu ? 'Marquer comme non lu' : 'Marquer comme lu'}
+                                    className={cn('rounded p-1 hover:text-brand-600', e.lu ? 'text-muted' : 'text-brand-600 dark:text-brand-400')}
+                                  >
+                                    {e.lu ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
                                   </button>
                                 )}
                                 {e.direction === 'entrant' && !wa && <button onClick={() => openAssign(e)} title="Affecter à un contact/conseiller" className="rounded p-1 text-muted hover:text-brand-600"><UserCog className="h-4 w-4" /></button>}

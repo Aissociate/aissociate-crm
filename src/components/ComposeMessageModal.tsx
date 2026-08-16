@@ -7,6 +7,7 @@ import { Button, Modal, Field } from '@/components/ui';
 import { uploadFile } from '@/lib/storage';
 import { fullName, prochaineHeureOuvrable } from '@/lib/utils';
 import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
+import { linkifyHtml } from '@/lib/linkify';
 import { applyTemplateVars, templatesForCanal, DEFAULT_TEMPLATES, type MessageTemplate, type TemplateVars } from '@/lib/messageTemplates';
 import type { Dossier, Document, Contact, EmailCanal } from '@/lib/database.types';
 
@@ -130,7 +131,7 @@ export default function ComposeMessageModal({
       },
       {
         contact_id: contactId, date_action: suite.date, heure_action: suite.heure,
-        type: 'relance', faite: false,
+        type: 'appel', faite: false,
         description: `Relance ASAP — vérifier la réponse à « ${sujet || (kind === 'whatsapp' ? 'WhatsApp' : 'message')} »`,
       },
     ]);
@@ -162,7 +163,8 @@ export default function ComposeMessageModal({
     let finalStatut = statut;
     if (statut === 'envoye') {
       const sigHtml = includeSig ? buildSignatureHtml(signatureCfg, organisme, profile) : '';
-      const html = (corps ?? '').replace(/\n/g, '<br>') + sigHtml;
+      // Le corps partait en texte nu : les URL restaient inertes chez le destinataire.
+      const html = linkifyHtml(corps ?? '') + sigHtml;
       const { error: fnError } = await supabase.functions.invoke('send-email', {
         body: { to: destinataires, subject: sujet, html, text: corps, attachments },
       });

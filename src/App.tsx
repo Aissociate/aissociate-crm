@@ -34,6 +34,7 @@ import ActionsAFaire from '@/pages/ActionsAFaire';
 import Administration from '@/pages/Administration';
 import Parametres from '@/pages/Parametres';
 import Tickets from '@/pages/Tickets';
+import CaptureMobile from '@/pages/CaptureMobile';
 
 // ── Site vitrine public (vendorisé depuis Aissociate_OF, sous src/site) ──
 import OrganismHome from '@/site/pages/OrganismHome';
@@ -129,6 +130,12 @@ export default function App() {
         />
         <Route path="/tickets" element={<Tickets />} />
       </Route>
+
+      {/* ── Capture mobile (plein écran, hors Layout : usage sur téléphone) ── */}
+      <Route
+        path="/mobile"
+        element={configured ? <ProtectedRoute><CaptureMobile /></ProtectedRoute> : <SupabaseNotice />}
+      />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

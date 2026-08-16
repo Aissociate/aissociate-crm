@@ -14,6 +14,7 @@ Allow: /assistance
 
 # Bloquer back-office et pages non publiques
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 Disallow: /admin
 Disallow: /onboarding
@@ -61,36 +62,43 @@ Crawl-delay: 1
 User-agent: GPTBot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: OAI-SearchBot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: PerplexityBot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: anthropic-ai
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: Claude-Web
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: Google-Extended
@@ -99,22 +107,26 @@ Allow: /
 User-agent: Gemini
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: cohere-ai
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: CCBot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 # ── Moteurs de recherche ──
 User-agent: Googlebot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: Googlebot-Image
@@ -123,16 +135,19 @@ Allow: /
 User-agent: Bingbot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: DuckDuckBot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 User-agent: Applebot
 Allow: /
 Disallow: /login
+Disallow: /mobile
 Disallow: /dashboard
 
 # ── Réseaux sociaux (prévisualisation des liens) ──

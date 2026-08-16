@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn, isConseillerInactif } from '@/lib/utils';
@@ -33,6 +33,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/contacts', label: 'Contacts', icon: Users },
       { to: '/entreprises', label: 'Entreprises', icon: Building2 },
       { to: '/pipeline', label: 'Pipeline commercial', icon: TrendingUp },
+      { to: '/mobile', label: 'Capture mobile', icon: Mic },
       { to: '/conseillers', label: 'Conseillers', icon: UsersRound, managerOnly: true },
     ],
   },
