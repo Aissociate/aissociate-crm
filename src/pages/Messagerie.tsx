@@ -78,6 +78,8 @@ export default function Messagerie() {
   // ── Recherche & filtres (tickets « recherche », « réponse apportée », « statut opportunité ») ──
   const [search, setSearch] = useState('');
   const [scopes, setScopes] = useState<Set<Scope>>(new Set(ALL_SCOPES));
+  const [dateDebut, setDateDebut] = useState('');
+  const [dateFin, setDateFin] = useState('');
   const [reponseFilter, setReponseFilter] = useState<'' | 'repondu' | 'non_repondu' | 'closes'>('');
   const [oppFilter, setOppFilter] = useState('');           // '' | 'aucune' | <stage>
   const [sortBy, setSortBy] = useState<'date' | 'conseiller'>('date');
@@ -299,6 +301,19 @@ export default function Messagerie() {
     });
   };
 
+  // Fourchette de dates : la conversation est retenue si au moins un de ses
+  // messages tombe dans l'intervalle (bornes incluses, vides = pas de limite).
+  const matchesDate = (c: Convo): boolean => {
+    if (!dateDebut && !dateFin) return true;
+    return c.emails.some((e) => {
+      const j = (e.sent_at ?? e.created_at ?? '').slice(0, 10);
+      if (!j) return false;
+      if (dateDebut && j < dateDebut) return false;
+      if (dateFin && j > dateFin) return false;
+      return true;
+    });
+  };
+
   const matchesReponse = (c: Convo): boolean => {
     if (reponseFilter === 'closes') return c.closed;
     if (c.closed) return false; // une discussion close sort des listes « à traiter »
@@ -320,6 +335,7 @@ export default function Messagerie() {
   const convos = (view === 'orphelins' ? orphanConvos : mainConvos)
     .filter((c) => view === 'orphelins' || !ownerFilter || (ownerFilter === 'none' ? c.owners.size === 0 : c.owners.has(ownerFilter)))
     .filter(matchesSearch)
+    .filter(matchesDate)
     .filter((c) => view === 'orphelins' || matchesReponse(c))
     .filter((c) => view === 'orphelins' || matchesOpp(c))
     .sort((a, b) => {
@@ -493,8 +509,15 @@ export default function Messagerie() {
               placeholder="Rechercher dans les messages…"
             />
           </div>
-          {search && (
-            <button onClick={() => setSearch('')} className="rounded-lg border border-line px-2.5 py-2 text-sm text-muted hover:text-fg">
+          {/* Fourchette de dates — ticket « fonction de recherche de messages ». */}
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            Du <input type="date" className="input w-[9.5rem] py-2 text-sm" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} title="Date de début" />
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            au <input type="date" className="input w-[9.5rem] py-2 text-sm" value={dateFin} onChange={(e) => setDateFin(e.target.value)} title="Date de fin" />
+          </label>
+          {(search || dateDebut || dateFin) && (
+            <button onClick={() => { setSearch(''); setDateDebut(''); setDateFin(''); }} className="rounded-lg border border-line px-2.5 py-2 text-sm text-muted hover:text-fg">
               Effacer
             </button>
           )}

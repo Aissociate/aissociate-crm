@@ -57,6 +57,17 @@ export function fileNameOf(value: string | null | undefined): string {
   }
 }
 
+/**
+ * URL absolue et téléchargeable d'un fichier stocké. Les buckets privés ne
+ * stockent qu'un chemin : le serveur SMTP ne saurait pas le récupérer, on lui
+ * fournit donc une URL signée (ticket « choix des pièces jointes »).
+ */
+export async function signedUrlFor(bucket: Bucket, value: string, secondes = 86400): Promise<string | null> {
+  if (/^https?:\/\//i.test(value)) return value;
+  const { data } = await supabase.storage.from(bucket).createSignedUrl(value, secondes);
+  return data?.signedUrl ?? null;
+}
+
 /** Ouvre un fichier : URL directe si http, sinon URL signée temporaire. */
 export async function openFile(bucket: Bucket, value: string): Promise<void> {
   if (/^https?:\/\//i.test(value)) {

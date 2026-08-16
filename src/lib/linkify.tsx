@@ -47,10 +47,22 @@ export function linkifyHtml(text: string): string {
     .map((p) =>
       p.kind === 'link'
         ? `<a href="${esc(p.href)}" style="color:#2563eb;text-decoration:underline">${esc(p.value)}</a>`
-        : esc(p.value),
+        : miseEnForme(esc(p.value)),
     )
     .join('')
     .replace(/\n/g, '<br>');
+}
+
+/**
+ * Mise en forme légère du corps : **gras** et _italique_. Le corps reste du
+ * texte dans la base (affichage et recherche inchangés) ; la conversion n'a lieu
+ * qu'au moment de produire le HTML du message.
+ * Appliqué sur du texte DÉJÀ échappé — d'où l'absence de nouvel échappement ici.
+ */
+function miseEnForme(html: string): string {
+  return html
+    .replace(/\*\*([^\n*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])_([^\n_]+)_(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>');
 }
 
 /** Affichage in-app d'un texte dont les liens sont cliquables. */

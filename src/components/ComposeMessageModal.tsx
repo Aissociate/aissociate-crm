@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Mail, Send, Paperclip, MessageCircle, Upload, X, Loader as Loader2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Button, Modal, Field } from '@/components/ui';
-import { uploadFile } from '@/lib/storage';
+import { uploadFile, signedUrlFor, fileNameOf, type Bucket } from '@/lib/storage';
 import { fullName, prochaineHeureOuvrable } from '@/lib/utils';
 import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
 import { linkifyHtml } from '@/lib/linkify';
@@ -34,6 +34,12 @@ const nowParts = () => {
   return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, heure: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
 };
 const channelIcon = (c: EmailCanal, cls = 'h-4 w-4') => (c === 'whatsapp' ? <MessageCircle className={cls} /> : <Mail className={cls} />);
+// Le libellé d'une pièce ne porte pas l'extension : on la reprend du fichier
+// stocké pour que la pièce jointe s'ouvre correctement chez le destinataire.
+const extensionDe = (value: string): string => {
+  const m = fileNameOf(value).match(/\.[A-Za-z0-9]{1,5}$/);
+  return m ? m[0] : '';
+};
 
 // Modale de composition e-mail / WhatsApp, partagée entre la Messagerie et la
 // fiche contact. Envoi SMTP via la fonction « send-email », journalisation dans
@@ -99,6 +105,44 @@ export default function ComposeMessageModal({
 
   const toggleAttach = (id: string) => setAttachIds((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
+  // ── Pièces jointes issues du dossier lié et du coffre-fort du contact ───────
+  // Ticket « choix des pièces jointes » : proposer, en plus de l'espace
+  // documentaire, les pièces du dossier sélectionné et les documents du coffre
+  // du contact associé. Les deux buckets sont privés : l'URL est signée à l'envoi.
+  type SourcePJ = { key: string; filename: string; bucket: Bucket; value: string; origine: string };
+  const [piecesDossier, setPiecesDossier] = useState<SourcePJ[]>([]);
+  const [docsCoffre, setDocsCoffre] = useState<SourcePJ[]>([]);
+
+  useEffect(() => {
+    if (!dossierId) { setPiecesDossier([]); return; }
+    let annule = false;
+    supabase.from('dossier_pieces').select('id, libelle, fichier_url').eq('dossier_id', dossierId)
+      .not('fichier_url', 'is', null)
+      .then(({ data }) => {
+        if (annule) return;
+        setPiecesDossier((data ?? []).map((p) => ({
+          key: `piece:${p.id}`, filename: `${p.libelle}${extensionDe(p.fichier_url as string)}`,
+          bucket: 'pieces' as Bucket, value: p.fichier_url as string, origine: 'Dossier',
+        })));
+      });
+    return () => { annule = true; };
+  }, [dossierId]);
+
+  useEffect(() => {
+    if (!contactId) { setDocsCoffre([]); return; }
+    let annule = false;
+    supabase.from('contact_documents').select('id, titre, fichier_url').eq('contact_id', contactId)
+      .not('fichier_url', 'is', null)
+      .then(({ data }) => {
+        if (annule) return;
+        setDocsCoffre((data ?? []).map((d) => ({
+          key: `coffre:${d.id}`, filename: `${d.titre}${extensionDe(d.fichier_url as string)}`,
+          bucket: 'coffre' as Bucket, value: d.fichier_url as string, origine: 'Coffre-fort',
+        })));
+      });
+    return () => { annule = true; };
+  }, [contactId]);
+
   // PJ libre : téléversement vers le bucket public « documents », URL passée à send-email.
   const handleAttachUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -137,10 +181,31 @@ export default function ComposeMessageModal({
     ]);
   };
 
+  // Pièces jointes retenues, toutes sources confondues (pour l'aperçu et l'envoi).
+  const sourcesPJ = [...piecesDossier, ...docsCoffre];
+  const pjSelection = [
+    ...sourcesPJ.filter((s) => attachIds.has(s.key)).map((s) => s.filename),
+    ...availableDocs.filter((d) => attachIds.has(d.id) && d.fichier_url).map((d) => d.titre),
+    ...extraAttachments.map((a) => a.filename),
+  ];
+
+  /** Résout les URL (signées pour les buckets privés) au moment de l'envoi. */
+  const buildAttachments = async (): Promise<Attachment[]> => {
+    const docAttachments = availableDocs
+      .filter((d) => attachIds.has(d.id) && d.fichier_url)
+      .map((d) => ({ filename: d.titre, url: d.fichier_url! }));
+    const privees: Attachment[] = [];
+    for (const s of sourcesPJ) {
+      if (!attachIds.has(s.key)) continue;
+      const url = await signedUrlFor(s.bucket, s.value);
+      if (url) privees.push({ filename: s.filename, url });
+    }
+    return [...privees, ...docAttachments, ...extraAttachments];
+  };
+
   const send = async (statut: 'brouillon' | 'envoye') => {
     setSaving(true);
-    const docAttachments = availableDocs.filter((d) => attachIds.has(d.id) && d.fichier_url).map((d) => ({ filename: d.titre, url: d.fichier_url! }));
-    const attachments: Attachment[] = [...docAttachments, ...extraAttachments];
+    const attachments: Attachment[] = await buildAttachments();
 
     if (canal === 'whatsapp') {
       const phone = digits(dest);
@@ -217,6 +282,28 @@ export default function ComposeMessageModal({
   const waValid = canal === 'whatsapp' && !!digits(dest) && !!corps;
   const emailValid = canal === 'email' && !!sujet && !!dest;
 
+  // ── Mise en forme du corps ──────────────────────────────────────────────────
+  // Le corps reste du texte (stocké et recherché tel quel) ; **gras** et
+  // _italique_ sont convertis en HTML à l'envoi. La barre d'outils encadre la
+  // sélection courante.
+  const corpsRef = useRef<HTMLTextAreaElement>(null);
+  const entourer = (marque: string) => {
+    const el = corpsRef.current;
+    if (!el) return;
+    const { selectionStart: a, selectionEnd: b } = el;
+    const sel = corps.slice(a, b) || 'texte';
+    const next = `${corps.slice(0, a)}${marque}${sel}${marque}${corps.slice(b)}`;
+    setCorps(next);
+    // Replace le curseur autour du texte encadré.
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(a + marque.length, a + marque.length + sel.length);
+    });
+  };
+
+  // ── Vérification avant envoi ────────────────────────────────────────────────
+  const [apercu, setApercu] = useState(false);
+
   return (
     <Modal
       open={open} onClose={onClose} wide
@@ -226,7 +313,8 @@ export default function ComposeMessageModal({
           ? <Button onClick={() => send('envoye')} disabled={saving || !waValid}><MessageCircle className="h-4 w-4" /> Ouvrir WhatsApp</Button>
           : <>
               <Button variant="secondary" onClick={() => send('brouillon')} disabled={saving || !sujet}>Enregistrer brouillon</Button>
-              <Button onClick={() => send('envoye')} disabled={saving || !emailValid}><Send className="h-4 w-4" /> Envoyer</Button>
+              {/* Vérification ultime avant l'envoi réel. */}
+              <Button onClick={() => setApercu(true)} disabled={saving || !emailValid}><Send className="h-4 w-4" /> Envoyer</Button>
             </>
       }
     >
@@ -270,7 +358,32 @@ export default function ComposeMessageModal({
               {dossiers.map((d) => <option key={d.id} value={d.id}>{d.reference} — {d.intitule}</option>)}
             </select></Field>
             <Field label="Sujet" required><input className="input" value={sujet} onChange={(e) => setSujet(e.target.value)} /></Field>
-            <Field label="Message"><textarea className="input" rows={6} value={corps} onChange={(e) => setCorps(e.target.value)} /></Field>
+            <Field label="Message">
+              <div className="mb-1 flex items-center gap-1">
+                <button type="button" onClick={() => entourer('**')} title="Gras (**texte**)" className="rounded border border-line px-2 py-1 text-sm font-bold text-muted hover:text-brand-600">G</button>
+                <button type="button" onClick={() => entourer('_')} title="Italique (_texte_)" className="rounded border border-line px-2 py-1 text-sm italic text-muted hover:text-brand-600">I</button>
+                <span className="ml-1 text-xs text-muted">La mise en forme et les liens sont appliqués à l'envoi.</span>
+              </div>
+              <textarea ref={corpsRef} className="input" rows={6} value={corps} onChange={(e) => setCorps(e.target.value)} />
+            </Field>
+
+            {/* Pièces du dossier lié et du coffre-fort du contact — juste après le
+                corps du message, avant les pièces de l'espace documentaire. */}
+            {sourcesPJ.length > 0 && (
+              <Field label="Pièces du dossier et du coffre-fort" hint="Documents rattachés au dossier lié et au contact associé">
+                <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+                  {sourcesPJ.map((s) => (
+                    <label key={s.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-surface-2">
+                      <input type="checkbox" checked={attachIds.has(s.key)} onChange={() => toggleAttach(s.key)} />
+                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />
+                      <span className="truncate text-fg">{s.filename}</span>
+                      <span className="shrink-0 text-xs text-muted">· {s.origine}</span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            )}
+
             <Field label="Pièces jointes" hint="Documents de l'espace documentaire">
               {availableDocs.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-line p-3 text-sm text-muted">Aucun document disponible. Ajoutez des fichiers dans l'<strong>Espace documentaire</strong> pour pouvoir les joindre.</p>
@@ -322,6 +435,49 @@ export default function ComposeMessageModal({
           </>
         )}
       </div>
+
+      {/* ── Vérification avant envoi ────────────────────────────────────────── */}
+      <Modal
+        open={apercu} onClose={() => setApercu(false)} wide
+        title="Vérification avant envoi"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setApercu(false)}>Modifier</Button>
+            <Button onClick={() => { setApercu(false); void send('envoye'); }} disabled={saving}>
+              <Send className="h-4 w-4" /> Envoyer définitivement
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted">À : <strong className="text-fg">{dest}</strong></p>
+          <p className="text-sm text-muted">Objet : <strong className="text-fg">{sujet || '(sans objet)'}</strong></p>
+          {/* Le corps est rendu exactement comme il partira : mise en forme et
+              liens appliqués, signature comprise. */}
+          <div
+            className="max-h-[45vh] overflow-y-auto rounded-lg border border-line bg-surface p-4 text-sm leading-relaxed text-fg [&_a]:text-brand-600 [&_a]:underline"
+            dangerouslySetInnerHTML={{
+              __html: linkifyHtml(corps ?? '') + (includeSig ? buildSignatureHtml(signatureCfg, organisme, profile) : ''),
+            }}
+          />
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">
+              Pièces jointes ({pjSelection.length})
+            </p>
+            {pjSelection.length === 0 ? (
+              <p className="text-sm text-muted">Aucune pièce jointe.</p>
+            ) : (
+              <ul className="space-y-1">
+                {pjSelection.map((nom, i) => (
+                  <li key={`${nom}-${i}`} className="flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2 py-1 text-sm">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" /><span className="truncate text-fg">{nom}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Modal>
     </Modal>
   );
 }

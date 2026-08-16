@@ -227,14 +227,26 @@ export default function Dashboard() {
   const rdvAujourdhui = aFaire.filter((a) => a.type === 'rdv' && a.date_action === todayStr).length;
 
   // ── Suivi de la prospection : opportunités en cours ──
-  // « Stand-by » = opportunité toujours ouverte, sans mouvement depuis 30 / 90 jours.
+  // « Stand-by » : même définition que les colonnes du pipeline — le contact lié
+  // n'a aucune action à faire dans les 30 (ou 90) prochains jours.
   const ouvertes = opps.data.filter((o) => o.stage !== 'gagne' && o.stage !== 'perdu');
-  const jours = (o: Opportunite) => (now.getTime() - new Date(o.updated_at ?? o.created_at).getTime()) / 86400000;
   const somme = (arr: Opportunite[]) => arr.reduce((s, o) => s + Number(o.montant ?? 0), 0);
+  const dansNJours = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return format(d, 'yyyy-MM-dd'); };
+  const prochaineAction = (contactId: string | null): string | null => {
+    if (!contactId) return null;
+    return aFaire.filter((a) => a.contact_id === contactId && a.date_action >= todayStr)
+      .map((a) => a.date_action).sort()[0] ?? null;
+  };
   const oppNouveau = ouvertes.filter((o) => o.stage === 'nouveau');
   const oppEnCours = ouvertes.filter((o) => o.stage === 'qualifie' || o.stage === 'negociation');
-  const oppStandby30 = ouvertes.filter((o) => jours(o) > 30 && jours(o) <= 90);
-  const oppStandby90 = ouvertes.filter((o) => jours(o) > 90);
+  const oppStandby30 = ouvertes.filter((o) => {
+    const p = prochaineAction(o.contact_id);
+    return !!p && p > dansNJours(30) && p <= dansNJours(90);
+  });
+  const oppStandby90 = ouvertes.filter((o) => {
+    const p = prochaineAction(o.contact_id);
+    return !p || p > dansNJours(90);
+  });
 
   // ── Suivi de la prospection : mails entrants à qualifier ──
   // La synchronisation IMAP n'ingère que des expéditeurs connus : un mail sans

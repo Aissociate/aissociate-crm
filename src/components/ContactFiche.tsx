@@ -118,6 +118,12 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
 
   const addOpp = async () => {
     if (!newOpp.titre.trim()) return;
+    // Une opportunité sans suite prévue part en stand-by dans le pipeline : on
+    // exige donc une action à faire avant de la créer (ticket « colonnes stand-by »).
+    if (!actions.some((a) => !a.faite)) {
+      alert("Création refusée : ce contact n'a aucune action à faire.\nPlanifiez d'abord une action (appel, e-mail, rdv) pour assurer le suivi de l'opportunité.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.from('opportunites').insert({
       contact_id: c.id, entreprise_id: c.entreprise_id, financeur_id: c.financeur_id,

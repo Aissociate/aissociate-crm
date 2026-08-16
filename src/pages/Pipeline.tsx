@@ -8,12 +8,24 @@ import { PageHeader, Button, Modal, Field, Spinner } from '@/components/ui';
 import ContactFiche from '@/components/ContactFiche';
 import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
 import { formatMoney, fullName } from '@/lib/utils';
-import type { Opportunite, OpportuniteStage, Contact, Entreprise, Financeur, Profile } from '@/lib/database.types';
+import type { Opportunite, OpportuniteStage, Contact, ContactAction, Entreprise, Financeur, Profile } from '@/lib/database.types';
 
 const empty = (): Partial<Opportunite> => ({
   titre: '', montant: 0, stage: 'nouveau', probabilite: 10,
   contact_id: null, entreprise_id: null, financeur_id: null, notes: '',
 });
+
+// ── Colonnes « stand-by » ────────────────────────────────────────────────────
+// Une opportunité est en stand-by quand le contact lié n'a aucune action à faire
+// dans les 30 (ou 90) prochains jours : rien n'est prévu pour la faire avancer.
+// La colonne est CALCULÉE à chaque affichage, jamais stockée : elle reflète donc
+// en permanence l'état réel des actions, sans traitement de fond à synchroniser.
+type Colonne = OpportuniteStage | 'standby30' | 'standby90';
+const STANDBY_LABELS: Record<'standby30' | 'standby90', string> = {
+  standby30: 'Stand-by > 30 J', standby90: 'Stand-by > 90 J',
+};
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dansNJours = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
 
 export default function Pipeline() {
   const { session } = useAuth();
@@ -25,6 +37,7 @@ export default function Pipeline() {
   const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
   const profiles = useCollection<Profile>('profiles');
+  const actions = useCollection<ContactAction>('contact_actions');
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<Opportunite>>(empty());
@@ -53,6 +66,32 @@ export default function Pipeline() {
     ? data.filter((o) => (conseillerId === 'aucun' ? !conseillerDe(o) : conseillerDe(o) === conseillerId))
     : data;
 
+  // ── Stand-by : dérivé des actions à faire du contact ────────────────────────
+  /** Date de la prochaine action non réalisée du contact, ou null. */
+  const prochaineAction = (contactId: string | null): string | null => {
+    if (!contactId) return null;
+    const futures = actions.data
+      .filter((a) => a.contact_id === contactId && !a.faite && a.date_action >= ymd(new Date()))
+      .map((a) => a.date_action)
+      .sort();
+    return futures[0] ?? null;
+  };
+  /** Colonne d'affichage : étape normale, ou stand-by faute d'action prévue. */
+  const colonneDe = (o: Opportunite): Colonne => {
+    if (o.stage === 'gagne' || o.stage === 'perdu') return o.stage;
+    const prochaine = prochaineAction(o.contact_id);
+    if (!prochaine || prochaine > dansNJours(90)) return 'standby90';
+    if (prochaine > dansNJours(30)) return 'standby30';
+    return o.stage;
+  };
+  // Stand-by intercalé avant gagné / perdu : ce sont des affaires encore ouvertes.
+  const COLONNES: Colonne[] = [
+    ...OPP_STAGE_ORDER.filter((s) => s !== 'gagne' && s !== 'perdu'),
+    'standby30', 'standby90', 'gagne', 'perdu',
+  ];
+  const libelleColonne = (c: Colonne) =>
+    c === 'standby30' || c === 'standby90' ? STANDBY_LABELS[c] : OPP_STAGE_LABELS[c];
+
   const save = async () => {
     setSaving(true);
     const payload = {
@@ -74,6 +113,15 @@ export default function Pipeline() {
     const idx = OPP_STAGE_ORDER.indexOf(o.stage);
     const next = OPP_STAGE_ORDER[idx + dir];
     if (!next) return;
+    // Une opportunité ne progresse pas toute seule : sauf clôture (gagné /
+    // perdu), une action doit être prévue dans les 30 jours.
+    if (next !== 'gagne' && next !== 'perdu') {
+      const prochaine = prochaineAction(o.contact_id);
+      if (!prochaine || prochaine > dansNJours(30)) {
+        alert("Déplacement refusé : aucune action n'est prévue pour ce contact dans les 30 prochains jours.\nPlanifiez une action dans sa fiche avant de faire avancer l'opportunité.");
+        return;
+      }
+    }
     const { error } = await supabase.from('opportunites').update({ stage: next }).eq('id', o.id);
     if (error) { alert(error.message); return; }
     refresh();
@@ -111,13 +159,14 @@ export default function Pipeline() {
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {OPP_STAGE_ORDER.map((stage) => {
-            const items = visibles.filter((o) => o.stage === stage);
+          {COLONNES.map((stage) => {
+            const items = visibles.filter((o) => colonneDe(o) === stage);
             const total = items.reduce((s, o) => s + Number(o.montant ?? 0), 0);
+            const standby = stage === 'standby30' || stage === 'standby90';
             return (
               <div key={stage} className="flex w-72 shrink-0 flex-col">
                 <div className="mb-2 flex items-center justify-between px-1">
-                  <span className="text-sm font-semibold text-fg">{OPP_STAGE_LABELS[stage]}</span>
+                  <span className={`text-sm font-semibold ${standby ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}>{libelleColonne(stage)}</span>
                   <span className="rounded-full bg-surface-2 px-2 text-xs text-muted">{items.length}</span>
                 </div>
                 <p className="mb-2 px-1 text-xs text-muted">{formatMoney(total)}</p>
@@ -146,6 +195,8 @@ export default function Pipeline() {
                             <button onClick={() => remove(o)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                           </div>
                         </div>
+                        {/* En stand-by, la carte rappelle l'étape réelle de l'opportunité. */}
+                        {standby && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{OPP_STAGE_LABELS[o.stage]} · aucune action prévue</p>}
                         {contact?.telephone && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><Phone className="h-3 w-3" /> {contact.telephone}</p>}
                         {contact && o.titre && <p className="mt-1 truncate text-xs text-muted">{o.titre}</p>}
                         <p className="mt-1 text-sm font-semibold text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</p>
