@@ -11,6 +11,7 @@ import { Badge, type Tone } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import ComposeMessageModal from '@/components/ComposeMessageModal';
 import ConversationsContact from '@/components/ConversationsContact';
+import MiniCalendrierContact from '@/components/MiniCalendrierContact';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
 const STATUTS_PROSPECT = ['', 'non assigné', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
@@ -85,6 +86,8 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   const [opps, setOpps] = useState<Opportunite[]>([]);
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
   const [sessions, setSessions] = useState<SessionFormation[]>([]);
+  // Lignes de participation du contact (statut, id) — utilisées par le calendrier miniature.
+  const [participations, setParticipations] = useState<SessionParticipant[]>([]);
   const [actions, setActions] = useState<ContactAction[]>([]);
   const [coffre, setCoffre] = useState<ContactDocument[]>([]);
 
@@ -92,12 +95,14 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     const [o, d, sp, a, cd] = await Promise.all([
       supabase.from('opportunites').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
       supabase.from('dossiers').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
-      supabase.from('session_participants').select('session_id').eq('contact_id', c.id),
+      supabase.from('session_participants').select('*').eq('contact_id', c.id),
       supabase.from('contact_actions').select('*').eq('contact_id', c.id).order('date_action', { ascending: false }).order('heure_action', { ascending: false, nullsFirst: false }),
       supabase.from('contact_documents').select('*').eq('contact_id', c.id).order('created_at', { ascending: false }),
     ]);
     setOpps(o.data ?? []); setDossiers(d.data ?? []); setActions(a.data ?? []); setCoffre(cd.data ?? []);
-    const ids = ((sp.data ?? []) as Pick<SessionParticipant, 'session_id'>[]).map((x) => x.session_id);
+    const parts = (sp.data ?? []) as SessionParticipant[];
+    setParticipations(parts);
+    const ids = parts.map((x) => x.session_id);
     if (ids.length) {
       const s = await supabase.from('sessions_formation').select('*').in('id', ids).order('date_debut', { ascending: false });
       setSessions(s.data ?? []);
@@ -108,11 +113,13 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   // ── Ajout d'opportunité / dossier / inscription à une session ────────────────
   const [allSessions, setAllSessions] = useState<SessionFormation[]>([]);
   useEffect(() => { supabase.from('sessions_formation').select('*').order('date_debut', { ascending: false }).then(({ data }) => setAllSessions(data ?? [])); }, []);
-  const [addPanel, setAddPanel] = useState<'opp' | 'doss' | 'sess' | null>(null);
+  const [addPanel, setAddPanel] = useState<'opp' | 'doss' | null>(null);
+  // Le calendrier miniature reste ouvert par défaut : positionner un contact sur
+  // une session est un geste courant depuis la fiche.
+  const [calOpen, setCalOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [newOpp, setNewOpp] = useState({ titre: '', montant: '' });
   const [newDoss, setNewDoss] = useState({ intitule: '' });
-  const [enrollId, setEnrollId] = useState('');
   // Propriétaire = utilisateur courant (requis par la RLS d'écriture pour un conseiller).
   const ownerOf = session?.user.id ?? c.responsable_id ?? c.owner_id ?? null;
 
@@ -144,19 +151,6 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     if (error) { alert(error.message); return; }
     setNewDoss({ intitule: '' }); setAddPanel(null); loadRefs();
   };
-  const enroll = async () => {
-    if (!enrollId) return;
-    setBusy(true);
-    const { error } = await supabase.from('session_participants').insert({
-      session_id: enrollId, contact_id: c.id, nom: c.nom, prenom: c.prenom, email: c.email, statut: 'inscrit',
-    });
-    setBusy(false);
-    if (error) { alert(error.message); return; }
-    setEnrollId(''); setAddPanel(null); loadRefs();
-  };
-  // Sessions où le contact n'est pas déjà inscrit
-  const enrollable = allSessions.filter((s) => !sessions.some((x) => x.id === s.id));
-
   // ── Coffre de documents rattachés au contact ─────────────────────────────────
   const addDoc = async (value: string, name?: string) => {
     const { error } = await supabase.from('contact_documents').insert({
@@ -617,7 +611,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
 
           {/* Sessions (placées avant Dossiers) */}
           <div>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{sessions.length}</span><button onClick={() => setAddPanel(addPanel === 'sess' ? null : 'sess')} title="Inscrire à une session" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{sessions.length}</span><button onClick={() => setCalOpen((v) => !v)} title={calOpen ? 'Masquer le calendrier' : 'Positionner sur une session'} className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
             {sessions.length === 0 ? <p className="text-sm text-muted">Aucune session.</p> : (
               <ul className="space-y-1.5">{sessions.map((s) => {
                 const passee = new Date(s.date_debut) < now;
@@ -628,16 +622,21 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                   </li>);
               })}</ul>
             )}
-            {addPanel === 'sess' && (
-              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
-                <select className="input" value={enrollId} onChange={(e) => setEnrollId(e.target.value)}>
-                  <option value="">{enrollable.length ? 'Choisir une session…' : 'Aucune session disponible'}</option>
-                  {enrollable.map((s) => <option key={s.id} value={s.id}>{s.titre} — {formatDate(s.date_debut, 'dd/MM/yyyy')}</option>)}
-                </select>
-                <button onClick={enroll} disabled={busy || !enrollId} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Inscrire</button>
-              </div>
-            )}
           </div>
+
+          {/* Calendrier miniature : positionne le contact sur une session et
+              répercute la mise à jour sur la fiche et le pipeline. */}
+          {calOpen && (
+            <MiniCalendrierContact
+              contact={cc}
+              sessions={allSessions}
+              participants={participations}
+              opportunites={opps}
+              actions={actions}
+              onChanged={() => { loadRefs(); onUpdated(); }}
+              onNavigate={onClose}
+            />
+          )}
 
           {/* Dossiers */}
           <div>
