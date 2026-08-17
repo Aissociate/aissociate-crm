@@ -3,16 +3,24 @@
  *
  * La SPA injecte le <head> par JavaScript (SEO.tsx) → invisible pour les crawlers
  * qui n'exécutent pas le JS (LinkedIn, Facebook, WhatsApp, Bing partiellement).
- * Ce script génère, pour chaque page publique clé, un fichier HTML statique avec
+ * Ce script génère, pour chaque page publique, un fichier HTML statique avec
  * le bon <title>, meta description/keywords, canonical, Open Graph/Twitter et
  * JSON-LD — directement dans le HTML servi par Netlify.
  *
- * ⚠️ Les méta ci-dessous doivent rester alignées avec les <SEO> des pages
- *    correspondantes (src/site/pages/*). C'est volontairement dupliqué pour
- *    rester sans dépendance ni refonte du runtime.
+ * Les pages statiques (accueil, services, légal, etc.) ont leurs métadonnées
+ * définies ci-dessous. Les formations et articles de blog sont lus dans
+ * Supabase au build (lecture publique RLS).
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+
+// Charger .env (Vite expose VITE_* au client mais le postbuild tourne hors Vite)
+if (existsSync('.env')) {
+  for (const line of readFileSync('.env', 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+}
 
 const DIST = 'dist';
 const SITE = 'https://aissociate.re';
@@ -46,10 +54,11 @@ const breadcrumb = (items) => ({
   '@context': 'https://schema.org', '@type': 'BreadcrumbList',
   itemListElement: items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, item: it.url })),
 });
-const course = (name) => ({
-  '@context': 'https://schema.org', '@type': 'Course', name,
+const course = (name, description, opts = {}) => ({
+  '@context': 'https://schema.org', '@type': 'Course', name, description,
   provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate', url: SITE },
   inLanguage: 'fr-FR', courseMode: ['blended', 'onsite', 'online'],
+  ...opts,
 });
 const faqPage = (items) => ({
   '@context': 'https://schema.org', '@type': 'FAQPage',
@@ -64,19 +73,6 @@ const HOME_FAQ = [
   { question: "Faut-il des prérequis techniques pour se former à l'IA ?", answer: "Non. Nos formations s'adressent aux dirigeants, équipes et PME sans compétence technique : la maîtrise des outils informatiques de base suffit." },
   { question: "Combien de temps dure une formation en intelligence artificielle ?", answer: "De 7 h (1 jour) pour les formations d'initiation à 21 h (3 jours) pour les parcours certifiants." },
   { question: "Quels outils d'IA apprend-on (ChatGPT, prompt engineering…) ?", answer: "Vous apprenez à utiliser les principaux outils d'IA générative (ChatGPT, génération d'images, assistants) et le prompt engineering, via des cas pratiques." },
-];
-
-const FORMATIONS = [
-  { id: 'closer-ia-cpf', title: 'Formation Closer IA éligible CPF — Certifiante Qualiopi' },
-  { id: 'creation-contenus-ia', title: "Création de contenus par l'IA générative — Certifiante CPF" },
-  { id: 'introduction-ia-pme', title: 'Introduction aux IA pour les PME' },
-  { id: 'automatisation-process-pme', title: 'Automatisation des process des PME avec l\'IA' },
-  { id: 'marches-publics-btp-ia', title: 'Réponse aux marchés publics BTP avec l\'IA' },
-  { id: 'ia-relation-client', title: "L'IA pour optimiser la relation client" },
-  { id: 'ia-marketing-communication', title: "L'IA pour le marketing et la communication" },
-  { id: 'ia-prospection-commerciale', title: "L'IA pour la prospection commerciale" },
-  { id: 'ia-ressources-humaines', title: "L'IA pour les ressources humaines" },
-  { id: 'ia-manager', title: "L'IA au service du manager" },
 ];
 
 const routes = [
@@ -129,14 +125,13 @@ const routes = [
     keywords: 'contact Aissociate, formation IA Réunion contact, devis formation IA, organisme formation IA La Réunion',
     schemas: [breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Contact', url: `${SITE}/contact` }])],
   },
-  // Formations (détail)
-  ...FORMATIONS.map((f) => ({
-    path: `/formations/${f.id}`,
-    title: `${f.title} — Formation IA | Aissociate`,
-    description: `${f.title}. Formation professionnelle en intelligence artificielle, certifiée Qualiopi, finançable CPF / OPCO, à La Réunion ou à distance.`,
-    keywords: `${f.title}, formation IA, Qualiopi, CPF, OPCO, intelligence artificielle`,
-    schemas: [course(f.title), breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Formations', url: `${SITE}/formations` }, { name: f.title, url: `${SITE}/formations/${f.id}` }])],
-  })),
+  {
+    path: '/formulaire',
+    title: 'Demande de devis — Aissociate, formation IA à La Réunion',
+    description: "Formulaire de demande de contact pour vos projets de formation IA, assistance ou développement sur-mesure. Organisme certifié Qualiopi à La Réunion.",
+    keywords: 'devis formation IA, demande de contact formation IA, formulaire inscription formation, organisme formation IA La Réunion',
+    schemas: [breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Contact', url: `${SITE}/contact` }, { name: 'Demande de devis', url: `${SITE}/formulaire` }])],
+  },
   // Pages légales
   { path: '/mentions-legales', title: 'Mentions légales | Aissociate', description: "Mentions légales d'Aissociate, organisme de formation IA certifié Qualiopi à La Réunion." },
   { path: '/confidentialite', title: 'Politique de confidentialité | Aissociate', description: "Politique de confidentialité et protection des données (RGPD) d'Aissociate." },
@@ -176,52 +171,153 @@ function writeRoute(r) {
 let count = 0;
 for (const r of routes) { writeRoute(r); count++; }
 
-// ── Articles de blog : lus dans Supabase au build (lecture publique RLS) ──
-// Nécessite VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY dans l'environnement de build.
-// Défensif : en l'absence d'accès, on saute sans faire échouer le build.
-async function prerenderBlog() {
-  const url = process.env.VITE_SUPABASE_URL;
+// ── Fetch helper (défensif : en l'absence d'accès, on saute sans faire échouer le build) ──
+async function fetchJson(url) {
   const anon = process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !anon) {
-    console.log('[prerender] Blog ignoré (VITE_SUPABASE_URL / ANON_KEY absents du build).');
-    return 0;
-  }
+  if (!process.env.VITE_SUPABASE_URL || !anon) return null;
   try {
-    const q = `${url}/rest/v1/blog_articles?select=slug,title,excerpt,seo_title,seo_description,seo_keywords,image_url,author,published_at,updated_at&published=eq.true&order=published_at.desc`;
-    const res = await fetch(q, { headers: { apikey: anon, Authorization: `Bearer ${anon}` } });
-    if (!res.ok) { console.log(`[prerender] Blog ignoré (HTTP ${res.status}).`); return 0; }
-    const articles = await res.json();
-    let n = 0;
-    for (const a of articles) {
-      if (!a.slug) continue;
-      const u = `${SITE}/blog/${a.slug}`;
-      const img = a.image_url || OG_IMAGE;
-      const desc = a.seo_description || a.excerpt || a.title;
-      const article = {
-        '@context': 'https://schema.org', '@type': 'BlogPosting', '@id': `${u}#article`,
-        headline: a.title, description: desc, image: img, url: u,
-        datePublished: a.published_at, dateModified: a.updated_at || a.published_at,
-        author: { '@type': 'Organization', name: a.author || 'Aissociate' },
-        publisher: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate', logo: { '@type': 'ImageObject', url: OG_IMAGE } },
-        mainEntityOfPage: u, inLanguage: 'fr-FR',
-      };
-      writeRoute({
-        path: `/blog/${a.slug}`,
-        title: `${a.seo_title || a.title} | Aissociate`,
-        description: desc,
-        keywords: a.seo_keywords || '',
-        image: img,
-        ogType: 'article',
-        schemas: [article, breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Blog', url: `${SITE}/blog` }, { name: a.title, url: u }])],
-      });
-      n++;
-    }
-    return n;
-  } catch (e) {
-    console.log('[prerender] Blog ignoré (erreur fetch) :', String(e));
-    return 0;
-  }
+    const res = await fetch(url, { headers: { apikey: anon, Authorization: `Bearer ${anon}` } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
 }
 
+// ── Formations : lues dans Supabase (lecture publique RLS) ──
+async function prerenderFormations() {
+  const baseUrl = process.env.VITE_SUPABASE_URL;
+  if (!baseUrl) { console.log('[prerender] Formations ignorées (VITE_SUPABASE_URL absent).'); return 0; }
+  const formations = await fetchJson(
+    `${baseUrl}/rest/v1/formations?select=slug,intitule,objectifs,duree_heures,prix,prix_intra,public_vise,certifiante,reference&actif=eq.true&order=slug.asc`
+  );
+  if (!formations || !Array.isArray(formations)) {
+    console.log('[prerender] Formations ignorées (pas de données).');
+    return 0;
+  }
+  let n = 0;
+  for (const f of formations) {
+    if (!f.slug) continue;
+    const u = `${SITE}/formations/${f.slug}`;
+    const objectifs = f.objectifs ? String(f.objectifs).split('\n').map(s => s.trim()).filter(Boolean) : [];
+    const desc = `${f.intitule}. ${f.duree_heures || 7}h, formation certifiée Qualiopi, finançable ${f.certifiante ? 'CPF et OPCO' : 'OPCO'}. Présentiel à La Réunion ou distanciel.`;
+    const courseSchema = course(f.intitule, objectifs[0] || desc, {
+      timeRequired: f.duree_heures ? `PT${f.duree_heures}H` : undefined,
+      offers: {
+        '@type': 'Offer',
+        price: f.prix_intra || f.prix || '0',
+        priceCurrency: 'EUR',
+        availability: 'https://schema.org/InStock',
+        url: u,
+        validFrom: new Date().toISOString().slice(0, 10),
+      },
+    });
+    writeRoute({
+      path: `/formations/${f.slug}`,
+      title: `${f.intitule} — Formation IA | Aissociate`,
+      description: desc,
+      keywords: `${f.intitule}, formation IA, Qualiopi, ${f.certifiante ? 'CPF, ' : ''}OPCO, intelligence artificielle, La Réunion`,
+      schemas: [courseSchema, breadcrumb([
+        { name: 'Accueil', url: SITE },
+        { name: 'Formations', url: `${SITE}/formations` },
+        { name: f.intitule, url: u },
+      ])],
+    });
+    n++;
+  }
+  return n;
+}
+
+// ── Articles de blog : lus dans Supabase (lecture publique RLS) ──
+async function prerenderBlog() {
+  const baseUrl = process.env.VITE_SUPABASE_URL;
+  if (!baseUrl) { console.log('[prerender] Blog ignoré (VITE_SUPABASE_URL absent).'); return 0; }
+  const articles = await fetchJson(
+    `${baseUrl}/rest/v1/blog_articles?select=slug,title,excerpt,seo_title,seo_description,seo_keywords,image_url,author,published_at,updated_at&published=eq.true&order=published_at.desc`
+  );
+  if (!articles || !Array.isArray(articles)) {
+    console.log('[prerender] Blog ignoré (pas de données).');
+    return 0;
+  }
+  let n = 0;
+  for (const a of articles) {
+    if (!a.slug) continue;
+    const u = `${SITE}/blog/${a.slug}`;
+    const img = a.image_url || OG_IMAGE;
+    const desc = a.seo_description || a.excerpt || a.title;
+    const article = {
+      '@context': 'https://schema.org', '@type': 'BlogPosting', '@id': `${u}#article`,
+      headline: a.title, description: desc, image: img, url: u,
+      datePublished: a.published_at, dateModified: a.updated_at || a.published_at,
+      author: { '@type': 'Organization', name: a.author || 'Aissociate' },
+      publisher: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate', logo: { '@type': 'ImageObject', url: OG_IMAGE } },
+      mainEntityOfPage: u, inLanguage: 'fr-FR',
+    };
+    writeRoute({
+      path: `/blog/${a.slug}`,
+      title: `${a.seo_title || a.title} | Aissociate`,
+      description: desc,
+      keywords: a.seo_keywords || '',
+      image: img,
+      ogType: 'article',
+      schemas: [article, breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Blog', url: `${SITE}/blog` }, { name: a.title, url: u }])],
+    });
+    n++;
+  }
+  return n;
+}
+
+// ── Sitemap dynamique : pages statiques + formations + articles de blog ──
+async function generateSitemap(formations, blogArticles) {
+  const today = new Date().toISOString().slice(0, 10);
+  const urls = [];
+
+  // Pages statiques
+  const staticPages = [
+    { loc: '/', priority: '1.0', changefreq: 'weekly' },
+    { loc: '/formations', priority: '0.95', changefreq: 'weekly' },
+    { loc: '/assistance', priority: '0.75', changefreq: 'monthly' },
+    { loc: '/developpement', priority: '0.75', changefreq: 'monthly' },
+    { loc: '/aides-formation', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/blog', priority: '0.85', changefreq: 'daily' },
+    { loc: '/contact', priority: '0.75', changefreq: 'monthly' },
+    { loc: '/formulaire', priority: '0.7', changefreq: 'monthly' },
+    { loc: '/mentions-legales', priority: '0.3', changefreq: 'yearly' },
+    { loc: '/confidentialite', priority: '0.3', changefreq: 'yearly' },
+    { loc: '/accessibilite', priority: '0.3', changefreq: 'yearly' },
+    { loc: '/reclamations', priority: '0.3', changefreq: 'yearly' },
+  ];
+  for (const p of staticPages) {
+    urls.push(`  <url>\n    <loc>${SITE}${p.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`);
+  }
+
+  // Formations
+  for (const f of formations) {
+    if (!f.slug) continue;
+    urls.push(`  <url>\n    <loc>${SITE}/formations/${f.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.9</priority>\n  </url>`);
+  }
+
+  // Articles de blog
+  for (const a of blogArticles) {
+    if (!a.slug) continue;
+    const lastmod = (a.updated_at || a.published_at || today).slice(0, 10);
+    urls.push(`  <url>\n    <loc>${SITE}/blog/${a.slug}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`);
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
+  writeFileSync(join(DIST, 'sitemap.xml'), xml, 'utf8');
+}
+
+// ── Exécution ──
+const formationCount = await prerenderFormations();
 const blogCount = await prerenderBlog();
-console.log(`[prerender] ${count} pages statiques + ${blogCount} articles de blog générés (<head> + JSON-LD).`);
+
+// Récupérer les données pour le sitemap (réutilise le cache fetch si possible)
+const baseUrl = process.env.VITE_SUPABASE_URL;
+let formationsForSitemap = [];
+let blogForSitemap = [];
+if (baseUrl) {
+  formationsForSitemap = await fetchJson(`${baseUrl}/rest/v1/formations?select=slug&actif=eq.true`) || [];
+  blogForSitemap = await fetchJson(`${baseUrl}/rest/v1/blog_articles?select=slug,published_at,updated_at&published=eq.true`) || [];
+}
+await generateSitemap(formationsForSitemap, blogForSitemap);
+
+console.log(`[prerender] ${count} pages statiques + ${formationCount} formations + ${blogCount} articles de blog générés (<head> + JSON-LD). Sitemap mis à jour.`);

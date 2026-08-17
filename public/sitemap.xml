@@ -1,172 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-                            http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
-  <!-- Accueil -->
+  <!-- Ce sitemap est régénéré dynamiquement au build par scripts/prerender.mjs
+       (postbuild) avec les formations et articles de blog depuis Supabase.
+       Cette version statique sert de fallback si le postbuild échoue. -->
+
   <url>
     <loc>https://aissociate.re/</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <image:image>
-      <image:loc>https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg</image:loc>
-      <image:title>Aissociate — Formation IA Générative certifiée Qualiopi</image:title>
-      <image:caption>Formation professionnelle en intelligence artificielle générative à La Réunion, certifiée Qualiopi, finançable CPF et OPCO</image:caption>
-    </image:image>
   </url>
 
-  <!-- Catalogue de formations -->
   <url>
     <loc>https://aissociate.re/formations</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/formations/closer-ia-cpf</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/creation-contenus-ia</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/introduction-ia-pme</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.85</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/automatisation-process-pme</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.85</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/marches-publics-btp-ia</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/ia-relation-client</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/ia-marketing-communication</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/ia-prospection-commerciale</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/ia-ressources-humaines</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://aissociate.re/formations/ia-manager</loc>
-    <lastmod>2026-06-04</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <!-- Services -->
-  <url>
     <loc>https://aissociate.re/assistance</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
   <url>
     <loc>https://aissociate.re/developpement</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
-  <!-- Financement -->
   <url>
     <loc>https://aissociate.re/aides-formation</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
-  <!-- Blog (articles dynamiques) -->
   <url>
     <loc>https://aissociate.re/blog</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.85</priority>
   </url>
 
-  <!-- Contact -->
   <url>
     <loc>https://aissociate.re/contact</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
   <url>
     <loc>https://aissociate.re/formulaire</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
-  <!-- Pages légales -->
   <url>
     <loc>https://aissociate.re/mentions-legales</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
     <loc>https://aissociate.re/confidentialite</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
     <loc>https://aissociate.re/accessibilite</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
     <loc>https://aissociate.re/reclamations</loc>
-    <lastmod>2026-06-04</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
