@@ -1,5 +1,6 @@
+# Sitemap dynamique (articles blog + formations CRM) — AVANT le fallback SPA :
+# les règles sont évaluées dans l'ordre, la première qui matche gagne.
+/sitemap-blog.xml  https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/sitemap-blog  200
+
 # SPA fallback
 /*    /index.html   200
-
-# Sitemap dynamique (articles blog + formations CRM)
-/sitemap-blog.xml  https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/sitemap-blog  200

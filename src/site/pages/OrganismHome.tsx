@@ -60,7 +60,7 @@ export default function OrganismHome() {
       />
       <Header />
 
-      <main>
+      <main id="contenu">
       <section className="relative bg-gradient-to-br from-slate-50 via-white to-orange-50 py-20 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMDAwMCIgc3Ryb2tlLW9wYWNpdHk9IjAuMDMiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-40"></div>
 
@@ -73,7 +73,7 @@ export default function OrganismHome() {
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 mb-6 leading-tight">
-                Formation en <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-600">intelligence artificielle</span> à La Réunion
+                Formation en <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-amber-700">intelligence artificielle</span> à La Réunion
               </h1>
 
               <p className="text-xl text-slate-600 mb-8 leading-relaxed">
@@ -85,7 +85,7 @@ export default function OrganismHome() {
               <div className="flex flex-wrap gap-4">
                 <Link
                   to="/formations"
-                  className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
+                  className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
                 >
                   Découvrir nos formations
                   <ArrowRight className="w-5 h-5" />
@@ -128,7 +128,7 @@ export default function OrganismHome() {
               <div className="relative bg-white rounded-t-2xl -mt-8 p-8 border border-slate-200">
                 <div className="space-y-4">
                   <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
-                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-amber-700 rounded-lg flex items-center justify-center flex-shrink-0">
                       <GraduationCap className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -274,7 +274,7 @@ export default function OrganismHome() {
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent"></div>
               </div>
               <div className="p-8">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform -mt-16 relative">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform -mt-16 relative">
                 <GraduationCap className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-slate-900 mb-3">Formations débutantes</h3>
@@ -425,7 +425,7 @@ export default function OrganismHome() {
           <div className="flex flex-wrap gap-4 justify-center">
             <Link
               to="/formations"
-              className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
+              className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
             >
               Voir nos formations
               <ArrowRight className="w-5 h-5" />

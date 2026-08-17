@@ -31,9 +31,12 @@ Deno.serve(async (req: Request) => {
       .order("published_at", { ascending: false })
       .limit(500);
 
+    // URLs par slug (lisibles, stables) — jamais par UUID.
     const { data: formations } = await sb
       .from("formations")
-      .select("id, intitule, updated_at")
+      .select("slug, intitule, updated_at")
+      .eq("actif", true)
+      .not("slug", "is", null)
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -56,7 +59,7 @@ ${imageTag}
     const formationUrls = (formations || []).map((f) => {
       const lastmod = (f.updated_at || today).slice(0, 10);
       return `  <url>
-    <loc>${SITE_URL}/formations/${esc(String(f.id))}</loc>
+    <loc>${SITE_URL}/formations/${esc(String(f.slug))}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

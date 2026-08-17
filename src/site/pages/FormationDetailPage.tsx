@@ -18,9 +18,32 @@ const fmtDuree = (h) => {
 function CrmFormationDetail({ f }) {
   const objectives = f.objectifs ? String(f.objectifs).split('\n').map((s) => s.trim()).filter(Boolean) : [];
   const program = Array.isArray(f.programme) ? f.programme.filter(Boolean) : [];
+  // Canonical par slug (jamais l'UUID) : une seule URL indexable par formation.
+  const canonicalUrl = `${SITE_URL}/formations/${f.slug || f.id}`;
   return (
     <div className="min-h-screen bg-white">
+      <SEO
+        title={`${f.intitule} — Formation IA | Aissociate`}
+        description={`${f.intitule}.${f.duree_heures ? ` ${f.duree_heures}h,` : ''} formation certifiée Qualiopi, finançable OPCO${f.certifiante ? ' et CPF' : ''}. Présentiel à La Réunion ou distanciel.`}
+        url={canonicalUrl}
+        type="course"
+        breadcrumbs={[
+          { name: 'Formations', url: `${SITE_URL}/formations` },
+          { name: f.intitule, url: canonicalUrl },
+        ]}
+        courseData={{
+          name: f.intitule,
+          description: objectives[0] || f.intitule,
+          provider: 'Aissociate',
+          duration: f.duree_heures ? `PT${f.duree_heures}H` : 'PT7H',
+          price: Number(f.prix) > 0 ? String(Number(f.prix)) : '0',
+          priceCurrency: 'EUR',
+          educationalLevel: 'Tous niveaux',
+          courseMode: ['blended', 'onsite', 'online'],
+        }}
+      />
       <Header />
+      <main id="contenu">
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link to="/formations" className="inline-flex items-center gap-2 text-slate-300 hover:text-white mb-6"><ArrowLeft className="w-4 h-4" /> Retour aux formations</Link>
@@ -51,10 +74,11 @@ function CrmFormationDetail({ f }) {
           <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border border-orange-200 text-center">
             <h2 className="text-2xl font-bold text-slate-900 mb-3">Intéressé par cette formation ?</h2>
             <p className="text-slate-600 mb-6">Demandez un devis personnalisé, finançable (CPF / OPCO / AGEFICE).</p>
-            <Link to="/formulaire" className="inline-block bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
+            <Link to="/formulaire" className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
           </div>
         </div>
       </section>
+      </main>
       <Footer />
     </div>
   );
@@ -715,6 +739,7 @@ export default function FormationDetailPage() {
         }}
       />
       <Header />
+      <main id="contenu">
 
       <section className="relative h-96 overflow-hidden">
         <img
@@ -880,7 +905,7 @@ export default function FormationDetailPage() {
 
                   <Link
                     to="/formulaire"
-                    className="block w-full text-center bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
+                    className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
                   >
                     Demander un devis
                   </Link>
@@ -931,6 +956,7 @@ export default function FormationDetailPage() {
           </div>
         </div>
       </section>
+      </main>
 
       <Footer />
     </div>

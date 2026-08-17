@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import SupabaseNotice from '@/components/SupabaseNotice';
 import Layout from '@/components/Layout';
@@ -6,35 +7,37 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import SiteFrame from '@/components/SiteFrame';
 
 // ── CRM (back-office, derrière /login) ──
-import Login from '@/pages/Login';
-import ResetPassword from '@/pages/ResetPassword';
-import Dashboard from '@/pages/Dashboard';
-import Contacts from '@/pages/Contacts';
-import Entreprises from '@/pages/Entreprises';
-import Pipeline from '@/pages/Pipeline';
-import Formations from '@/pages/Formations';
-import PlansFormation from '@/pages/PlansFormation';
-import Devis from '@/pages/Devis';
-import Dossiers from '@/pages/Dossiers';
-import DossierDetail from '@/pages/DossierDetail';
-import Calendrier from '@/pages/Calendrier';
-import Emargement from '@/pages/Emargement';
-import Formateurs from '@/pages/Formateurs';
-import Kanban from '@/pages/Kanban';
-import Documents from '@/pages/Documents';
-import Qualiopi from '@/pages/Qualiopi';
-import Messagerie from '@/pages/Messagerie';
-import Assistant from '@/pages/Assistant';
-import BlogAdmin from '@/pages/BlogAdmin';
-import Newsletter from '@/pages/Newsletter';
-import Recrutement from '@/pages/Recrutement';
-import Conseillers from '@/pages/Conseillers';
-import Statistiques from '@/pages/Statistiques';
-import ActionsAFaire from '@/pages/ActionsAFaire';
-import Administration from '@/pages/Administration';
-import Parametres from '@/pages/Parametres';
-import Tickets from '@/pages/Tickets';
-import CaptureMobile from '@/pages/CaptureMobile';
+// Chargé en lazy : le site vitrine public ne doit pas télécharger le bundle du CRM
+// (Core Web Vitals / SEO). Chaque page devient son propre chunk à la build.
+const Login = lazy(() => import('@/pages/Login'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Contacts = lazy(() => import('@/pages/Contacts'));
+const Entreprises = lazy(() => import('@/pages/Entreprises'));
+const Pipeline = lazy(() => import('@/pages/Pipeline'));
+const Formations = lazy(() => import('@/pages/Formations'));
+const PlansFormation = lazy(() => import('@/pages/PlansFormation'));
+const Devis = lazy(() => import('@/pages/Devis'));
+const Dossiers = lazy(() => import('@/pages/Dossiers'));
+const DossierDetail = lazy(() => import('@/pages/DossierDetail'));
+const Calendrier = lazy(() => import('@/pages/Calendrier'));
+const Emargement = lazy(() => import('@/pages/Emargement'));
+const Formateurs = lazy(() => import('@/pages/Formateurs'));
+const Kanban = lazy(() => import('@/pages/Kanban'));
+const Documents = lazy(() => import('@/pages/Documents'));
+const Qualiopi = lazy(() => import('@/pages/Qualiopi'));
+const Messagerie = lazy(() => import('@/pages/Messagerie'));
+const Assistant = lazy(() => import('@/pages/Assistant'));
+const BlogAdmin = lazy(() => import('@/pages/BlogAdmin'));
+const Newsletter = lazy(() => import('@/pages/Newsletter'));
+const Recrutement = lazy(() => import('@/pages/Recrutement'));
+const Conseillers = lazy(() => import('@/pages/Conseillers'));
+const Statistiques = lazy(() => import('@/pages/Statistiques'));
+const ActionsAFaire = lazy(() => import('@/pages/ActionsAFaire'));
+const Administration = lazy(() => import('@/pages/Administration'));
+const Parametres = lazy(() => import('@/pages/Parametres'));
+const Tickets = lazy(() => import('@/pages/Tickets'));
+const CaptureMobile = lazy(() => import('@/pages/CaptureMobile'));
 
 // ── Site vitrine public (vendorisé depuis Aissociate_OF, sous src/site) ──
 import OrganismHome from '@/site/pages/OrganismHome';
@@ -52,14 +55,26 @@ import SiteMentionsLegales from '@/site/pages/MentionsLegales';
 import SiteConfidentialite from '@/site/pages/Confidentialite';
 import SiteAccessibilite from '@/site/pages/Accessibilite';
 import SiteReclamations from '@/site/pages/Reclamations';
-import SiteQuestionnaire from '@/site/pages/Questionnaire';
-import SiteSignature from '@/site/pages/Signature';
-import SiteEmargement from '@/site/pages/Emargement';
+import SiteNotFound from '@/site/pages/NotFound';
+
+// Pages publiques tokenisées (non indexées, usage ponctuel) : lazy également.
+const SiteQuestionnaire = lazy(() => import('@/site/pages/Questionnaire'));
+const SiteSignature = lazy(() => import('@/site/pages/Signature'));
+const SiteEmargement = lazy(() => import('@/site/pages/Emargement'));
+
+function LazyFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white" role="status" aria-label="Chargement">
+      <div className="w-8 h-8 border-4 border-orange-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   const { configured } = useAuth();
 
   return (
+    <Suspense fallback={<LazyFallback />}>
     <Routes>
       {/* ── Site vitrine public (layout SiteFrame = AuthProvider du site + bouton Admin) ── */}
       <Route element={<SiteFrame />}>
@@ -78,6 +93,8 @@ export default function App() {
         <Route path="/confidentialite" element={<SiteConfidentialite />} />
         <Route path="/accessibilite" element={<SiteAccessibilite />} />
         <Route path="/reclamations" element={<SiteReclamations />} />
+        {/* Vraie page 404 (noindex) : pas de redirection silencieuse vers l'accueil (soft 404) */}
+        <Route path="*" element={<SiteNotFound />} />
       </Route>
 
       {/* ── Pages publiques tokenisées (hors chrome du site, non indexées) ── */}
@@ -137,7 +154,7 @@ export default function App() {
         element={configured ? <ProtectedRoute><CaptureMobile /></ProtectedRoute> : <SupabaseNotice />}
       />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

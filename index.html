@@ -39,16 +39,41 @@
     <meta name="twitter:image" content="https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg" />
     <meta name="twitter:image:alt" content="Aissociate — Formation IA Générative" />
 
-    <!-- Canonical -->
+    <!-- Canonical : réécrit par route par scripts/prerender.mjs (postbuild), puis par
+         React/SEO.tsx au runtime. Cette ligne sert de cible au remplacement du prérendu. -->
     <link rel="canonical" href="https://aissociate.re" />
 
     <!-- Sitemaps -->
     <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
 
-    <!-- Preconnect fonts -->
+    <!-- Organisation (JSON-LD statique : visible par tous les bots, y compris sans JS) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": ["EducationalOrganization", "LocalBusiness"],
+      "@id": "https://aissociate.re/#organization",
+      "name": "Aissociate",
+      "description": "Organisme de formation en intelligence artificielle générative certifié Qualiopi à La Réunion. Formations finançables CPF, OPCO, France Travail.",
+      "url": "https://aissociate.re",
+      "logo": "https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg",
+      "email": "contact@aissociate.re",
+      "telephone": "+262692246860",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "36 chemin de l'État Major",
+        "addressLocality": "Saint-Denis",
+        "postalCode": "97417",
+        "addressCountry": "RE"
+      },
+      "hasCredential": { "@type": "EducationalOccupationalCredential", "name": "Certification Qualiopi" }
+    }
+    </script>
+
+    <!-- Fonts : non bloquantes (media=print puis bascule à l'onload) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" /></noscript>
 
     <script>
       // Anti-flash : applique le thème avant le rendu React
@@ -81,6 +106,26 @@
     <noscript><img height="1" width="1" style="display:none"
       src="https://www.facebook.com/tr?id=552188931169395&ev=PageView&noscript=1"
     /></noscript>
+    <!-- Contenu de secours pour visiteurs et crawlers sans JavaScript (GPTBot, etc.) -->
+    <noscript>
+      <main style="max-width:640px;margin:40px auto;padding:0 16px;font-family:system-ui,sans-serif;color:#0f172a">
+        <h1>Aissociate — Formation IA Générative certifiée Qualiopi</h1>
+        <p>Organisme de formation en intelligence artificielle générative à La Réunion, certifié
+        Qualiopi. Formations ChatGPT, prompt engineering et automatisation, finançables CPF, OPCO
+        et France Travail — en présentiel ou à distance.</p>
+        <p>Ce site nécessite JavaScript pour l'affichage complet. Pages principales :</p>
+        <ul>
+          <li><a href="/formations">Catalogue de formations IA</a></li>
+          <li><a href="/aides-formation">Financer sa formation (CPF, OPCO, France Travail)</a></li>
+          <li><a href="/assistance">Assistance &amp; chatbots IA</a></li>
+          <li><a href="/developpement">Développement d'agents IA</a></li>
+          <li><a href="/blog">Blog IA</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+        <p>Contact : <a href="mailto:contact@aissociate.re">contact@aissociate.re</a> — 06 92 24 68 60<br />
+        36 chemin de l'État Major, 97417 Saint-Denis, La Réunion</p>
+      </main>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

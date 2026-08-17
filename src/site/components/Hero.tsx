@@ -44,7 +44,7 @@ export default function Hero() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-20">
             <Link
               to="/formulaire"
-              className="group bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl w-full sm:w-auto flex items-center justify-center gap-2"
+              className="group bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl w-full sm:w-auto flex items-center justify-center gap-2"
             >
               Découvrir la formation
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />

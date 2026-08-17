@@ -14,6 +14,7 @@ export default function LegalLayout({ title, description, path, updated, childre
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: title, url: `${SITE_URL}${path}` }]}
       />
       <Header />
+      <main id="contenu">
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -28,6 +29,7 @@ export default function LegalLayout({ title, description, path, updated, childre
         </div>
       </section>
 
+      </main>
       <Footer />
     </div>
   );

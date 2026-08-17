@@ -1,0 +1,9 @@
+# Config de build Netlify.
+#
+# Force `npm run build` : le script `postbuild` (scripts/prerender.mjs) génère les
+# pages statiques par route (<head> + JSON-LD par page + articles de blog). Sans lui,
+# toutes les routes servent l'index.html générique — le prérendu SEO est perdu
+# (c'était le cas quand la commande de build était configurée côté UI sur `vite build`).
+[build]
+  command = "npm run build"
+  publish = "dist"

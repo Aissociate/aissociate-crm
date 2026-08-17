@@ -19,7 +19,7 @@ export default function Development() {
       description: 'Assistants conversationnels personnalisés pour automatiser votre support client et vos processus',
       icon: MessageSquare,
       features: ['Support client 24/7', 'Qualification de leads', 'Prise de rendez-vous', 'FAQ automatisée'],
-      color: 'from-orange-500 to-amber-600'
+      color: 'from-orange-600 to-amber-700'
     },
     {
       title: 'Automatisation documentaire',
@@ -94,6 +94,7 @@ export default function Development() {
         faqData={FAQ_DEV}
       />
       <Header />
+      <main id="contenu">
 
       <section className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white py-20 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9IjAuMDUiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-40"></div>
@@ -114,7 +115,7 @@ export default function Development() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-              Développement d'<span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-amber-600">agents IA</span> &amp; automatisation sur-mesure
+              Développement d'<span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-amber-700">agents IA</span> &amp; automatisation sur-mesure
             </h1>
 
             <p className="text-xl text-slate-300 mb-8 leading-relaxed">
@@ -124,7 +125,7 @@ export default function Development() {
             <div className="flex flex-wrap gap-4 justify-center">
               <Link
                 to="/formulaire"
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
+                className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
               >
                 Discuter de votre projet
                 <ArrowRight className="w-5 h-5" />
@@ -201,7 +202,7 @@ export default function Development() {
             {processSteps.map((step, index) => (
               <div key={index} className="relative">
                 <div className="bg-white rounded-xl p-6 text-center shadow-lg h-full">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold text-xl">
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-amber-700 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-bold text-xl">
                     {step.step}
                   </div>
                   <h3 className="font-bold text-slate-900 mb-2">{step.title}</h3>
@@ -297,7 +298,7 @@ export default function Development() {
               <div className="space-y-4">
                 <Link
                   to="/formulaire"
-                  className="block w-full text-center bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white py-4 rounded-xl font-bold text-lg transition-all"
+                  className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white py-4 rounded-xl font-bold text-lg transition-all"
                 >
                   Demander un devis
                 </Link>
@@ -345,6 +346,7 @@ export default function Development() {
         </div>
       </section>
 
+      </main>
       <Footer />
     </div>
   );

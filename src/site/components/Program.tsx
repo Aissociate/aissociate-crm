@@ -6,7 +6,7 @@ export default function Program() {
     {
       day: 'Jour 1',
       title: 'Fondamentaux et stratégie IA',
-      color: 'from-orange-500 to-amber-600',
+      color: 'from-orange-600 to-amber-700',
       topics: [
         'Introduction à l\'intelligence artificielle générative',
         'Comprendre les opportunités et limites de l\'IA',
@@ -89,13 +89,13 @@ export default function Program() {
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
             <BookOpen className="w-7 h-7 text-white" />
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
             Programme de formation
           </h2>
-          <div className="w-20 h-1 bg-gradient-to-r from-orange-500 to-amber-600 mx-auto rounded-full mb-6"></div>
+          <div className="w-20 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full mb-6"></div>
           <p className="text-xl text-slate-600">3 jours intensifs pour maîtriser l'IA</p>
         </div>
 
@@ -108,7 +108,7 @@ export default function Program() {
                 className="group bg-white rounded-2xl border border-slate-200 p-7 hover:shadow-2xl hover:border-orange-200 transition-all duration-300 hover:-translate-y-1"
               >
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="w-11 h-11 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+                  <div className="w-11 h-11 bg-gradient-to-br from-orange-600 to-amber-700 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
                     <Icon className="w-6 h-6 text-white" />
                   </div>
                   <h3 className="text-lg font-bold text-slate-900">{info.title}</h3>
@@ -133,7 +133,7 @@ export default function Program() {
           <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 mb-4">
             Déroulé de la formation
           </h3>
-          <div className="w-16 h-1 bg-gradient-to-r from-orange-500 to-amber-600 mx-auto rounded-full mb-4"></div>
+          <div className="w-16 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full mb-4"></div>
           <p className="text-lg text-slate-600">Programme détaillé sur 3 jours</p>
         </div>
 

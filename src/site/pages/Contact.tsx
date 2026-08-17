@@ -68,6 +68,7 @@ export default function Contact() {
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Contact', url: `${SITE_URL}/contact` }]}
       />
       <Header />
+      <main id="contenu">
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -240,7 +241,7 @@ export default function Contact() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
+                  className="w-full bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
                 >
                   <Send className="w-5 h-5" />
                   {loading ? 'Envoi en cours…' : 'Envoyer le message'}
@@ -315,6 +316,7 @@ export default function Contact() {
         </div>
       </section>
 
+      </main>
       <Footer />
     </div>
   );

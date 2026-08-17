@@ -7,7 +7,7 @@ import Footer from '../components/Footer';
 import { GraduationCap, Clock, Users, Euro, Award, CheckCircle, TrendingUp, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-const GRADIENTS = ['from-orange-500 to-amber-600', 'from-emerald-500 to-teal-600', 'from-blue-500 to-cyan-600', 'from-purple-500 to-pink-600', 'from-amber-600 to-orange-700'];
+const GRADIENTS = ['from-orange-600 to-amber-700', 'from-emerald-500 to-teal-600', 'from-blue-500 to-cyan-600', 'from-purple-500 to-pink-600', 'from-amber-600 to-orange-700'];
 
 // Mise en forme des champs CRM pour l'affichage public.
 const fmtPrix = (n) => `${Number(n).toLocaleString('fr-FR')} €`;
@@ -50,7 +50,7 @@ export default function FormationsList() {
         'Appliquer les principes de confidentialité et protection des données (RGPD)',
         'Produire des contenus conformes aux exigences éthiques et réglementaires'
       ],
-      color: 'from-orange-500 to-amber-600'
+      color: 'from-orange-600 to-amber-700'
     },
     {
       id: 'introduction-ia-pme',
@@ -122,7 +122,7 @@ export default function FormationsList() {
         'Optimiser la stratégie de contenus avec l\'IA',
         'Gérer les relations médias et la communication de crise'
       ],
-      color: 'from-orange-500 to-amber-600'
+      color: 'from-orange-600 to-amber-700'
     },
     {
       id: 'ia-prospection-commerciale',
@@ -246,11 +246,12 @@ export default function FormationsList() {
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formations', url: `${SITE_URL}/formations` }]}
       />
       <Header />
+      <main id="contenu">
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle</h1>
@@ -364,7 +365,7 @@ export default function FormationsList() {
 
                       <Link
                         to={`/formations/${formation.id}`}
-                        className="inline-block bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                        className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
                       >
                         Découvrir la formation
                       </Link>
@@ -452,7 +453,7 @@ export default function FormationsList() {
               </p>
               <Link
                 to="/formulaire"
-                className="inline-block bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
               >
                 Contactez-nous
               </Link>
@@ -461,6 +462,7 @@ export default function FormationsList() {
         </div>
       </section>
 
+      </main>
       <Footer />
     </div>
   );

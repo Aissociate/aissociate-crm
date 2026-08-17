@@ -18,7 +18,7 @@ export default function Assistance() {
       title: 'Audit IA',
       description: 'Analyse complète de vos processus et identification des opportunités d\'automatisation par l\'IA',
       icon: Target,
-      color: 'from-orange-500 to-amber-600'
+      color: 'from-orange-600 to-amber-700'
     },
     {
       title: 'Stratégie digitale',
@@ -74,6 +74,7 @@ export default function Assistance() {
         faqData={FAQ_ASSISTANCE}
       />
       <Header />
+      <main id="contenu">
 
       <section className="relative bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9IjAuMDUiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-40"></div>
@@ -105,7 +106,7 @@ export default function Assistance() {
               <div className="flex flex-wrap gap-4">
                 <Link
                   to="/formulaire"
-                  className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
+                  className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Prendre rendez-vous
@@ -268,7 +269,7 @@ export default function Assistance() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-8 sm:p-10 text-white">
+            <div className="bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl p-8 sm:p-10 text-white">
               <div className="text-center mb-8">
                 <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-80" />
                 <h3 className="text-2xl font-bold mb-2">Parlons de votre projet</h3>
@@ -319,6 +320,7 @@ export default function Assistance() {
         </div>
       </section>
 
+      </main>
       <Footer />
     </div>
   );

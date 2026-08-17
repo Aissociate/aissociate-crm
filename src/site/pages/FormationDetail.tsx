@@ -29,6 +29,7 @@ export default function FormationDetail() {
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formations', url: `${SITE_URL}/formations` }, { name: 'Closer IA CPF', url: `${SITE_URL}/formations/closer-ia-cpf` }]}
       />
       <Header />
+      <main id="contenu">
 
       <div className="bg-slate-50 border-b border-slate-200 py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -52,6 +53,7 @@ export default function FormationDetail() {
       <Team />
       <FAQ />
       <FinalCTA />
+      </main>
       <Footer />
     </div>
   );

@@ -8,7 +8,14 @@ export default function Header() {
 
   return (
     <header className="bg-white shadow-sm sticky top-0 z-50">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Lien d'évitement : premier élément focalisable, visible uniquement au clavier */}
+      <a
+        href="#contenu"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:bg-slate-900 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg"
+      >
+        Aller au contenu
+      </a>
+      <nav aria-label="Navigation principale" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <Link to="/" className="flex items-center gap-3 group">
             <AdminLogo
@@ -65,7 +72,7 @@ export default function Header() {
 
             <Link
               to="/formulaire"
-              className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-all"
+              className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-6 py-2.5 rounded-lg font-semibold transition-all"
             >
               Nous contacter
             </Link>
@@ -74,13 +81,16 @@ export default function Header() {
           <button
             className="md:hidden text-slate-700"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label={isMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+            aria-expanded={isMenuOpen}
+            aria-controls="menu-mobile"
           >
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {isMenuOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
           </button>
         </div>
 
         {isMenuOpen && (
-          <div className="md:hidden border-t border-slate-200 py-4 space-y-2">
+          <div id="menu-mobile" className="md:hidden border-t border-slate-200 py-4 space-y-2">
             <Link
               to="/formations"
               className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
@@ -128,7 +138,7 @@ export default function Header() {
 
             <Link
               to="/formulaire"
-              className="block mx-4 mt-4 text-center bg-gradient-to-r from-orange-500 to-amber-600 text-white px-6 py-2.5 rounded-lg font-semibold"
+              className="block mx-4 mt-4 text-center bg-gradient-to-r from-orange-600 to-amber-700 text-white px-6 py-2.5 rounded-lg font-semibold"
               onClick={() => setIsMenuOpen(false)}
             >
               Nous contacter

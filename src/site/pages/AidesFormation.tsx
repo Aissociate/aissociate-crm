@@ -65,6 +65,7 @@ export default function AidesFormation() {
         faqData={FAQ_AIDES}
       />
       <Header />
+      <main id="contenu">
 
       <div className="w-full h-1 flex" aria-hidden="true">
         <div className="flex-1" style={{ backgroundColor: BLEU_FRANCE }}></div>
@@ -537,6 +538,7 @@ export default function AidesFormation() {
         <div className="flex-1" style={{ backgroundColor: ROUGE_MARIANNE }}></div>
       </div>
 
+      </main>
       <Footer />
     </div>
   );

@@ -86,7 +86,7 @@ export default function BlogArticle() {
           <p className="text-slate-500 mb-8">Cet article n'existe pas ou n'est plus disponible.</p>
           <Link
             to="/blog"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white px-6 py-3 rounded-xl font-bold hover:from-orange-600 hover:to-amber-700 transition-all"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-600 to-amber-700 text-white px-6 py-3 rounded-xl font-bold hover:from-orange-700 hover:to-amber-800 transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour au blog
@@ -125,6 +125,7 @@ export default function BlogArticle() {
         }}
       />
       <Header />
+      <main id="contenu">
 
       <div className="bg-slate-50 border-b border-slate-200 py-4">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -142,7 +143,7 @@ export default function BlogArticle() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
             {article.blog_categories && (
-              <span className="inline-block bg-gradient-to-r from-orange-500 to-amber-600 text-white px-4 py-1 rounded-full text-sm font-semibold mb-4">
+              <span className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 text-white px-4 py-1 rounded-full text-sm font-semibold mb-4">
                 {article.blog_categories.name}
               </span>
             )}
@@ -192,7 +193,7 @@ export default function BlogArticle() {
               </p>
               <Link
                 to="/formations"
-                className="inline-block bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
               >
                 Voir nos formations
               </Link>
@@ -220,7 +221,7 @@ export default function BlogArticle() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-orange-600 to-amber-700 flex items-center justify-center">
                         <BookOpen className="w-10 h-10 text-white/60" />
                       </div>
                     )}
@@ -237,6 +238,7 @@ export default function BlogArticle() {
           </div>
         </section>
       )}
+      </main>
 
       <Footer />
     </div>

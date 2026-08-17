@@ -84,16 +84,18 @@ export default function FAQ() {
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
                 className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white/50 transition-all"
+                aria-expanded={openIndex === index}
+                aria-controls={`faq-reponse-${index}`}
               >
                 <span className="font-bold text-slate-900 text-lg pr-4" itemProp="name">{faq.question}</span>
                 {openIndex === index ? (
-                  <ChevronUp className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                  <ChevronUp className="w-6 h-6 text-blue-600 flex-shrink-0" aria-hidden="true" />
                 ) : (
-                  <ChevronDown className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                  <ChevronDown className="w-6 h-6 text-blue-600 flex-shrink-0" aria-hidden="true" />
                 )}
               </button>
               {openIndex === index && (
-                <div className="px-6 pb-5" itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
+                <div id={`faq-reponse-${index}`} className="px-6 pb-5" itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
                   <p className="text-slate-700 leading-relaxed" itemProp="text">{faq.answer}</p>
                 </div>
               )}

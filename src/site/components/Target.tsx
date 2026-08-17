@@ -15,13 +15,13 @@ export default function Target() {
     <section className="py-24 bg-gradient-to-b from-white via-slate-50/50 to-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
             <TargetIcon className="w-7 h-7 text-white" />
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
             Cette formation est faite pour vous
           </h2>
-          <div className="w-20 h-1 bg-gradient-to-r from-orange-500 to-amber-600 mx-auto rounded-full"></div>
+          <div className="w-20 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full"></div>
         </div>
 
         <div className="max-w-5xl mx-auto">
@@ -51,7 +51,7 @@ export default function Target() {
                     key={index}
                     className="group flex flex-col items-center p-6 sm:p-8 bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 border border-slate-200 hover:border-orange-200"
                   >
-                    <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg">
+                    <div className="w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg">
                       <Icon className="w-8 h-8 text-white" />
                     </div>
                     <p className="text-center font-semibold text-slate-900 text-sm sm:text-base">{profile.label}</p>

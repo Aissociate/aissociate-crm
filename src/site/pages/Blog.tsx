@@ -53,7 +53,7 @@ export default function Blog() {
   }
 
   const categoryColors: Record<string, string> = {
-    'formation': 'from-orange-500 to-amber-600',
+    'formation': 'from-orange-600 to-amber-700',
     'intelligence-artificielle': 'from-blue-500 to-cyan-600',
     'business': 'from-emerald-500 to-teal-600',
     'marketing': 'from-rose-500 to-pink-600',
@@ -61,8 +61,8 @@ export default function Blog() {
   };
 
   function getCategoryColor(cat: BlogCategory | null | undefined): string {
-    if (!cat) return 'from-orange-500 to-amber-600';
-    return categoryColors[cat.slug] || 'from-orange-500 to-amber-600';
+    if (!cat) return 'from-orange-600 to-amber-700';
+    return categoryColors[cat.slug] || 'from-orange-600 to-amber-700';
   }
 
   return (
@@ -76,11 +76,12 @@ export default function Blog() {
         breadcrumbs={[{ name: 'Blog', url: `${SITE_URL}/blog` }]}
       />
       <Header />
+      <main id="contenu">
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
               <BookOpen className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-4xl sm:text-5xl font-bold mb-6">Notre blog</h1>
@@ -98,7 +99,7 @@ export default function Blog() {
               onClick={() => setActiveCategory(null)}
               className={`px-6 py-2 rounded-full font-semibold transition-all ${
                 !activeCategory
-                  ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-lg'
+                  ? 'bg-gradient-to-r from-orange-600 to-amber-700 text-white shadow-lg'
                   : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-orange-300 hover:shadow-md'
               }`}
             >
@@ -113,7 +114,7 @@ export default function Blog() {
                   onClick={() => setActiveCategory(cat.id)}
                   className={`px-6 py-2 rounded-full font-semibold transition-all ${
                     activeCategory === cat.id
-                      ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-lg'
+                      ? 'bg-gradient-to-r from-orange-600 to-amber-700 text-white shadow-lg'
                       : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-orange-300 hover:shadow-md'
                   }`}
                 >
@@ -206,7 +207,7 @@ export default function Blog() {
                 placeholder="Votre adresse email"
                 className="flex-1 px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-orange-400 focus:outline-none"
               />
-              <button className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white px-8 py-3 rounded-lg font-bold transition-all whitespace-nowrap">
+              <button className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-lg font-bold transition-all whitespace-nowrap">
                 S'abonner
               </button>
             </div>
@@ -214,6 +215,7 @@ export default function Blog() {
         </div>
       </section>
 
+      </main>
       <Footer />
     </div>
   );

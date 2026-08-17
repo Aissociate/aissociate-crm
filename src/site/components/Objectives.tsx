@@ -6,7 +6,7 @@ export default function Objectives() {
     {
       icon: Target,
       text: 'Comprendre le fonctionnement et les usages de l\'IA générative',
-      color: 'from-orange-500 to-amber-600'
+      color: 'from-orange-600 to-amber-700'
     },
     {
       icon: Zap,
@@ -41,13 +41,13 @@ export default function Objectives() {
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
             <CheckCircle2 className="w-7 h-7 text-white" />
           </div>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
             Objectifs de la formation
           </h2>
-          <div className="w-20 h-1 bg-gradient-to-r from-orange-500 to-amber-600 mx-auto rounded-full mb-6"></div>
+          <div className="w-20 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full mb-6"></div>
           <p className="text-xl text-slate-600 max-w-3xl mx-auto">
             À l'issue de la formation, les participants seront capables de :
           </p>
