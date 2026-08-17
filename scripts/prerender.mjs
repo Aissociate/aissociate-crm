@@ -183,16 +183,36 @@ async function fetchJson(url) {
 }
 
 // ── Formations : lues dans Supabase (lecture publique RLS) ──
+// Filet de sécurité : si la lecture échoue au build (variables d'environnement
+// absentes du contexte de deploy, Supabase injoignable…), on retombe sur cette
+// liste. Sans elle, un build muet ferait disparaître les 10 pages formations du
+// prérendu ET du sitemap — ce sont les pages les mieux référencées du site.
+const FORMATIONS_FALLBACK = [
+  { slug: 'closer-ia-cpf', intitule: 'Formation Closer IA éligible CPF — Certifiante Qualiopi', certifiante: true },
+  { slug: 'creation-contenus-ia', intitule: "Création de contenus par l'IA générative — Certifiante CPF", certifiante: true },
+  { slug: 'introduction-ia-pme', intitule: 'Introduction aux IA pour les PME' },
+  { slug: 'automatisation-process-pme', intitule: "Automatisation des process des PME avec l'IA" },
+  { slug: 'marches-publics-btp-ia', intitule: 'Réponse aux marchés publics BTP avec l\'IA' },
+  { slug: 'ia-relation-client', intitule: "L'IA pour optimiser la relation client" },
+  { slug: 'ia-marketing-communication', intitule: "L'IA pour le marketing et la communication" },
+  { slug: 'ia-prospection-commerciale', intitule: "L'IA pour la prospection commerciale" },
+  { slug: 'ia-ressources-humaines', intitule: "L'IA pour les ressources humaines" },
+  { slug: 'ia-manager', intitule: "L'IA au service du manager" },
+];
+
+/** Formations réellement prérendues — réutilisées telles quelles par le sitemap. */
+let formationsPrerendues = [];
+
 async function prerenderFormations() {
   const baseUrl = process.env.VITE_SUPABASE_URL;
-  if (!baseUrl) { console.log('[prerender] Formations ignorées (VITE_SUPABASE_URL absent).'); return 0; }
-  const formations = await fetchJson(
+  const lues = baseUrl ? await fetchJson(
     `${baseUrl}/rest/v1/formations?select=slug,intitule,objectifs,duree_heures,prix,prix_intra,public_vise,certifiante,reference&actif=eq.true&order=slug.asc`
-  );
-  if (!formations || !Array.isArray(formations)) {
-    console.log('[prerender] Formations ignorées (pas de données).');
-    return 0;
+  ) : null;
+  const formations = Array.isArray(lues) && lues.length ? lues : FORMATIONS_FALLBACK;
+  if (formations === FORMATIONS_FALLBACK) {
+    console.log(`[prerender] ⚠ Formations non lues dans Supabase (${baseUrl ? 'pas de données' : 'VITE_SUPABASE_URL absent'}) — liste de secours utilisée.`);
   }
+  formationsPrerendues = formations;
   let n = 0;
   for (const f of formations) {
     if (!f.slug) continue;
@@ -227,16 +247,21 @@ async function prerenderFormations() {
 }
 
 // ── Articles de blog : lus dans Supabase (lecture publique RLS) ──
+// Pas de liste de secours possible ici (contenu dynamique) : en cas d'échec, le
+// sitemap conserve au moins /blog et les pages formations.
+let blogPrerendus = [];
+
 async function prerenderBlog() {
   const baseUrl = process.env.VITE_SUPABASE_URL;
-  if (!baseUrl) { console.log('[prerender] Blog ignoré (VITE_SUPABASE_URL absent).'); return 0; }
+  if (!baseUrl) { console.log('[prerender] ⚠ Blog ignoré (VITE_SUPABASE_URL absent).'); return 0; }
   const articles = await fetchJson(
     `${baseUrl}/rest/v1/blog_articles?select=slug,title,excerpt,seo_title,seo_description,seo_keywords,image_url,author,published_at,updated_at&published=eq.true&order=published_at.desc`
   );
   if (!articles || !Array.isArray(articles)) {
-    console.log('[prerender] Blog ignoré (pas de données).');
+    console.log('[prerender] ⚠ Blog ignoré (pas de données).');
     return 0;
   }
+  blogPrerendus = articles;
   let n = 0;
   for (const a of articles) {
     if (!a.slug) continue;
@@ -310,14 +335,9 @@ async function generateSitemap(formations, blogArticles) {
 const formationCount = await prerenderFormations();
 const blogCount = await prerenderBlog();
 
-// Récupérer les données pour le sitemap (réutilise le cache fetch si possible)
-const baseUrl = process.env.VITE_SUPABASE_URL;
-let formationsForSitemap = [];
-let blogForSitemap = [];
-if (baseUrl) {
-  formationsForSitemap = await fetchJson(`${baseUrl}/rest/v1/formations?select=slug&actif=eq.true`) || [];
-  blogForSitemap = await fetchJson(`${baseUrl}/rest/v1/blog_articles?select=slug,published_at,updated_at&published=eq.true`) || [];
-}
-await generateSitemap(formationsForSitemap, blogForSitemap);
+// Le sitemap liste exactement ce qui vient d'être prérendu : pas de seconde
+// lecture (qui pouvait réussir ou échouer indépendamment de la première et
+// produire un sitemap incohérent avec les pages réellement générées).
+await generateSitemap(formationsPrerendues, blogPrerendus);
 
 console.log(`[prerender] ${count} pages statiques + ${formationCount} formations + ${blogCount} articles de blog générés (<head> + JSON-LD). Sitemap mis à jour.`);
