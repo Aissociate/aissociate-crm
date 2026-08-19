@@ -430,6 +430,11 @@ export type Database = {
     Views: EmptyMap;
     Functions: {
       qualiopi_prepare_session: { Args: { p_session: string }; Returns: undefined };
+      /** Compteurs de trafic par fenêtre [debut, fin) — évite de rapatrier page_views. */
+      dashboard_visiteurs: {
+        Args: { p_ranges: string[][] };
+        Returns: { visiteurs: number; vues: number }[];
+      };
     };
     Enums: {
       user_role: UserRole;
