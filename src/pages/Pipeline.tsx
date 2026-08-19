@@ -28,7 +28,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 const dansNJours = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
 
 export default function Pipeline() {
-  const { session } = useAuth();
+  const { session, isManager } = useAuth();
   const navigate = useNavigate();
   const { data, loading, refresh } = useCollection<Opportunite>('opportunites', {
     orderBy: { column: 'created_at', ascending: false },
@@ -109,10 +109,9 @@ export default function Pipeline() {
     refresh();
   };
 
-  const move = async (o: Opportunite, dir: -1 | 1) => {
-    const idx = OPP_STAGE_ORDER.indexOf(o.stage);
-    const next = OPP_STAGE_ORDER[idx + dir];
-    if (!next) return;
+  /** Écrit la nouvelle étape — passage obligé des flèches ET du glisser-déposer. */
+  const setStage = async (o: Opportunite, next: OpportuniteStage) => {
+    if (next === o.stage) return;
     // Une opportunité ne progresse pas toute seule : sauf clôture (gagné /
     // perdu), une action doit être prévue dans les 30 jours.
     if (next !== 'gagne' && next !== 'perdu') {
@@ -127,6 +126,26 @@ export default function Pipeline() {
     refresh();
   };
 
+  const move = (o: Opportunite, dir: -1 | 1) => {
+    const next = OPP_STAGE_ORDER[OPP_STAGE_ORDER.indexOf(o.stage) + dir];
+    if (next) void setStage(o, next);
+  };
+
+  // ── Glisser-déposer (direction uniquement) ──────────────────────────────────
+  // Les colonnes stand-by sont calculées, pas stockées : on ne peut donc pas y
+  // déposer une carte — ce sont les actions du contact qui les font entrer et
+  // sortir de stand-by.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<Colonne | null>(null);
+  const estEtape = (c: Colonne): c is OpportuniteStage => c !== 'standby30' && c !== 'standby90';
+  const peutDeposer = (c: Colonne) => isManager && !!dragId && estEtape(c);
+
+  const onDrop = (c: Colonne) => {
+    const o = dragId ? data.find((x) => x.id === dragId) : null;
+    setDragId(null); setOverCol(null);
+    if (o && estEtape(c)) void setStage(o, c);
+  };
+
   const remove = async (o: Opportunite) => {
     if (!confirm(`Supprimer l'opportunité « ${o.titre} » ?`)) return;
     const { error } = await supabase.from('opportunites').delete().eq('id', o.id);
@@ -138,7 +157,9 @@ export default function Pipeline() {
     <div>
       <PageHeader
         title="Pipeline commercial"
-        subtitle="Suivi des opportunités de la qualification à la signature (4.1)"
+        subtitle={isManager
+          ? 'Suivi des opportunités de la qualification à la signature (4.1) — glissez une carte sur une étape pour la déplacer'
+          : 'Suivi des opportunités de la qualification à la signature (4.1)'}
         actions={
           <div className="flex items-center gap-2">
             <select
@@ -158,59 +179,106 @@ export default function Pipeline() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex gap-2.5 overflow-x-auto pb-4">
           {COLONNES.map((stage) => {
             const items = visibles.filter((o) => colonneDe(o) === stage);
             const total = items.reduce((s, o) => s + Number(o.montant ?? 0), 0);
             const standby = stage === 'standby30' || stage === 'standby90';
+            const cible = overCol === stage && peutDeposer(stage);
             return (
-              <div key={stage} className="flex w-72 shrink-0 flex-col">
-                <div className="mb-2 flex items-center justify-between px-1">
-                  <span className={`text-sm font-semibold ${standby ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}>{libelleColonne(stage)}</span>
-                  <span className="rounded-full bg-surface-2 px-2 text-xs text-muted">{items.length}</span>
+              <div
+                key={stage}
+                className="flex w-60 shrink-0 flex-col"
+                onDragOver={(e) => {
+                  if (!peutDeposer(stage)) return;
+                  e.preventDefault(); // sans quoi le dépôt est refusé par le navigateur
+                  e.dataTransfer.dropEffect = 'move';
+                  setOverCol(stage);
+                }}
+                onDragLeave={() => setOverCol((c) => (c === stage ? null : c))}
+                onDrop={(e) => { e.preventDefault(); onDrop(stage); }}
+              >
+                {/* En-tête sur une seule ligne : étape, effectif, montant */}
+                <div className="mb-1.5 flex items-baseline gap-1.5 px-1">
+                  <span className={`truncate text-sm font-semibold ${standby ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}>{libelleColonne(stage)}</span>
+                  <span className="rounded-full bg-surface-2 px-1.5 text-[11px] leading-4 text-muted">{items.length}</span>
+                  <span className="ml-auto shrink-0 text-xs tabular-nums text-muted">{formatMoney(total)}</span>
                 </div>
-                <p className="mb-2 px-1 text-xs text-muted">{formatMoney(total)}</p>
-                <div className="flex-1 space-y-2 rounded-xl bg-surface-2 p-2">
+                {/* Une seule classe de fond : deux `bg-*` concurrentes se départagent
+                    par l'ordre du CSS généré, pas par l'ordre d'écriture. */}
+                <div className={`flex-1 space-y-1.5 rounded-xl p-1.5 transition-colors ${cible ? 'bg-brand-500/10 ring-2 ring-brand-500' : 'bg-surface-2'}`}>
                   {items.map((o) => {
                     const idx = OPP_STAGE_ORDER.indexOf(o.stage);
                     const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
                     const entreprise = entreprises.data.find((x) => x.id === (o.entreprise_id ?? contact?.entreprise_id));
                     const title = contact ? fullName(contact.prenom, contact.nom) : o.titre;
+                    // Sous-titre : société et conseiller sur une seule ligne. Le
+                    // conseiller est redondant quand la vue est déjà filtrée sur lui.
+                    const sousTitre = [
+                      entreprise?.raison_sociale,
+                      conseillerId ? null : (nomConseiller(conseillerDe(o)) || 'Non affecté'),
+                    ].filter(Boolean).join(' · ');
                     return (
-                      <div key={o.id} onClick={() => openFiche(o.contact_id)} className={`card p-3 ${o.contact_id ? 'cursor-pointer hover:border-brand-300' : ''}`} title={o.contact_id ? 'Ouvrir la fiche client' : undefined}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-fg">{title}</p>
-                            {/* Le conseiller n'est utile que dans la vue « tous les
-                                conseillers » : filtrée, l'information est redondante. */}
-                            {!conseillerId && (
-                              <p className="truncate text-xs font-medium text-brand-600 dark:text-brand-400">
-                                {nomConseiller(conseillerDe(o)) || 'Non affecté'}
-                              </p>
-                            )}
-                            {entreprise && <p className="truncate text-xs text-muted">{entreprise.raison_sociale}</p>}
-                          </div>
-                          <div className="flex shrink-0 gap-0.5" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => { setForm(o); setOpen(true); }} className="rounded p-1 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
-                            <button onClick={() => remove(o)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
-                          </div>
+                      <div
+                        key={o.id}
+                        onClick={() => openFiche(o.contact_id)}
+                        draggable={isManager}
+                        onDragStart={(e) => {
+                          setDragId(o.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          // Firefox n'amorce pas le glisser sans données transportées.
+                          e.dataTransfer.setData('text/plain', o.id);
+                        }}
+                        onDragEnd={() => { setDragId(null); setOverCol(null); }}
+                        className={`group card px-2.5 py-2 ${o.contact_id ? 'cursor-pointer hover:border-brand-300' : ''} ${isManager ? 'cursor-grab active:cursor-grabbing' : ''} ${dragId === o.id ? 'opacity-40' : ''}`}
+                        title={o.contact_id ? 'Ouvrir la fiche client' : undefined}
+                      >
+                        {/* Ligne 1 : qui, et combien */}
+                        <div className="flex items-baseline gap-2">
+                          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{title}</p>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</span>
                         </div>
+                        {/* Ligne 2 : société · conseiller */}
+                        {sousTitre && <p className="truncate text-xs text-muted" title={sousTitre}>{sousTitre}</p>}
+                        {/* Ligne 3 : intitulé de l'affaire (le titre de la carte est le contact) */}
+                        {contact && o.titre && <p className="truncate text-xs text-muted/80">{o.titre}</p>}
                         {/* En stand-by, la carte rappelle l'étape réelle de l'opportunité. */}
-                        {standby && <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">{OPP_STAGE_LABELS[o.stage]} · aucune action prévue</p>}
-                        {contact?.telephone && <p className="mt-1 flex items-center gap-1 text-xs text-muted"><Phone className="h-3 w-3" /> {contact.telephone}</p>}
-                        {contact && o.titre && <p className="mt-1 truncate text-xs text-muted">{o.titre}</p>}
-                        <p className="mt-1 text-sm font-semibold text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</p>
-                        <p className="text-xs text-muted">{o.probabilite}% de probabilité</p>
-                        {/* Les titres sont portés par les boutons eux-mêmes, sinon
-                            l'infobulle « Ouvrir la fiche client » de la carte est héritée. */}
-                        <div className="mt-2 flex justify-between" onClick={(e) => e.stopPropagation()}>
-                          <button disabled={idx === 0} onClick={() => move(o, -1)} title="Déplacer l'opportunité à l'étape précédente" aria-label="Déplacer l'opportunité à l'étape précédente" className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-                          <button disabled={idx === OPP_STAGE_ORDER.length - 1} onClick={() => move(o, 1)} title="Déplacer l'opportunité à l'étape suivante" aria-label="Déplacer l'opportunité à l'étape suivante" className="rounded p-1 text-muted hover:bg-surface-2 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+                        {standby && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400">{OPP_STAGE_LABELS[o.stage]} · aucune action prévue</p>}
+
+                        {/* Probabilité : jauge fine plutôt qu'une ligne de texte */}
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-line" title={`${o.probabilite} % de probabilité`}>
+                            <div className="h-full rounded-full bg-brand-500/70" style={{ width: `${Math.min(100, Math.max(0, Number(o.probabilite) || 0))}%` }} />
+                          </div>
+                          <span className="shrink-0 text-[11px] tabular-nums text-muted">{o.probabilite} %</span>
+                        </div>
+
+                        {/* Barre d'outils : discrète au repos, visible au survol ou au
+                            focus clavier. Toujours visible sur écran tactile (pas de survol). */}
+                        <div
+                          className="mt-1 flex items-center justify-between opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            <button disabled={idx === 0} onClick={() => move(o, -1)} title="Étape précédente" aria-label="Déplacer l'opportunité à l'étape précédente" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+                            <button disabled={idx === OPP_STAGE_ORDER.length - 1} onClick={() => move(o, 1)} title="Étape suivante" aria-label="Déplacer l'opportunité à l'étape suivante" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            {contact?.telephone && (
+                              <a href={`tel:${contact.telephone}`} title={`Appeler ${contact.telephone}`} aria-label={`Appeler ${contact.telephone}`} className="rounded p-1 text-muted hover:bg-surface-2 hover:text-brand-600"><Phone className="h-3.5 w-3.5" /></a>
+                            )}
+                            <button onClick={() => { setForm(o); setOpen(true); }} title="Modifier" aria-label="Modifier l'opportunité" className="rounded p-1 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => remove(o)} title="Supprimer" aria-label="Supprimer l'opportunité" className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
-                  {items.length === 0 && <p className="px-2 py-4 text-center text-xs text-muted">—</p>}
+                  {items.length === 0 && (
+                    <p className="px-2 py-6 text-center text-xs text-muted">
+                      {cible ? 'Déposer ici' : '—'}
+                    </p>
+                  )}
                 </div>
               </div>
             );
