@@ -755,7 +755,17 @@ Deno.serve(async (req: Request) => {
               },
               body: JSON.stringify({ model, messages, tools, tool_choice: "auto", temperature: 0.2 }),
             });
-            if (!resp.ok) throw new Error(`OpenRouter ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
+            if (!resp.ok) {
+              const detail = (await resp.text()).slice(0, 300);
+              // Cause fréquente : un modèle sans support du tool calling
+              // configuré en `model_agent` (ex. modèle à raisonnement pur).
+              throw new Error(
+                `OpenRouter ${resp.status} avec le modèle « ${model} » : ${detail}` +
+                (resp.status === 400 || resp.status === 404
+                  ? " — vérifiez que le modèle de l'assistant (Paramètres › IA › agent) supporte le tool calling (ex. anthropic/claude-sonnet-4.5)."
+                  : ""),
+              );
+            }
             const data = await resp.json();
             const msg = data?.choices?.[0]?.message;
             if (!msg) throw new Error("Réponse OpenRouter vide");
@@ -794,6 +804,7 @@ Deno.serve(async (req: Request) => {
           const sources = ctx.sources.filter((s) => { if (seen.has(s.label)) return false; seen.add(s.label); return true; });
           emit("done", { answer, sources });
         } catch (err) {
+          console.error("[agent] erreur boucle:", err instanceof Error ? err.message : String(err));
           emit("error", { message: err instanceof Error ? err.message : String(err) });
         } finally {
           try { controller.close(); } catch { /* déjà fermé */ }

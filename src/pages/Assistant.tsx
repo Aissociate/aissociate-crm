@@ -58,7 +58,12 @@ async function readSse(res: Response, onEvent: (event: string, data: Record<stri
         else if (line.startsWith('data: ')) data += line.slice(6);
       }
       if (data) {
-        try { onEvent(event, JSON.parse(data)); } catch { /* fragment illisible */ }
+        // Seul le parse est protégé : une exception levée par onEvent (ex.
+        // l'événement `error` du serveur) doit remonter à l'appelant, sinon
+        // le vrai message d'erreur est remplacé par « Flux interrompu ».
+        let parsed: Record<string, unknown> | null = null;
+        try { parsed = JSON.parse(data); } catch { /* fragment illisible */ }
+        if (parsed) onEvent(event, parsed);
       }
     }
   }
