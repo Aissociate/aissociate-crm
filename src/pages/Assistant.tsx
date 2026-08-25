@@ -11,6 +11,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Button, Spinner, Badge } from '@/components/ui';
+import DicteeVocale from '@/components/DicteeVocale';
 import type { AiAction, AiConversation } from '@/lib/database.types';
 
 type Source = { label: string; url: string | null };
@@ -375,6 +376,11 @@ export default function Assistant() {
           onSubmit={(e) => { e.preventDefault(); void ask(input); }}
           className="flex items-end gap-2 border-t border-line bg-surface p-3"
         >
+          <DicteeVocale
+            disabled={loading}
+            onTexte={(t) => setInput((v) => (v ? `${v.trimEnd()} ${t}` : t))}
+            onErreur={(msg) => setMessages((m) => [...m, { role: 'assistant', content: `⚠️ Dictée : ${msg}` }])}
+          />
           <textarea
             className="input max-h-40 min-h-[44px] flex-1 resize-none"
             placeholder="Votre question ou votre demande d'action…"

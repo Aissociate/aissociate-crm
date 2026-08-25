@@ -17,6 +17,9 @@
 //   { mode: "chat", message, conversation_id?, contexte? }  → flux SSE
 //   { mode: "execute", action_id }                          → JSON
 //   { mode: "cancel",  action_id }                          → JSON
+//   { mode: "transcribe", audio (base64), format }          → JSON { texte }
+//     Dictée vocale des instructions : STT via OpenRouter, modèle
+//     `ai.model_stt` sinon gpt-4o-mini-transcribe (fiable, ~0,003 $/min).
 //
 // SSE émis pendant `chat` :
 //   meta   { conversation_id, role }
@@ -613,6 +616,35 @@ Deno.serve(async (req: Request) => {
     const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
     const role = (profile?.role as string) ?? "conseiller";
     const isDirection = role === "admin" || role === "directeur_commercial";
+
+    // ── Mode transcribe : dictée vocale → texte (aucun accès aux données) ──
+    if (mode === "transcribe") {
+      const audio = String(body.audio ?? "");
+      const format = String(body.format ?? "webm");
+      if (!audio) return json({ error: "Audio manquant" }, 400);
+      // ~2 min de voix à 32 kbps ≈ 480 Ko → ~640 Ko en base64. Garde-fou large.
+      if (audio.length > 8_000_000) return json({ error: "Audio trop long pour la dictée (2 min max)." }, 413);
+
+      const { data: aiRow } = await admin.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
+      const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
+      const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
+      if (!apiKey) return json({ error: "Clé OpenRouter absente (Paramètres > IA)" }, 400);
+      const modelStt = ai.model_stt || "openai/gpt-4o-mini-transcribe";
+
+      const resp = await fetch("https://openrouter.ai/api/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json",
+          "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM AIssociate — Agent",
+        },
+        body: JSON.stringify({ model: modelStt, language: "fr", input_audio: { data: audio, format } }),
+      });
+      if (!resp.ok) return json({ error: `Transcription indisponible (OpenRouter ${resp.status}).` }, 502);
+      const out = await resp.json();
+      const texte = typeof out?.text === "string" ? out.text.trim() : "";
+      if (!texte) return json({ error: "Transcription vide : audio inaudible." }, 422);
+      return json({ ok: true, texte });
+    }
 
     // ── Mode execute / cancel : action déjà validée par l'utilisateur ──
     if (mode === "execute" || mode === "cancel") {
