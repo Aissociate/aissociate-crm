@@ -242,9 +242,9 @@ export default function FormationsList() {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="Catalogue de formations IA — Qualiopi, CPF & OPCO | Aissociate"
-        description="Découvrez nos formations en intelligence artificielle à La Réunion : création de contenus IA, IA pour PME, prospection, marketing, RH, management. Certifiées Qualiopi, finançables CPF et OPCO."
-        keywords="catalogue formation IA, formations intelligence artificielle Réunion, formation IA PME, formation IA marketing, formation IA RH, formation prospection IA, Qualiopi, CPF, OPCO"
+        title="Formation IA à La Réunion : le catalogue — Qualiopi, CPF & OPCO | Aissociate"
+        description="Nos formations en intelligence artificielle à La Réunion : ChatGPT et IA générative pour PME, marketing, RH, prospection, management. Certifiées Qualiopi, finançables CPF, OPCO et France Travail — programmes détaillés en ligne."
+        keywords="formation IA La Réunion, catalogue formation IA, formations intelligence artificielle Réunion, formation IA 974, formation IA PME, formation IA marketing, formation IA RH, Qualiopi, CPF, OPCO"
         url={`${SITE_URL}/formations`}
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formations', url: `${SITE_URL}/formations` }]}
       />
@@ -257,7 +257,7 @@ export default function FormationsList() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle</h1>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle à La Réunion</h1>
             <p className="text-xl text-slate-300">
               Le catalogue de nos formations IA à La Réunion : création de contenus, IA pour PME, prospection, marketing, RH et management.
               Formations certifiées <strong className="text-white">Qualiopi</strong>, finançables <strong className="text-white">CPF, OPCO et France Travail</strong>, en présentiel ou à distance.

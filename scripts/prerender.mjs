@@ -88,30 +88,47 @@ const routes = [
   {
     path: '/',
     title: 'Formation IA à La Réunion — Qualiopi, CPF & OPCO | Aissociate',
-    description: "Organisme de formation certifié Qualiopi à La Réunion. Formez vos équipes à l'IA générative : ChatGPT, prompt engineering, automatisation des process. Finançable CPF, OPCO, France Travail — présentiel ou distanciel.",
-    keywords: 'formation IA La Réunion, formation intelligence artificielle Réunion, formation IA 974, formation IA Qualiopi, formation IA CPF, OPCO intelligence artificielle, ChatGPT entreprise, IA générative PME, automatisation IA, prompt engineering',
+    description: "Organisme de formation et expert IA certifié Qualiopi à La Réunion. Formez vos équipes à l'IA générative : ChatGPT, prompt engineering, automatisation des process. Finançable CPF, OPCO, France Travail — présentiel ou distanciel.",
+    keywords: 'formation IA La Réunion, formation intelligence artificielle Réunion, formation IA 974, expert IA Réunion, consultant IA 974, formation IA Qualiopi, formation IA CPF, OPCO intelligence artificielle, ChatGPT entreprise, IA générative PME, automatisation IA, prompt engineering',
     schemas: [WEBSITE, ORG, faqPage(HOME_FAQ), breadcrumb([{ name: 'Accueil', url: canon('/') }])],
   },
-  {
-    path: '/formations',
-    title: 'Catalogue de formations IA — Qualiopi, CPF & OPCO | Aissociate',
-    description: 'Découvrez nos formations en intelligence artificielle à La Réunion : création de contenus IA, IA pour PME, prospection, marketing, RH, management. Certifiées Qualiopi, finançables CPF et OPCO.',
-    keywords: 'catalogue formation IA, formations intelligence artificielle Réunion, formation IA PME, formation IA marketing, formation IA RH, formation prospection IA, Qualiopi, CPF, OPCO',
-    schemas: [breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Formations', url: `${SITE}/formations` }])],
-  },
+  // NB : /formations est prérendu dans prerenderFormations() — son corps et son
+  // schéma ItemList sont construits à partir de la liste réelle des formations.
   {
     path: '/assistance',
-    title: 'Assistance & chatbots IA pour entreprises | Aissociate',
-    description: "Déployez des assistants IA pour votre entreprise à La Réunion : support client 24/7, chatbots, qualification de leads, FAQ automatisée. Accompagnement par un organisme certifié Qualiopi.",
-    keywords: 'assistant IA entreprise, chatbot IA, support client IA, qualification de leads IA, automatisation relation client, IA La Réunion',
-    schemas: [breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Assistance', url: `${SITE}/assistance` }])],
+    title: 'Assistance & chatbots IA pour entreprises à La Réunion | Aissociate',
+    description: "Déployez des assistants IA pour votre entreprise à La Réunion : support client 24/7, chatbots, qualification de leads, FAQ automatisée. Accompagnement par un expert IA local certifié Qualiopi.",
+    keywords: 'assistant IA entreprise, chatbot IA, support client IA, qualification de leads IA, automatisation relation client, expert IA La Réunion',
+    schemas: [
+      {
+        '@context': 'https://schema.org', '@type': 'Service',
+        name: 'Assistance et chatbots IA pour entreprises',
+        serviceType: 'Déploiement d’assistants IA et chatbots',
+        provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate' },
+        areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
+        url: `${SITE}/assistance/`, inLanguage: 'fr-FR',
+      },
+      breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Assistance', url: `${SITE}/assistance` }]),
+    ],
   },
   {
+    // Cible les requêtes « expert IA / consultant IA Réunion » : positions 4-9
+    // dans Search Console sans aucun clic, faute de snippet dédié à cette intention.
     path: '/developpement',
-    title: "Développement d'agents IA & automatisation sur-mesure | Aissociate",
-    description: "Création d'agents IA et automatisation des process pour les entreprises réunionnaises : intégrations sur-mesure, workflows intelligents, gain de productivité.",
-    keywords: 'développement agent IA, automatisation process IA, agents IA sur-mesure, intégration IA entreprise, workflow IA, IA Réunion',
-    schemas: [breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Développement', url: `${SITE}/developpement` }])],
+    title: 'Expert & consultant IA à La Réunion — agents IA sur-mesure | Aissociate',
+    description: "Consultant IA à La Réunion : développement d'agents IA, automatisation de vos process et accompagnement sur-mesure des PME par un expert local certifié Qualiopi. Parlez-nous de votre projet.",
+    keywords: 'expert IA La Réunion, consultant IA Réunion, expert IA 974, développement agent IA, automatisation process IA, agents IA sur-mesure, intégration IA entreprise',
+    schemas: [
+      {
+        '@context': 'https://schema.org', '@type': 'Service',
+        name: 'Conseil et développement IA sur-mesure',
+        serviceType: 'Conseil en intelligence artificielle, développement d’agents IA',
+        provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate' },
+        areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
+        url: `${SITE}/developpement/`, inLanguage: 'fr-FR',
+      },
+      breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Développement', url: `${SITE}/developpement` }]),
+    ],
   },
   {
     path: '/aides-formation',
@@ -257,6 +274,42 @@ async function prerenderFormations() {
     });
     n++;
   }
+
+  // ── Page catalogue /formations : la requête reine du rapport Search Console
+  // (« formation ia réunion », 394 impressions) mérite une vraie page
+  // d'atterrissage — title local, corps statique lisible sans JavaScript et
+  // schéma ItemList pointant vers chaque fiche formation.
+  const cardsHtml = formations.filter((f) => f.slug).map((f) =>
+    `<li><a href="/formations/${esc(f.slug)}/">${esc(f.intitule)}</a>${f.duree_heures ? ` — ${esc(String(f.duree_heures))} h` : ''}${f.certifiante ? ' — certifiante, éligible CPF' : ''}</li>`
+  ).join('\n          ');
+  writeRoute({
+    path: '/formations',
+    title: 'Formation IA à La Réunion : le catalogue — Qualiopi, CPF & OPCO | Aissociate',
+    description: `${formations.length} formations en intelligence artificielle à La Réunion : ChatGPT et IA générative pour PME, marketing, RH, prospection, management. Certifiées Qualiopi, finançables CPF, OPCO et France Travail — programmes détaillés en ligne.`,
+    keywords: 'formation IA La Réunion, catalogue formation IA, formations intelligence artificielle Réunion, formation IA 974, formation IA PME, formation IA marketing, formation IA RH, Qualiopi, CPF, OPCO',
+    schemas: [
+      {
+        '@context': 'https://schema.org', '@type': 'ItemList',
+        name: 'Formations en intelligence artificielle — Aissociate',
+        numberOfItems: formations.filter((f) => f.slug).length,
+        itemListElement: formations.filter((f) => f.slug).map((f, i) => ({
+          '@type': 'ListItem', position: i + 1, name: f.intitule, url: canon(`/formations/${f.slug}`),
+        })),
+      },
+      breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Formations', url: `${SITE}/formations` }]),
+    ],
+    body: `<main><section>
+        <h1>Formations en intelligence artificielle à La Réunion</h1>
+        <p>Le catalogue des formations IA d'Aissociate, organisme certifié Qualiopi : ChatGPT et IA générative,
+        automatisation des process, marketing, prospection commerciale, ressources humaines et management.
+        Formations finançables CPF, OPCO et France Travail, en présentiel à La Réunion ou à distance.</p>
+        <ul>
+          ${cardsHtml}
+        </ul>
+        <p><a href="/aides-formation/">Financer sa formation (CPF, OPCO, France Travail)</a> · <a href="/contact/">Demander un devis</a></p>
+      </section></main>`,
+  });
+  n++;
   return n;
 }
 
