@@ -28,7 +28,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 const dansNJours = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
 
 export default function Pipeline() {
-  const { session, isManager } = useAuth();
+  const { session } = useAuth();
   const navigate = useNavigate();
   const { data, loading, refresh } = useCollection<Opportunite>('opportunites', {
     orderBy: { column: 'created_at', ascending: false },
@@ -109,18 +109,12 @@ export default function Pipeline() {
     refresh();
   };
 
-  /** Écrit la nouvelle étape — passage obligé des flèches ET du glisser-déposer. */
+  /** Écrit la nouvelle étape — passage obligé des flèches ET du glisser-déposer.
+   *  Aucune condition préalable : toute carte visible peut aller sur n'importe
+   *  quelle étape. L'absence d'action prévue reste signalée, mais par les
+   *  colonnes stand-by (calculées à l'affichage), jamais en bloquant le geste. */
   const setStage = async (o: Opportunite, next: OpportuniteStage) => {
     if (next === o.stage) return;
-    // Une opportunité ne progresse pas toute seule : sauf clôture (gagné /
-    // perdu), une action doit être prévue dans les 30 jours.
-    if (next !== 'gagne' && next !== 'perdu') {
-      const prochaine = prochaineAction(o.contact_id);
-      if (!prochaine || prochaine > dansNJours(30)) {
-        alert("Déplacement refusé : aucune action n'est prévue pour ce contact dans les 30 prochains jours.\nPlanifiez une action dans sa fiche avant de faire avancer l'opportunité.");
-        return;
-      }
-    }
     const { error } = await supabase.from('opportunites').update({ stage: next }).eq('id', o.id);
     if (error) { alert(error.message); return; }
     refresh();
@@ -131,14 +125,16 @@ export default function Pipeline() {
     if (next) void setStage(o, next);
   };
 
-  // ── Glisser-déposer (direction uniquement) ──────────────────────────────────
-  // Les colonnes stand-by sont calculées, pas stockées : on ne peut donc pas y
-  // déposer une carte — ce sont les actions du contact qui les font entrer et
-  // sortir de stand-by.
+  // ── Glisser-déposer ─────────────────────────────────────────────────────────
+  // Ouvert à tous : la RLS de `opportunites` autorise déjà la mise à jour de
+  // toute opportunité visible (manager, ou propriétaire de la sienne).
+  // Les colonnes stand-by restent hors cible : elles sont calculées, pas
+  // stockées — il n'existe aucune étape à écrire pour elles. Ce sont les
+  // actions du contact qui les font entrer et sortir de stand-by.
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<Colonne | null>(null);
   const estEtape = (c: Colonne): c is OpportuniteStage => c !== 'standby30' && c !== 'standby90';
-  const peutDeposer = (c: Colonne) => isManager && !!dragId && estEtape(c);
+  const peutDeposer = (c: Colonne) => !!dragId && estEtape(c);
 
   const onDrop = (c: Colonne) => {
     const o = dragId ? data.find((x) => x.id === dragId) : null;
@@ -157,9 +153,7 @@ export default function Pipeline() {
     <div>
       <PageHeader
         title="Pipeline commercial"
-        subtitle={isManager
-          ? 'Suivi des opportunités de la qualification à la signature (4.1) — glissez une carte sur une étape pour la déplacer'
-          : 'Suivi des opportunités de la qualification à la signature (4.1)'}
+        subtitle="Suivi des opportunités de la qualification à la signature (4.1) — glissez une carte sur une étape pour la déplacer"
         actions={
           <div className="flex items-center gap-2">
             <select
@@ -179,7 +173,7 @@ export default function Pipeline() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
       ) : (
-        <div className="flex gap-2.5 overflow-x-auto pb-4">
+        <div className="scroll-x flex gap-2.5 overflow-x-auto pb-3">
           {COLONNES.map((stage) => {
             const items = visibles.filter((o) => colonneDe(o) === stage);
             const total = items.reduce((s, o) => s + Number(o.montant ?? 0), 0);
@@ -222,7 +216,7 @@ export default function Pipeline() {
                       <div
                         key={o.id}
                         onClick={() => openFiche(o.contact_id)}
-                        draggable={isManager}
+                        draggable
                         onDragStart={(e) => {
                           setDragId(o.id);
                           e.dataTransfer.effectAllowed = 'move';
@@ -230,7 +224,7 @@ export default function Pipeline() {
                           e.dataTransfer.setData('text/plain', o.id);
                         }}
                         onDragEnd={() => { setDragId(null); setOverCol(null); }}
-                        className={`group card px-2.5 py-2 ${o.contact_id ? 'cursor-pointer hover:border-brand-300' : ''} ${isManager ? 'cursor-grab active:cursor-grabbing' : ''} ${dragId === o.id ? 'opacity-40' : ''}`}
+                        className={`group card cursor-grab px-2.5 py-2 active:cursor-grabbing ${o.contact_id ? 'hover:border-brand-300' : ''} ${dragId === o.id ? 'opacity-40' : ''}`}
                         title={o.contact_id ? 'Ouvrir la fiche client' : undefined}
                       >
                         {/* Ligne 1 : qui, et combien */}

@@ -2,5 +2,17 @@
 # les règles sont évaluées dans l'ordre, la première qui matche gagne.
 /sitemap-blog.xml  https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/sitemap-blog  200
 
+# Pages définitivement supprimées : 410 Gone, et non le 200 du fallback SPA
+# sur la page 404 de l'application. Google déréférence une URL en 410 dès le
+# passage suivant, là où un « soft 404 » (statut 200 sur une page d'erreur)
+# reste des semaines dans le rapport d'indexation. Le corps servi reste
+# l'application, qui affiche sa page 404 habituelle.
+# Les deux casses sont déclarées : la normalisation en minuscules de Netlify
+# ne s'appliquait qu'au dossier statique, désormais supprimé.
+/guideIA2026      /index.html   410
+/guideIA2026/*    /index.html   410
+/guideia2026      /index.html   410
+/guideia2026/*    /index.html   410
+
 # SPA fallback
 /*    /index.html   200
