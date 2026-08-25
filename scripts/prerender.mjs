@@ -28,6 +28,15 @@ const OG_IMAGE = 'https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/me
 
 const tpl = readFileSync(join(DIST, 'index.html'), 'utf8');
 
+/**
+ * URL canonique d'une route = la forme réellement servie par Netlify.
+ * Le prérendu produit `dist/<route>/index.html`, servi sur `/<route>/` ;
+ * la forme sans slash final répond 301. Canonical, og:url, JSON-LD et sitemap
+ * doivent donc tous porter le slash, sinon chaque URL soumise à Google
+ * retombe sur une redirection et n'est jamais indexée.
+ */
+const canon = (path) => (path === '/' ? `${SITE}/` : `${SITE}${path}/`);
+
 const esc = (s = '') => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const ld = (obj) => `<script type="application/ld+json" data-prerender="true">${JSON.stringify(obj).replace(/</g, '\\u003c')}</script>`;
 
@@ -81,7 +90,7 @@ const routes = [
     title: 'Formation IA à La Réunion — Qualiopi, CPF & OPCO | Aissociate',
     description: "Organisme de formation certifié Qualiopi à La Réunion. Formez vos équipes à l'IA générative : ChatGPT, prompt engineering, automatisation des process. Finançable CPF, OPCO, France Travail — présentiel ou distanciel.",
     keywords: 'formation IA La Réunion, formation intelligence artificielle Réunion, formation IA 974, formation IA Qualiopi, formation IA CPF, OPCO intelligence artificielle, ChatGPT entreprise, IA générative PME, automatisation IA, prompt engineering',
-    schemas: [WEBSITE, ORG, faqPage(HOME_FAQ), breadcrumb([{ name: 'Accueil', url: SITE }])],
+    schemas: [WEBSITE, ORG, faqPage(HOME_FAQ), breadcrumb([{ name: 'Accueil', url: canon('/') }])],
   },
   {
     path: '/formations',
@@ -140,7 +149,7 @@ const routes = [
 ];
 
 function applyHead(html, r) {
-  const url = r.path === '/' ? SITE + '/' : SITE + r.path;
+  const url = canon(r.path);
   const set = (re, val) => { html = html.replace(re, val); };
   set(/<title>[\s\S]*?<\/title>/, `<title>${esc(r.title)}</title>`);
   set(/(<meta name="description" content=")[^"]*(")/, `$1${esc(r.description)}$2`);
@@ -162,7 +171,12 @@ function applyHead(html, r) {
 }
 
 function writeRoute(r) {
-  const html = applyHead(tpl, r);
+  let html = applyHead(tpl, r);
+  // Corps statique optionnel, injecté dans #root : le crawler lit le texte de
+  // la page sans exécuter de JS. React monte avec createRoot() (pas
+  // hydrateRoot) et vide le conteneur au premier rendu — le contenu injecté
+  // est donc remplacé par le rendu applicatif normal.
+  if (r.body) html = html.replace('<div id="root"></div>', `<div id="root">${r.body}</div>`);
   const outDir = r.path === '/' ? DIST : join(DIST, r.path);
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'index.html'), html, 'utf8');
@@ -216,7 +230,7 @@ async function prerenderFormations() {
   let n = 0;
   for (const f of formations) {
     if (!f.slug) continue;
-    const u = `${SITE}/formations/${f.slug}`;
+    const u = canon(`/formations/${f.slug}`);
     const objectifs = f.objectifs ? String(f.objectifs).split('\n').map(s => s.trim()).filter(Boolean) : [];
     const desc = `${f.intitule}. ${f.duree_heures || 7}h, formation certifiée Qualiopi, finançable ${f.certifiante ? 'CPF et OPCO' : 'OPCO'}. Présentiel à La Réunion ou distanciel.`;
     const courseSchema = course(f.intitule, objectifs[0] || desc, {
@@ -246,6 +260,37 @@ async function prerenderFormations() {
   return n;
 }
 
+/**
+ * Corps statique d'un article de blog.
+ *
+ * Le prérendu ne produisait que le <head> : le <body> se résumait à
+ * `<div id="root"></div>`, donc les articles n'existaient qu'après exécution
+ * du JavaScript. Google finit par les rendre, mais avec un délai et une
+ * priorité moindres — d'où les seaux « Explorée / Détectée, actuellement non
+ * indexée ». Le contenu est ici présent dès la réponse HTTP.
+ *
+ * `content` est déjà du HTML en base (le site l'injecte via
+ * dangerouslySetInnerHTML) : il est repris tel quel.
+ */
+function articleBody(a) {
+  const dateFr = a.published_at
+    ? new Date(a.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '';
+  const meta = [
+    a.author ? `Par ${esc(a.author)}` : '',
+    dateFr ? `<time datetime="${esc(String(a.published_at).slice(0, 10))}">${esc(dateFr)}</time>` : '',
+    a.read_time ? `${esc(String(a.read_time))} min de lecture` : '',
+  ].filter(Boolean).join(' — ');
+  return `<article>
+        <p><a href="/blog/">Retour au blog</a></p>
+        <h1>${esc(a.title)}</h1>
+        ${meta ? `<p>${meta}</p>` : ''}
+        ${a.image_url ? `<img src="${esc(a.image_url)}" alt="${esc(a.title)}" width="1200" height="630" />` : ''}
+        <div class="blog-content">${a.content || `<p>${esc(a.excerpt || '')}</p>`}</div>
+        <p><a href="/formations/">Découvrir nos formations IA certifiées Qualiopi</a></p>
+      </article>`;
+}
+
 // ── Articles de blog : lus dans Supabase (lecture publique RLS) ──
 // Pas de liste de secours possible ici (contenu dynamique) : en cas d'échec, le
 // sitemap conserve au moins /blog et les pages formations.
@@ -255,7 +300,7 @@ async function prerenderBlog() {
   const baseUrl = process.env.VITE_SUPABASE_URL;
   if (!baseUrl) { console.log('[prerender] ⚠ Blog ignoré (VITE_SUPABASE_URL absent).'); return 0; }
   const articles = await fetchJson(
-    `${baseUrl}/rest/v1/blog_articles?select=slug,title,excerpt,seo_title,seo_description,seo_keywords,image_url,author,published_at,updated_at&published=eq.true&order=published_at.desc`
+    `${baseUrl}/rest/v1/blog_articles?select=slug,title,content,excerpt,read_time,seo_title,seo_description,seo_keywords,image_url,author,published_at,updated_at&published=eq.true&order=published_at.desc`
   );
   if (!articles || !Array.isArray(articles)) {
     console.log('[prerender] ⚠ Blog ignoré (pas de données).');
@@ -265,7 +310,7 @@ async function prerenderBlog() {
   let n = 0;
   for (const a of articles) {
     if (!a.slug) continue;
-    const u = `${SITE}/blog/${a.slug}`;
+    const u = canon(`/blog/${a.slug}`);
     const img = a.image_url || OG_IMAGE;
     const desc = a.seo_description || a.excerpt || a.title;
     const article = {
@@ -283,7 +328,8 @@ async function prerenderBlog() {
       keywords: a.seo_keywords || '',
       image: img,
       ogType: 'article',
-      schemas: [article, breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Blog', url: `${SITE}/blog` }, { name: a.title, url: u }])],
+      body: articleBody(a),
+      schemas: [article, breadcrumb([{ name: 'Accueil', url: canon('/') }, { name: 'Blog', url: canon('/blog') }, { name: a.title, url: u }])],
     });
     n++;
   }
@@ -311,20 +357,20 @@ async function generateSitemap(formations, blogArticles) {
     { loc: '/reclamations', priority: '0.3', changefreq: 'yearly' },
   ];
   for (const p of staticPages) {
-    urls.push(`  <url>\n    <loc>${SITE}${p.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`);
+    urls.push(`  <url>\n    <loc>${canon(p.loc)}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`);
   }
 
   // Formations
   for (const f of formations) {
     if (!f.slug) continue;
-    urls.push(`  <url>\n    <loc>${SITE}/formations/${f.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.9</priority>\n  </url>`);
+    urls.push(`  <url>\n    <loc>${canon(`/formations/${f.slug}`)}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.9</priority>\n  </url>`);
   }
 
   // Articles de blog
   for (const a of blogArticles) {
     if (!a.slug) continue;
     const lastmod = (a.updated_at || a.published_at || today).slice(0, 10);
-    urls.push(`  <url>\n    <loc>${SITE}/blog/${a.slug}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`);
+    urls.push(`  <url>\n    <loc>${canon(`/blog/${a.slug}`)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`);
   }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
