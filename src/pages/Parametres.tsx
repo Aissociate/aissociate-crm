@@ -15,7 +15,7 @@ type Organisme = {
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
-type Ai = { provider?: string; model?: string; model_resume?: string; openrouter_key?: string; plan_prompt?: string };
+type Ai = { provider?: string; model?: string; model_resume?: string; model_agent?: string; openrouter_key?: string; plan_prompt?: string };
 type MailActionsCfg = { enabled?: boolean; resume_ia?: boolean; max_par_passage?: number };
 type AgeficeCfg = {
   demande_url?: string; prefet_region?: string;
@@ -480,6 +480,9 @@ export default function Parametres() {
             </Field>
             <Field label="Clé API OpenRouter" hint="Lue uniquement côté serveur (jamais envoyée au navigateur)">
               <input className="input" type="password" value={ai.openrouter_key ?? ''} onChange={(e) => setAi({ ...ai, openrouter_key: e.target.value })} autoComplete="new-password" placeholder="sk-or-…" />
+            </Field>
+            <Field label="Modèle de l'assistant (agent)" hint="Doit gérer le tool calling de façon fiable — défaut : anthropic/claude-sonnet-4.5">
+              <input className="input" value={ai.model_agent ?? ''} onChange={(e) => setAi({ ...ai, model_agent: e.target.value })} placeholder="anthropic/claude-sonnet-4.5" />
             </Field>
             <div className="lg:col-span-2">
               <Field label="Prompt de génération (configurable)" hint="Doit demander une réponse JSON {titre, sections:[{titre,contenu}]}">

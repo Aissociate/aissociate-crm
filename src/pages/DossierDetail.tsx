@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, Paperclip, UserRound, PenLine, Send } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, Paperclip, UserRound, PenLine, Send, Bot } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCollection } from '@/hooks/useCollection';
@@ -241,6 +241,10 @@ export default function DossierDetail() {
         subtitle={`${dossier.reference}${financeur ? ` · ${financeur.nom}` : ''}`}
         actions={
           <>
+            <Button variant="ghost" title="Ouvrir l'assistant IA sur ce dossier"
+              onClick={() => navigate('/assistant', { state: { assistantContexte: { type: 'dossier', id: dossier.id, label: `${dossier.reference} — ${dossier.intitule}` } } })}>
+              <Bot className="h-4 w-4" /> Assistant
+            </Button>
             {contact && (
               <Button variant="secondary" onClick={() => setFicheOpen(true)} title="Ouvrir la fiche du contact">
                 <UserRound className="h-4 w-4" /> {fullName(contact.prenom, contact.nom)}
