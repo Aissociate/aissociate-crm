@@ -76,14 +76,24 @@ export default function Pipeline() {
       .sort();
     return futures[0] ?? null;
   };
-  /** Colonne d'affichage : étape normale, ou stand-by faute d'action prévue. */
+  /** Colonne d'affichage. Une carte posée à la main (colonne_manuelle) reste où
+   *  l'utilisateur l'a mise ; le calcul stand-by automatique ne s'applique
+   *  qu'aux cartes jamais déplacées. */
   const colonneDe = (o: Opportunite): Colonne => {
+    if (o.colonne_manuelle) return o.colonne_manuelle as Colonne;
     if (o.stage === 'gagne' || o.stage === 'perdu') return o.stage;
     const prochaine = prochaineAction(o.contact_id);
     if (!prochaine || prochaine > dansNJours(90)) return 'standby90';
     if (prochaine > dansNJours(30)) return 'standby30';
     return o.stage;
   };
+  /** Cartes d'une colonne, dans l'ordre manuel (les non-placées en fin, plus récentes d'abord). */
+  const itemsDe = (c: Colonne): Opportunite[] =>
+    visibles
+      .filter((o) => colonneDe(o) === c)
+      .sort((a, b) =>
+        (a.position ?? Number.POSITIVE_INFINITY) - (b.position ?? Number.POSITIVE_INFINITY) ||
+        (a.created_at < b.created_at ? 1 : -1));
   // Stand-by intercalé avant gagné / perdu : ce sont des affaires encore ouvertes.
   const COLONNES: Colonne[] = [
     ...OPP_STAGE_ORDER.filter((s) => s !== 'gagne' && s !== 'perdu'),
@@ -100,6 +110,13 @@ export default function Pipeline() {
       probabilite: Number(form.probabilite ?? 0),
       owner_id: form.owner_id ?? session?.user.id,
     };
+    // Étape changée dans le formulaire : épingler la carte sur cette étape,
+    // sinon un éventuel épinglage stand-by la maintiendrait dans l'ancienne colonne.
+    const original = form.id ? data.find((x) => x.id === form.id) : null;
+    if (original && form.stage && form.stage !== original.stage) {
+      payload.colonne_manuelle = form.stage;
+      payload.position = null;
+    }
     const { error } = form.id
       ? await supabase.from('opportunites').update(payload).eq('id', form.id)
       : await supabase.from('opportunites').insert(payload);
@@ -109,37 +126,57 @@ export default function Pipeline() {
     refresh();
   };
 
-  /** Écrit la nouvelle étape — passage obligé des flèches ET du glisser-déposer.
-   *  Aucune condition préalable : toute carte visible peut aller sur n'importe
-   *  quelle étape. L'absence d'action prévue reste signalée, mais par les
-   *  colonnes stand-by (calculées à l'affichage), jamais en bloquant le geste. */
-  const setStage = async (o: Opportunite, next: OpportuniteStage) => {
-    if (next === o.stage) return;
-    const { error } = await supabase.from('opportunites').update({ stage: next }).eq('id', o.id);
+  /** Flèches ← → : étape précédente/suivante, carte épinglée en fin de colonne. */
+  const move = async (o: Opportunite, dir: -1 | 1) => {
+    const next = OPP_STAGE_ORDER[OPP_STAGE_ORDER.indexOf(o.stage) + dir];
+    if (!next) return;
+    const { error } = await supabase.from('opportunites')
+      .update({ stage: next, colonne_manuelle: next, position: null }).eq('id', o.id);
     if (error) { alert(error.message); return; }
     refresh();
   };
 
-  const move = (o: Opportunite, dir: -1 | 1) => {
-    const next = OPP_STAGE_ORDER[OPP_STAGE_ORDER.indexOf(o.stage) + dir];
-    if (next) void setStage(o, next);
-  };
-
   // ── Glisser-déposer ─────────────────────────────────────────────────────────
-  // Ouvert à tous : la RLS de `opportunites` autorise déjà la mise à jour de
-  // toute opportunité visible (manager, ou propriétaire de la sienne).
-  // Les colonnes stand-by restent hors cible : elles sont calculées, pas
-  // stockées — il n'existe aucune étape à écrire pour elles. Ce sont les
-  // actions du contact qui les font entrer et sortir de stand-by.
+  // Sans restriction : toute carte peut être déposée sur n'importe quelle
+  // colonne — y compris Stand-by > 30/90 J — et à n'importe quelle position
+  // entre deux cartes (un trait d'insertion suit le curseur). Le dépôt épingle
+  // la carte (colonne_manuelle) : elle reste où on l'a mise, le calcul
+  // stand-by automatique ne la reclasse plus. La RLS de `opportunites` fait foi
+  // sur qui peut modifier quoi.
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overCol, setOverCol] = useState<Colonne | null>(null);
+  const [over, setOver] = useState<{ col: Colonne; index: number } | null>(null);
   const estEtape = (c: Colonne): c is OpportuniteStage => c !== 'standby30' && c !== 'standby90';
-  const peutDeposer = (c: Colonne) => !!dragId && estEtape(c);
+  const setOverAt = (col: Colonne, index: number) =>
+    setOver((p) => (p && p.col === col && p.index === index ? p : { col, index }));
 
-  const onDrop = (c: Colonne) => {
+  const onDrop = async (col: Colonne, index: number) => {
     const o = dragId ? data.find((x) => x.id === dragId) : null;
-    setDragId(null); setOverCol(null);
-    if (o && estEtape(c)) void setStage(o, c);
+    setDragId(null); setOver(null);
+    if (!o) return;
+    // Liste d'arrivée sans la carte déplacée ; si elle venait de cette colonne
+    // depuis une position antérieure, l'index visé recule d'un cran.
+    const avant = itemsDe(col);
+    const idxOrigine = avant.findIndex((x) => x.id === o.id);
+    const dest = avant.filter((x) => x.id !== o.id);
+    const cible = Math.max(0, Math.min(idxOrigine !== -1 && idxOrigine < index ? index - 1 : index, dest.length));
+    dest.splice(cible, 0, o);
+    // Réindexation compacte de la colonne d'arrivée (colonnes courtes : quelques
+    // écritures) ; seule la carte déplacée change d'étape/épinglage.
+    const updates = dest
+      .map((x, i) => ({ x, i }))
+      .filter(({ x, i }) => x.id === o.id || x.position !== i)
+      .map(({ x, i }) => {
+        const patch: Partial<Opportunite> = { position: i };
+        if (x.id === o.id) {
+          patch.colonne_manuelle = col;
+          if (estEtape(col)) patch.stage = col; // en stand-by, l'étape réelle est conservée
+        }
+        return supabase.from('opportunites').update(patch).eq('id', x.id);
+      });
+    const results = await Promise.all(updates);
+    const err = results.find((r) => r.error)?.error;
+    if (err) alert(err.message);
+    refresh();
   };
 
   const remove = async (o: Opportunite) => {
@@ -153,7 +190,7 @@ export default function Pipeline() {
     <div>
       <PageHeader
         title="Pipeline commercial"
-        subtitle="Suivi des opportunités de la qualification à la signature (4.1) — glissez une carte sur une étape pour la déplacer"
+        subtitle="Suivi des opportunités de la qualification à la signature (4.1) — glissez une carte où vous voulez, y compris en stand-by et entre deux cartes"
         actions={
           <div className="flex items-center gap-2">
             <select
@@ -175,22 +212,27 @@ export default function Pipeline() {
       ) : (
         <div className="scroll-x flex gap-2.5 overflow-x-auto pb-3">
           {COLONNES.map((stage) => {
-            const items = visibles.filter((o) => colonneDe(o) === stage);
+            const items = itemsDe(stage);
             const total = items.reduce((s, o) => s + Number(o.montant ?? 0), 0);
             const standby = stage === 'standby30' || stage === 'standby90';
-            const cible = overCol === stage && peutDeposer(stage);
+            const cible = !!dragId && over?.col === stage;
             return (
               <div
                 key={stage}
                 className="flex w-60 shrink-0 flex-col"
                 onDragOver={(e) => {
-                  if (!peutDeposer(stage)) return;
+                  if (!dragId) return;
                   e.preventDefault(); // sans quoi le dépôt est refusé par le navigateur
                   e.dataTransfer.dropEffect = 'move';
-                  setOverCol(stage);
+                  // Survol du fond de colonne (hors carte) : insertion en fin.
+                  setOverAt(stage, items.length);
                 }}
-                onDragLeave={() => setOverCol((c) => (c === stage ? null : c))}
-                onDrop={(e) => { e.preventDefault(); onDrop(stage); }}
+                onDragLeave={(e) => {
+                  // Ignorer les sorties vers un enfant de la colonne.
+                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                  setOver((p) => (p?.col === stage ? null : p));
+                }}
+                onDrop={(e) => { e.preventDefault(); void onDrop(stage, over?.col === stage ? over.index : items.length); }}
               >
                 {/* En-tête sur une seule ligne : étape, effectif, montant */}
                 <div className="mb-1.5 flex items-baseline gap-1.5 px-1">
@@ -201,8 +243,9 @@ export default function Pipeline() {
                 {/* Une seule classe de fond : deux `bg-*` concurrentes se départagent
                     par l'ordre du CSS généré, pas par l'ordre d'écriture. */}
                 <div className={`flex-1 space-y-1.5 rounded-xl p-1.5 transition-colors ${cible ? 'bg-brand-500/10 ring-2 ring-brand-500' : 'bg-surface-2'}`}>
-                  {items.map((o) => {
+                  {items.map((o, pos) => {
                     const idx = OPP_STAGE_ORDER.indexOf(o.stage);
+                    const traitAvant = cible && over?.index === pos && dragId !== o.id;
                     const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
                     const entreprise = entreprises.data.find((x) => x.id === (o.entreprise_id ?? contact?.entreprise_id));
                     const title = contact ? fullName(contact.prenom, contact.nom) : o.titre;
@@ -213,8 +256,10 @@ export default function Pipeline() {
                       conseillerId ? null : (nomConseiller(conseillerDe(o)) || 'Non affecté'),
                     ].filter(Boolean).join(' · ');
                     return (
+                      <div key={o.id}>
+                      {/* Trait d'insertion : la carte lâchée prendra cette place. */}
+                      {traitAvant && <div className="mb-1.5 h-0.5 rounded-full bg-brand-500" />}
                       <div
-                        key={o.id}
                         onClick={() => openFiche(o.contact_id)}
                         draggable
                         onDragStart={(e) => {
@@ -223,7 +268,16 @@ export default function Pipeline() {
                           // Firefox n'amorce pas le glisser sans données transportées.
                           e.dataTransfer.setData('text/plain', o.id);
                         }}
-                        onDragEnd={() => { setDragId(null); setOverCol(null); }}
+                        onDragEnd={() => { setDragId(null); setOver(null); }}
+                        onDragOver={(e) => {
+                          if (!dragId) return;
+                          e.preventDefault();
+                          e.stopPropagation(); // sinon la colonne force l'insertion en fin
+                          e.dataTransfer.dropEffect = 'move';
+                          // Moitié haute : insérer avant cette carte ; basse : après.
+                          const r = e.currentTarget.getBoundingClientRect();
+                          setOverAt(stage, e.clientY < r.top + r.height / 2 ? pos : pos + 1);
+                        }}
                         className={`group card cursor-grab px-2.5 py-2 active:cursor-grabbing ${o.contact_id ? 'hover:border-brand-300' : ''} ${dragId === o.id ? 'opacity-40' : ''}`}
                         title={o.contact_id ? 'Ouvrir la fiche client' : undefined}
                       >
@@ -266,8 +320,13 @@ export default function Pipeline() {
                           </div>
                         </div>
                       </div>
+                      </div>
                     );
                   })}
+                  {/* Trait d'insertion en fin de colonne */}
+                  {cible && over?.index === items.length && items.length > 0 && (
+                    <div className="h-0.5 rounded-full bg-brand-500" />
+                  )}
                   {items.length === 0 && (
                     <p className="px-2 py-6 text-center text-xs text-muted">
                       {cible ? 'Déposer ici' : '—'}

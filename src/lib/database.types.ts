@@ -99,6 +99,10 @@ export type Opportunite = Timestamps & {
   financeur_id: string | null; montant: number; stage: OpportuniteStage;
   probabilite: number; date_cloture_prev: string | null; date_cloture: string | null;
   owner_id: string | null; notes: string | null;
+  /** Ordre manuel dans la colonne du pipeline (null = fin de colonne). */
+  position: number | null;
+  /** Colonne épinglée à la main (étape ou standby30/90) ; null = calculée. */
+  colonne_manuelle: string | null;
 };
 export type Formation = Timestamps & {
   id: string; intitule: string; objectifs: string | null; programme: string[];
