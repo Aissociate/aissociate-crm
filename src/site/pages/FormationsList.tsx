@@ -38,10 +38,13 @@ export default function FormationsList() {
       id: 'creation-contenus-ia',
       title: 'Création de contenus rédactionnels et visuels par l\'IA générative',
       subtitle: 'Usage responsable de l\'intelligence artificielle',
-      description: 'Formation certifiante pour maîtriser la création de contenus avec l\'IA générative tout en respectant les principes de confidentialité et protection des données.',
-      duration: '14h (2 jours)',
+      description: 'Formation certifiante pour maîtriser la création de contenus avec l\'IA générative tout en respectant les principes de confidentialité et protection des données. Parcours de 21h (présentiel + e-learning), au choix en format collectif ou individuel.',
+      duration: '21h (présentiel + e-learning)',
+      // Libellé figé : 21h ne se traduit pas en « 3 jours » (parcours mixte).
+      durationLabel: '21h (présentiel + e-learning)',
       participants: 'Grand public',
-      price: '1 600 €',
+      price: '1 489 €',
+      priceNote: 'Format collectif — individuel : 1 650 €',
       level: 'Débutant',
       certifications: ['CPF', 'RS 6776', 'Certifiant'],
       objectives: [
@@ -206,7 +209,7 @@ export default function FormationsList() {
     return {
       ...f,
       title: db.intitule || f.title,
-      duration: fmtDuree(db.duree_heures) ?? f.duration,
+      duration: f.durationLabel ?? fmtDuree(db.duree_heures) ?? f.duration,
       price: Number(db.prix) > 0 ? fmtPrix(db.prix) : f.price,
       participants: db.public_vise || f.participants,
       // objectifs CRM seulement s'ils sont rédigés en liste (1 ligne = 1 objectif)
@@ -375,7 +378,7 @@ export default function FormationsList() {
                       <div className="bg-gradient-to-br from-slate-50 to-orange-50 rounded-xl p-6 border border-slate-200">
                         <div className="text-center mb-6">
                           <div className="text-4xl font-bold text-slate-900 mb-1">{formation.price}</div>
-                          <div className="text-sm text-slate-600">Par participant</div>
+                          <div className="text-sm text-slate-600">{formation.priceNote || 'Par participant'}</div>
                         </div>
 
                         <div className="space-y-4 mb-6">
