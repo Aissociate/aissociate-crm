@@ -21,6 +21,10 @@
 //     Dictée vocale des instructions : STT via OpenRouter, modèle
 //     `ai.model_stt` sinon gpt-4o-mini-transcribe (fiable, ~0,003 $/min).
 //
+// ⚠ En-têtes HTTP sortants : ByteString uniquement (Latin-1). Pas de tiret
+// cadratin ni d'accent dans X-Title & co — sinon le fetch lève
+// « Failed to construct 'Request': not a valid ByteString ».
+//
 // SSE émis pendant `chat` :
 //   meta   { conversation_id, role }
 //   step   { outil, label }            — un appel d'outil vient d'être exécuté
@@ -635,7 +639,7 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json",
-          "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM AIssociate — Agent",
+          "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM AIssociate Agent",
         },
         body: JSON.stringify({ model: modelStt, language: "fr", input_audio: { data: audio, format } }),
       });
@@ -751,7 +755,7 @@ Deno.serve(async (req: Request) => {
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json",
-                "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM AIssociate — Agent",
+                "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM AIssociate Agent",
               },
               body: JSON.stringify({ model, messages, tools, tool_choice: "auto", temperature: 0.2 }),
             });
