@@ -17,7 +17,7 @@ const FAQ = [
   },
   {
     question: "Proposez-vous des formations IA à La Réunion et à distance ?",
-    answer: "Oui. Nos formations en intelligence artificielle se déroulent à La Réunion en présentiel, ou en classe virtuelle à distance, selon votre organisation.",
+    answer: "Oui. Nos formations en intelligence artificielle se déroulent en présentiel à Saint-Denis de La Réunion, ou en classe virtuelle à distance, selon votre organisation.",
   },
   {
     question: "Faut-il des prérequis techniques pour se former à l'IA ?",
@@ -79,7 +79,7 @@ export default function OrganismHome() {
               <p className="text-xl text-slate-600 mb-8 leading-relaxed">
                 Organisme de formation certifié Qualiopi, AIssociate forme dirigeants, équipes et PME réunionnaises à l'IA générative
                 (ChatGPT, prompt engineering, automatisation des process). Des formations finançables <strong>CPF, OPCO et France Travail</strong>,
-                en présentiel à La Réunion ou à distance.
+                en présentiel à Saint-Denis de La Réunion (974) ou à distance.
               </p>
 
               <div className="flex flex-wrap gap-4">
@@ -279,9 +279,10 @@ export default function OrganismHome() {
               </div>
               <h3 className="text-2xl font-bold text-slate-900 mb-3">Formations débutantes</h3>
               <p className="text-slate-600 mb-4">
-                Découvrez l'IA générative et créez vos premiers contenus professionnels conformes au RGPD.
+                Découvrez l'IA générative avec ChatGPT et créez vos premiers contenus professionnels conformes au RGPD.
               </p>
               <ul className="text-sm text-slate-600 space-y-1 mb-4">
+                <li>• ChatGPT et prompt engineering au quotidien</li>
                 <li>• Génération de contenus rédactionnels</li>
                 <li>• Création d'images et visuels</li>
                 <li>• Usage responsable et éthique</li>
@@ -420,7 +421,8 @@ export default function OrganismHome() {
             Prêt à démarrer votre formation ?
           </h2>
           <p className="text-xl text-slate-600 mb-8">
-            Contactez-nous dès aujourd'hui pour échanger sur vos besoins et trouver la formation adaptée
+            Contactez-nous dès aujourd'hui pour échanger sur vos besoins et trouver la formation adaptée,
+            dans nos locaux à Saint-Denis ou à distance
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link

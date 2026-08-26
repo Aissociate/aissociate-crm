@@ -78,7 +78,7 @@ const faqPage = (items) => ({
 const HOME_FAQ = [
   { question: "Vos formations en intelligence artificielle sont-elles éligibles au CPF ?", answer: "Oui. Plusieurs de nos formations IA sont certifiantes et éligibles au CPF. Les autres sont finançables via votre OPCO, France Travail ou le plan de développement des compétences de votre entreprise." },
   { question: "AIssociate est-il un organisme de formation certifié Qualiopi ?", answer: "Oui, AIssociate est un organisme de formation certifié Qualiopi — gage de qualité reconnu par l'État et condition d'accès aux financements (CPF, OPCO, France Travail)." },
-  { question: "Proposez-vous des formations IA à La Réunion et à distance ?", answer: "Oui. Nos formations en intelligence artificielle se déroulent à La Réunion en présentiel, ou en classe virtuelle à distance." },
+  { question: "Proposez-vous des formations IA à La Réunion et à distance ?", answer: "Oui. Nos formations en intelligence artificielle se déroulent en présentiel à Saint-Denis de La Réunion, ou en classe virtuelle à distance." },
   { question: "Faut-il des prérequis techniques pour se former à l'IA ?", answer: "Non. Nos formations s'adressent aux dirigeants, équipes et PME sans compétence technique : la maîtrise des outils informatiques de base suffit." },
   { question: "Combien de temps dure une formation en intelligence artificielle ?", answer: "De 7 h (1 jour) pour les formations d'initiation à 21 h (3 jours) pour les parcours certifiants." },
   { question: "Quels outils d'IA apprend-on (ChatGPT, prompt engineering…) ?", answer: "Vous apprenez à utiliser les principaux outils d'IA générative (ChatGPT, génération d'images, assistants) et le prompt engineering, via des cas pratiques." },
