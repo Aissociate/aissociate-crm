@@ -14,7 +14,10 @@ export type ContactType = 'prospect' | 'contact' | 'apprenant' | 'contact_entrep
 export type FinancementType =
   | 'cpf' | 'opco' | 'france_travail' | 'pole_emploi' | 'conseil_regional'
   | 'transition_pro' | 'agefice' | 'entreprise' | 'particulier' | 'autre';
-export type OpportuniteStage = 'nouveau' | 'qualifie' | 'proposition' | 'negociation' | 'gagne' | 'perdu';
+/** Étape du pipeline : clé libre — la liste des colonnes est configurée dans
+ *  parametres (cle 'pipeline'), voir src/lib/pipeline.ts. Les clés historiques
+ *  restent : nouveau, qualifie, proposition, negociation, gagne, perdu. */
+export type OpportuniteStage = string;
 export type DossierStatut =
   | 'brouillon' | 'montage' | 'depose' | 'en_instruction'
   | 'accorde' | 'refuse' | 'en_cours' | 'solde' | 'cloture';

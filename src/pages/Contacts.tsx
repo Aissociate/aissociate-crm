@@ -686,7 +686,7 @@ export default function Contacts() {
                     </span>
                   ) : <span className="text-muted/60">—</span>}
                   <div className="flex flex-wrap gap-1">
-                    {stageOf[c.id] && <Badge tone="brand">{OPP_STAGE_LABELS[stageOf[c.id]]}</Badge>}
+                    {stageOf[c.id] && <Badge tone="brand">{OPP_STAGE_LABELS[stageOf[c.id]] ?? stageOf[c.id]}</Badge>}
                     {nextSession[c.id] && (
                       <Badge tone={nextSession[c.id].date_debut >= TODAY ? 'warning' : 'success'}>
                         {nextSession[c.id].date_debut >= TODAY ? 'Session ' : 'Réalisée '}{formatDate(nextSession[c.id].date_debut, 'dd/MM')}

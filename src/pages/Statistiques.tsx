@@ -4,9 +4,8 @@ import {
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, StatCard } from '@/components/ui';
-import {
-  DOSSIER_STATUT_LABELS, OPP_STAGE_LABELS, OPP_STAGE_ORDER,
-} from '@/lib/constants';
+import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
+import { usePipelineColonnes } from '@/lib/pipeline';
 import { formatMoney } from '@/lib/utils';
 import ConseillerActivite from '@/components/ConseillerActivite';
 import type { Dossier, Opportunite, Financeur, DossierStatut } from '@/lib/database.types';
@@ -17,6 +16,7 @@ const GRID = 'rgb(148 163 184 / 0.2)';
 
 export default function Statistiques() {
   const { isManager } = useAuth();
+  const { colonnes: colonnesPipeline } = usePipelineColonnes();
   const dossiers = useCollection<Dossier>('dossiers');
   const opps = useCollection<Opportunite>('opportunites');
   const financeurs = useCollection<Financeur>('financeurs');
@@ -34,8 +34,8 @@ export default function Statistiques() {
     montant: dossiers.data.filter((d) => d.financeur_id === f.id).reduce((s, d) => s + Number(d.montant_accorde || d.montant_demande || 0), 0),
   })).filter((x) => x.montant > 0);
 
-  const parStage = OPP_STAGE_ORDER.map((s) => ({
-    name: OPP_STAGE_LABELS[s], value: opps.data.filter((o) => o.stage === s).length,
+  const parStage = colonnesPipeline.map((c) => ({
+    name: c.libelle, value: opps.data.filter((o) => o.stage === c.cle).length,
   }));
 
   const totalAccorde = dossiers.data.reduce((s, d) => s + Number(d.montant_accorde ?? 0), 0);

@@ -100,7 +100,7 @@ function buildTools(ctx: Ctx) {
   }
   if (on("pipeline")) {
     tool("lister_pipeline", "Opportunités commerciales du pipeline, avec étape, probabilité et échéance.",
-      { etape: { type: "string", enum: ["nouveau", "qualifie", "proposition", "negociation", "gagne", "perdu"] } });
+      { etape: { type: "string", description: "Clé d'étape (colonne du pipeline, configurable) : nouveau, qualifie, proposition, negociation, gagne, perdu, ou une colonne personnalisée vue dans les données" } });
   }
   if (on("dossiers")) {
     tool("lister_dossiers", "Dossiers de financement (référence, intitulé, statut, montants).",
@@ -166,8 +166,8 @@ function buildTools(ctx: Ctx) {
   }
   if (on("pipeline")) {
     tool("proposer_deplacement_opportunite",
-      "Propose de déplacer une opportunité vers une autre étape du pipeline (à valider).",
-      { opportunite_id: { type: "string" }, etape: { type: "string", enum: ["nouveau", "qualifie", "proposition", "negociation", "gagne", "perdu"] } },
+      "Propose de déplacer une opportunité vers une autre étape du pipeline (à valider). Les colonnes sont configurables : utiliser une clé d'étape existante (vue via lister_pipeline), jamais une clé inventée.",
+      { opportunite_id: { type: "string" }, etape: { type: "string", description: "Clé d'étape cible (ex. nouveau, qualifie, proposition, negociation, gagne, perdu, ou colonne personnalisée)" } },
       ["opportunite_id", "etape"]);
   }
   if (on("dossiers")) {
@@ -478,6 +478,16 @@ async function buildProposalDescription(ctx: Ctx, name: string, a: Record<string
 }
 
 async function runWriteProposal(ctx: Ctx, name: string, a: Record<string, unknown>): Promise<unknown> {
+  // Garde-fou : une étape cible doit exister dans la config du pipeline.
+  if (name === "proposer_deplacement_opportunite") {
+    const { data: pRow } = await ctx.db.from("parametres").select("valeur").eq("cle", "pipeline").maybeSingle();
+    const colonnes = ((pRow?.valeur as { colonnes?: { cle: string }[] } | null)?.colonnes ?? []).map((c) => c.cle);
+    const defaut = ["nouveau", "qualifie", "proposition", "negociation", "gagne", "perdu"];
+    const valides = colonnes.length ? colonnes : defaut;
+    if (!valides.includes(String(a.etape))) {
+      return { erreur: `Étape inconnue « ${a.etape} ». Étapes valides : ${valides.join(", ")}.` };
+    }
+  }
   const desc = await buildProposalDescription(ctx, name, a);
   if (typeof desc !== "string") return desc;
   const { data, error } = await ctx.db.from("ai_actions").insert({
@@ -557,7 +567,7 @@ async function executeAction(
       return { ok: true, entite: "emails", entite_id: null, resultat: { envoye_a: a.destinataire } };
     }
     case "proposer_deplacement_opportunite": {
-      const { error } = await db.from("opportunites").update({ stage: String(a.etape) }).eq("id", String(a.opportunite_id));
+      const { error } = await db.from("opportunites").update({ stage: String(a.etape), colonne_manuelle: String(a.etape), position: null }).eq("id", String(a.opportunite_id));
       if (error) return { ok: false, erreur: error.message };
       return { ok: true, entite: "opportunites", entite_id: String(a.opportunite_id) };
     }

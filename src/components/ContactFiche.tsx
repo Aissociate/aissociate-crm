@@ -602,7 +602,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <ul className="space-y-1.5">{opps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                   <span className="text-fg">{o.titre}</span>
-                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage]}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
+                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage] ?? o.stage}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
                 </li>))}
               </ul>
             )}

@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Phone, Settings2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner } from '@/components/ui';
 import ContactFiche from '@/components/ContactFiche';
-import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
+import { usePipelineColonnes, ecrireColonnesPipeline, cleDepuisLibelle, type PipelineColonne } from '@/lib/pipeline';
 import { formatMoney, fullName } from '@/lib/utils';
 import type { Opportunite, OpportuniteStage, Contact, ContactAction, Entreprise, Financeur, Profile } from '@/lib/database.types';
 
@@ -28,8 +28,11 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 const dansNJours = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
 
 export default function Pipeline() {
-  const { session } = useAuth();
+  const { session, isManager } = useAuth();
   const navigate = useNavigate();
+  // Colonnes configurables (parametres cle 'pipeline') : clé stable + libellé.
+  const { colonnes, setColonnes, libelleDe } = usePipelineColonnes();
+  const ordreEtapes = colonnes.map((c) => c.cle);
   const { data, loading, refresh } = useCollection<Opportunite>('opportunites', {
     orderBy: { column: 'created_at', ascending: false },
   });
@@ -96,11 +99,12 @@ export default function Pipeline() {
         (a.created_at < b.created_at ? 1 : -1));
   // Stand-by intercalé avant gagné / perdu : ce sont des affaires encore ouvertes.
   const COLONNES: Colonne[] = [
-    ...OPP_STAGE_ORDER.filter((s) => s !== 'gagne' && s !== 'perdu'),
-    'standby30', 'standby90', 'gagne', 'perdu',
+    ...ordreEtapes.filter((s) => s !== 'gagne' && s !== 'perdu'),
+    'standby30', 'standby90',
+    ...ordreEtapes.filter((s) => s === 'gagne' || s === 'perdu'),
   ];
   const libelleColonne = (c: Colonne) =>
-    c === 'standby30' || c === 'standby90' ? STANDBY_LABELS[c] : OPP_STAGE_LABELS[c];
+    c === 'standby30' || c === 'standby90' ? STANDBY_LABELS[c] : libelleDe(c);
 
   const save = async () => {
     setSaving(true);
@@ -128,7 +132,7 @@ export default function Pipeline() {
 
   /** Flèches ← → : étape précédente/suivante, carte épinglée en fin de colonne. */
   const move = async (o: Opportunite, dir: -1 | 1) => {
-    const next = OPP_STAGE_ORDER[OPP_STAGE_ORDER.indexOf(o.stage) + dir];
+    const next = ordreEtapes[ordreEtapes.indexOf(o.stage) + dir];
     if (!next) return;
     const { error } = await supabase.from('opportunites')
       .update({ stage: next, colonne_manuelle: next, position: null }).eq('id', o.id);
@@ -186,6 +190,65 @@ export default function Pipeline() {
     refresh();
   };
 
+  // ── Gestion des colonnes (managers) ─────────────────────────────────────────
+  // Brouillon local édité dans un modal, enregistré d'un bloc dans parametres.
+  // La clé d'une colonne ne change jamais : renommer = libellé seulement, les
+  // cartes (stage / colonne_manuelle) restent rattachées. Suppression bloquée
+  // tant que des cartes utilisent la colonne (visible du manager : il voit tout).
+  const [colOpen, setColOpen] = useState(false);
+  const [colDraft, setColDraft] = useState<PipelineColonne[]>([]);
+  const [colSaving, setColSaving] = useState(false);
+  const [nouvelleColonne, setNouvelleColonne] = useState('');
+
+  const ouvrirColonnes = () => {
+    setColDraft(colonnes.map((c) => ({ ...c })));
+    setNouvelleColonne('');
+    setColOpen(true);
+  };
+  const colonneUtilisee = (cle: string) =>
+    data.some((o) => o.stage === cle || o.colonne_manuelle === cle);
+  const deplacerColonne = (i: number, dir: -1 | 1) => {
+    setColDraft((d) => {
+      const j = i + dir;
+      if (j < 0 || j >= d.length) return d;
+      const copie = [...d];
+      [copie[i], copie[j]] = [copie[j], copie[i]];
+      return copie;
+    });
+  };
+  const supprimerColonne = (i: number) => {
+    const c = colDraft[i];
+    if (c.systeme) return;
+    if (colonneUtilisee(c.cle)) {
+      alert(`Des opportunités sont encore dans « ${c.libelle} » : déplacez-les avant de supprimer la colonne.`);
+      return;
+    }
+    setColDraft((d) => d.filter((_, k) => k !== i));
+  };
+  const ajouterColonne = () => {
+    const libelle = nouvelleColonne.trim();
+    if (!libelle) return;
+    setColDraft((d) => [
+      // Insérée avant gagné/perdu : une nouvelle étape est une étape ouverte.
+      ...d.filter((c) => c.cle !== 'gagne' && c.cle !== 'perdu'),
+      { cle: cleDepuisLibelle(libelle, d.map((c) => c.cle)), libelle },
+      ...d.filter((c) => c.cle === 'gagne' || c.cle === 'perdu'),
+    ]);
+    setNouvelleColonne('');
+  };
+  const enregistrerColonnes = async () => {
+    const nettoyees = colDraft
+      .map((c) => ({ ...c, libelle: c.libelle.trim() }))
+      .filter((c) => c.libelle);
+    if (!nettoyees.length) return;
+    setColSaving(true);
+    const err = await ecrireColonnesPipeline(nettoyees);
+    setColSaving(false);
+    if (err) { alert(err); return; }
+    setColonnes(nettoyees);
+    setColOpen(false);
+  };
+
   return (
     <div>
       <PageHeader
@@ -202,6 +265,11 @@ export default function Pipeline() {
               {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
               <option value="aucun">— Non affecté —</option>
             </select>
+            {isManager && (
+              <Button variant="secondary" onClick={ouvrirColonnes} title="Ajouter, renommer, réordonner ou supprimer les colonnes du pipeline">
+                <Settings2 className="h-4 w-4" /> Colonnes
+              </Button>
+            )}
             <Button onClick={() => { setForm(empty()); setOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle opportunité</Button>
           </div>
         }
@@ -244,7 +312,7 @@ export default function Pipeline() {
                     par l'ordre du CSS généré, pas par l'ordre d'écriture. */}
                 <div className={`flex-1 space-y-1.5 rounded-xl p-1.5 transition-colors ${cible ? 'bg-brand-500/10 ring-2 ring-brand-500' : 'bg-surface-2'}`}>
                   {items.map((o, pos) => {
-                    const idx = OPP_STAGE_ORDER.indexOf(o.stage);
+                    const idx = ordreEtapes.indexOf(o.stage);
                     const traitAvant = cible && over?.index === pos && dragId !== o.id;
                     const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
                     const entreprise = entreprises.data.find((x) => x.id === (o.entreprise_id ?? contact?.entreprise_id));
@@ -291,7 +359,7 @@ export default function Pipeline() {
                         {/* Ligne 3 : intitulé de l'affaire (le titre de la carte est le contact) */}
                         {contact && o.titre && <p className="truncate text-xs text-muted/80">{o.titre}</p>}
                         {/* En stand-by, la carte rappelle l'étape réelle de l'opportunité. */}
-                        {standby && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400">{OPP_STAGE_LABELS[o.stage]} · aucune action prévue</p>}
+                        {standby && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400">{libelleDe(o.stage)} · aucune action prévue</p>}
 
                         {/* Probabilité : jauge fine plutôt qu'une ligne de texte */}
                         <div className="mt-1.5 flex items-center gap-2">
@@ -309,7 +377,7 @@ export default function Pipeline() {
                         >
                           <div className="flex items-center gap-0.5">
                             <button disabled={idx === 0} onClick={() => move(o, -1)} title="Étape précédente" aria-label="Déplacer l'opportunité à l'étape précédente" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-                            <button disabled={idx === OPP_STAGE_ORDER.length - 1} onClick={() => move(o, 1)} title="Étape suivante" aria-label="Déplacer l'opportunité à l'étape suivante" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+                            <button disabled={idx === ordreEtapes.length - 1} onClick={() => move(o, 1)} title="Étape suivante" aria-label="Déplacer l'opportunité à l'étape suivante" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
                           </div>
                           <div className="flex items-center gap-0.5">
                             {contact?.telephone && (
@@ -354,7 +422,7 @@ export default function Pipeline() {
           <Field label="Montant (€)"><input className="input" type="number" value={form.montant ?? 0} onChange={(e) => set('montant', e.target.value)} /></Field>
           <Field label="Probabilité (%)"><input className="input" type="number" min={0} max={100} value={form.probabilite ?? 0} onChange={(e) => set('probabilite', e.target.value)} /></Field>
           <Field label="Étape"><select className="input" value={form.stage} onChange={(e) => set('stage', e.target.value as OpportuniteStage)}>
-            {OPP_STAGE_ORDER.map((s) => <option key={s} value={s}>{OPP_STAGE_LABELS[s]}</option>)}
+            {colonnes.map((c) => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
           </select></Field>
           <Field label="Clôture prévue"><input className="input" type="date" value={form.date_cloture_prev ?? ''} onChange={(e) => set('date_cloture_prev', e.target.value || null)} /></Field>
           <Field label="Contact"><select className="input" value={form.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
@@ -370,6 +438,58 @@ export default function Pipeline() {
             {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
           </select></Field>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field></div>
+        </div>
+      </Modal>
+
+      {/* Gestion des colonnes du pipeline */}
+      <Modal
+        open={colOpen} onClose={() => setColOpen(false)}
+        title="Colonnes du pipeline"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setColOpen(false)}>Annuler</Button>
+            <Button onClick={enregistrerColonnes} disabled={colSaving}>{colSaving ? 'Enregistrement…' : 'Enregistrer'}</Button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          <p className="text-sm text-muted">
+            Renommez, réordonnez, ajoutez ou supprimez les étapes. Les colonnes Stand-by sont
+            automatiques et « Nouveau », « Gagné », « Perdu » ne peuvent pas être supprimées
+            (nouvelles opportunités, clôture automatique, statistiques). Une colonne ne peut être
+            supprimée que vide.
+          </p>
+          {colDraft.map((c, i) => (
+            <div key={c.cle} className="flex items-center gap-2">
+              <input
+                className="input flex-1"
+                value={c.libelle}
+                onChange={(e) => setColDraft((d) => d.map((x, k) => (k === i ? { ...x, libelle: e.target.value } : x)))}
+                aria-label={`Libellé de la colonne ${c.libelle}`}
+              />
+              <button onClick={() => deplacerColonne(i, -1)} disabled={i === 0} title="Monter" aria-label={`Monter ${c.libelle}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
+              <button onClick={() => deplacerColonne(i, 1)} disabled={i === colDraft.length - 1} title="Descendre" aria-label={`Descendre ${c.libelle}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button>
+              <button
+                onClick={() => supprimerColonne(i)}
+                disabled={!!c.systeme}
+                title={c.systeme ? 'Colonne système : non supprimable' : colonneUtilisee(c.cle) ? 'Des cartes utilisent cette colonne' : 'Supprimer la colonne'}
+                aria-label={`Supprimer ${c.libelle}`}
+                className="rounded p-1.5 text-muted hover:text-red-600 disabled:opacity-30"
+              ><Trash2 className="h-4 w-4" /></button>
+            </div>
+          ))}
+          <form
+            className="flex items-center gap-2 border-t border-line pt-3"
+            onSubmit={(e) => { e.preventDefault(); ajouterColonne(); }}
+          >
+            <input
+              className="input flex-1"
+              placeholder="Nouvelle colonne (ex. Relance, Attente financeur…)"
+              value={nouvelleColonne}
+              onChange={(e) => setNouvelleColonne(e.target.value)}
+            />
+            <Button type="submit" variant="secondary" disabled={!nouvelleColonne.trim()}><Plus className="h-4 w-4" /> Ajouter</Button>
+          </form>
         </div>
       </Modal>
 
