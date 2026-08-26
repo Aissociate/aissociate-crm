@@ -1,10 +1,18 @@
 // @ts-nocheck
-import React, { useState } from 'react';
-import { Send, CircleCheck as CheckCircle2, Loader as Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Send, CircleCheck as CheckCircle2, ShieldCheck, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import SEO from '../components/SEO';
 
+// Comparaison insensible aux accents / à la casse (pré-sélection de formation).
+const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 const Formulaire = () => {
+  // Pré-remplissage depuis les CTA des pages formations : /formulaire?formation=<intitulé>
+  const [searchParams] = useSearchParams();
+  const formationParam = searchParams.get('formation') || '';
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -12,8 +20,24 @@ const Formulaire = () => {
     phone: '',
     company: '',
     requestType: '',
-    message: ''
+    message: formationParam ? `Je souhaite un devis pour la formation « ${formationParam} ».` : ''
   });
+
+  // Si l'intitulé transmis correspond à une option du menu, on la pré-sélectionne.
+  useEffect(() => {
+    if (!formationParam) return;
+    const select = document.getElementById('requestType');
+    if (!select) return;
+    const target = norm(formationParam);
+    for (const opt of select.options) {
+      if (!opt.value) continue;
+      const v = norm(opt.value);
+      if (v.includes(target) || target.includes(v)) {
+        setFormData((f) => ({ ...f, requestType: opt.value }));
+        break;
+      }
+    }
+  }, [formationParam]);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -275,7 +299,14 @@ const Formulaire = () => {
               </button>
             </form>
 
-            <p className="text-sm text-slate-500 text-center mt-6">
+            <div className="flex items-center justify-center gap-2 mt-6 text-emerald-700 font-semibold">
+              <ShieldCheck className="w-5 h-5" aria-hidden="true" />
+              Réponse sous 24 h ouvrées
+            </div>
+            <p className="text-sm text-slate-600 text-center mt-2">
+              Organisme certifié Qualiopi — formations finançables CPF, OPCO et France Travail. Sans engagement.
+            </p>
+            <p className="text-sm text-slate-500 text-center mt-4">
               En soumettant ce formulaire, vous acceptez d'être contacté par notre équipe concernant votre demande.
             </p>
           </div>

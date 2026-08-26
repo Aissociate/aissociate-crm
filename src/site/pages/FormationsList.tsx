@@ -416,7 +416,7 @@ export default function FormationsList() {
                         </div>
 
                         <Link
-                          to="/formulaire"
+                          to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
                           className="block w-full text-center bg-white hover:bg-slate-50 text-slate-900 px-6 py-3 rounded-lg font-bold transition-all border-2 border-slate-200 hover:border-orange-300"
                         >
                           Demander un devis

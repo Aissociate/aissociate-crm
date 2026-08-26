@@ -74,7 +74,8 @@ function CrmFormationDetail({ f }) {
           <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border border-orange-200 text-center">
             <h2 className="text-2xl font-bold text-slate-900 mb-3">Intéressé par cette formation ?</h2>
             <p className="text-slate-600 mb-6">Demandez un devis personnalisé, finançable (CPF / OPCO / AGEFICE).</p>
-            <Link to="/formulaire" className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
+            <Link to={`/formulaire?formation=${encodeURIComponent(f.intitule)}`} className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
+            <p className="text-sm text-slate-500 mt-3">Réponse sous 24 h ouvrées</p>
           </div>
         </div>
       </section>
@@ -974,11 +975,12 @@ export default function FormationDetailPage() {
                   </div>
 
                   <Link
-                    to="/formulaire"
+                    to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
                     className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
                   >
                     Demander un devis
                   </Link>
+                  <p className="text-center text-sm text-slate-500 mt-3">Réponse sous 24 h ouvrées</p>
                 </div>
 
                 <div className="bg-white border-2 border-slate-200 rounded-2xl p-6">
