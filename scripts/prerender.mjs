@@ -221,6 +221,7 @@ async function fetchJson(url) {
 const FORMATIONS_FALLBACK = [
   { slug: 'closer-ia-cpf', intitule: 'Formation Closer IA éligible CPF — Certifiante Qualiopi', certifiante: true },
   { slug: 'creation-contenus-ia', intitule: "Création de contenus par l'IA générative — Certifiante CPF", certifiante: true },
+  { slug: 'developper-activite-ia', intitule: "Développer son activité avec l'intelligence artificielle — accompagnement individuel", certifiante: true },
   { slug: 'introduction-ia-pme', intitule: 'Introduction aux IA pour les PME' },
   { slug: 'automatisation-process-pme', intitule: "Automatisation des process des PME avec l'IA" },
   { slug: 'marches-publics-btp-ia', intitule: 'Réponse aux marchés publics BTP avec l\'IA' },
