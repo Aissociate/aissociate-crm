@@ -37,9 +37,17 @@ async function fetchRss(url: string): Promise<RssItem[]> {
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 AissociateBot" }, signal: ctrl.signal });
+    const r = await fetch(url, {
+      headers: {
+        // UA navigateur complet : Google News repond 200 vide ou 403 aux UA
+        // « bot » depuis les IP cloud — c'est ce qui a coupe la veille.
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*",
+      },
+      signal: ctrl.signal,
+    });
     clearTimeout(to);
-    if (!r.ok) return [];
+    if (!r.ok) { console.log(`[rss] ${url} -> HTTP ${r.status}`); return []; }
     const xml = await r.text();
     const out: RssItem[] = [];
     for (const b of xml.split(/<item[\s>]/i).slice(1, 16)) {
@@ -55,8 +63,12 @@ async function fetchRss(url: string): Promise<RssItem[]> {
       const date = parseDate(e.match(/<updated>([\s\S]*?)<\/updated>/i)?.[1] ?? e.match(/<published>([\s\S]*?)<\/published>/i)?.[1] ?? "");
       if (title) out.push({ title, desc: "", link, date });
     }
+    console.log(`[rss] ${url} -> ${out.length} item(s)`);
     return out;
-  } catch { return []; }
+  } catch (err) {
+    console.log(`[rss] ${url} -> erreur: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
 }
 
 // Sélection IA : choisit l'actualité la PLUS IMPORTANTE non déjà traitée.
@@ -195,6 +207,13 @@ Deno.serve(async (req: Request) => {
     // importante du jour NON déjà traitée (anti-doublon), sinon un thème.
     let subject = (body.subject as string) || "";
     let sourceNote = "";
+    // Sujets deja traites (titres + prompts) — anti-doublon commun a la
+    // veille RSS ET aux themes de repli.
+    const { data: past } = await sb.from("blog_articles")
+      .select("title, generation_prompt").order("created_at", { ascending: false }).limit(120);
+    const covered = (past ?? [])
+      .flatMap((a) => [a.generation_prompt, a.title]).filter(Boolean).map((s) => String(s));
+    const coveredN = new Set(covered.map(normTitle));
     const buildSourceNote = (it: RssItem) =>
       `\n\nActualité IA à exploiter (veille RSS) :\nTitre : ${it.title}${it.desc ? `\nRésumé : ${it.desc}` : ""}${it.link ? `\nSource : ${it.link}` : ""}\nRédige un article ORIGINAL et à valeur ajoutée inspiré de cette actualité (ne recopie pas, contextualise pour les PME).`;
     if (!subject && feeds.length) {
@@ -214,15 +233,10 @@ Deno.serve(async (req: Request) => {
       candidates = candidates.slice(0, 25);
 
       if (candidates.length) {
-        // 3. Sujets déjà traités (titres + prompts de génération) → anti-doublon.
-        const { data: past } = await sb.from("blog_articles")
-          .select("title, generation_prompt").order("created_at", { ascending: false }).limit(80);
-        const covered = (past ?? [])
-          .flatMap((a) => [a.generation_prompt, a.title]).filter(Boolean).map((s) => String(s));
-        const coveredN = new Set(covered.map(normTitle));
-
-        // 4. Choix par l'IA de l'actu la plus importante non encore couverte.
-        const selModel = (ai.model || "anthropic/claude-opus-4.8").replace(/:online$/, "");
+        // Choix par l'IA de l'actu la plus importante non encore couverte.
+        // Modele agent (tool calling fiable = JSON fiable), pas le modele de
+        // redaction (minimax renvoie du raisonnement difficile a parser).
+        const selModel = (ai.model_agent || ai.model || "anthropic/claude-sonnet-4.5").replace(/:online$/, "");
         const idx = await selectMostImportant(apiKey, selModel, candidates, covered);
         let chosen = idx >= 0 ? candidates[idx] : null;
         // Repli : si l'IA renonce (tout doublon), prendre la plus récente non traitée.
@@ -230,7 +244,14 @@ Deno.serve(async (req: Request) => {
         if (chosen) { subject = chosen.title; sourceNote = buildSourceNote(chosen); }
       }
     }
-    if (!subject) subject = themes[Math.floor(Math.random() * themes.length)];
+    if (!subject) {
+      const libres = themes.filter((t) => !coveredN.has(normTitle(t)));
+      if (!libres.length) {
+        console.log("[blog] veille muette et tous les themes deja couverts : aucune generation.");
+        return json({ ok: true, skipped: "Aucun sujet nouveau (veille RSS vide, themes deja tous traites)." });
+      }
+      subject = libres[Math.floor(Math.random() * libres.length)];
+    }
 
     const useWeb = (body.use_web ?? blog.use_web) === true;
     const model = (ai.model || "anthropic/claude-opus-4.8") + (useWeb ? ":online" : "");
