@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Euro } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn, isConseillerInactif } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import ThemeToggle from '@/components/ThemeToggle';
 import BugReporter from '@/components/BugReporter';
+import NotificationBell from '@/components/NotificationBell';
+import GlobalSearch from '@/components/GlobalSearch';
 
 interface NavItem {
   to: string;
@@ -43,11 +45,13 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/catalogue', label: 'Catalogue', icon: GraduationCap },
       { to: '/plans', label: 'Plans de formation', icon: FileText },
       { to: '/devis', label: 'Devis', icon: ReceiptText },
+      { to: '/factures', label: 'Factures', icon: Euro },
       { to: '/dossiers', label: 'Dossiers', icon: FolderKanban },
       { to: '/calendrier', label: 'Calendrier', icon: CalendarDays },
       { to: '/emargement', label: 'Émargement', icon: CalendarCheck },
       { to: '/formateurs', label: 'Formateurs', icon: Presentation },
       { to: '/qualiopi', label: 'Conformité Qualiopi', icon: BadgeCheck },
+      { to: '/bpf', label: 'BPF', icon: FileSpreadsheet, managerOnly: true },
     ],
   },
   {
@@ -77,6 +81,19 @@ export default function Layout() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
+  // Recherche globale : Ctrl+K / ⌘K ou clic sur le bouton de la sidebar.
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
   // Badge « mails entrants non lus » (RLS : chacun ne compte que ses mails ;
   // la direction voit tout). Rafraîchi périodiquement et à chaque navigation.
   // Les mails rattachés à un conseiller devenu inactif sont exclus du décompte.
@@ -97,8 +114,13 @@ export default function Layout() {
       if (on) setUnreadMails(count ?? 0);
     };
     void load();
+    // Temps réel (insertion / lecture d'un mail) + intervalle de secours.
+    const channel = supabase
+      .channel('layout-emails')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'emails' }, () => { void load(); })
+      .subscribe();
     const t = setInterval(load, 60000);
-    return () => { on = false; clearInterval(t); };
+    return () => { on = false; clearInterval(t); void supabase.removeChannel(channel); };
   }, [location.pathname]);
 
   const visible = (item: NavItem) =>
@@ -122,6 +144,17 @@ export default function Layout() {
           <Logo size="md" tagline />
           <button className="lg:hidden" onClick={() => setOpen(false)}>
             <X className="h-5 w-5 text-muted" />
+          </button>
+        </div>
+
+        <div className="px-3 pt-3">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-fg"
+          >
+            <Search className="h-4 w-4" />
+            <span className="flex-1 text-left">Rechercher…</span>
+            <kbd className="rounded border border-line px-1.5 py-0.5 text-[10px] font-semibold">Ctrl K</kbd>
           </button>
         </div>
 
@@ -176,6 +209,7 @@ export default function Layout() {
               </p>
               <p className="truncate text-xs text-muted">{role ? ROLE_LABELS[role] : ''}</p>
             </div>
+            <NotificationBell />
             <ThemeToggle />
             <button
               onClick={handleSignOut}
@@ -206,6 +240,7 @@ export default function Layout() {
         </main>
       </div>
       <BugReporter />
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

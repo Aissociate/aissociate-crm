@@ -41,9 +41,16 @@ const Formulaire = () => {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  // Anti-spam : honeypot invisible + temps minimal de saisie (trigger côté base en renfort).
+  const [website, setWebsite] = useState('');
+  const [openedAt] = useState(() => Date.now());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (website || Date.now() - openedAt < 3000) {
+      setSubmitted(true);
+      return;
+    }
     setLoading(true);
     setError('');
 
@@ -130,6 +137,11 @@ const Formulaire = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Honeypot : invisible pour les humains, rempli par les robots. */}
+              <div className="absolute -left-[9999px] top-auto" aria-hidden="true">
+                <label htmlFor="website">Ne pas remplir</label>
+                <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="firstName" className="block text-sm font-semibold text-slate-700 mb-2">

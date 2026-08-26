@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Clock } from 'lucide-react';
 import { differenceInCalendarDays } from 'date-fns';
 import { useCollection } from '@/hooks/useCollection';
@@ -13,6 +13,7 @@ import {
   guessMapping, CONTACT_IMPORT_FIELDS, type ColumnMapping,
 } from '@/lib/importExcel';
 import ContactFiche from '@/components/ContactFiche';
+import DoublonsContacts from '@/components/DoublonsContacts';
 import type {
   Contact, ContactType, Entreprise, Financeur, Profile,
   ContactAction, Opportunite, SessionParticipant, SessionFormation, ImportBatch,
@@ -146,6 +147,18 @@ export default function Contacts() {
   const [intakeMsg, setIntakeMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [fiche, setFiche] = useState<Contact | null>(null);
+  const [doublonsOpen, setDoublonsOpen] = useState(false);
+  // Ouverture directe d'une fiche via /contacts?id=… (recherche globale Ctrl+K).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (!id || loading) return;
+    const c = data.find((x) => x.id === id);
+    if (c) setFiche(c);
+    searchParams.delete('id');
+    setSearchParams(searchParams, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, data]);
   const fileRef = useRef<HTMLInputElement>(null);
   // Import CSV avec mapping de colonnes
   const mapFileRef = useRef<HTMLInputElement>(null);
@@ -505,6 +518,9 @@ export default function Contacts() {
                 <DownloadCloud className="h-4 w-4" /> Sheets
               </Button>
             )}
+            <Button variant="secondary" onClick={() => setDoublonsOpen(true)} title="Détecter et fusionner les contacts en doublon">
+              <Undo2 className="h-4 w-4 rotate-90" /> Doublons
+            </Button>
             {isManager && (
               <Button variant="secondary" onClick={() => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }} title="Saisir une demande comme le formulaire public (création ou mise à jour)">
                 <ClipboardList className="h-4 w-4" /> Saisie (formulaire)
@@ -923,6 +939,14 @@ export default function Contacts() {
           onUpdated={() => { refresh(); actionsCol.refresh(); }}
         />
       )}
+
+      <DoublonsContacts
+        open={doublonsOpen}
+        onClose={() => setDoublonsOpen(false)}
+        contacts={data}
+        isManager={isManager}
+        onMerged={() => { refresh(); actionsCol.refresh(); oppsCol.refresh(); }}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX, Activity } from 'lucide-react';
+import SanteJobs from '@/components/SanteJobs';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge, Table, Button, Modal, Field } from '@/components/ui';
@@ -13,7 +14,7 @@ const FIN_TYPES: FinancementType[] = [
   'transition_pro', 'agefice', 'entreprise', 'particulier', 'autre',
 ];
 
-type Tab = 'pending' | 'users' | 'financeurs' | 'audit';
+type Tab = 'pending' | 'users' | 'financeurs' | 'audit' | 'sante';
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>('pending');
@@ -66,6 +67,7 @@ export default function Administration() {
     { key: 'users', label: 'Utilisateurs & droits', icon: Users },
     { key: 'financeurs', label: 'Financeurs', icon: Building },
     { key: 'audit', label: 'Journal d\'audit', icon: ScrollText },
+    { key: 'sante', label: 'Santé des jobs', icon: Activity },
   ];
 
   return (
@@ -216,6 +218,8 @@ export default function Administration() {
           </Table>
         )
       )}
+
+      {tab === 'sante' && <SanteJobs />}
 
       <Modal open={finOpen} onClose={() => setFinOpen(false)} title={finForm.id ? 'Modifier le financeur' : 'Nouveau financeur'}
         footer={<><Button variant="secondary" onClick={() => setFinOpen(false)}>Annuler</Button><Button onClick={saveFin} disabled={!finForm.code || !finForm.nom}>Enregistrer</Button></>}>

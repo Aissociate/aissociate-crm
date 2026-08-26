@@ -1,4 +1,5 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 interface Props { children: ReactNode }
 interface State { error: Error | null }
@@ -17,6 +18,21 @@ export default class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Visible dans la console du navigateur pour le diagnostic
     console.error('Erreur applicative capturée :', error, info.componentStack);
+    // Remontée en base (Administration › Santé des jobs) — best effort :
+    // ne doit jamais aggraver l'erreur d'origine ni bloquer l'affichage.
+    if (isSupabaseConfigured) {
+      void (async () => {
+        try {
+          const { data } = await supabase.auth.getUser();
+          await supabase.from('client_errors').insert({
+            user_id: data.user?.id ?? null,
+            url: window.location.pathname,
+            message: String(error.message ?? error).slice(0, 2000),
+            stack: `${error.stack ?? ''}\n${info.componentStack ?? ''}`.slice(0, 8000),
+          });
+        } catch { /* silencieux */ }
+      })();
+    }
   }
 
   render() {

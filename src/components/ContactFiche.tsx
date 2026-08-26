@@ -14,6 +14,7 @@ import ConversationsContact from '@/components/ConversationsContact';
 import MiniCalendrierContact from '@/components/MiniCalendrierContact';
 import AssistantChat from '@/components/AssistantChat';
 import HistoriqueContact from '@/components/HistoriqueContact';
+import EspaceClientButton from '@/components/EspaceClientButton';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
 const STATUTS_PROSPECT = ['', 'non assigné', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
@@ -401,6 +402,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             >
               <Mail className="h-4 w-4" />
             </button>
+            <EspaceClientButton contactId={c.id} />
             <button
               onClick={() => { onClose(); onEdit(c); }}
               className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"

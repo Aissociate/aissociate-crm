@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
@@ -66,6 +67,8 @@ export default function Messagerie() {
   const { colonnes: colonnesPipeline } = usePipelineColonnes();
   const navigate = useNavigate();
   const { data, loading, refresh } = useCollection<Email>('emails', { orderBy: { column: 'created_at', ascending: false } });
+  // Un mail entrant relevé par le cron IMAP apparaît sans « Synchroniser ».
+  useRealtimeRefresh('emails', refresh);
   const contacts = useCollection<Contact>('contacts');
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
   const formateurs = useCollection<Formateur>('formateurs');

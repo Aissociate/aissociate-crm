@@ -287,6 +287,38 @@ export type DevisLigne = {
   id: string; devis_id: string; designation: string; description: string | null;
   quantite: number; unite: string; prix_unitaire_ht: number; ordre: number; created_at: string;
 };
+export type FactureStatut = 'brouillon' | 'envoyee' | 'payee' | 'annulee';
+export type Facture = Timestamps & {
+  id: string; numero: string; devis_id: string | null; contact_id: string | null; entreprise_id: string | null;
+  financeur_id: string | null; dossier_id: string | null; formation_id: string | null;
+  date_emission: string; date_echeance: string | null; statut: FactureStatut;
+  tva_taux: number; tva_exoneree: boolean; total_ht: number; total_tva: number; total_ttc: number;
+  objet: string | null; conditions: string | null; notes: string | null; fichier_url: string | null;
+  date_reglement: string | null; mode_reglement: string | null;
+  qonto_transaction_id: string | null; rapproche_le: string | null; owner_id: string | null;
+};
+export type FactureLigne = {
+  id: string; facture_id: string; designation: string; description: string | null;
+  quantite: number; unite: string; prix_unitaire_ht: number; ordre: number; created_at: string;
+};
+export type Notification = {
+  id: string; user_id: string; type: string; titre: string; corps: string | null;
+  lien: string | null; dedupe_key: string | null; lu: boolean; created_at: string;
+};
+export type JobRun = {
+  id: string; fonction: string; started_at: string; finished_at: string | null;
+  ok: boolean; message: string | null; detail: Json | null; created_at: string;
+};
+export type ClientError = {
+  id: string; user_id: string | null; url: string | null; message: string; stack: string | null; created_at: string;
+};
+export type EspaceAcces = {
+  id: string; contact_id: string; token: string; actif: boolean;
+  created_by: string | null; created_at: string; last_seen_at: string | null;
+};
+export type EspaceConsultation = {
+  id: string; acces_id: string; ressource: string; detail: string | null; created_at: string;
+};
 export type ParticipantStatut = 'inscrit' | 'present' | 'absent' | 'annule';
 export type SessionParticipant = {
   id: string; session_id: string; contact_id: string | null; nom: string; prenom: string | null;
@@ -433,6 +465,13 @@ export type Database = {
       plan_pdfs: TableShape<PlanPdf>;
       devis: TableShape<Devis>;
       devis_lignes: TableShape<DevisLigne>;
+      factures: TableShape<Facture>;
+      facture_lignes: TableShape<FactureLigne>;
+      notifications: TableShape<Notification>;
+      job_runs: TableShape<JobRun>;
+      client_errors: TableShape<ClientError>;
+      espace_acces: TableShape<EspaceAcces>;
+      espace_consultations: TableShape<EspaceConsultation>;
       blog_articles: TableShape<BlogArticle>;
       blog_categories: TableShape<BlogCategory>;
       contact_actions: TableShape<ContactAction>;
@@ -466,6 +505,16 @@ export type Database = {
         Args: { p_ranges: string[][] };
         Returns: { visiteurs: number; vues: number }[];
       };
+      /** Paires de contacts probablement identiques (RLS de contacts appliquée). */
+      contacts_doublons: {
+        Args: Record<string, never>;
+        Returns: { id1: string; id2: string; raisons: string }[];
+      };
+      /** Fusionne le doublon dans le contact conservé (direction uniquement). */
+      merge_contacts: {
+        Args: { p_garde: string; p_doublon: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       user_role: UserRole;
@@ -474,6 +523,7 @@ export type Database = {
       opportunite_stage: OpportuniteStage;
       dossier_statut: DossierStatut;
       devis_statut: DevisStatut;
+      facture_statut: FactureStatut;
       piece_statut: PieceStatut;
       candidat_statut: CandidatStatut;
       plan_statut: PlanStatut;
