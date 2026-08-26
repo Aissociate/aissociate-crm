@@ -79,6 +79,7 @@ function ActionCard({ action, onDecision }: { action: AiAction; onDecision: (id:
   const statutUi: Record<string, { icon: JSX.Element; text: string; cls: string }> = {
     executee: { icon: <CircleCheck className="h-4 w-4" />, text: 'Exécutée', cls: 'text-emerald-600 dark:text-emerald-400' },
     annulee: { icon: <CircleX className="h-4 w-4" />, text: 'Annulée', cls: 'text-muted' },
+    expiree: { icon: <CircleX className="h-4 w-4" />, text: 'Expirée (non traitée sous 24 h)', cls: 'text-muted' },
     erreur: { icon: <TriangleAlert className="h-4 w-4" />, text: `Erreur : ${(action.resultat?.erreur as string) ?? 'inconnue'}`, cls: 'text-red-600 dark:text-red-400' },
   };
   return (
