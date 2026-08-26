@@ -557,14 +557,25 @@ async function executeAction(
         body: JSON.stringify({ to: String(a.destinataire), subject: String(a.sujet), html, text: corps }),
       });
       if (!resp.ok) return { ok: false, erreur: `send-email ${resp.status}: ${(await resp.text()).slice(0, 300)}` };
-      // Historiser l'échange sur la fiche contact si elle est connue.
+      // Historiser comme le fait la Messagerie : une ligne `emails` (sinon
+      // l'envoi est invisible dans la Messagerie et l'historique de la fiche)
+      // + une action sur la fiche contact si elle est connue.
+      const { data: me } = await db.auth.getUser();
+      const { data: mailRow } = await db.from("emails").insert({
+        destinataires: [String(a.destinataire)],
+        sujet: String(a.sujet), corps,
+        statut: "envoye", canal: "email", direction: "sortant", lu: true,
+        contact_id: a.contact_id ? String(a.contact_id) : null,
+        sent_at: new Date().toISOString(),
+        owner_id: me?.user?.id ?? null,
+      }).select("id").maybeSingle();
       if (a.contact_id) {
         await db.from("contact_actions").insert({
           contact_id: String(a.contact_id), date_action: new Date().toISOString().slice(0, 10),
           type: "email", description: `Email envoyé (assistant IA) — ${a.sujet}`, faite: true,
         });
       }
-      return { ok: true, entite: "emails", entite_id: null, resultat: { envoye_a: a.destinataire } };
+      return { ok: true, entite: "emails", entite_id: mailRow?.id ?? null, resultat: { envoye_a: a.destinataire } };
     }
     case "proposer_deplacement_opportunite": {
       const { error } = await db.from("opportunites").update({ stage: String(a.etape), colonne_manuelle: String(a.etape), position: null }).eq("id", String(a.opportunite_id));
