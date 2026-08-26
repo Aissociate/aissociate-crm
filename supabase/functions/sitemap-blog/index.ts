@@ -3,9 +3,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 
-// Slash final obligatoire : Netlify sert les pages prérendues sur /<route>/
-// et redirige la forme sans slash en 301. Un sitemap listant la forme sans
-// slash ne soumet à Google que des redirections — aucune page indexée.
 const SITE_URL = "https://aissociate.re";
 
 const corsHeaders = {
@@ -51,7 +48,7 @@ Deno.serve(async (req: Request) => {
         ? `    <image:image>\n      <image:loc>${esc(a.image_url)}</image:loc>\n      <image:title>${esc(a.title)}</image:title>\n    </image:image>`
         : "";
       return `  <url>
-    <loc>${SITE_URL}/blog/${esc(a.slug)}/</loc>
+    <loc>${SITE_URL}/blog/${esc(a.slug)}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -62,7 +59,7 @@ ${imageTag}
     const formationUrls = (formations || []).map((f) => {
       const lastmod = (f.updated_at || today).slice(0, 10);
       return `  <url>
-    <loc>${SITE_URL}/formations/${esc(String(f.slug))}/</loc>
+    <loc>${SITE_URL}/formations/${esc(String(f.slug))}</loc>
     <lastmod>${lastmod}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

@@ -6,7 +6,7 @@ import {
 import { fr } from 'date-fns/locale';
 import {
   Eye, ClipboardList, TrendingUp, Clock, Euro, Landmark, Trophy, Megaphone,
-  ArrowUpRight, ArrowDownRight, Minus, Mail, ListTodo, Percent, Target,
+  ArrowUpRight, ArrowDownRight, Minus, Mail, ListTodo,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -17,10 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge } from '@/components/ui';
 import { DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import { formatMoney, initials, isConseillerInactif } from '@/lib/utils';
-import type { Dossier, DossierStatut, Opportunite, Profile, ContactRequest, Email, Contact, ContactAction } from '@/lib/database.types';
-
-/** Compteurs de trafic renvoyés par la fonction SQL `dashboard_visiteurs`. */
-type Trafic = { visiteurs: number; vues: number };
+import type { Dossier, DossierStatut, Opportunite, Profile, PageView, ContactRequest, Email, Contact, ContactAction } from '@/lib/database.types';
 
 type MetaCampaign = { name: string; spend: number; impressions: number; clicks: number; leads: number };
 type MetaInsights = {
@@ -125,6 +122,7 @@ export default function Dashboard() {
 
   const opps = useCollection<Opportunite>('opportunites');
   const dossiers = useCollection<Dossier>('dossiers');
+  const views = useCollection<PageView>('page_views');
   const leads = useCollection<ContactRequest>('contact_requests');
   const contacts = useCollection<Contact>('contacts');
   const profiles = useCollection<Profile>('profiles');
@@ -148,34 +146,6 @@ export default function Dashboard() {
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
   const totalNonLus = unreadList.reduce((s, [, n]) => s + n, 0);
-
-  // ── Trafic du site : compté côté serveur ────────────────────────────────────
-  // `page_views` dépasse 20 000 lignes : les rapatrier pour compter dans le
-  // navigateur demandait 21 requêtes paginées (~35 s), pendant lesquelles la
-  // tuile affichait 0. La fonction `dashboard_visiteurs` renvoie un compteur par
-  // fenêtre en une requête. `null` = pas encore chargé (≠ zéro visiteur).
-  const [trafic, setTrafic] = useState<{ cur: Trafic; prev: Trafic; buckets: Trafic[] } | null>(null);
-  useEffect(() => {
-    if (!isManager) { setTrafic(null); return; }
-    // Base de temps figée dans l'effet : `now` recalculé à chaque rendu
-    // relancerait la requête en boucle.
-    const n = new Date();
-    const s = periodStart(gran, n);
-    const ps = previousStart(gran, s);
-    const pe = new Date(ps.getTime() + (n.getTime() - s.getTime()));
-    const bs = bucketStarts(gran, n, gran === 'jour' ? 14 : 12);
-    const fin = new Date(n.getTime() + 1);
-    const ranges = [
-      [s.toISOString(), n.toISOString()],
-      [ps.toISOString(), pe.toISOString()],
-      ...bs.map((b, i) => [b.toISOString(), (i + 1 < bs.length ? bs[i + 1] : fin).toISOString()]),
-    ];
-    supabase.rpc('dashboard_visiteurs', { p_ranges: ranges }).then(({ data, error }) => {
-      const rows = (Array.isArray(data) ? data : []) as Trafic[];
-      if (error || rows.length < 2) { setTrafic(null); return; }
-      setTrafic({ cur: rows[0], prev: rows[1], buckets: rows.slice(2) });
-    });
-  }, [gran, isManager]);
 
   // Performances publicitaires Meta (lues côté serveur via l'Edge Function meta-ads).
   const [meta, setMeta] = useState<MetaInsights | null>(null);
@@ -205,9 +175,11 @@ export default function Dashboard() {
   const cmp = COMPARATIF[gran];
 
   // ── KPI : visiteurs (uniques) + pages vues ──
-  const visiteursCur = trafic?.cur.visiteurs ?? 0;
-  const visiteursPrev = trafic?.prev.visiteurs ?? 0;
-  const vuesCur = trafic?.cur.vues ?? 0;
+  const uniq = (rows: PageView[], a: Date, b: Date) =>
+    new Set(rows.filter((v) => inRange(v.created_at, a, b)).map((v) => v.visitor_id ?? v.id)).size;
+  const visiteursCur = uniq(views.data, start, now);
+  const visiteursPrev = uniq(views.data, prevStart, prevEnd);
+  const vuesCur = views.data.filter((v) => inRange(v.created_at, start, now)).length;
 
   // ── KPI : leads totaux = formulaires web + nouveaux prospects (import/manuel) ──
   // Anti double-comptage : un lead du formulaire crée déjà un contact prospect
@@ -293,7 +265,7 @@ export default function Dashboard() {
     const bEnd = i + 1 < starts.length ? starts[i + 1] : new Date(now.getTime() + 1);
     return {
       label: bucketLabel(gran, bStart),
-      Visiteurs: trafic?.buckets[i]?.visiteurs ?? 0,
+      Visiteurs: uniq(views.data, bStart, bEnd),
       Leads: leads.data.filter((l) => inRange(l.created_at, bStart, bEnd)).length + newProspects(bStart, bEnd),
       Opportunités: opps.data.filter((o) => inRange(o.created_at, bStart, bEnd)).length,
     };
@@ -308,40 +280,6 @@ export default function Dashboard() {
     cur.ca += Number(o.montant ?? 0); cur.n += 1;
     byOwner.set(k, cur);
   }
-  // ── KPI : taux de transformation ────────────────────────────────────────────
-  const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
-  const fmtPct = (n: number) => `${n.toLocaleString('fr-FR', { maximumFractionDigits: n < 10 ? 2 : 1 })} %`;
-
-  // Visiteur → lead, sur la période affichée : le trafic est assez dense pour
-  // que le ratio ait un sens à la semaine. Seules les demandes du formulaire
-  // viennent du site — les prospects importés ou saisis ne sont pas issus du
-  // trafic et fausseraient le taux.
-  const tauxLeadCur = pct(formCur, visiteursCur);
-  const tauxLeadPrev = pct(formPrev, visiteursPrev);
-
-  // Lead → gagné et valeur moyenne d'un gain : sur 12 MOIS GLISSANTS, pas sur la
-  // période affichée. Le cycle de vente dépasse largement la semaine et les
-  // affaires gagnées se comptent sur les doigts d'une main : rapporté à la
-  // semaine, le taux vaudrait 0 % en permanence et n'apprendrait rien. La
-  // fenêtre est indiquée sous chaque tuile.
-  // Ratio de flux, pas suivi de cohorte : une affaire gagnée dans la fenêtre
-  // peut venir d'un lead antérieur.
-  const an1 = subMonths(now, 12);
-  const an2 = subMonths(now, 24);
-  const leadsEntre = (a: Date, b: Date) =>
-    leads.data.filter((l) => inRange(l.created_at, a, b)).length + newProspects(a, b);
-  const gagneesEntre = (a: Date, b: Date) =>
-    opps.data.filter((o) => o.stage === 'gagne' && inRange(o.date_cloture, a, b));
-  const leads12 = leadsEntre(an1, now);
-  const leads24 = leadsEntre(an2, an1);
-  const gagnees12 = gagneesEntre(an1, now);
-  const gagnees24 = gagneesEntre(an2, an1);
-
-  const tauxGagneCur = pct(gagnees12.length, leads12);
-  const tauxGagnePrev = pct(gagnees24.length, leads24);
-  const gainMoyCur = gagnees12.length ? somme(gagnees12) / gagnees12.length : 0;
-  const gainMoyPrev = gagnees24.length ? somme(gagnees24) / gagnees24.length : 0;
-
   const pName = (id: string) => {
     const p = profiles.data.find((x) => x.id === id);
     return p ? `${p.prenom ?? ''} ${p.nom ?? ''}`.trim() || p.email : 'Non attribué';
@@ -446,9 +384,8 @@ export default function Dashboard() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {isManager && (
           <Kpi
-            compact icon={<Eye className="h-4 w-4" />} label="Visiteurs site"
-            value={trafic ? visiteursCur : '…'}
-            hint={trafic ? `${fmtNum(vuesCur)} pages vues` : 'chargement…'}
+            compact icon={<Eye className="h-4 w-4" />} label="Visiteurs site" value={visiteursCur}
+            hint={`${vuesCur} pages vues`}
             delta={<Delta cur={visiteursCur} prev={visiteursPrev} label={cmp} />}
           />
         )}
@@ -457,14 +394,6 @@ export default function Dashboard() {
             compact icon={<ClipboardList className="h-4 w-4" />} label="Leads (total)" value={leadsCur}
             hint="Formulaire + nouveaux prospects"
             delta={<Delta cur={leadsCur} prev={leadsPrev} label={cmp} />}
-          />
-        )}
-        {isManager && (
-          <Kpi
-            compact icon={<Percent className="h-4 w-4" />} label="Visiteur → lead"
-            value={trafic ? fmtPct(tauxLeadCur) : '…'}
-            hint={trafic ? `${fmtNum(formCur)} demande(s) / ${fmtNum(visiteursCur)} visiteurs` : 'chargement…'}
-            delta={<Delta cur={tauxLeadCur} prev={tauxLeadPrev} label={cmp} />}
           />
         )}
         <Kpi
@@ -480,20 +409,6 @@ export default function Dashboard() {
           compact icon={<Euro className="h-4 w-4" />} label="Valeur moy. / opp."
           value={formatMoney(valMoyCur)}
           delta={<Delta cur={valMoyCur} prev={valMoyPrev} label={cmp} />}
-        />
-        {isManager && (
-          <Kpi
-            compact icon={<Target className="h-4 w-4" />} label="Lead → gagné"
-            value={fmtPct(tauxGagneCur)}
-            hint={`${fmtNum(gagnees12.length)} gagné(s) / ${fmtNum(leads12)} lead(s) · 12 mois`}
-            delta={<Delta cur={tauxGagneCur} prev={tauxGagnePrev} label="vs 12 mois préc." />}
-          />
-        )}
-        <Kpi
-          compact icon={<Trophy className="h-4 w-4" />} label="Valeur moy. / gain"
-          value={formatMoney(gainMoyCur)}
-          hint={gagnees12.length ? `${fmtNum(gagnees12.length)} affaire(s) gagnée(s) · 12 mois` : 'aucune affaire gagnée sur 12 mois'}
-          delta={<Delta cur={gainMoyCur} prev={gainMoyPrev} label="vs 12 mois préc." />}
         />
         <Kpi
           compact icon={<Landmark className="h-4 w-4" />} label="Dossiers chez le financeur"

@@ -5,21 +5,6 @@ export const SITE_URL = 'https://aissociate.re';
 export const SITE_NAME = 'Aissociate — Formation IA Générative';
 export const DEFAULT_OG_IMAGE = 'https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg';
 
-/**
- * URL canonique = URL réellement servie par Netlify.
- *
- * Le prérendu écrit `dist/<route>/index.html` : Netlify sert donc la page sur
- * `/formations/` et redirige `/formations` en 301. Un canonical sans slash
- * final désignait une redirection — Google classait alors chaque page en
- * « Page avec redirection » / « URL canonique non sélectionnée » et n'indexait
- * rien. Le slash final est ajouté ici pour toutes les pages du site public.
- */
-export const canonicalUrl = (url?: string) => {
-  const u = String(url ?? SITE_URL).trim();
-  if (!u || u.includes('#') || u.includes('?')) return u || `${SITE_URL}/`;
-  return u.endsWith('/') ? u : `${u}/`;
-};
-
 interface Breadcrumb { name: string; url: string }
 
 interface SEOProps {
@@ -90,7 +75,7 @@ function setMeta(attrs: Record<string, string>) {
 
 export default function SEO(props: SEOProps) {
   const c = { ...defaultProps, ...props };
-  const canonical = canonicalUrl(c.url);
+  const canonical = c.url || SITE_URL;
   const ogImage = c.image || DEFAULT_OG_IMAGE;
 
   useEffect(() => {
@@ -295,7 +280,7 @@ export default function SEO(props: SEOProps) {
         '@type': 'ListItem',
         position: i + 1,
         name: b.name,
-        item: canonicalUrl(b.url),
+        item: b.url,
       })),
     });
 

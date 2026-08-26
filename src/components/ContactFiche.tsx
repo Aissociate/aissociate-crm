@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText, Bot } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
@@ -64,7 +64,6 @@ interface Props {
 
 export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit, onUpdated }: Props) {
   const { session } = useAuth();
-  const navigate = useNavigate();
   const [composeOpen, setComposeOpen] = useState(false);
   const entreprise = entreprises.find((e) => e.id === c.entreprise_id);
   const financeur = financeurs.find((f) => f.id === c.financeur_id);
@@ -383,13 +382,6 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={() => navigate('/assistant', { state: { assistantContexte: { type: 'contact', id: c.id, label: fullName(c.prenom, c.nom) } } })}
-              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
-              title="Ouvrir l'assistant IA sur cette fiche"
-            >
-              <Bot className="h-4 w-4" />
-            </button>
-            <button
               onClick={() => setComposeOpen(true)}
               className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
               title="Envoyer un e-mail / WhatsApp"
@@ -602,7 +594,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <ul className="space-y-1.5">{opps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                   <span className="text-fg">{o.titre}</span>
-                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage] ?? o.stage}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
+                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage]}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
                 </li>))}
               </ul>
             )}

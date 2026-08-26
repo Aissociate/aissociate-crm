@@ -10,8 +10,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, CircleCheck as CheckCircle2, P
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui';
-import { OPP_STAGE_LABELS } from '@/lib/constants';
-import { usePipelineColonnes } from '@/lib/pipeline';
+import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
 import { cn, fullName } from '@/lib/utils';
 import type {
   Contact, ContactAction, Opportunite, OpportuniteStage,
@@ -66,7 +65,6 @@ export default function MiniCalendrierContact({
   contact, sessions, participants, opportunites, actions, onChanged, onNavigate,
 }: Props) {
   const { session: auth } = useAuth();
-  const { colonnes: colonnesPipeline } = usePipelineColonnes();
   const [mois, setMois] = useState<Date>(new Date());
   const [jour, setJour] = useState<Date>(new Date());
   const [pending, setPending] = useState<SessionFormation | null>(null);
@@ -164,7 +162,7 @@ export default function MiniCalendrierContact({
       if (error) faits.push(`⚠ Opportunité non mise à jour : ${error.message}`);
       else if (!data?.length) faits.push("⚠ Opportunité non mise à jour : elle ne vous appartient pas");
       else {
-        faits.push(`Opportunité passée en « ${OPP_STAGE_LABELS[cas.stage] ?? cas.stage} »`);
+        faits.push(`Opportunité passée en « ${OPP_STAGE_LABELS[cas.stage]} »`);
         // Le pipeline calcule le stand-by depuis les actions à faire : une
         // opportunité encore ouverte sans action sous 30 jours y retombera.
         const ouverte = cas.stage !== 'gagne' && cas.stage !== 'perdu';
@@ -338,7 +336,7 @@ export default function MiniCalendrierContact({
                       >
                         <option value="">Ne pas toucher au pipeline</option>
                         {opportunites.map((o) => (
-                          <option key={o.id} value={o.id}>{o.titre} ({OPP_STAGE_LABELS[o.stage] ?? o.stage})</option>
+                          <option key={o.id} value={o.id}>{o.titre} ({OPP_STAGE_LABELS[o.stage]})</option>
                         ))}
                       </select>
                       <select
@@ -348,7 +346,7 @@ export default function MiniCalendrierContact({
                         disabled={!cas.oppId}
                         title="Étape cible"
                       >
-                        {colonnesPipeline.map((c) => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
+                        {OPP_STAGE_ORDER.map((st) => <option key={st} value={st}>{OPP_STAGE_LABELS[st]}</option>)}
                       </select>
                     </div>
                   )}

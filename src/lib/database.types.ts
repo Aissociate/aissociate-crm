@@ -14,10 +14,7 @@ export type ContactType = 'prospect' | 'contact' | 'apprenant' | 'contact_entrep
 export type FinancementType =
   | 'cpf' | 'opco' | 'france_travail' | 'pole_emploi' | 'conseil_regional'
   | 'transition_pro' | 'agefice' | 'entreprise' | 'particulier' | 'autre';
-/** Étape du pipeline : clé libre — la liste des colonnes est configurée dans
- *  parametres (cle 'pipeline'), voir src/lib/pipeline.ts. Les clés historiques
- *  restent : nouveau, qualifie, proposition, negociation, gagne, perdu. */
-export type OpportuniteStage = string;
+export type OpportuniteStage = 'nouveau' | 'qualifie' | 'proposition' | 'negociation' | 'gagne' | 'perdu';
 export type DossierStatut =
   | 'brouillon' | 'montage' | 'depose' | 'en_instruction'
   | 'accorde' | 'refuse' | 'en_cours' | 'solde' | 'cloture';
@@ -102,10 +99,6 @@ export type Opportunite = Timestamps & {
   financeur_id: string | null; montant: number; stage: OpportuniteStage;
   probabilite: number; date_cloture_prev: string | null; date_cloture: string | null;
   owner_id: string | null; notes: string | null;
-  /** Ordre manuel dans la colonne du pipeline (null = fin de colonne). */
-  position: number | null;
-  /** Colonne épinglée à la main (étape ou standby30/90) ; null = calculée. */
-  colonne_manuelle: string | null;
 };
 export type Formation = Timestamps & {
   id: string; intitule: string; objectifs: string | null; programme: string[];
@@ -309,27 +302,6 @@ export type AuditLog = {
   id: string; user_id: string | null; action: string; entite: string;
   entite_id: string | null; details: Record<string, unknown> | null; created_at: string;
 };
-// ── Assistant IA agentique (Edge Function `agent`) ──
-export type AiConversation = {
-  id: string; user_id: string; titre: string;
-  /** Entité ouverte au lancement (fiche contact / dossier) : {type, id, label}. */
-  contexte: Record<string, unknown> | null;
-  created_at: string; updated_at: string;
-};
-export type AiMessage = {
-  id: string; conversation_id: string; user_id: string;
-  role: 'user' | 'assistant'; content: string;
-  /** Trace des outils appelés pendant ce tour : [{outil, label}]. */
-  etapes: { outil: string; label: string }[] | null;
-  created_at: string;
-};
-export type AiActionStatut = 'proposee' | 'executee' | 'annulee' | 'erreur';
-export type AiAction = {
-  id: string; conversation_id: string | null; user_id: string;
-  outil: string; args: Record<string, unknown>; description: string;
-  statut: AiActionStatut; resultat: Record<string, unknown> | null;
-  created_at: string; executed_at: string | null;
-};
 export type Parametre = {
   id: string; cle: string; valeur: Record<string, unknown> | null;
   description: string | null; updated_at: string;
@@ -443,9 +415,6 @@ export type Database = {
       newsletters: TableShape<Newsletter>;
       newsletter_queue: TableShape<NewsletterQueue>;
       audit_log: TableShape<AuditLog>;
-      ai_conversations: TableShape<AiConversation>;
-      ai_messages: TableShape<AiMessage>;
-      ai_actions: TableShape<AiAction>;
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;
       page_views: TableShape<PageView>;
@@ -461,11 +430,6 @@ export type Database = {
     Views: EmptyMap;
     Functions: {
       qualiopi_prepare_session: { Args: { p_session: string }; Returns: undefined };
-      /** Compteurs de trafic par fenêtre [debut, fin) — évite de rapatrier page_views. */
-      dashboard_visiteurs: {
-        Args: { p_ranges: string[][] };
-        Returns: { visiteurs: number; vues: number }[];
-      };
     };
     Enums: {
       user_role: UserRole;
