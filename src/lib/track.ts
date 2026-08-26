@@ -46,6 +46,30 @@ function alreadyCounted(path: string): boolean {
   }
 }
 
+/**
+ * Enregistre un clic sortant (téléphone, WhatsApp) sous un chemin /click/<nom>.
+ * Ces lignes vivent dans page_views mais sont EXCLUES des KPI visiteurs du
+ * dashboard (fonction SQL dashboard_visiteurs) : ce sont des conversions, pas
+ * des vues. Dédoublonné sur 10 s pour absorber les double-clics.
+ */
+const lastClick: Record<string, number> = {};
+export async function trackClick(name: string): Promise<void> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.webdriver) return;
+    const now = Date.now();
+    if (lastClick[name] && now - lastClick[name] < 10_000) return;
+    lastClick[name] = now;
+    const { error } = await supabase.from('page_views').insert({
+      path: `/click/${name}`,
+      visitor_id: visitorId(),
+      referrer: window.location.pathname,
+    });
+    if (error) console.warn('[analytics] clic insert échoué :', error.message);
+  } catch (e) {
+    console.warn('[analytics] clic insert exception :', e instanceof Error ? e.message : e);
+  }
+}
+
 export async function trackPageView(path: string): Promise<void> {
   try {
     // Navigateurs pilotés (crawlers exécutant le JS, tests) : pas des visiteurs.

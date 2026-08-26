@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GraduationCap, Menu, X, Phone, PhoneCall, Code, BookOpen, Euro, MessageCircle } from 'lucide-react';
 import AdminLogo from './AdminLogo';
+import { trackClick } from '@/lib/track';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -74,6 +75,7 @@ export default function Header() {
               href="tel:+262692246860"
               className="flex items-center gap-2 text-slate-700 hover:text-orange-700 font-semibold transition-colors"
               aria-label="Appeler Aissociate au 06 92 24 68 60"
+              onClick={() => trackClick('tel')}
             >
               <PhoneCall className="w-4 h-4" aria-hidden="true" />
               0692 24 68 60
@@ -148,6 +150,7 @@ export default function Header() {
             <a
               href="tel:+262692246860"
               className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-semibold"
+              onClick={() => trackClick('tel')}
             >
               <PhoneCall className="w-4 h-4" aria-hidden="true" />
               Appeler : 0692 24 68 60
@@ -158,6 +161,7 @@ export default function Header() {
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold"
+              onClick={() => trackClick('whatsapp')}
             >
               <MessageCircle className="w-4 h-4" aria-hidden="true" />
               WhatsApp

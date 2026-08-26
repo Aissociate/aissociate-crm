@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { ShieldCheck, MessageCircle } from 'lucide-react';
-import { trackPageView } from '@/lib/track';
+import { trackPageView, trackClick } from '@/lib/track';
 
 /**
  * Layout du site vitrine public : rend les pages publiques et ajoute un bouton
@@ -43,6 +43,7 @@ export default function SiteFrame() {
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Nous contacter sur WhatsApp"
+        onClick={() => trackClick('whatsapp')}
         className="fixed bottom-5 left-5 z-50 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
       >
         <MessageCircle className="h-4 w-4" aria-hidden="true" /> WhatsApp
