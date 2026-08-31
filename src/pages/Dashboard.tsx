@@ -256,13 +256,17 @@ export default function Dashboard() {
 
   // ── Suivi de la prospection : opportunités en cours ──
   // « Stand-by » : même définition que les colonnes du pipeline — le contact lié
-  // n'a aucune action à faire dans les 30 (ou 90) prochains jours.
+  // n'a aucune action à faire dans les 30 (ou 90) prochains jours, les actions
+  // en retard étant considérées comme du suivi en cours.
   const ouvertes = opps.data.filter((o) => o.stage !== 'gagne' && o.stage !== 'perdu');
   const somme = (arr: Opportunite[]) => arr.reduce((s, o) => s + Number(o.montant ?? 0), 0);
   const dansNJours = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return format(d, 'yyyy-MM-dd'); };
+  // Les actions en retard comptent, comme dans le pipeline : une relance due
+  // depuis trois jours n'est pas une absence de suivi, sans quoi le badge et
+  // les colonnes stand-by se contredisaient.
   const prochaineAction = (contactId: string | null): string | null => {
     if (!contactId) return null;
-    return aFaire.filter((a) => a.contact_id === contactId && a.date_action >= todayStr)
+    return aFaire.filter((a) => a.contact_id === contactId)
       .map((a) => a.date_action).sort()[0] ?? null;
   };
   const oppNouveau = ouvertes.filter((o) => o.stage === 'nouveau');

@@ -26,6 +26,8 @@ const STANDBY_LABELS: Record<'standby30' | 'standby90', string> = {
 };
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const dansNJours = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
+/** « 2026-09-04 » → « 04/09 ». */
+const jjmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 export default function Pipeline() {
   const { session, isManager } = useAuth();
@@ -70,14 +72,27 @@ export default function Pipeline() {
     : data;
 
   // ── Stand-by : dérivé des actions à faire du contact ────────────────────────
-  /** Date de la prochaine action non réalisée du contact, ou null. */
+  /**
+   * Date de la prochaine action non réalisée du contact, ou null s'il n'en a
+   * aucune. Les actions EN RETARD comptent : un appel dû depuis trois jours est
+   * la chose la plus urgente de la liste, pas une absence de suivi. Les exclure
+   * envoyait en stand-by des opportunités que le conseiller relançait déjà
+   * (ticket Benjamin « Pipeline : colonne Stand-by »).
+   */
   const prochaineAction = (contactId: string | null): string | null => {
     if (!contactId) return null;
-    const futures = actions.data
-      .filter((a) => a.contact_id === contactId && !a.faite && a.date_action >= ymd(new Date()))
+    const dues = actions.data
+      .filter((a) => a.contact_id === contactId && !a.faite)
       .map((a) => a.date_action)
       .sort();
-    return futures[0] ?? null;
+    return dues[0] ?? null;
+  };
+  /** Alerte d'échéance de la carte : retard, ou absence totale d'action. */
+  const alerteDe = (o: Opportunite): string | null => {
+    if (o.stage === 'gagne' || o.stage === 'perdu') return null;
+    const prochaine = prochaineAction(o.contact_id);
+    if (!prochaine) return 'aucune action prévue';
+    return prochaine < ymd(new Date()) ? `action en retard depuis le ${jjmm(prochaine)}` : null;
   };
   /** Colonne d'affichage. Une carte posée à la main (colonne_manuelle) reste où
    *  l'utilisateur l'a mise ; le calcul stand-by automatique ne s'applique
@@ -323,6 +338,15 @@ export default function Pipeline() {
                       entreprise?.raison_sociale,
                       conseillerId ? null : (nomConseiller(conseillerDe(o)) || 'Non affecté'),
                     ].filter(Boolean).join(' · ');
+                    // En stand-by, la carte rappelle l'étape réelle ; ailleurs, seul
+                    // un retard justifie une ligne rouge. Une carte épinglée à la main
+                    // dans une colonne stand-by affiche la date réelle plutôt qu'un
+                    // « aucune action prévue » démenti par la fiche du contact.
+                    const alerte = alerteDe(o);
+                    const prochaine = prochaineAction(o.contact_id);
+                    const rappel = standby
+                      ? `${libelleDe(o.stage)} · ${alerte ?? (prochaine ? `prochaine action le ${jjmm(prochaine)}` : 'aucune action prévue')}`
+                      : alerte;
                     return (
                       <div key={o.id}>
                       {/* Trait d'insertion : la carte lâchée prendra cette place. */}
@@ -358,8 +382,8 @@ export default function Pipeline() {
                         {sousTitre && <p className="truncate text-xs text-muted" title={sousTitre}>{sousTitre}</p>}
                         {/* Ligne 3 : intitulé de l'affaire (le titre de la carte est le contact) */}
                         {contact && o.titre && <p className="truncate text-xs text-muted/80">{o.titre}</p>}
-                        {/* En stand-by, la carte rappelle l'étape réelle de l'opportunité. */}
-                        {standby && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400">{libelleDe(o.stage)} · aucune action prévue</p>}
+                        {/* Étape réelle en stand-by, et rappel d'une échéance dépassée. */}
+                        {rappel && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400" title={rappel}>{rappel}</p>}
 
                         {/* Probabilité : jauge fine plutôt qu'une ligne de texte */}
                         <div className="mt-1.5 flex items-center gap-2">

@@ -178,7 +178,7 @@ export default function Devis() {
                   {d.fichier_url && <FileLink bucket="devis" value={d.fichier_url} />}
                   <button onClick={() => generate(d.id)} disabled={genId === d.id} title="Générer le PDF" className="rounded p-1.5 text-muted hover:text-brand-600">{genId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}</button>
                   <AddToDossierButton
-                    contactId={d.contact_id} dossiers={dossiers.data} fichierUrl={d.fichier_url}
+                    contactId={d.contact_id} dossiers={dossiers.data} fichierUrl={d.fichier_url} sourceBucket="devis"
                     pieceLibelle="Devis signé" documentLabel="devis" onDone={() => { dossiers.refresh(); refresh(); }}
                     // Sans PDF généré, le bouton relie simplement le devis au dossier.
                     lierDossier={async (dos) => {
