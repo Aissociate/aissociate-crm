@@ -10,17 +10,7 @@ export const DEFAULT_PIECES = [
   "Pièce d'identité du bénéficiaire", "Justificatif d'éligibilité", 'Demande de prise en charge',
   // Exigées au remboursement par l'AGEFICE, produites en fin de parcours.
   "Feuille d'émargement", "Attestation d'assiduité",
-];
-
-/**
- * Libellés standard proposés au menu déroulant d'un dossier : la checklist
- * ci-dessus, plus des pièces courantes mais propres à certains financeurs.
- * Elles restent hors de `DEFAULT_PIECES` pour ne pas être imposées comme
- * obligatoires à chaque nouveau dossier — une attestation CPF n'a rien à faire
- * dans un dossier AGEFICE (ticket Benjamin « Dossiers : ajouter pièces standard »).
- */
-export const PIECES_STANDARD = [
-  ...DEFAULT_PIECES,
+  // Ticket Benjamin « Dossiers : ajouter pièces standard ».
   'Attestation CPF', 'RIB', 'Avis Sirene',
 ];
 

@@ -35,6 +35,8 @@ export type Profile = Timestamps & {
 };
 export type Financeur = Timestamps & {
   id: string; code: string; nom: string; type: FinancementType;
+  /** Adresse de dépôt des dossiers : pré-remplit le « Mail au financeur ». */
+  email: string | null;
   specificites: string | null; actif: boolean;
 };
 export type Entreprise = Timestamps & {

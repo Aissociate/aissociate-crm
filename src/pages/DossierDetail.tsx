@@ -14,7 +14,7 @@ import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
 import { formatMoney, formatDate, fullName } from '@/lib/utils';
-import { PIECES_STANDARD } from '@/lib/dossierClient';
+import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type {
   Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
   Devis, PlanFormation, PlanPdf, Document, ContactDocument, DossierDocument,
@@ -183,8 +183,9 @@ export default function DossierDetail() {
   const [versementBusy, setVersementBusy] = useState(false);
 
   // ── Mail au financeur ───────────────────────────────────────────────────────
-  // Ouvre la composition avec toutes les pièces du dossier déjà cochées. Le
-  // destinataire reste à saisir : `financeurs` ne porte pas d'adresse e-mail.
+  // Ouvre la composition avec toutes les pièces du dossier déjà cochées et
+  // l'adresse de dépôt du financeur en destinataire (vide tant qu'elle n'est
+  // pas renseignée dans Administration › Financeurs).
   const [mailOpen, setMailOpen] = useState(false);
   const [mailInitial, setMailInitial] = useState<ComposeInitial>({});
   const piecesJointes = pieces.filter((p) => p.fichier_url).length;
@@ -194,6 +195,7 @@ export default function DossierDetail() {
     const beneficiaire = contact ? fullName(contact.prenom, contact.nom) : '';
     setMailInitial({
       canal: 'email',
+      dest: financeur?.email ?? '',
       sujet: `Dossier ${dossier.reference}${beneficiaire ? ` — ${beneficiaire}` : ''} : pièces justificatives`,
       corps: [
         'Bonjour,',
@@ -214,7 +216,7 @@ export default function DossierDetail() {
   const ouvrirVersement = (d: ContactDocument) => {
     setVersement(d);
     // Pré-sélection du libellé standard le plus proche du titre du document.
-    const proche = PIECES_STANDARD.find((l) => d.titre.toLowerCase().includes(l.toLowerCase()));
+    const proche = DEFAULT_PIECES.find((l) => d.titre.toLowerCase().includes(l.toLowerCase()));
     setVersementLibelle(proche ?? '');
   };
 
@@ -243,7 +245,7 @@ export default function DossierDetail() {
   };
   // Pièces standard non présentes → ajoutables en un clic (ré-ajout d'une pièce
   // supprimée par erreur, ou pièce propre au financeur du dossier).
-  const missingStd = PIECES_STANDARD.filter((l) => !pieces.some((p) => p.libelle === l));
+  const missingStd = DEFAULT_PIECES.filter((l) => !pieces.some((p) => p.libelle === l));
 
   const removeDossier = async () => {
     if (!dossier) return;
@@ -715,10 +717,10 @@ export default function DossierDetail() {
           L'original reste dans le coffre-fort du contact.
         </p>
         <Field label="Pièce justificative" hint="Un libellé standard, ou le vôtre">
-          <select className="input mb-2" value={PIECES_STANDARD.includes(versementLibelle) ? versementLibelle : ''}
+          <select className="input mb-2" value={DEFAULT_PIECES.includes(versementLibelle) ? versementLibelle : ''}
             onChange={(e) => setVersementLibelle(e.target.value)}>
             <option value="">— Libellé libre —</option>
-            {PIECES_STANDARD.map((l) => <option key={l} value={l}>{l}</option>)}
+            {DEFAULT_PIECES.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
           <input className="input" value={versementLibelle} placeholder="Intitulé de la pièce…"
             onChange={(e) => setVersementLibelle(e.target.value)} />
