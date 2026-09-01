@@ -87,6 +87,24 @@ export default function Pipeline() {
       .sort();
     return dues[0] ?? null;
   };
+  // ── Plusieurs opportunités pour un même contact ─────────────────────────────
+  // Le titre d'une carte est le NOM DU CONTACT : deux opportunités d'un même
+  // contact donnaient deux cartes d'apparence identique dans deux colonnes, et
+  // celle qu'on cherchait depuis la fiche restait introuvable (ticket Benjamin
+  // « Identification opportunités dans Contacts vs Pipeline »). On les numérote
+  // et on rend l'intitulé de l'affaire lisible plutôt qu'estompé.
+  const fratries = new Map<string, Opportunite[]>();
+  for (const o of visibles) {
+    if (!o.contact_id) continue;
+    fratries.set(o.contact_id, [...(fratries.get(o.contact_id) ?? []), o]);
+  }
+  for (const l of fratries.values()) l.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  /** « 2/3 » quand le contact a plusieurs opportunités, sinon null. */
+  const rangDe = (o: Opportunite): string | null => {
+    const soeurs = o.contact_id ? fratries.get(o.contact_id) ?? [] : [];
+    return soeurs.length > 1 ? `${soeurs.findIndex((x) => x.id === o.id) + 1}/${soeurs.length}` : null;
+  };
+
   /** Alerte d'échéance de la carte : retard, ou absence totale d'action. */
   const alerteDe = (o: Opportunite): string | null => {
     if (o.stage === 'gagne' || o.stage === 'perdu') return null;
@@ -342,6 +360,7 @@ export default function Pipeline() {
                     // un retard justifie une ligne rouge. Une carte épinglée à la main
                     // dans une colonne stand-by affiche la date réelle plutôt qu'un
                     // « aucune action prévue » démenti par la fiche du contact.
+                    const rang = rangDe(o);
                     const alerte = alerteDe(o);
                     const prochaine = prochaineAction(o.contact_id);
                     const rappel = standby
@@ -376,12 +395,23 @@ export default function Pipeline() {
                         {/* Ligne 1 : qui, et combien */}
                         <div className="flex items-baseline gap-2">
                           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{title}</p>
+                          {/* « 2/3 » : ce contact a plusieurs affaires en cours. */}
+                          {rang && (
+                            <span className="shrink-0 rounded bg-surface-2 px-1.5 text-[11px] font-medium tabular-nums text-muted"
+                              title={`${rang.split('/')[1]} opportunités pour ce contact — voir aussi les autres colonnes`}>
+                              {rang}
+                            </span>
+                          )}
                           <span className="shrink-0 text-sm font-semibold tabular-nums text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</span>
                         </div>
                         {/* Ligne 2 : société · conseiller */}
                         {sousTitre && <p className="truncate text-xs text-muted" title={sousTitre}>{sousTitre}</p>}
-                        {/* Ligne 3 : intitulé de l'affaire (le titre de la carte est le contact) */}
-                        {contact && o.titre && <p className="truncate text-xs text-muted/80">{o.titre}</p>}
+                        {/* Ligne 3 : intitulé de l'affaire (le titre de la carte est le
+                            contact). Mis en avant quand le contact a plusieurs affaires :
+                            c'est la seule chose qui distingue les cartes entre elles. */}
+                        {contact && o.titre && (
+                          <p className={`truncate text-xs ${rang ? 'font-medium text-fg' : 'text-muted/80'}`} title={o.titre}>{o.titre}</p>
+                        )}
                         {/* Étape réelle en stand-by, et rappel d'une échéance dépassée. */}
                         {rappel && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400" title={rappel}>{rappel}</p>}
 
