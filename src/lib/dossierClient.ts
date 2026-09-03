@@ -10,8 +10,6 @@ export const DEFAULT_PIECES = [
   "Pièce d'identité du bénéficiaire", "Justificatif d'éligibilité", 'Demande de prise en charge',
   // Exigées au remboursement par l'AGEFICE, produites en fin de parcours.
   "Feuille d'émargement", "Attestation d'assiduité",
-  // Ticket Benjamin « Dossiers : ajouter pièces standard ».
-  'Attestation CPF', 'RIB', 'Avis Sirene',
 ];
 
 export type DossierRef = { id: string; reference: string; intitule: string };

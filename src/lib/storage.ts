@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type Bucket = 'documents' | 'pieces' | 'cv' | 'formateurs' | 'plans' | 'devis' | 'factures' | 'coffre' | 'conseiller_coffre' | 'recrutement' | 'blog' | 'qualiopi';
+export type Bucket = 'documents' | 'pieces' | 'cv' | 'formateurs' | 'plans' | 'devis' | 'coffre' | 'conseiller_coffre' | 'recrutement' | 'blog' | 'qualiopi';
 
 const PUBLIC_BUCKETS: Bucket[] = ['documents', 'blog'];
 
@@ -54,48 +54,6 @@ export function fileNameOf(value: string | null | undefined): string {
     return decodeURIComponent(path.split('/').filter(Boolean).pop() ?? '');
   } catch {
     return value.split('/').filter(Boolean).pop() ?? '';
-  }
-}
-
-/** Chemin d'une copie : identifiant neuf, extension d'origine conservée. */
-function copyPath(value: string): string {
-  const ext = fileNameOf(value).match(/\.[A-Za-z0-9]{1,5}$/)?.[0] ?? '';
-  const id = (crypto.randomUUID?.() ?? `${Date.now()}-${Math.round(Math.random() * 1e9)}`);
-  return `${id}${ext}`;
-}
-
-/**
- * Copie un fichier vers un autre bucket et renvoie le chemin de la copie.
- *
- * Un chemin de bucket privé n'a de sens que dans SON bucket : `dossier_pieces`
- * est toujours relu depuis « pieces », si bien que recopier le chemin d'un devis
- * (bucket « devis ») ou d'un plan (bucket « plans ») produisait une pièce dont
- * le fichier restait introuvable — tickets Benjamin « devis ajouté au dossier
- * introuvable » et « plan de formation non transféré ». Il faut donc déplacer
- * une vraie copie, pas seulement la référence.
- */
-export async function copyToBucket(
-  source: Bucket, value: string, cible: Bucket,
-): Promise<{ path: string | null; error: string | null }> {
-  if (source === cible) return { path: value, error: null };
-  const path = copyPath(value);
-
-  // Bucket privé (chemin nu) : copie côté serveur, sans transiter par le navigateur.
-  if (!/^https?:\/\//i.test(value)) {
-    const { error } = await supabase.storage.from(source).copy(value, path, { destinationBucket: cible });
-    return error ? { path: null, error: error.message } : { path, error: null };
-  }
-
-  // Bucket public (URL complète) : pas de copie serveur possible sur une URL,
-  // on relit le fichier puis on le téléverse dans le bucket cible.
-  try {
-    const res = await fetch(value);
-    if (!res.ok) return { path: null, error: `Lecture du fichier impossible (HTTP ${res.status})` };
-    const { error } = await supabase.storage.from(cible)
-      .upload(path, await res.blob(), { cacheControl: '3600', upsert: false });
-    return error ? { path: null, error: error.message } : { path, error: null };
-  } catch (e) {
-    return { path: null, error: e instanceof Error ? e.message : 'Copie impossible' };
   }
 }
 

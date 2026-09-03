@@ -8,8 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Card, Spinner, Badge, Button, Modal, Field, StatCard, EmptyState } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
-import { ROLE_LABELS } from '@/lib/constants';
-import { usePipelineColonnes } from '@/lib/pipeline';
+import { OPP_STAGE_LABELS, OPP_STAGE_ORDER, ROLE_LABELS } from '@/lib/constants';
 import { fullName, initials, formatMoney, formatDate } from '@/lib/utils';
 import type { Profile, Contact, Opportunite, Dossier, ContactAction, ConseillerDocument } from '@/lib/database.types';
 
@@ -26,7 +25,6 @@ const statutTone = (s: string | null): 'success' | 'warning' | 'neutral' => (s =
 
 export default function Conseillers() {
   const { session } = useAuth();
-  const { colonnes: colonnesPipeline } = usePipelineColonnes();
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
   const contacts = useCollection<Contact>('contacts');
   const opps = useCollection<Opportunite>('opportunites');
@@ -209,9 +207,9 @@ export default function Conseillers() {
                 </div>
                 <Card className="mt-3">
                   <div className="flex flex-wrap gap-2">
-                    {colonnesPipeline.map((c) => {
-                      const n = opps.data.filter((o) => o.owner_id === selected.id && o.stage === c.cle).length;
-                      return <Badge key={c.cle} tone={c.cle === 'gagne' ? 'success' : c.cle === 'perdu' ? 'danger' : 'neutral'}>{c.libelle} : {n}</Badge>;
+                    {OPP_STAGE_ORDER.map((st) => {
+                      const n = opps.data.filter((o) => o.owner_id === selected.id && o.stage === st).length;
+                      return <Badge key={st} tone={st === 'gagne' ? 'success' : st === 'perdu' ? 'danger' : 'neutral'}>{OPP_STAGE_LABELS[st]} : {n}</Badge>;
                     })}
                   </div>
                 </Card>

@@ -233,7 +233,6 @@ export default function PlansFormation() {
                   <AddToDossierButton
                     contactId={p.contact_id} dossiers={dossiers.data}
                     fichierUrl={pdfs.data.find((d) => d.plan_id === p.id)?.fichier_url ?? null}
-                    sourceBucket="plans"
                     pieceLibelle="Programme de formation" documentLabel="plan de formation"
                     onDone={() => { dossiers.refresh(); refresh(); }}
                     lierDossier={async (dos) => {
@@ -286,7 +285,7 @@ export default function PlansFormation() {
                         La pièce visée dépend de la nature du document produit. */}
                     <AddToDossierButton
                       contactId={planOf(d.plan_id)?.contact_id ?? null}
-                      dossiers={dossiers.data} fichierUrl={d.fichier_url} sourceBucket="plans"
+                      dossiers={dossiers.data} fichierUrl={d.fichier_url}
                       pieceLibelle={PIECE_POUR[d.kind] ?? 'Programme de formation'}
                       documentLabel={(AGEFICE_DOCS.find((a) => a.kind === d.kind)?.label ?? 'plan de formation').toLowerCase()}
                       onDone={() => dossiers.refresh()}

@@ -164,20 +164,6 @@ body {
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 9999px; }
 
-/* Ascenseur horizontal explicite (colonnes du pipeline).
-   La scrollbar fine ci-dessus, sur piste transparente, est invisible tant
-   qu'on ne fait pas défiler : rien n'indique que des colonnes attendent hors
-   écran. Ici la piste est dessinée en permanence et le curseur est épaissi. */
-.scroll-x { scrollbar-width: auto; scrollbar-color: rgb(var(--muted) / 0.55) rgb(var(--surface-2)); }
-.scroll-x::-webkit-scrollbar { height: 12px; }
-.scroll-x::-webkit-scrollbar-track { background: rgb(var(--surface-2)); border-radius: 9999px; }
-.scroll-x::-webkit-scrollbar-thumb {
-  background: rgb(var(--muted) / 0.55);
-  border: 3px solid rgb(var(--surface-2));
-  border-radius: 9999px;
-}
-.scroll-x::-webkit-scrollbar-thumb:hover { background: rgb(var(--muted)); }
-
 /* ── Blog article : HTML généré par IA ── */
 .blog-content { color: #1e293b; line-height: 1.75; font-size: 1.125rem; }
 .blog-content p { color: #334155; margin-bottom: 1.5rem; line-height: 1.8; }

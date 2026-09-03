@@ -154,53 +154,6 @@ supabase secrets set SHEET_CANDIDATS_ID=… SHEET_PROSPECTS_ID=…
 
 Les IDs des deux feuilles fournies sont les valeurs par défaut intégrées à la fonction.
 
-## Facturation & rapprochement Qonto
-
-Module **Factures** (`/factures`) : création libre ou depuis un devis, PDF conforme
-(Edge Function `generate-facture`, bucket privé `factures`), échéances, statuts.
-L'Edge Function `qonto-sync` (cron quotidien + bouton « Rapprocher Qonto ») marque
-« payée » toute facture dont un virement Qonto porte le **montant ET le numéro** ;
-un montant identique sans référence est listé « à vérifier ». Config :
-`supabase secrets set QONTO_LOGIN=… QONTO_SECRET_KEY=…` (ou `parametres`, clé `qonto`).
-
-## BPF (Bilan Pédagogique et Financier)
-
-Page `/bpf` (direction) : pré-remplissage du Cerfa 10443 — cadre C (produits par
-type de financeur, depuis les factures), stagiaires et heures-stagiaires (sessions
-du Calendrier), export CSV par exercice.
-
-## Espace client / apprenant
-
-Bouton « Espace client » de la fiche contact → lien tokenisé `/espace/:token`
-(page publique non indexée). Le client y retrouve sessions, devis, factures,
-documents, questionnaires à répondre, signatures et émargement. Données servies
-par l'Edge Function `espace-client` (service role) ; chaque consultation est
-tracée dans `espace_consultations` (Qualiopi).
-
-## Notifications & observabilité
-
-- **Cloche de notifications** (sidebar, temps réel) + e-mail de synthèse quotidien :
-  Edge Function `notifications-cron` (cron 03:00 UTC) — relances échues, devis sans
-  réponse (7 j), factures échues, propositions IA en attente. Déduplication par
-  `dedupe_key`.
-- **Recherche globale Ctrl+K** : contacts, entreprises, dossiers, formations,
-  documents, e-mails, devis, factures (RLS appliquée).
-- **Doublons de contacts** : bouton « Doublons » (page Contacts) — détection
-  (e-mail / téléphone / nom) et fusion (direction) via `merge_contacts()`, qui
-  réaffecte dynamiquement toutes les FK et exclut l'`external_id` de l'import.
-- **Santé des jobs** (Administration) : journal `job_runs` alimenté par les
-  Edge Functions planifiées + erreurs front (`client_errors`, ErrorBoundary).
-- **Temps réel** : Messagerie, Tickets et badge mails via Supabase Realtime.
-- **RGPD** : Edge Function `rgpd-purge` (cron hebdo) — candidats refusés,
-  segments audio, page_views anciens ; délais dans `parametres` (clé `rgpd`).
-- **Anti-spam** : honeypot + délai minimal sur les formulaires publics, et
-  trigger de rate-limit sur `contact_requests` (5/h par e-mail, 100/h global).
-
-## Tests
-
-`npm test` (vitest) : tests unitaires de `src/lib` (utils, jours fériés,
-pipeline). Exécutés en CI avant le build.
-
 ## Points d'extension (CDC v2 / Lot 4)
 
 - Connecteurs financeurs (EDOF…) et signature électronique → intégrations externes.

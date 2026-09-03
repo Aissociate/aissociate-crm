@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX, Activity } from 'lucide-react';
-import SanteJobs from '@/components/SanteJobs';
+import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Spinner, Badge, Table, Button, Modal, Field } from '@/components/ui';
@@ -14,7 +13,7 @@ const FIN_TYPES: FinancementType[] = [
   'transition_pro', 'agefice', 'entreprise', 'particulier', 'autre',
 ];
 
-type Tab = 'pending' | 'users' | 'financeurs' | 'audit' | 'sante';
+type Tab = 'pending' | 'users' | 'financeurs' | 'audit';
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>('pending');
@@ -67,7 +66,6 @@ export default function Administration() {
     { key: 'users', label: 'Utilisateurs & droits', icon: Users },
     { key: 'financeurs', label: 'Financeurs', icon: Building },
     { key: 'audit', label: 'Journal d\'audit', icon: ScrollText },
-    { key: 'sante', label: 'Santé des jobs', icon: Activity },
   ];
 
   return (
@@ -180,7 +178,6 @@ export default function Administration() {
               <tr>
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Nom</th>
-                <th className="px-4 py-3">Adresse de dépôt</th>
                 <th className="px-4 py-3">Spécificités</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -189,7 +186,6 @@ export default function Administration() {
                 <tr key={f.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3"><Badge tone="brand">{f.code}</Badge></td>
                   <td className="px-4 py-3 font-medium text-fg">{f.nom}</td>
-                  <td className="px-4 py-3 text-xs text-muted">{f.email ?? <span className="text-muted/60">— à renseigner</span>}</td>
                   <td className="px-4 py-3 text-xs text-muted">{f.specificites}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -221,8 +217,6 @@ export default function Administration() {
         )
       )}
 
-      {tab === 'sante' && <SanteJobs />}
-
       <Modal open={finOpen} onClose={() => setFinOpen(false)} title={finForm.id ? 'Modifier le financeur' : 'Nouveau financeur'}
         footer={<><Button variant="secondary" onClick={() => setFinOpen(false)}>Annuler</Button><Button onClick={saveFin} disabled={!finForm.code || !finForm.nom}>Enregistrer</Button></>}>
         <div className="space-y-4">
@@ -231,9 +225,6 @@ export default function Administration() {
           <Field label="Type"><select className="input" value={finForm.type ?? 'autre'} onChange={(e) => setF('type', e.target.value as FinancementType)}>
             {FIN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select></Field>
-          <Field label="Adresse de dépôt" hint="Pré-remplit le destinataire du « Mail au financeur » depuis un dossier">
-            <input className="input" type="email" value={finForm.email ?? ''} onChange={(e) => setF('email', e.target.value)} placeholder="depot@financeur.fr" />
-          </Field>
           <Field label="Spécificités"><textarea className="input" rows={3} value={finForm.specificites ?? ''} onChange={(e) => setF('specificites', e.target.value)} /></Field>
         </div>
       </Modal>

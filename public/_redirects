@@ -2,57 +2,5 @@
 # les règles sont évaluées dans l'ordre, la première qui matche gagne.
 /sitemap-blog.xml  https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/sitemap-blog  200
 
-# ── URLs fantômes des anciennes versions du site (rapport Search Console) ──
-# Elles répondaient 200 avec le shell SPA générique (soft 404, title dupliqué)
-# et captaient ~22 % des impressions. 301 vers la page équivalente actuelle :
-# le jus SEO accumulé est transféré au lieu d'être perdu.
-/rh          /formations/ia-ressources-humaines/     301
-/rh/*        /formations/ia-ressources-humaines/     301
-/ventes      /formations/ia-prospection-commerciale/ 301
-/ventes/*    /formations/ia-prospection-commerciale/ 301
-/formation   /formations/                            301
-/home        /                                       301
-/home/*      /                                       301
-
-# ── Articles fusionnés (déduplication SEO) ──
-# Plusieurs variantes quasi identiques du même sujet se cannibalisaient dans
-# les résultats. Chaque groupe est consolidé sur sa meilleure version (la plus
-# d'impressions / la mieux positionnée) ; les autres sont dépubliées en base et
-# redirigées 301 ici. Netlify ignore le slash final au matching : une règle
-# couvre les deux formes.
-/blog/l-ia-generative-au-service-des-pme-guide-complet-pour-booster-votre-entreprise-a  /blog/l-ia-generative-au-service-des-pme-reunionnaises-guide-pratique-2026/  301
-/blog/l-ia-generative-au-service-des-pme-le-guide-pratique-pour-passer-a-l-action-en-2  /blog/l-ia-generative-au-service-des-pme-reunionnaises-guide-pratique-2026/  301
-/blog/l-ia-generative-au-service-des-pme-en-2026-guide-pratique-pour-les-dirigeants-re  /blog/l-ia-generative-au-service-des-pme-reunionnaises-guide-pratique-2026/  301
-/blog/l-ia-generative-au-service-des-pme-reunionnaises-guide-pratique-pour-passer-a-l-  /blog/l-ia-generative-au-service-des-pme-reunionnaises-guide-pratique-2026/  301
-/blog/poppy-l-ia-generative-de-californie-ce-que-les-pme-reunionnaises-peuvent-en-rete  /blog/poppy-l-ia-generative-de-californie-4-lecons-que-les-pme-reunionnaises-doivent-r/  301
-/blog/godot-ferme-la-porte-au-code-ia-ce-que-cette-decision-revele-aux-pme-sur-l-usage  /blog/godot-refuse-le-code-genere-par-l-ia-ce-que-les-dirigeants-de-pme-doivent-en-ret/  301
-/blog/fonds-souverain-de-l-ia-ce-que-la-proposition-d-openai-change-pour-les-pme        /blog/fonds-souverain-de-l-ia-la-proposition-d-altman-et-ce-qu-elle-change-pour-les-pm/  301
-/blog/souverainete-ia-quand-le-portugal-montre-l-exemple-avec-amalia-et-que-la-france-  /blog/souverainete-ia-quand-le-portugal-livre-amalia-et-interroge-la-strategie-francai/  301
-/blog/fable-5-retabli-mais-le-risque-de-dependance-aux-modeles-americains-reste-entier  /blog/fable-5-retabli-pourquoi-les-pme-reunionnaises-doivent-anticiper-le-risque-de-de/  301
-/blog/anthropic-capte-un-tiers-du-capital-risque-ia-mondial-pourquoi-les-pme-reunionna  /blog/anthropic-capte-un-tiers-du-capital-risque-mondial-ce-que-ca-change-concretement/  301
-/blog/ia-et-emploi-pourquoi-la-note-du-tresor-de-juin-2026-doit-alerter-les-dirigeants  /blog/ia-et-emploi-a-la-reunion-ce-que-la-note-du-tresor-change-pour-les-dirigeants-de/  301
-/blog/crawlers-ia-pourquoi-le-site-de-votre-pme-est-aspire-et-ce-que-ca-vous-coute-vra  /blog/crawlers-ia-ce-que-les-106-millions-de-requetes-de-claudebot-revelent-aux-dirige/  301
-/blog/veille-ia-juillet-2026-gpt-5-6-agents-autonomes-et-visibilite-des-pme-ce-que-les  /blog/veille-ia-juillet-2026-les-4-tendances-qui-vont-bouleverser-votre-entreprise-reu/  301
-/blog/veille-ia-2026-les-tendances-incontournables-pour-les-pme-reunionnaises           /blog/veille-ia-2026-les-tendances-qui-redessinent-le-quotidien-des-pme-reunionnaises/  301
-/blog/chatgpt-suspendu-par-la-justice-ce-que-cet-arret-change-pour-votre-pme-reunionna  /blog/ia-en-entreprise-la-justice-suspend-chatgpt-sans-consultation-du-cse-ce-que-les-/  301
-/blog/ia-et-relation-client-en-pme-comment-transformer-chaque-interaction-en-levier-de  /blog/ia-et-relation-client-comment-les-pme-reunionnaises-peuvent-transformer-leur-exp/  301
-/blog/prompt-engineering-les-bases-essentielles-pour-demarrer-avec-l-ia-en-2026         /blog/prompt-engineering-les-bases-pour-debuter-en-entreprise-a-la-reunion/  301
-/blog/automatiser-ses-processus-metier-avec-l-ia-le-guide-pratique-pour-les-pme-en-202  /blog/automatiser-ses-processus-metier-avec-l-ia-guide-complet-pour-les-pme-en-2026/  301
-/blog/ia-en-entreprise-pourquoi-l-exploitation-des-agents-devient-le-vrai-enjeu-pour-l  /blog/ia-en-entreprise-pourquoi-le-vrai-defi-n-est-plus-le-modele-mais-l-exploitation/  301
-/blog/jumeaux-numeriques-en-2026-quand-l-ia-transforme-les-infrastructures-critiques-e  /blog/jumeaux-numeriques-et-ia-ce-que-les-infrastructures-critiques-enseignent-aux-pme/  301
-/blog/pharmacy-forward-comment-un-investissement-ia-de-100-m-inspire-les-pme-reunionna  /blog/evernorth-investit-100-m-en-ia-pharmaceutique-ce-que-les-pme-reunionnaises-peuve/  301
-
-# Pages définitivement supprimées : 410 Gone, et non le 200 du fallback SPA
-# sur la page 404 de l'application. Google déréférence une URL en 410 dès le
-# passage suivant, là où un « soft 404 » (statut 200 sur une page d'erreur)
-# reste des semaines dans le rapport d'indexation. Le corps servi reste
-# l'application, qui affiche sa page 404 habituelle.
-# Les deux casses sont déclarées : la normalisation en minuscules de Netlify
-# ne s'appliquait qu'au dossier statique, désormais supprimé.
-/guideIA2026      /index.html   410
-/guideIA2026/*    /index.html   410
-/guideia2026      /index.html   410
-/guideia2026/*    /index.html   410
-
 # SPA fallback
 /*    /index.html   200

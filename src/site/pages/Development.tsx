@@ -86,9 +86,9 @@ export default function Development() {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="Expert & consultant IA à La Réunion — agents IA sur-mesure | Aissociate"
-        description="Consultant IA à La Réunion : développement d'agents IA, automatisation de vos process et accompagnement sur-mesure des PME par un expert local certifié Qualiopi. Parlez-nous de votre projet."
-        keywords="expert IA La Réunion, consultant IA Réunion, expert IA 974, développement agent IA, automatisation process IA, agents IA sur-mesure, intégration IA entreprise"
+        title="Développement d'agents IA & automatisation sur-mesure | Aissociate"
+        description="Création d'agents IA et automatisation des process pour les entreprises réunionnaises : intégrations sur-mesure, workflows intelligents, gain de productivité. Par un organisme certifié Qualiopi."
+        keywords="développement agent IA, automatisation process IA, agents IA sur-mesure, intégration IA entreprise, workflow IA, IA Réunion"
         url={`${SITE_URL}/developpement`}
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Développement', url: `${SITE_URL}/developpement` }]}
         faqData={FAQ_DEV}

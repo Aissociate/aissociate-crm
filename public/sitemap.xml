@@ -12,67 +12,67 @@
   </url>
 
   <url>
-    <loc>https://aissociate.re/formations/</loc>
+    <loc>https://aissociate.re/formations</loc>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/assistance/</loc>
+    <loc>https://aissociate.re/assistance</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/developpement/</loc>
+    <loc>https://aissociate.re/developpement</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/aides-formation/</loc>
+    <loc>https://aissociate.re/aides-formation</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/blog/</loc>
+    <loc>https://aissociate.re/blog</loc>
     <changefreq>daily</changefreq>
     <priority>0.85</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/contact/</loc>
+    <loc>https://aissociate.re/contact</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/formulaire/</loc>
+    <loc>https://aissociate.re/formulaire</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/mentions-legales/</loc>
+    <loc>https://aissociate.re/mentions-legales</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/confidentialite/</loc>
+    <loc>https://aissociate.re/confidentialite</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/accessibilite/</loc>
+    <loc>https://aissociate.re/accessibilite</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
-    <loc>https://aissociate.re/reclamations/</loc>
+    <loc>https://aissociate.re/reclamations</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>

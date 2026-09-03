@@ -14,10 +14,7 @@ export type ContactType = 'prospect' | 'contact' | 'apprenant' | 'contact_entrep
 export type FinancementType =
   | 'cpf' | 'opco' | 'france_travail' | 'pole_emploi' | 'conseil_regional'
   | 'transition_pro' | 'agefice' | 'entreprise' | 'particulier' | 'autre';
-/** Étape du pipeline : clé libre — la liste des colonnes est configurée dans
- *  parametres (cle 'pipeline'), voir src/lib/pipeline.ts. Les clés historiques
- *  restent : nouveau, qualifie, proposition, negociation, gagne, perdu. */
-export type OpportuniteStage = string;
+export type OpportuniteStage = 'nouveau' | 'qualifie' | 'proposition' | 'negociation' | 'gagne' | 'perdu';
 export type DossierStatut =
   | 'brouillon' | 'montage' | 'depose' | 'en_instruction'
   | 'accorde' | 'refuse' | 'en_cours' | 'solde' | 'cloture';
@@ -35,8 +32,6 @@ export type Profile = Timestamps & {
 };
 export type Financeur = Timestamps & {
   id: string; code: string; nom: string; type: FinancementType;
-  /** Adresse de dépôt des dossiers : pré-remplit le « Mail au financeur ». */
-  email: string | null;
   specificites: string | null; actif: boolean;
 };
 export type Entreprise = Timestamps & {
@@ -104,10 +99,6 @@ export type Opportunite = Timestamps & {
   financeur_id: string | null; montant: number; stage: OpportuniteStage;
   probabilite: number; date_cloture_prev: string | null; date_cloture: string | null;
   owner_id: string | null; notes: string | null;
-  /** Ordre manuel dans la colonne du pipeline (null = fin de colonne). */
-  position: number | null;
-  /** Colonne épinglée à la main (étape ou standby30/90) ; null = calculée. */
-  colonne_manuelle: string | null;
 };
 export type Formation = Timestamps & {
   id: string; intitule: string; objectifs: string | null; programme: string[];
@@ -289,38 +280,6 @@ export type DevisLigne = {
   id: string; devis_id: string; designation: string; description: string | null;
   quantite: number; unite: string; prix_unitaire_ht: number; ordre: number; created_at: string;
 };
-export type FactureStatut = 'brouillon' | 'envoyee' | 'payee' | 'annulee';
-export type Facture = Timestamps & {
-  id: string; numero: string; devis_id: string | null; contact_id: string | null; entreprise_id: string | null;
-  financeur_id: string | null; dossier_id: string | null; formation_id: string | null;
-  date_emission: string; date_echeance: string | null; statut: FactureStatut;
-  tva_taux: number; tva_exoneree: boolean; total_ht: number; total_tva: number; total_ttc: number;
-  objet: string | null; conditions: string | null; notes: string | null; fichier_url: string | null;
-  date_reglement: string | null; mode_reglement: string | null;
-  qonto_transaction_id: string | null; rapproche_le: string | null; owner_id: string | null;
-};
-export type FactureLigne = {
-  id: string; facture_id: string; designation: string; description: string | null;
-  quantite: number; unite: string; prix_unitaire_ht: number; ordre: number; created_at: string;
-};
-export type Notification = {
-  id: string; user_id: string; type: string; titre: string; corps: string | null;
-  lien: string | null; dedupe_key: string | null; lu: boolean; created_at: string;
-};
-export type JobRun = {
-  id: string; fonction: string; started_at: string; finished_at: string | null;
-  ok: boolean; message: string | null; detail: Json | null; created_at: string;
-};
-export type ClientError = {
-  id: string; user_id: string | null; url: string | null; message: string; stack: string | null; created_at: string;
-};
-export type EspaceAcces = {
-  id: string; contact_id: string; token: string; actif: boolean;
-  created_by: string | null; created_at: string; last_seen_at: string | null;
-};
-export type EspaceConsultation = {
-  id: string; acces_id: string; ressource: string; detail: string | null; created_at: string;
-};
 export type ParticipantStatut = 'inscrit' | 'present' | 'absent' | 'annule';
 export type SessionParticipant = {
   id: string; session_id: string; contact_id: string | null; nom: string; prenom: string | null;
@@ -342,27 +301,6 @@ export type TicketVote = {
 export type AuditLog = {
   id: string; user_id: string | null; action: string; entite: string;
   entite_id: string | null; details: Record<string, unknown> | null; created_at: string;
-};
-// ── Assistant IA agentique (Edge Function `agent`) ──
-export type AiConversation = {
-  id: string; user_id: string; titre: string;
-  /** Entité ouverte au lancement (fiche contact / dossier) : {type, id, label}. */
-  contexte: Record<string, unknown> | null;
-  created_at: string; updated_at: string;
-};
-export type AiMessage = {
-  id: string; conversation_id: string; user_id: string;
-  role: 'user' | 'assistant'; content: string;
-  /** Trace des outils appelés pendant ce tour : [{outil, label}]. */
-  etapes: { outil: string; label: string }[] | null;
-  created_at: string;
-};
-export type AiActionStatut = 'proposee' | 'executee' | 'annulee' | 'erreur';
-export type AiAction = {
-  id: string; conversation_id: string | null; user_id: string;
-  outil: string; args: Record<string, unknown>; description: string;
-  statut: AiActionStatut; resultat: Record<string, unknown> | null;
-  created_at: string; executed_at: string | null;
 };
 export type Parametre = {
   id: string; cle: string; valeur: Record<string, unknown> | null;
@@ -467,13 +405,6 @@ export type Database = {
       plan_pdfs: TableShape<PlanPdf>;
       devis: TableShape<Devis>;
       devis_lignes: TableShape<DevisLigne>;
-      factures: TableShape<Facture>;
-      facture_lignes: TableShape<FactureLigne>;
-      notifications: TableShape<Notification>;
-      job_runs: TableShape<JobRun>;
-      client_errors: TableShape<ClientError>;
-      espace_acces: TableShape<EspaceAcces>;
-      espace_consultations: TableShape<EspaceConsultation>;
       blog_articles: TableShape<BlogArticle>;
       blog_categories: TableShape<BlogCategory>;
       contact_actions: TableShape<ContactAction>;
@@ -484,9 +415,6 @@ export type Database = {
       newsletters: TableShape<Newsletter>;
       newsletter_queue: TableShape<NewsletterQueue>;
       audit_log: TableShape<AuditLog>;
-      ai_conversations: TableShape<AiConversation>;
-      ai_messages: TableShape<AiMessage>;
-      ai_actions: TableShape<AiAction>;
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;
       page_views: TableShape<PageView>;
@@ -502,21 +430,6 @@ export type Database = {
     Views: EmptyMap;
     Functions: {
       qualiopi_prepare_session: { Args: { p_session: string }; Returns: undefined };
-      /** Compteurs de trafic par fenêtre [debut, fin) — évite de rapatrier page_views. */
-      dashboard_visiteurs: {
-        Args: { p_ranges: string[][] };
-        Returns: { visiteurs: number; vues: number }[];
-      };
-      /** Paires de contacts probablement identiques (RLS de contacts appliquée). */
-      contacts_doublons: {
-        Args: Record<string, never>;
-        Returns: { id1: string; id2: string; raisons: string }[];
-      };
-      /** Fusionne le doublon dans le contact conservé (direction uniquement). */
-      merge_contacts: {
-        Args: { p_garde: string; p_doublon: string };
-        Returns: undefined;
-      };
     };
     Enums: {
       user_role: UserRole;
@@ -525,7 +438,6 @@ export type Database = {
       opportunite_stage: OpportuniteStage;
       dossier_statut: DossierStatut;
       devis_statut: DevisStatut;
-      facture_statut: FactureStatut;
       piece_statut: PieceStatut;
       candidat_statut: CandidatStatut;
       plan_statut: PlanStatut;
