@@ -134,7 +134,12 @@ Deno.serve(async (req: Request) => {
     const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
     const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
-    const model = ai.model || "anthropic/claude-opus-4.8";
+    // Modèle dédié aux plans. Le plan est le plus long document généré (17
+    // rubriques rédigées) : un modèle à raisonnement dépasse la limite de 150 s
+    // de la passerelle Edge Functions et renvoie un 504. On le sépare donc du
+    // modèle général `ai.model` (chatbot, articles, newsletter), qui peut rester
+    // un modèle lent sans casser la génération de plans.
+    const model = ai.model_plan || ai.model || "anthropic/claude-sonnet-4.5";
     const systemPrompt = ai.plan_prompt || DEFAULT_PROMPT;
     if (!apiKey) return json({ error: "Clé OpenRouter absente (secret OPENROUTER_API_KEY ou Paramètres > IA)" }, 400);
 

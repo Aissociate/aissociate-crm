@@ -15,7 +15,7 @@ type Organisme = {
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
-type Ai = { provider?: string; model?: string; model_resume?: string; model_agent?: string; model_stt?: string; openrouter_key?: string; plan_prompt?: string };
+type Ai = { provider?: string; model?: string; model_plan?: string; model_resume?: string; model_agent?: string; model_stt?: string; openrouter_key?: string; plan_prompt?: string };
 type MailActionsCfg = { enabled?: boolean; resume_ia?: boolean; max_par_passage?: number };
 type AgeficeCfg = {
   demande_url?: string; prefet_region?: string;
@@ -475,8 +475,11 @@ export default function Parametres() {
             <h2 className="font-semibold text-fg">IA — génération de plans (OpenRouter)</h2>
           </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Field label="Modèle" hint="ex. anthropic/claude-opus-4.8">
+            <Field label="Modèle général" hint="Chatbot, articles, newsletter, résumés d'emails — ex. anthropic/claude-opus-4.8">
               <input className="input" value={ai.model ?? ''} onChange={(e) => setAi({ ...ai, model: e.target.value })} />
+            </Field>
+            <Field label="Modèle des plans de formation" hint="Doit être rapide : au-delà de 150 s de génération, la fonction est coupée (504). Éviter les modèles à raisonnement. Vide = modèle général.">
+              <input className="input" value={ai.model_plan ?? ''} onChange={(e) => setAi({ ...ai, model_plan: e.target.value })} placeholder="anthropic/claude-sonnet-4.5" />
             </Field>
             <Field label="Clé API OpenRouter" hint="Lue uniquement côté serveur (jamais envoyée au navigateur)">
               <input className="input" type="password" value={ai.openrouter_key ?? ''} onChange={(e) => setAi({ ...ai, openrouter_key: e.target.value })} autoComplete="new-password" placeholder="sk-or-…" />
