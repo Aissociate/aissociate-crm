@@ -34,7 +34,7 @@ type Options = {
 };
 
 /** Premier conteneur supporté par le navigateur (Chrome Android : webm/opus). */
-function pickMime(): string {
+export function pickMime(): string {
   const candidats = [
     'audio/webm;codecs=opus',
     'audio/webm',

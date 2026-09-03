@@ -18,6 +18,8 @@ const Pipeline = lazy(() => import('@/pages/Pipeline'));
 const Formations = lazy(() => import('@/pages/Formations'));
 const PlansFormation = lazy(() => import('@/pages/PlansFormation'));
 const Devis = lazy(() => import('@/pages/Devis'));
+const Factures = lazy(() => import('@/pages/Factures'));
+const Bpf = lazy(() => import('@/pages/Bpf'));
 const Dossiers = lazy(() => import('@/pages/Dossiers'));
 const DossierDetail = lazy(() => import('@/pages/DossierDetail'));
 const Calendrier = lazy(() => import('@/pages/Calendrier'));
@@ -61,6 +63,7 @@ import SiteNotFound from '@/site/pages/NotFound';
 const SiteQuestionnaire = lazy(() => import('@/site/pages/Questionnaire'));
 const SiteSignature = lazy(() => import('@/site/pages/Signature'));
 const SiteEmargement = lazy(() => import('@/site/pages/Emargement'));
+const SiteEspaceClient = lazy(() => import('@/site/pages/EspaceClient'));
 
 function LazyFallback() {
   return (
@@ -101,6 +104,7 @@ export default function App() {
       <Route path="/q/:token" element={<SiteQuestionnaire />} />
       <Route path="/signature/:token" element={<SiteSignature />} />
       <Route path="/emargement/:token" element={<SiteEmargement />} />
+      <Route path="/espace/:token" element={<SiteEspaceClient />} />
 
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
@@ -115,6 +119,8 @@ export default function App() {
         <Route path="/catalogue" element={<Formations />} />
         <Route path="/plans" element={<PlansFormation />} />
         <Route path="/devis" element={<Devis />} />
+        <Route path="/factures" element={<Factures />} />
+        <Route path="/bpf" element={<ProtectedRoute managerOnly><Bpf /></ProtectedRoute>} />
         <Route path="/dossiers" element={<Dossiers />} />
         <Route path="/dossiers/:id" element={<DossierDetail />} />
         <Route path="/calendrier" element={<Calendrier />} />

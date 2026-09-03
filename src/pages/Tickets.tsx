@@ -7,6 +7,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
 import { useCollection } from '@/hooks/useCollection';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, Button, Modal, Field, Badge, EmptyState, Spinner, TONE_TILE, type Tone } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -357,6 +358,8 @@ export default function Tickets() {
   const { data: rawTickets, loading, refresh: refreshTickets } = useCollection<Ticket>('tickets', {
     orderBy: { column: 'created_at', ascending: false },
   });
+  // Un ticket créé ou mis à jour par un collègue apparaît en direct.
+  useRealtimeRefresh('tickets', refreshTickets);
 
   // Votes
   const { data: rawVotes, refresh: refreshVotes } = useCollection('ticket_votes', {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FolderPlus, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { copyToBucket, type Bucket } from '@/lib/storage';
 import { Button, Modal } from '@/components/ui';
 import type { Dossier, DossierPiece } from '@/lib/database.types';
 
@@ -18,13 +19,19 @@ import type { Dossier, DossierPiece } from '@/lib/database.types';
  * Le document est déposé dans la pièce justificative dont le libellé est
  * `pieceLibelle` (celle de la checklist par défaut du dossier). Si elle n'existe
  * pas encore dans le dossier, elle est créée.
+ *
+ * Le fichier est physiquement COPIÉ depuis son bucket d'origine vers « pieces » :
+ * les pièces d'un dossier sont toujours relues depuis ce bucket, un simple
+ * partage de chemin donnait une pièce au fichier introuvable.
  */
 export default function AddToDossierButton({
-  contactId, dossiers, fichierUrl, pieceLibelle, documentLabel, onDone, lierDossier,
+  contactId, dossiers, fichierUrl, sourceBucket, pieceLibelle, documentLabel, onDone, lierDossier,
 }: {
   contactId: string | null;
   dossiers: Dossier[];
   fichierUrl: string | null;
+  /** Bucket où vit `fichierUrl`, ex. « devis », « plans », « coffre ». */
+  sourceBucket: Bucket;
   /** Libellé de la pièce justificative cible, ex. « Devis signé ». */
   pieceLibelle: string;
   /** Nom du document dans les messages, ex. « devis », « plan de formation ». */
@@ -51,12 +58,16 @@ export default function AddToDossierButton({
   const attach = async (dossier: Dossier, existing: DossierPiece | null) => {
     if (!fichierUrl) return;
     setBusy(true);
+    // Copie dans le bucket des pièces : c'est le seul depuis lequel le dossier
+    // sait relire un fichier. L'original reste en place dans son bucket.
+    const { path, error: copieError } = await copyToBucket(sourceBucket, fichierUrl, 'pieces');
+    if (copieError || !path) { setBusy(false); setInfo(`Copie du fichier impossible : ${copieError ?? 'chemin vide'}`); return; }
     const { error } = existing
       ? await supabase.from('dossier_pieces')
-          .update({ fichier_url: fichierUrl, statut: 'recue', version: (existing.version ?? 1) + 1 })
+          .update({ fichier_url: path, statut: 'recue', version: (existing.version ?? 1) + 1 })
           .eq('id', existing.id)
       : await supabase.from('dossier_pieces')
-          .insert({ dossier_id: dossier.id, libelle: pieceLibelle, obligatoire: true, statut: 'recue', fichier_url: fichierUrl });
+          .insert({ dossier_id: dossier.id, libelle: pieceLibelle, obligatoire: true, statut: 'recue', fichier_url: path });
     setBusy(false);
     if (error) { setInfo(`Échec de l'ajout : ${error.message}`); return; }
     setInfo(`${documentLabel.charAt(0).toUpperCase()}${documentLabel.slice(1)} ${existing ? 'remplacé' : 'ajouté'} dans le dossier ${dossier.reference}.`);

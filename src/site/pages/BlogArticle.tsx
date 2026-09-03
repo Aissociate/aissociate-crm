@@ -186,17 +186,27 @@ export default function BlogArticle() {
           <div className="mt-12 pt-8 border-t border-slate-200">
             <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border border-orange-200">
               <h3 className="text-xl font-bold text-slate-900 mb-3">
-                Cet article vous a ete utile ?
+                Envie de passer à la pratique ?
               </h3>
               <p className="text-slate-700 mb-6">
-                Decouvrez nos formations pour maitriser l'IA dans votre activite professionnelle
+                Formez-vous ou formez vos équipes à l'IA avec un organisme certifié Qualiopi à La Réunion —
+                formations finançables <strong>CPF, OPCO et France Travail</strong>.
               </p>
-              <Link
-                to="/formations"
-                className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
-              >
-                Voir nos formations
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  to="/formulaire"
+                  className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                >
+                  Demander un devis gratuit
+                </Link>
+                <Link
+                  to="/formations"
+                  className="inline-block bg-white hover:bg-slate-50 text-slate-900 px-8 py-3 rounded-xl font-bold transition-all border-2 border-slate-200 hover:border-orange-300"
+                >
+                  Voir nos formations
+                </Link>
+              </div>
+              <p className="text-sm text-slate-500 mt-4">Réponse sous 24 h ouvrées — sans engagement.</p>
             </div>
           </div>
         </div>

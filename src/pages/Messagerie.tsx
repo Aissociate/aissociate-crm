@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE, type Tone } from '@/components/ui';
@@ -9,7 +10,8 @@ import { formatDate, fullName, cn } from '@/lib/utils';
 import { LinkedText } from '@/lib/linkify';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
 import ContactFiche from '@/components/ContactFiche';
-import { OPP_STAGE_LABELS, OPP_STAGE_ORDER } from '@/lib/constants';
+import { OPP_STAGE_LABELS } from '@/lib/constants';
+import { usePipelineColonnes } from '@/lib/pipeline';
 import type {
   Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat,
   Opportunite, OpportuniteStage, ConversationClose, Entreprise, Financeur,
@@ -62,8 +64,11 @@ const ALL_SCOPES = Object.keys(SCOPE_LABELS) as Scope[];
 
 export default function Messagerie() {
   const { isManager, isAdmin, session } = useAuth();
+  const { colonnes: colonnesPipeline } = usePipelineColonnes();
   const navigate = useNavigate();
   const { data, loading, refresh } = useCollection<Email>('emails', { orderBy: { column: 'created_at', ascending: false } });
+  // Un mail entrant relevé par le cron IMAP apparaît sans « Synchroniser ».
+  useRealtimeRefresh('emails', refresh);
   const contacts = useCollection<Contact>('contacts');
   const profiles = useCollection<Profile>('profiles', { orderBy: { column: 'nom' } });
   const formateurs = useCollection<Formateur>('formateurs');
@@ -530,7 +535,7 @@ export default function Messagerie() {
           <select className="input max-w-[210px] py-2 text-sm" value={oppFilter} onChange={(e) => setOppFilter(e.target.value)}>
             <option value="">Opportunité : toutes</option>
             <option value="aucune">Sans opportunité</option>
-            {OPP_STAGE_ORDER.map((s) => <option key={s} value={s}>{OPP_STAGE_LABELS[s]}</option>)}
+            {colonnesPipeline.map((c) => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
           </select>
           <select className="input max-w-[190px] py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
             <option value="date">Trier par date</option>
@@ -618,7 +623,7 @@ export default function Messagerie() {
                         {c.closed
                           ? <Badge tone="neutral">Discussion close</Badge>
                           : c.answered ? <Badge tone="success">Répondu</Badge> : <Badge tone="warning">Sans réponse</Badge>}
-                        {c.oppStage && <Badge tone="info">Opportunité · {OPP_STAGE_LABELS[c.oppStage]}</Badge>}
+                        {c.oppStage && <Badge tone="info">Opportunité · {OPP_STAGE_LABELS[c.oppStage] ?? c.oppStage}</Badge>}
                         {/* Repère visuel : un brouillon attend d'être finalisé dans ce fil. */}
                         {c.emails.some((e) => e.statut === 'brouillon') && <Badge tone="warning">Brouillon à finaliser</Badge>}
                       </div>

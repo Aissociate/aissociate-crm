@@ -74,7 +74,8 @@ function CrmFormationDetail({ f }) {
           <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border border-orange-200 text-center">
             <h2 className="text-2xl font-bold text-slate-900 mb-3">Intéressé par cette formation ?</h2>
             <p className="text-slate-600 mb-6">Demandez un devis personnalisé, finançable (CPF / OPCO / AGEFICE).</p>
-            <Link to="/formulaire" className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
+            <Link to={`/formulaire?formation=${encodeURIComponent(f.intitule)}`} className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
+            <p className="text-sm text-slate-500 mt-3">Réponse sous 24 h ouvrées</p>
           </div>
         </div>
       </section>
@@ -91,15 +92,44 @@ const formationsData: Record<string, any> = {
     rs: 'RS 6776',
     title: 'Création de contenus rédactionnels et visuels par l\'usage responsable de l\'intelligence artificielle générative',
     image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=600&fit=crop&q=80',
-    duration: '14h (2 jours)',
-    price: '1 600€',
-    priceInter: '1 600€',
-    priceIntra: '1 600€',
+    // Parcours de 21h : le présentiel varie selon le format (collectif 2 j. /
+    // individuel 1 j.), le e-learning complète jusqu'à 21h. `durationLabel`
+    // prime sur la durée heures→jours calculée depuis le CRM (21h ≠ 3 jours ici).
+    duration: '21h (présentiel + e-learning)',
+    durationLabel: '21h (présentiel + e-learning)',
+    price: '1 489 €',
+    priceNote: 'Format collectif — individuel : 1 650 €',
+    priceInter: '1 489 €',
+    priceIntra: '1 650 €',
     participants: 'Grand public',
     level: 'Débutant',
-    format: 'Présentiel ou en classe à distance',
+    format: 'Présentiel à La Réunion ou classe à distance + e-learning',
     isCertifying: true,
     isEligibleCPF: true,
+    formats: [
+      {
+        name: 'Format collectif',
+        price: '1 489 €',
+        duration: '2 jours en présentiel (14h) + 7h de e-learning',
+        details: [
+          'Session en groupe restreint, en présentiel à La Réunion ou en classe à distance',
+          'Plateforme e-learning accessible avant et après le présentiel',
+          '21h de parcours au total, passage de la certification RS 6776 inclus',
+        ],
+        cpfUrl: 'https://www.moncompteformation.gouv.fr/espace-prive/html/#/formation/recherche/93454251500010_RS6776-distaciel/93454251500010_1489_stemarie',
+      },
+      {
+        name: 'Format individuel',
+        price: '1 650 €',
+        duration: '1 journée en présentiel (7h) + 14h de e-learning',
+        details: [
+          'Accompagnement individuel : rythme et cas d\'usage adaptés à votre métier',
+          'Plateforme e-learning accessible avant et après la journée en présentiel',
+          '21h de parcours au total, passage de la certification RS 6776 inclus',
+        ],
+        cpfUrl: 'https://www.moncompteformation.gouv.fr/espace-prive/html/#/formation/recherche/93454251500010_RS6776-collectif/93454251500010_1800lareunion',
+      },
+    ],
     prerequisites: 'Maîtrise de base de l\'outil informatique et navigation internet',
     objectives: [
       'Analyser ses besoins professionnels en matière d\'IA générative',
@@ -706,7 +736,9 @@ export default function FormationDetailPage() {
   const formation = crmRow ? {
     ...staticFormation,
     title: crmRow.intitule || staticFormation.title,
-    duration: fmtDuree(crmRow.duree_heures) ?? staticFormation.duration,
+    // Libellé figé de la fiche statique prioritaire : le calcul heures→jours
+    // ne reflète pas les parcours mixtes (présentiel + e-learning).
+    duration: staticFormation.durationLabel ?? fmtDuree(crmRow.duree_heures) ?? staticFormation.duration,
     price: Number(crmRow.prix) > 0 ? `${Number(crmRow.prix).toLocaleString('fr-FR')} €` : staticFormation.price,
     participants: crmRow.public_vise || staticFormation.participants,
     prerequisites: crmRow.prerequis || staticFormation.prerequisites,
@@ -803,7 +835,7 @@ export default function FormationDetailPage() {
                   Objectifs de la formation
                 </h2>
                 <div className="bg-gradient-to-br from-slate-50 to-orange-50 rounded-2xl p-8 border border-slate-200">
-                  <p className="text-slate-600 mb-6">À l\'issue de la formation, le participant sera capable de :</p>
+                  <p className="text-slate-600 mb-6">À l’issue de la formation, le participant sera capable de :</p>
                   <ul className="space-y-3">
                     {formation.objectives.map((obj: string, index: number) => (
                       <li key={index} className="flex items-start gap-3">
@@ -837,6 +869,45 @@ export default function FormationDetailPage() {
                 </div>
               </div>
 
+              {formation.formats?.length > 0 && (
+                <div>
+                  <h2 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                    <Users className="w-8 h-8 text-orange-600" />
+                    Deux formats au choix
+                  </h2>
+                  <div className="grid sm:grid-cols-2 gap-6">
+                    {formation.formats.map((fmt: any) => (
+                      <div key={fmt.name} className="bg-white border-2 border-slate-200 rounded-2xl p-8 flex flex-col hover:border-orange-300 transition-colors">
+                        <h3 className="text-xl font-bold text-slate-900 mb-1">{fmt.name}</h3>
+                        <div className="text-3xl font-bold text-orange-600 mb-1">{fmt.price}</div>
+                        <p className="text-sm text-slate-600 mb-5">{fmt.duration}</p>
+                        <ul className="space-y-3 mb-6 flex-1">
+                          {fmt.details.map((detail: string, i: number) => (
+                            <li key={i} className="flex items-start gap-3">
+                              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                              <span className="text-sm text-slate-600">{detail}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {fmt.cpfUrl ? (
+                          <a
+                            href={fmt.cpfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
+                          >
+                            S'inscrire via Mon Compte Formation
+                          </a>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-slate-500 mt-4">
+                    Tarifs par participant, passage de la certification RS 6776 inclus. Formation éligible au CPF ; financement OPCO, AGEFICE ou France Travail possible selon votre situation.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <h2 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-3">
                   <Award className="w-8 h-8 text-orange-600" />
@@ -858,7 +929,7 @@ export default function FormationDetailPage() {
                 <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border-2 border-orange-200">
                   <div className="text-center mb-6">
                     <div className="text-5xl font-bold text-slate-900 mb-2">{formation.price}</div>
-                    <div className="text-sm text-slate-600">Par participant</div>
+                    <div className="text-sm text-slate-600">{formation.priceNote || 'Par participant'}</div>
                   </div>
 
                   <div className="space-y-4 mb-6">
@@ -904,11 +975,12 @@ export default function FormationDetailPage() {
                   </div>
 
                   <Link
-                    to="/formulaire"
+                    to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
                     className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
                   >
                     Demander un devis
                   </Link>
+                  <p className="text-center text-sm text-slate-500 mt-3">Réponse sous 24 h ouvrées</p>
                 </div>
 
                 <div className="bg-white border-2 border-slate-200 rounded-2xl p-6">

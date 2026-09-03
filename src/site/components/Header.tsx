@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GraduationCap, Menu, X, Phone, Code, BookOpen, Euro } from 'lucide-react';
+import { GraduationCap, Menu, X, Phone, PhoneCall, Code, BookOpen, Euro, MessageCircle } from 'lucide-react';
 import AdminLogo from './AdminLogo';
+import { trackClick } from '@/lib/track';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -70,6 +71,16 @@ export default function Header() {
               Aides
             </Link>
 
+            <a
+              href="tel:+262692246860"
+              className="flex items-center gap-2 text-slate-700 hover:text-orange-700 font-semibold transition-colors"
+              aria-label="Appeler Aissociate au 06 92 24 68 60"
+              onClick={() => trackClick('tel')}
+            >
+              <PhoneCall className="w-4 h-4" aria-hidden="true" />
+              0692 24 68 60
+            </a>
+
             <Link
               to="/formulaire"
               className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-6 py-2.5 rounded-lg font-semibold transition-all"
@@ -135,6 +146,26 @@ export default function Header() {
               <Euro className="w-4 h-4" />
               Aides à la formation
             </Link>
+
+            <a
+              href="tel:+262692246860"
+              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-semibold"
+              onClick={() => trackClick('tel')}
+            >
+              <PhoneCall className="w-4 h-4" aria-hidden="true" />
+              Appeler : 0692 24 68 60
+            </a>
+
+            <a
+              href="https://wa.me/262692246860?text=Bonjour%2C%20je%20souhaite%20des%20informations%20sur%20vos%20formations%20IA."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold"
+              onClick={() => trackClick('whatsapp')}
+            >
+              <MessageCircle className="w-4 h-4" aria-hidden="true" />
+              WhatsApp
+            </a>
 
             <Link
               to="/formulaire"

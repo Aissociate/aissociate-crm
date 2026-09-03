@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, Paperclip, UserRound, PenLine, Send } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCollection } from '@/hooks/useCollection';
 import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, TONE_BADGE } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
+import { copyToBucket } from '@/lib/storage';
 import ContactFiche from '@/components/ContactFiche';
 import SignatureButton from '@/components/SignatureButton';
+import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
 import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
@@ -171,8 +173,78 @@ export default function DossierDetail() {
     if (data) setPieces((prev) => [...prev, data]);
   };
   const addPiece = async () => { await insertPiece(newPiece); setNewPiece(''); };
-  // Pièces de la checklist standard non présentes → ré-ajoutables en un clic
-  // (utile quand une pièce a été supprimée par erreur).
+
+  // ── Coffre-fort → Pièces justificatives ─────────────────────────────────────
+  // Une copie du document du coffre est déposée dans la pièce choisie (libellé
+  // standard ou libre). Copie et non partage de chemin : les pièces sont relues
+  // depuis le bucket « pieces », le fichier doit y être physiquement présent.
+  const [versement, setVersement] = useState<ContactDocument | null>(null);
+  const [versementLibelle, setVersementLibelle] = useState('');
+  const [versementBusy, setVersementBusy] = useState(false);
+
+  // ── Mail au financeur ───────────────────────────────────────────────────────
+  // Ouvre la composition avec toutes les pièces du dossier déjà cochées et
+  // l'adresse de dépôt du financeur en destinataire (vide tant qu'elle n'est
+  // pas renseignée dans Administration › Financeurs).
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailInitial, setMailInitial] = useState<ComposeInitial>({});
+  const piecesJointes = pieces.filter((p) => p.fichier_url).length;
+
+  const ouvrirMailFinanceur = () => {
+    if (!dossier) return;
+    const beneficiaire = contact ? fullName(contact.prenom, contact.nom) : '';
+    setMailInitial({
+      canal: 'email',
+      dest: financeur?.email ?? '',
+      sujet: `Dossier ${dossier.reference}${beneficiaire ? ` — ${beneficiaire}` : ''} : pièces justificatives`,
+      corps: [
+        'Bonjour,',
+        '',
+        `Veuillez trouver ci-joint les pièces justificatives du dossier ${dossier.reference} (${dossier.intitule})${beneficiaire ? `, au nom de ${beneficiaire}` : ''}.`,
+        '',
+        'Je reste à votre disposition pour toute pièce complémentaire.',
+        '',
+        'Bien cordialement,',
+      ].join('\n'),
+      dossierId: dossier.id,
+      contactId: dossier.contact_id,
+      cocherPiecesDossier: true,
+    });
+    setMailOpen(true);
+  };
+
+  const ouvrirVersement = (d: ContactDocument) => {
+    setVersement(d);
+    // Pré-sélection du libellé standard le plus proche du titre du document.
+    const proche = DEFAULT_PIECES.find((l) => d.titre.toLowerCase().includes(l.toLowerCase()));
+    setVersementLibelle(proche ?? '');
+  };
+
+  const verserAuxPieces = async () => {
+    const libelle = versementLibelle.trim();
+    if (!versement?.fichier_url || !libelle || !dossier) return;
+    setVersementBusy(true);
+    const { path, error: copieErr } = await copyToBucket('coffre', versement.fichier_url, 'pieces');
+    if (copieErr || !path) { setVersementBusy(false); alert(`Copie impossible : ${copieErr ?? 'chemin vide'}`); return; }
+
+    const existante = pieces.find((p) => p.libelle === libelle);
+    if (existante) {
+      if (existante.fichier_url && !confirm(`La pièce « ${libelle} » contient déjà un fichier (v${existante.version}).\nLe remplacer ? L'ancien reste consultable dans l'historique.`)) {
+        setVersementBusy(false); return;
+      }
+      await setPieceFichier(existante, path);
+    } else {
+      const { data, error } = await supabase.from('dossier_pieces')
+        .insert({ dossier_id: dossier.id, libelle, obligatoire: true, statut: 'recue', fichier_url: path })
+        .select().single();
+      if (error) { setVersementBusy(false); alert(`Ajout impossible : ${error.message}`); return; }
+      if (data) setPieces((prev) => [...prev, data]);
+    }
+    setVersementBusy(false);
+    setVersement(null);
+  };
+  // Pièces standard non présentes → ajoutables en un clic (ré-ajout d'une pièce
+  // supprimée par erreur, ou pièce propre au financeur du dossier).
   const missingStd = DEFAULT_PIECES.filter((l) => !pieces.some((p) => p.libelle === l));
 
   const removeDossier = async () => {
@@ -241,6 +313,10 @@ export default function DossierDetail() {
         subtitle={`${dossier.reference}${financeur ? ` · ${financeur.nom}` : ''}`}
         actions={
           <>
+            <Button variant="ghost" title="Ouvrir l'assistant IA sur ce dossier"
+              onClick={() => navigate('/assistant', { state: { assistantContexte: { type: 'dossier', id: dossier.id, label: `${dossier.reference} — ${dossier.intitule}` } } })}>
+              <Bot className="h-4 w-4" /> Assistant
+            </Button>
             {contact && (
               <Button variant="secondary" onClick={() => setFicheOpen(true)} title="Ouvrir la fiche du contact">
                 <UserRound className="h-4 w-4" /> {fullName(contact.prenom, contact.nom)}
@@ -290,9 +366,17 @@ export default function DossierDetail() {
 
           {/* Pieces */}
           <Card>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold text-fg">Pièces justificatives</h2>
-              <Badge className="bg-surface-2 text-muted">{piecesOk}/{pieces.length} validées</Badge>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={ouvrirMailFinanceur} disabled={piecesJointes === 0}
+                  title={piecesJointes === 0
+                    ? 'Aucune pièce ne porte de fichier à joindre'
+                    : `Rédiger un mail avec les ${piecesJointes} pièce(s) du dossier en pièces jointes`}>
+                  <Send className="h-4 w-4" /> Mail au financeur
+                </Button>
+                <Badge className="bg-surface-2 text-muted">{piecesOk}/{pieces.length} validées</Badge>
+              </div>
             </div>
             <ul className="space-y-2">
               {pieces.map((p) => (
@@ -334,8 +418,8 @@ export default function DossierDetail() {
                 onChange={(e) => setNewPiece(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addPiece()} />
               <Button variant="secondary" onClick={addPiece}><Plus className="h-4 w-4" /></Button>
               {missingStd.length > 0 && (
-                <select className="input max-w-[260px]" value="" onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) void insertPiece(v); }} title="Ré-ajouter une pièce de la checklist standard">
-                  <option value="">+ Pièce standard (checklist)…</option>
+                <select className="input max-w-[260px]" value="" onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) void insertPiece(v); }} title="Ajouter une pièce au libellé standard">
+                  <option value="">+ Pièce standard…</option>
                   {missingStd.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
               )}
@@ -527,7 +611,15 @@ export default function DossierDetail() {
                     {coffre.map((d) => (
                       <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
                         <span className="text-fg">{d.titre}{d.categorie ? <span className="text-xs text-muted"> · {d.categorie}</span> : null}</span>
-                        {d.fichier_url && <FileLink bucket="coffre" value={d.fichier_url} />}
+                        <span className="flex items-center gap-2">
+                          {d.fichier_url && <FileLink bucket="coffre" value={d.fichier_url} />}
+                          {d.fichier_url && (
+                            <button onClick={() => ouvrirVersement(d)} title="Copier ce document dans les pièces justificatives"
+                              className="rounded p-1 text-muted transition hover:text-brand-600">
+                              <FolderPlus className="h-4 w-4" />
+                            </button>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -606,6 +698,40 @@ export default function DossierDetail() {
           </ul>
         )}
       </Modal>
+
+      {/* Coffre-fort → pièce justificative : choix du libellé de la pièce cible. */}
+      <Modal
+        open={!!versement} onClose={() => setVersement(null)}
+        title="Copier dans les pièces justificatives"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setVersement(null)}>Annuler</Button>
+            <Button onClick={() => void verserAuxPieces()} disabled={versementBusy || !versementLibelle.trim()}>
+              {versementBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />} Copier
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-muted">
+          Une copie de <strong className="text-fg">{versement?.titre}</strong> sera déposée dans la pièce ci-dessous.
+          L'original reste dans le coffre-fort du contact.
+        </p>
+        <Field label="Pièce justificative" hint="Un libellé standard, ou le vôtre">
+          <select className="input mb-2" value={DEFAULT_PIECES.includes(versementLibelle) ? versementLibelle : ''}
+            onChange={(e) => setVersementLibelle(e.target.value)}>
+            <option value="">— Libellé libre —</option>
+            {DEFAULT_PIECES.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <input className="input" value={versementLibelle} placeholder="Intitulé de la pièce…"
+            onChange={(e) => setVersementLibelle(e.target.value)} />
+        </Field>
+      </Modal>
+
+      {/* Mail au financeur : pièces du dossier jointes d'office. */}
+      <ComposeMessageModal
+        open={mailOpen} onClose={() => setMailOpen(false)} initial={mailInitial}
+        onSent={() => void load()}
+      />
     </div>
   );
 }

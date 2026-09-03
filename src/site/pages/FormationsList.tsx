@@ -38,10 +38,13 @@ export default function FormationsList() {
       id: 'creation-contenus-ia',
       title: 'Création de contenus rédactionnels et visuels par l\'IA générative',
       subtitle: 'Usage responsable de l\'intelligence artificielle',
-      description: 'Formation certifiante pour maîtriser la création de contenus avec l\'IA générative tout en respectant les principes de confidentialité et protection des données.',
-      duration: '14h (2 jours)',
+      description: 'Formation certifiante pour maîtriser la création de contenus avec l\'IA générative tout en respectant les principes de confidentialité et protection des données. Parcours de 21h (présentiel + e-learning), au choix en format collectif ou individuel.',
+      duration: '21h (présentiel + e-learning)',
+      // Libellé figé : 21h ne se traduit pas en « 3 jours » (parcours mixte).
+      durationLabel: '21h (présentiel + e-learning)',
       participants: 'Grand public',
-      price: '1 600 €',
+      price: '1 489 €',
+      priceNote: 'Format collectif — individuel : 1 650 €',
       level: 'Débutant',
       certifications: ['CPF', 'RS 6776', 'Certifiant'],
       objectives: [
@@ -206,7 +209,7 @@ export default function FormationsList() {
     return {
       ...f,
       title: db.intitule || f.title,
-      duration: fmtDuree(db.duree_heures) ?? f.duration,
+      duration: f.durationLabel ?? fmtDuree(db.duree_heures) ?? f.duration,
       price: Number(db.prix) > 0 ? fmtPrix(db.prix) : f.price,
       participants: db.public_vise || f.participants,
       // objectifs CRM seulement s'ils sont rédigés en liste (1 ligne = 1 objectif)
@@ -239,9 +242,9 @@ export default function FormationsList() {
   return (
     <div className="min-h-screen bg-white">
       <SEO
-        title="Catalogue de formations IA — Qualiopi, CPF & OPCO | Aissociate"
-        description="Découvrez nos formations en intelligence artificielle à La Réunion : création de contenus IA, IA pour PME, prospection, marketing, RH, management. Certifiées Qualiopi, finançables CPF et OPCO."
-        keywords="catalogue formation IA, formations intelligence artificielle Réunion, formation IA PME, formation IA marketing, formation IA RH, formation prospection IA, Qualiopi, CPF, OPCO"
+        title="Formation IA à La Réunion : le catalogue — Qualiopi, CPF & OPCO | Aissociate"
+        description="Nos formations en intelligence artificielle à La Réunion : ChatGPT et IA générative pour PME, marketing, RH, prospection, management. Certifiées Qualiopi, finançables CPF, OPCO et France Travail — programmes détaillés en ligne."
+        keywords="formation IA La Réunion, catalogue formation IA, formations intelligence artificielle Réunion, formation IA 974, formation IA PME, formation IA marketing, formation IA RH, Qualiopi, CPF, OPCO"
         url={`${SITE_URL}/formations`}
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formations', url: `${SITE_URL}/formations` }]}
       />
@@ -254,7 +257,7 @@ export default function FormationsList() {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle</h1>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle à La Réunion</h1>
             <p className="text-xl text-slate-300">
               Le catalogue de nos formations IA à La Réunion : création de contenus, IA pour PME, prospection, marketing, RH et management.
               Formations certifiées <strong className="text-white">Qualiopi</strong>, finançables <strong className="text-white">CPF, OPCO et France Travail</strong>, en présentiel ou à distance.
@@ -375,7 +378,7 @@ export default function FormationsList() {
                       <div className="bg-gradient-to-br from-slate-50 to-orange-50 rounded-xl p-6 border border-slate-200">
                         <div className="text-center mb-6">
                           <div className="text-4xl font-bold text-slate-900 mb-1">{formation.price}</div>
-                          <div className="text-sm text-slate-600">Par participant</div>
+                          <div className="text-sm text-slate-600">{formation.priceNote || 'Par participant'}</div>
                         </div>
 
                         <div className="space-y-4 mb-6">
@@ -413,7 +416,7 @@ export default function FormationsList() {
                         </div>
 
                         <Link
-                          to="/formulaire"
+                          to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
                           className="block w-full text-center bg-white hover:bg-slate-50 text-slate-900 px-6 py-3 rounded-lg font-bold transition-all border-2 border-slate-200 hover:border-orange-300"
                         >
                           Demander un devis

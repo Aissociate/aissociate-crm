@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText } from 'lucide-react';
+import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText, Bot, History, ContactRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -12,6 +12,9 @@ import { FileUpload, FileLink } from '@/components/FileUpload';
 import ComposeMessageModal from '@/components/ComposeMessageModal';
 import ConversationsContact from '@/components/ConversationsContact';
 import MiniCalendrierContact from '@/components/MiniCalendrierContact';
+import AssistantChat from '@/components/AssistantChat';
+import HistoriqueContact from '@/components/HistoriqueContact';
+import EspaceClientButton from '@/components/EspaceClientButton';
 import type { Contact, Entreprise, Financeur, Profile, ContactAction, ContactDocument, Opportunite, Dossier, SessionFormation, SessionParticipant } from '@/lib/database.types';
 
 const STATUTS_PROSPECT = ['', 'non assigné', 'nouveau', 'qualifié', 'en relance', 'rdv', 'gagné', 'perdu', 'sans suite'];
@@ -65,6 +68,10 @@ interface Props {
 export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit, onUpdated }: Props) {
   const { session } = useAuth();
   const [composeOpen, setComposeOpen] = useState(false);
+  // Trois vues dans le même panneau : la fiche, l'historique complet et
+  // l'assistant IA branché sur ce contact.
+  const [tab, setTab] = useState<'fiche' | 'historique' | 'assistant'>('fiche');
+  useEffect(() => { setTab('fiche'); }, [c.id]);
   const entreprise = entreprises.find((e) => e.id === c.entreprise_id);
   const financeur = financeurs.find((f) => f.id === c.financeur_id);
   const owner = profiles.find((p) => p.id === c.owner_id);
@@ -360,8 +367,8 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
         onClick={onClose}
       />
 
-      {/* Panel */}
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col bg-surface shadow-2xl animate-slide-in-right">
+      {/* Panel — élargi pour accueillir l'historique et le chat IA */}
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col bg-surface shadow-2xl animate-slide-in-right">
 
         {/* Header */}
         <div className="flex items-start justify-between border-b border-line p-5">
@@ -382,12 +389,20 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
+              onClick={() => setTab('assistant')}
+              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
+              title="Ouvrir l'assistant IA sur cette fiche"
+            >
+              <Bot className="h-4 w-4" />
+            </button>
+            <button
               onClick={() => setComposeOpen(true)}
               className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
               title="Envoyer un e-mail / WhatsApp"
             >
               <Mail className="h-4 w-4" />
             </button>
+            <EspaceClientButton contactId={c.id} />
             <button
               onClick={() => { onClose(); onEdit(c); }}
               className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
@@ -404,7 +419,53 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           </div>
         </div>
 
+        {/* Onglets : Fiche · Historique · Assistant IA */}
+        <div className="flex border-b border-line px-5" role="tablist">
+          {([
+            { cle: 'fiche', label: 'Fiche', icone: <ContactRound className="h-4 w-4" /> },
+            { cle: 'historique', label: 'Historique', icone: <History className="h-4 w-4" /> },
+            { cle: 'assistant', label: 'Assistant IA', icone: <Bot className="h-4 w-4" /> },
+          ] as const).map((t) => (
+            <button
+              key={t.cle}
+              role="tab"
+              aria-selected={tab === t.cle}
+              onClick={() => setTab(t.cle)}
+              className={cn(
+                'flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition',
+                tab === t.cle
+                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                  : 'border-transparent text-muted hover:border-line hover:text-fg',
+              )}
+            >
+              {t.icone} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Historique unifié de la fiche */}
+        {tab === 'historique' && (
+          <div className="flex-1 overflow-y-auto p-5">
+            <HistoriqueContact contactId={c.id} contactCreatedAt={c.created_at} onNavigate={onClose} />
+          </div>
+        )}
+
+        {/* Assistant IA embarqué, branché sur ce contact */}
+        {tab === 'assistant' && (
+          <AssistantChat
+            compact
+            contexte={{ type: 'contact', id: c.id, label: fullName(c.prenom, c.nom) }}
+            suggestions={[
+              'Résume la situation de ce contact',
+              'Quelle est la prochaine action prévue ?',
+              'Prépare un email de relance personnalisé',
+              'Propose une relance téléphonique pour demain 9h',
+            ]}
+          />
+        )}
+
         {/* Corps */}
+        {tab === 'fiche' && (
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
           {/* Coordonnées */}
@@ -594,7 +655,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               <ul className="space-y-1.5">{opps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
                   <span className="text-fg">{o.titre}</span>
-                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage]}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
+                  <span className="flex items-center gap-2"><Badge tone="brand">{OPP_STAGE_LABELS[o.stage] ?? o.stage}</Badge><span className="text-xs text-muted">{formatMoney(o.montant)}</span></span>
                 </li>))}
               </ul>
             )}
@@ -790,8 +851,10 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             )}
           </section>
         </div>
+        )}
 
-        {/* Pied */}
+        {/* Pied (vue Fiche uniquement : sauvegarde des notes + édition) */}
+        {tab === 'fiche' && (
         <div className="border-t border-line px-5 py-3 flex items-center justify-between gap-2">
           <div>
             {notesDirty && (
@@ -812,6 +875,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             <Pencil className="mr-1.5 h-3.5 w-3.5" /> Modifier ce contact
           </button>
         </div>
+        )}
       </div>
 
       {/* Envoi rapide e-mail / WhatsApp depuis la fiche (modale partagée Messagerie) */}

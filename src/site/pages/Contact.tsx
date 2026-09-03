@@ -19,9 +19,18 @@ export default function Contact() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Anti-spam : champ honeypot invisible (les robots le remplissent) +
+  // temps minimal de saisie. Complété par un garde-fou côté base (trigger).
+  const [website, setWebsite] = useState('');
+  const [openedAt] = useState(() => Date.now());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (website || Date.now() - openedAt < 3000) {
+      // Robot probable : on simule un succès sans rien enregistrer.
+      setSubmitted(true);
+      return;
+    }
     setLoading(true);
     setError('');
     // Enregistre le lead -> contact CRM (via contact_requests + trigger).
@@ -137,6 +146,11 @@ export default function Contact() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Honeypot : invisible pour les humains, rempli par les robots. */}
+                <div className="absolute -left-[9999px] top-auto" aria-hidden="true">
+                  <label htmlFor="website">Ne pas remplir</label>
+                  <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
+                </div>
                 <div>
                   <label htmlFor="name" className="block text-sm font-semibold text-slate-900 mb-2">
                     Nom complet *

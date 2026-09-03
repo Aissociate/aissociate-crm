@@ -8,6 +8,7 @@ import { uploadFile, signedUrlFor, fileNameOf, type Bucket } from '@/lib/storage
 import { fullName, prochaineHeureOuvrable } from '@/lib/utils';
 import { buildSignatureHtml, signatureSummary, type SignatureCfg, type OrganismeInfo } from '@/lib/signature';
 import { linkifyHtml } from '@/lib/linkify';
+import { basculerMarque } from '@/lib/miseEnFormeTexte';
 import { applyTemplateVars, templatesForCanal, DEFAULT_TEMPLATES, type MessageTemplate, type TemplateVars } from '@/lib/messageTemplates';
 import type { Dossier, Document, Contact, EmailCanal } from '@/lib/database.types';
 
@@ -24,6 +25,8 @@ export type ComposeInitial = {
   contactId?: string | null;  // pour rattacher le message au contact (table emails)
   draftId?: string | null;    // reprise d'un brouillon existant : on met à jour la ligne au lieu d'en créer une
   attachments?: Attachment[]; // PJ déjà associées au brouillon repris
+  /** Coche d'office toutes les pièces du dossier lié (envoi au financeur). */
+  cocherPiecesDossier?: boolean;
 };
 
 const digits = (s: string | null): string => (s ?? '').replace(/[^\d]/g, '');
@@ -87,9 +90,14 @@ export default function ComposeMessageModal({
   const [includeSig, setIncludeSig] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Compteur d'ouvertures : les pièces du dossier sont rechargées à chaque
+  // ouverture (elles ont pu changer) même si le dossier lié est le même.
+  const [ouverture, setOuverture] = useState(0);
+
   // Réinitialisation à chaque ouverture, depuis les valeurs `initial`.
   useEffect(() => {
     if (!open) return;
+    setOuverture((n) => n + 1);
     setCanal(initial?.canal ?? 'email');
     setDest(initial?.dest ?? '');
     setSujet(initial?.sujet ?? '');
@@ -120,13 +128,19 @@ export default function ComposeMessageModal({
       .not('fichier_url', 'is', null)
       .then(({ data }) => {
         if (annule) return;
-        setPiecesDossier((data ?? []).map((p) => ({
+        const sources: SourcePJ[] = (data ?? []).map((p) => ({
           key: `piece:${p.id}`, filename: `${p.libelle}${extensionDe(p.fichier_url as string)}`,
           bucket: 'pieces' as Bucket, value: p.fichier_url as string, origine: 'Dossier',
-        })));
+        }));
+        setPiecesDossier(sources);
+        // Mail au financeur : toutes les pièces du dossier sont jointes d'office.
+        if (initial?.cocherPiecesDossier) {
+          setAttachIds((prev) => new Set([...prev, ...sources.map((s) => s.key)]));
+        }
       });
     return () => { annule = true; };
-  }, [dossierId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dossierId, ouverture]);
 
   useEffect(() => {
     if (!contactId) { setDocsCoffre([]); return; }
@@ -287,18 +301,14 @@ export default function ComposeMessageModal({
   // _italique_ sont convertis en HTML à l'envoi. La barre d'outils encadre la
   // sélection courante.
   const corpsRef = useRef<HTMLTextAreaElement>(null);
+  /** Bouton G / I : bascule le marqueur sur la sélection (cf. basculerMarque). */
   const entourer = (marque: string) => {
     const el = corpsRef.current;
     if (!el) return;
-    const { selectionStart: a, selectionEnd: b } = el;
-    const sel = corps.slice(a, b) || 'texte';
-    const next = `${corps.slice(0, a)}${marque}${sel}${marque}${corps.slice(b)}`;
-    setCorps(next);
-    // Replace le curseur autour du texte encadré.
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(a + marque.length, a + marque.length + sel.length);
-    });
+    const r = basculerMarque(corps, el.selectionStart, el.selectionEnd, marque);
+    if (!r) { el.focus(); return; }  // rien de sélectionné
+    setCorps(r.texte);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(r.debut, r.fin); });
   };
 
   // ── Vérification avant envoi ────────────────────────────────────────────────
@@ -360,9 +370,9 @@ export default function ComposeMessageModal({
             <Field label="Sujet" required><input className="input" value={sujet} onChange={(e) => setSujet(e.target.value)} /></Field>
             <Field label="Message">
               <div className="mb-1 flex items-center gap-1">
-                <button type="button" onClick={() => entourer('**')} title="Gras (**texte**)" className="rounded border border-line px-2 py-1 text-sm font-bold text-muted hover:text-brand-600">G</button>
-                <button type="button" onClick={() => entourer('_')} title="Italique (_texte_)" className="rounded border border-line px-2 py-1 text-sm italic text-muted hover:text-brand-600">I</button>
-                <span className="ml-1 text-xs text-muted">La mise en forme et les liens sont appliqués à l'envoi.</span>
+                <button type="button" onClick={() => entourer('**')} title="Gras — sélectionnez du texte ; recliquez pour retirer" className="rounded border border-line px-2 py-1 text-sm font-bold text-muted hover:text-brand-600">G</button>
+                <button type="button" onClick={() => entourer('_')} title="Italique — sélectionnez du texte ; recliquez pour retirer" className="rounded border border-line px-2 py-1 text-sm italic text-muted hover:text-brand-600">I</button>
+                <span className="ml-1 text-xs text-muted">Les ** et _ disparaissent à l'envoi : ils marquent le gras et l'italique.</span>
               </div>
               <textarea ref={corpsRef} className="input" rows={6} value={corps} onChange={(e) => setCorps(e.target.value)} />
             </Field>
