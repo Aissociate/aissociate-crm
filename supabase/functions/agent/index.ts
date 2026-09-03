@@ -173,7 +173,8 @@ function buildTools(ctx: Ctx) {
   if (on("dossiers")) {
     tool("proposer_maj_statut_dossier",
       "Propose de changer le statut d'un dossier de financement (à valider).",
-      { dossier_id: { type: "string" }, statut: { type: "string", enum: ["brouillon", "montage", "depose", "accorde", "refuse", "en_cours", "solde", "cloture"] } },
+      // Les 9 valeurs de l'enum `dossier_statut` — `en_instruction` manquait.
+      { dossier_id: { type: "string" }, statut: { type: "string", enum: ["brouillon", "montage", "depose", "en_instruction", "accorde", "refuse", "en_cours", "solde", "cloture"] } },
       ["dossier_id", "statut"]);
   }
   return t;
@@ -288,8 +289,13 @@ async function runReadTool(ctx: Ctx, name: string, a: Record<string, unknown>): 
       }
       if (!dossier) return { erreur: "Dossier introuvable (ou hors de votre périmètre)." };
       if (!finances) { delete dossier.montant_demande; delete dossier.montant_accorde; }
-      const { data: pieces } = await db.from("dossier_pieces")
-        .select("libelle, statut, obligatoire, date_reception").eq("dossier_id", dossier.id as string);
+      // `dossier_pieces` n'a pas de colonne `date_reception` : la sélectionner
+      // faisait échouer la requête, l'erreur était ignorée et la liste des
+      // pièces remontait donc toujours vide. La date utile est `updated_at`
+      // (dernier changement de statut : manquante, recue, validee, rejetee).
+      const { data: pieces, error: pErr } = await db.from("dossier_pieces")
+        .select("libelle, statut, obligatoire, commentaire, updated_at").eq("dossier_id", dossier.id as string);
+      if (pErr) return { dossier, pieces: [], erreur_pieces: pErr.message };
       return { dossier, pieces: pieces ?? [] };
     }
 
