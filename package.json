@@ -10,7 +10,8 @@
     "postbuild": "node scripts/prerender.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "mcp": "node mcp/crm-server.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -26,6 +27,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^22.19.19",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
