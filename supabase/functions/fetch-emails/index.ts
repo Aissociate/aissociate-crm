@@ -142,7 +142,9 @@ function imapStr(s: string): string {
 // Format date as DD-Mon-YYYY for IMAP SINCE command
 function imapDate(d: Date): string {
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
+  // Jour sur deux chiffres : c'est la forme exigée par la RFC 3501, et certains
+  // serveurs rejettent « 2-Jun-2026 » là où ils acceptent « 02-Jun-2026 ».
+  return `${String(d.getDate()).padStart(2, "0")}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
 
 // ── Actions automatiques sur mail entrant ────────────────────────────────────
@@ -151,6 +153,14 @@ function imapDate(d: Date): string {
 // la description porte un résumé du message, et (2) une relance ASAP à traiter.
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const ymdLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/**
+ * Âge au-delà duquel un mail entrant n'engendre plus d'action ni de relance.
+ * Sert de garde-fou au rattrapage : reprendre un arriéré de plusieurs mois ne
+ * doit pas remplir « Actions à faire » de relances portant sur des échanges
+ * déjà clos. Trois jours couvrent un week-end prolongé.
+ */
+const ACTION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** Première heure ouvrable à venir : 9 h le prochain jour ouvré (lun-ven). */
 function prochaineHeureOuvrable(from = new Date()): { date: string; heure: string } {
@@ -229,16 +239,40 @@ Deno.serve(async (req: Request) => {
     }
 
     // Expéditeurs connus : contacts (avec conseiller affecté), formateurs, candidats.
-    const { data: contactRows } = await sb.from("contacts").select("id, owner_id, responsable_id, email").not("email", "is", null);
+    // Les adresses complémentaires comptent au même titre que l'adresse principale :
+    // une organisation écrit depuis sa comptabilité ou son service formation, et le
+    // message doit se rattacher au même contact (ticket Benjamin « ajouts de champs
+    // mails supplémentaires identifiables »).
+    const { data: contactRows } = await sb.from("contacts")
+      .select("id, owner_id, responsable_id, email, email2, email3");
     const contactMap = new Map<string, { id: string; owner_id: string | null }>();
+    const cibleDe = (c: Record<string, unknown>) =>
+      ({ id: c.id as string, owner_id: (c.responsable_id ?? c.owner_id ?? null) as string | null });
+    // Deux passes : les adresses principales d'abord, pour qu'une adresse partagée
+    // (la comptabilité d'un groupe, par exemple) déclarée en secondaire chez un
+    // contact n'écrase jamais l'adresse principale d'un autre.
     for (const c of (contactRows ?? [])) {
-      if (c.email) contactMap.set((c.email as string).toLowerCase(), { id: c.id as string, owner_id: (c.responsable_id ?? c.owner_id ?? null) as string | null });
+      const adresse = typeof c.email === "string" ? c.email.trim().toLowerCase() : "";
+      if (adresse) contactMap.set(adresse, cibleDe(c));
+    }
+    for (const c of (contactRows ?? [])) {
+      for (const champ of [c.email2, c.email3]) {
+        const adresse = typeof champ === "string" ? champ.trim().toLowerCase() : "";
+        if (adresse && !contactMap.has(adresse)) contactMap.set(adresse, cibleDe(c));
+      }
     }
     const knownExtra = new Set<string>();
     const { data: formateurRows } = await sb.from("formateurs").select("email").not("email", "is", null);
     for (const f of (formateurRows ?? [])) if (f.email) knownExtra.add((f.email as string).toLowerCase());
     const { data: candidatRows } = await sb.from("candidats").select("email").not("email", "is", null);
     for (const k of (candidatRows ?? [])) if (k.email) knownExtra.add((k.email as string).toLowerCase());
+
+    // Curseur de progression : dernier UID traité dans INBOX, avec l'UIDVALIDITY
+    // de la boîte au moment où il a été relevé (un changement d'UIDVALIDITY
+    // signifie que le serveur a renuméroté les messages : le curseur ne veut
+    // alors plus rien dire et il faut repartir de la date de coupure).
+    const { data: curseurRow } = await sb.from("parametres").select("valeur").eq("cle", "imap_cursor").maybeSingle();
+    const curseur = (curseurRow?.valeur ?? {}) as { uidvalidity?: number; last_uid?: number };
 
     // Date de coupure : paramètre `email_sync_since` prioritaire (réglé au flush),
     // sinon repli sur le dernier e-mail connu (- 1 jour) ou aujourd'hui.
@@ -284,17 +318,46 @@ Deno.serve(async (req: Request) => {
       const loginRes = await imap.cmd(`LOGIN ${imapStr(cfg.user)} ${imapStr(cfg.pass)}`);
       if (!loginRes.ok) throw new Error("Authentification IMAP échouée — vérifiez l'identifiant et le mot de passe");
 
-      const selRes = await imap.cmd("SELECT INBOX");
+      // EXAMINE et non SELECT : la boîte est ouverte en lecture seule. La
+      // progression est tenue par le curseur d'UID, plus par le drapeau \Seen,
+      // et le CRM n'a donc aucune raison de modifier l'état des messages.
+      const selRes = await imap.cmd("EXAMINE INBOX");
       if (!selRes.ok) throw new Error("Impossible d'ouvrir INBOX");
+      const uidvalidity = Number(
+        selRes.lines.map((l) => l.match(/\[UIDVALIDITY (\d+)\]/i)?.[1]).find(Boolean) ?? 0,
+      );
 
-      // Search unseen messages since the cutoff date
-      const searchRes = await imap.cmd(`UID SEARCH UNSEEN SINCE ${sinceStr}`);
+      // Sélection des messages à traiter.
+      //
+      // La recherche portait sur `UNSEEN SINCE <date>` : tout message lu ailleurs
+      // (webmail, téléphone, client de messagerie) avant le passage du cron
+      // sortait définitivement du champ, sans aucun rattrapage — c'est ce qui
+      // faisait « disparaître » des mails de la messagerie. La progression est
+      // désormais tenue par un curseur d'UID, insensible à qui lit la boîte :
+      // seuls les messages arrivés après le dernier traité sont repris.
+      const reprise = uidvalidity > 0 && curseur.uidvalidity === uidvalidity && Number(curseur.last_uid) > 0;
+      const depuisUid = reprise ? Number(curseur.last_uid) + 1 : 0;
+      const critere = reprise ? `UID ${depuisUid}:*` : `SINCE ${sinceStr}`;
+      const searchRes = await imap.cmd(`UID SEARCH ${critere}`);
       const searchLine = searchRes.lines.find((l) => /^\* SEARCH/i.test(l)) ?? "";
-      const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number).filter(Boolean);
-      const recent = uids.slice(-50);
+      const uids = searchLine.replace(/^\* SEARCH\s*/i, "").split(/\s+/).map(Number)
+        .filter((u) => Number.isFinite(u) && u > 0)
+        // `UID x:*` renvoie toujours au moins le dernier message de la boîte, même
+        // quand son UID est inférieur à x : ce filtre évite de le retraiter sans fin.
+        .filter((u) => u >= depuisUid)
+        .sort((a, b) => a - b);
+      // Les plus ANCIENS d'abord : le curseur avance lot par lot, et un rattrapage
+      // se déroule dans l'ordre chronologique au fil des passages du cron.
+      const recent = uids.slice(0, 50);
 
       let imported = 0;
       let skipped = 0;
+      let sansContact = 0;
+      let dernierUid = reprise ? Number(curseur.last_uid) : 0;
+      // Le curseur ne doit jamais franchir un message que l'on n'a pas su
+      // enregistrer : il serait perdu pour de bon. On retient le plus petit UID
+      // en échec et le curseur s'arrête juste avant.
+      let premierEchec = Number.POSITIVE_INFINITY;
 
       if (recent.length > 0) {
         const rawMap = await imap.fetchRaw(recent);
@@ -309,17 +372,16 @@ Deno.serve(async (req: Request) => {
             const info = bounceInfo(rawText);
             const traite = await handleBounce(sb, info, parsed, parsed.messageId ?? `imap-${uid}`);
             if (traite) imported++; else skipped++;
-            await imap.cmd(`UID STORE ${uid} +FLAGS (\\Seen)`);
+            dernierUid = Math.max(dernierUid, uid);
             continue;
           }
 
-          // On n'ingère que les expéditeurs connus (contact, formateur ou candidat).
+          // Expéditeur inconnu : le message est ingéré sans contact rattaché plutôt
+          // que jeté. C'est ce qui alimente « Individu non référencé » au tableau de
+          // bord (ticket Benjamin du 14/08), et la RLS réserve ces messages aux
+          // administrateurs tant qu'ils ne sont rattachés à personne.
           const contact = fromAddr ? contactMap.get(fromAddr) : undefined;
-          const known = !!contact || (fromAddr ? knownExtra.has(fromAddr) : false);
-          if (!known) {
-            skipped++;
-            continue;
-          }
+          if (!contact && !(fromAddr && knownExtra.has(fromAddr))) sansContact++;
 
           const messageId = parsed.messageId ?? `imap-${uid}`;
           const from = parsed.from?.text ?? null;
@@ -344,14 +406,20 @@ Deno.serve(async (req: Request) => {
 
           if (error) {
             console.error("upsert error", error.message);
+            premierEchec = Math.min(premierEchec, uid);
           } else {
             const nouveau = !!rows && rows.length > 0;
             if (nouveau) imported++;
             // Journalisation dans le suivi du contact — uniquement pour un mail
-            // réellement nouveau (l'upsert ignore les doublons) et rattaché.
-            if (nouveau && actionsEnabled && contact?.id) {
+            // réellement nouveau (l'upsert ignore les doublons), rattaché, et
+            // RÉCENT : rattraper un arriéré de plusieurs mois créerait autant de
+            // relances « ASAP » antidatées dans « Actions à faire », pour des
+            // échanges déjà traités depuis longtemps.
+            const recuLe = parsed.date ? new Date(parsed.date) : new Date();
+            const recentPourAction = Date.now() - recuLe.getTime() < ACTION_MAX_AGE_MS;
+            if (nouveau && actionsEnabled && contact?.id && recentPourAction) {
               try {
-                const recu = parsed.date ? new Date(parsed.date) : new Date();
+                const recu = recuLe;
                 const sujet = parsed.subject ?? "(sans objet)";
                 const corps = String(parsed.text ?? parsed.html ?? "");
                 const resume = resumesRestants > 0
@@ -376,14 +444,33 @@ Deno.serve(async (req: Request) => {
                 console.error("actions auto", e); // ne doit jamais bloquer l'import
               }
             }
-            await imap.cmd(`UID STORE ${uid} +FLAGS (\\Seen)`);
+            // Le message est traité : le curseur peut passer son UID. Le drapeau
+            // \Seen n'est plus posé — il appartient désormais au seul lecteur
+            // humain, et le CRM ne fait plus passer pour lus des messages que
+            // personne n'a ouverts.
+            dernierUid = Math.max(dernierUid, uid);
           }
         }
       }
 
+      // Curseur écrit à la fin du lot : une interruption en cours de route fait
+      // simplement rejouer le lot au passage suivant, l'upsert écartant les
+      // messages déjà enregistrés. Mieux vaut réimporter que perdre.
+      const curseurFinal = Math.min(dernierUid, premierEchec - 1);
+      if (curseurFinal > 0 && uidvalidity > 0 && curseurFinal !== Number(curseur.last_uid)) {
+        await sb.from("parametres").upsert(
+          { cle: "imap_cursor", valeur: { uidvalidity, last_uid: curseurFinal, maj_le: new Date().toISOString() } },
+          { onConflict: "cle" },
+        );
+      }
+
       await imap.close();
-      await recordSync(sb, { ok: true, imported, skipped });
-      return json({ ok: true, imported, skipped, since: sinceStr, total_unseen: uids.length });
+      const reste = Math.max(0, uids.length - recent.length);
+      await recordSync(sb, { ok: true, imported, skipped, sans_contact: sansContact, reste });
+      return json({
+        ok: true, imported, skipped, sans_contact: sansContact,
+        mode: reprise ? "curseur" : "rattrapage", critere, trouves: uids.length, reste, last_uid: curseurFinal,
+      });
     } catch (err) {
       try { await imap.close(); } catch { /**/ }
       throw err;
@@ -466,7 +553,10 @@ async function handleBounce(sb: any, info: BounceInfo, parsed: any, messageId: s
 // (clé `imap_sync`), pour affichage dans la Messagerie — ticket Benjamin
 // « synchronisation messagerie ». Ne doit jamais faire échouer la synchro.
 // deno-lint-ignore no-explicit-any
-async function recordSync(sb: any, info: { ok: boolean; imported?: number; skipped?: number; error?: string }) {
+async function recordSync(
+  sb: any,
+  info: { ok: boolean; imported?: number; skipped?: number; sans_contact?: number; reste?: number; error?: string },
+) {
   try {
     await sb.from("parametres").upsert(
       { cle: "imap_sync", valeur: { last_at: new Date().toISOString(), ...info } },
