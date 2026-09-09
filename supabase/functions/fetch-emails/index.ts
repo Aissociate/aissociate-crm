@@ -243,8 +243,20 @@ Deno.serve(async (req: Request) => {
     // une organisation écrit depuis sa comptabilité ou son service formation, et le
     // message doit se rattacher au même contact (ticket Benjamin « ajouts de champs
     // mails supplémentaires identifiables »).
-    const { data: contactRows } = await sb.from("contacts")
-      .select("id, owner_id, responsable_id, email, email2, email3");
+    // Chargement PAGINÉ : PostgREST plafonne une réponse à 1 000 lignes. Avec
+    // près de 1 300 contacts, le dernier quart n'entrait pas dans la table de
+    // correspondance et leurs messages restaient non rattachés — sans que rien
+    // ne le signale, puisqu'une réponse tronquée est une réponse valide.
+    const contactRows: Record<string, unknown>[] = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await sb.from("contacts")
+        .select("id, owner_id, responsable_id, email, email2, email3")
+        .order("id", { ascending: true })
+        .range(de, de + 999);
+      if (error) { console.error("chargement contacts", error.message); break; }
+      contactRows.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
     const contactMap = new Map<string, { id: string; owner_id: string | null }>();
     const cibleDe = (c: Record<string, unknown>) =>
       ({ id: c.id as string, owner_id: (c.responsable_id ?? c.owner_id ?? null) as string | null });
