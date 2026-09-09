@@ -13,6 +13,8 @@ const corsHeaders = {
 
 interface EmailPayload {
   to?: string | string[];
+  // Copie (CC) : destinataires « pour information », visibles de tous.
+  cc?: string | string[];
   // Copie cachée : utilisé pour les envois de masse (newsletter) afin de ne pas
   // exposer les adresses des destinataires entre eux.
   bcc?: string | string[];
@@ -61,8 +63,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
   try {
-    const { to, bcc, subject, html, text, attachments } = (await req.json()) as EmailPayload;
+    const { to, cc, bcc, subject, html, text, attachments } = (await req.json()) as EmailPayload;
     const toList = (Array.isArray(to) ? to : to ? [to] : []).filter(Boolean);
+    const ccList = (Array.isArray(cc) ? cc : cc ? [cc] : []).filter(Boolean);
     const bccList = (Array.isArray(bcc) ? bcc : bcc ? [bcc] : []).filter(Boolean);
     if ((!toList.length && !bccList.length) || !subject) {
       return json({ error: 'Champs "to" (ou "bcc") et "subject" requis' }, 400);
@@ -91,6 +94,7 @@ Deno.serve(async (req: Request) => {
     const info = await transporter.sendMail({
       from: cfg.from,
       to: toField,
+      cc: ccList.length ? ccList.join(", ") : undefined,
       bcc: bccList.length ? bccList.join(", ") : undefined,
       subject,
       text: text ?? "",
@@ -98,7 +102,7 @@ Deno.serve(async (req: Request) => {
       attachments: mailAttachments,
     });
 
-    return json({ ok: true, messageId: info.messageId, sent: toList.length + bccList.length });
+    return json({ ok: true, messageId: info.messageId, sent: toList.length + ccList.length + bccList.length });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

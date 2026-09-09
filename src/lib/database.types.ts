@@ -165,7 +165,7 @@ export type EmailCanal = 'email' | 'whatsapp';
 export type EmailAttachment = { filename: string; url: string };
 export type Email = {
   id: string; dossier_id: string | null; contact_id: string | null; expediteur: string | null;
-  destinataires: string[]; sujet: string; corps: string | null; statut: string;
+  destinataires: string[]; copie: string[]; sujet: string; corps: string | null; statut: string;
   sent_at: string | null; owner_id: string | null; created_at: string;
   direction: EmailDirection; message_id: string | null; lu: boolean;
   attachments: EmailAttachment[] | null; canal: EmailCanal;

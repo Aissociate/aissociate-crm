@@ -19,12 +19,14 @@ type Attachment = { filename: string; url: string };
 export type ComposeInitial = {
   canal?: EmailCanal;
   dest?: string;       // e-mails séparés par virgule, ou numéro WhatsApp
+  copie?: string;      // destinataires en copie (CC), e-mails séparés par virgule
   sujet?: string;
   corps?: string;
   dossierId?: string;
   contactId?: string | null;  // pour rattacher le message au contact (table emails)
   draftId?: string | null;    // reprise d'un brouillon existant : on met à jour la ligne au lieu d'en créer une
-  attachments?: Attachment[]; // PJ déjà associées au brouillon repris
+  attachments?: Attachment[]; // PJ déjà associées au brouillon repris, ou reprises d'un message transféré
+  titre?: string;             // titre de la fenêtre, ex. « Transférer le message »
   /** Coche d'office toutes les pièces du dossier lié (envoi au financeur). */
   cocherPiecesDossier?: boolean;
 };
@@ -79,6 +81,8 @@ export default function ComposeMessageModal({
 
   const [canal, setCanal] = useState<EmailCanal>('email');
   const [dest, setDest] = useState('');
+  const [copie, setCopie] = useState('');
+  const [copieVisible, setCopieVisible] = useState(false);
   const [sujet, setSujet] = useState('');
   const [corps, setCorps] = useState('');
   const [dossierId, setDossierId] = useState('');
@@ -100,6 +104,8 @@ export default function ComposeMessageModal({
     setOuverture((n) => n + 1);
     setCanal(initial?.canal ?? 'email');
     setDest(initial?.dest ?? '');
+    setCopie(initial?.copie ?? '');
+    setCopieVisible(!!initial?.copie);
     setSujet(initial?.sujet ?? '');
     setCorps(initial?.corps ?? '');
     setDossierId(initial?.dossierId ?? '');
@@ -239,13 +245,14 @@ export default function ComposeMessageModal({
     }
 
     const destinataires = dest.split(',').map((d) => d.trim()).filter(Boolean);
+    const copies = copie.split(',').map((d) => d.trim()).filter(Boolean);
     let finalStatut = statut;
     if (statut === 'envoye') {
       const sigHtml = includeSig ? buildSignatureHtml(signatureCfg, organisme, profile) : '';
       // Le corps partait en texte nu : les URL restaient inertes chez le destinataire.
       const html = linkifyHtml(corps ?? '') + sigHtml;
       const { error: fnError } = await supabase.functions.invoke('send-email', {
-        body: { to: destinataires, subject: sujet, html, text: corps, attachments },
+        body: { to: destinataires, cc: copies, subject: sujet, html, text: corps, attachments },
       });
       if (fnError) {
         finalStatut = 'brouillon';
@@ -253,7 +260,7 @@ export default function ComposeMessageModal({
       }
     }
     const row = {
-      destinataires, sujet, corps, statut: finalStatut, attachments, canal: 'email' as const,
+      destinataires, copie: copies, sujet, corps, statut: finalStatut, attachments, canal: 'email' as const,
       expediteur: smtpFrom ?? profile?.email ?? null,
       dossier_id: dossierId || null, contact_id: contactId,
       sent_at: finalStatut === 'envoye' ? new Date().toISOString() : null,
@@ -317,7 +324,7 @@ export default function ComposeMessageModal({
   return (
     <Modal
       open={open} onClose={onClose} wide
-      title={canal === 'whatsapp' ? 'Nouveau message WhatsApp' : draftId ? 'Reprendre le brouillon' : 'Nouveau message'}
+      title={initial?.titre ?? (canal === 'whatsapp' ? 'Nouveau message WhatsApp' : draftId ? 'Reprendre le brouillon' : 'Nouveau message')}
       footer={
         canal === 'whatsapp'
           ? <Button onClick={() => send('envoye')} disabled={saving || !waValid}><MessageCircle className="h-4 w-4" /> Ouvrir WhatsApp</Button>
@@ -363,6 +370,18 @@ export default function ComposeMessageModal({
                 {contacts.filter((c) => c.email).map((c) => <option key={c.id} value={c.email!}>{c.prenom} {c.nom}</option>)}
               </datalist>
             </Field>
+            {/* Copie : masquée tant qu'elle est vide, pour ne pas alourdir le cas
+                courant. Un brouillon ou un transfert qui en contient l'ouvre. */}
+            {copieVisible ? (
+              <Field label="Copie à (e-mails séparés par des virgules)" hint="Destinataires « pour information », visibles de tous">
+                <input className="input" value={copie} onChange={(e) => setCopie(e.target.value)} list="compose-contacts-emails" autoFocus />
+              </Field>
+            ) : (
+              <button type="button" onClick={() => setCopieVisible(true)}
+                className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
+                + Ajouter des destinataires en copie
+              </button>
+            )}
             <Field label="Dossier lié"><select className="input" value={dossierId} onChange={(e) => setDossierId(e.target.value)}>
               <option value="">—</option>
               {dossiers.map((d) => <option key={d.id} value={d.id}>{d.reference} — {d.intitule}</option>)}
@@ -461,6 +480,7 @@ export default function ComposeMessageModal({
       >
         <div className="space-y-3">
           <p className="text-sm text-muted">À : <strong className="text-fg">{dest}</strong></p>
+          {copie.trim() && <p className="text-sm text-muted">Copie : <strong className="text-fg">{copie}</strong></p>}
           <p className="text-sm text-muted">Objet : <strong className="text-fg">{sujet || '(sans objet)'}</strong></p>
           {/* Le corps est rendu exactement comme il partira : mise en forme et
               liens appliqués, signature comprise. */}

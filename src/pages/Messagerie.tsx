@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2 } from 'lucide-react';
+import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2, Forward } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +31,10 @@ const emailAddr = (s: string | null): string => {
 };
 const digits = (s: string | null): string => (s ?? '').replace(/[^\d]/g, '');
 const reSubject = (s: string | null): string => /^\s*re\s*:/i.test(s ?? '') ? (s ?? '') : `Re: ${s ?? ''}`;
+// « Fwd: » n'est pas empilé sur un objet déjà transféré, et un « Re: » existant
+// est conservé : « Fwd: Re: Devis » dit bien d'où vient le message.
+const fwdSubject = (s: string | null): string =>
+  /^\s*(fwd?|tr)\s*:/i.test(s ?? '') ? (s ?? '') : `Fwd: ${s ?? ''}`;
 
 type MatchKind = 'contact' | 'formateur' | 'candidat';
 const KIND_LABEL: Record<MatchKind, string> = { contact: 'Contact', formateur: 'Formateur', candidat: 'Recrutement' };
@@ -242,12 +246,46 @@ export default function Messagerie() {
     setOpen(true);
   };
 
+  /**
+   * Transfert d'un message : la composition s'ouvre avec le destinataire à
+   * saisir, l'objet préfixé « Fwd: », le message d'origine cité en en-tête et
+   * ses pièces jointes reprises telles quelles.
+   *
+   * Le rattachement au contact et au dossier d'origine est conservé : dans un
+   * CRM, transférer les pièces d'un candidat à un financeur fait partie du
+   * suivi de l'affaire et doit rester dans son fil. Le bouton « Affecter »
+   * permet de le déplacer si le transfert ne concernait pas ce contact.
+   */
+  const forward = (e: Email) => {
+    const entete = [
+      '',
+      '---------- Message transféré ----------',
+      `De : ${e.expediteur ?? '—'}`,
+      `Date : ${formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}`,
+      `Objet : ${e.sujet || '(sans objet)'}`,
+      `À : ${e.destinataires.join(', ') || '—'}`,
+      '',
+    ].join('\n');
+    setComposeInitial({
+      canal: 'email',
+      dest: '',
+      titre: 'Transférer le message',
+      sujet: fwdSubject(e.sujet),
+      corps: `${entete}${e.corps ?? ''}`,
+      dossierId: e.dossier_id ?? undefined,
+      contactId: e.contact_id,
+      attachments: e.attachments ?? [],
+    });
+    setOpen(true);
+  };
+
   // Reprise d'un brouillon : rouvre la modale de composition pré-remplie et
   // rattachée à la ligne existante (ticket Benjamin « brouillon impossible à rouvrir »).
   const editDraft = (e: Email) => {
     setComposeInitial({
       canal: e.canal === 'whatsapp' ? 'whatsapp' : 'email',
       dest: e.destinataires.join(', '),
+      copie: (e.copie ?? []).join(', '),
       sujet: e.sujet ?? '',
       corps: e.corps ?? '',
       dossierId: e.dossier_id ?? undefined,
@@ -674,6 +712,7 @@ export default function Messagerie() {
                                 <span className="flex min-w-0 items-center gap-1 truncate">
                                   {channelIcon(e.canal, 'h-3 w-3 shrink-0')}
                                   {e.direction === 'entrant' ? `De ${e.expediteur ?? '—'}` : `À ${e.destinataires.join(', ') || '—'}`}
+                                  {e.copie?.length > 0 && <span className="truncate">· copie : {e.copie.join(', ')}</span>}
                                 </span>
                                 <span className="flex shrink-0 items-center gap-2">
                                   {/* Un avis de non-remise arrive en « entrant » : il doit rester visible. */}
@@ -698,6 +737,13 @@ export default function Messagerie() {
                                 {e.direction === 'sortant' && e.statut === 'brouillon' && (
                                   <button onClick={() => editDraft(e)} title="Reprendre le brouillon" className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 dark:text-brand-400">
                                     <Pencil className="h-3.5 w-3.5" /> Reprendre
+                                  </button>
+                                )}
+                                {/* Transfert : e-mail uniquement — un message WhatsApp
+                                    part par wa.me, sans pièces jointes ni objet. */}
+                                {!wa && e.statut !== 'brouillon' && (
+                                  <button onClick={() => forward(e)} title="Transférer ce message" className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-muted hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400">
+                                    <Forward className="h-3.5 w-3.5" /> Transférer
                                   </button>
                                 )}
                                 {/* Lu / non lu : le message peut être remis en « à traiter ». */}
