@@ -59,6 +59,17 @@ function isMetaToken(v: string): boolean {
   return s === "" || s === "true" || s === "false" || s === "fb" || s === "ig"
     || s === "facebook" || s === "instagram" || s === "created" || /^\d{9,}$/.test(s);
 }
+// Identifiant + date de la soumission Meta (`l:<id>` et `created_time`), repérés
+// par contenu pour rester valables sur les lignes « décalées ».
+const isLeadId = (v: string) => /^l:\d+$/.test((v ?? "").trim());
+function leadRef(r: Row): { id: string | null; date: Date | null } {
+  const vals = Object.values(r).map((v) => (v ?? "").toString().trim());
+  const id = (isLeadId(r.id ?? "") ? (r.id as string) : (vals.find(isLeadId) ?? "")).trim();
+  const brut = (isIsoDate(r.created_time ?? "") ? (r.created_time as string) : (vals.find(isIsoDate) ?? "")).trim();
+  const d = brut ? new Date(brut) : null;
+  return { id: id || null, date: d && !Number.isNaN(d.getTime()) ? d : null };
+}
+
 function looksLikeName(v: string): boolean {
   const s = (v ?? "").trim();
   if (!s) return false;
@@ -242,6 +253,12 @@ Deno.serve(async (req: Request) => {
         "platform", "inbox_url",
       ]);
 
+      // Dernière soumission Meta connue par contact (external_id → id/date/réponses).
+      // Sert à détecter les « releads » : un prospect déjà en base qui redépose
+      // le formulaire. Le Sheet étant relu en entier toutes les 5 min, on garde
+      // la soumission la plus récente de chaque clé.
+      const derniersLeads = new Map<string, { id: string | null; date: Date | null; reponses: string }>();
+
       const payloads = rows
         .filter((r) => {
           if (!r || typeof r !== "object") return false;
@@ -279,8 +296,16 @@ Deno.serve(async (req: Request) => {
 
           const notes = [entete.join("\n"), commentaires].filter(Boolean).join("\n");
           const key = (p.email || p.telephone || `${p.prenom ?? ""} ${p.nom}`).toLowerCase().trim();
+
+          const externalId = `pros:${key}`;
+          const lead = leadRef(r);
+          const connu = derniersLeads.get(externalId);
+          if (!connu?.date || (lead.date && lead.date > connu.date)) {
+            derniersLeads.set(externalId, { ...lead, reponses: commentaires });
+          }
+
           return {
-            external_id: `pros:${key}`,
+            external_id: externalId,
             type: "prospect" as const,
             nom: p.nom,
             prenom: p.prenom,
@@ -305,7 +330,56 @@ Deno.serve(async (req: Request) => {
         if (error) throw new Error(`contacts: ${error.message}`);
         imported = ins?.length ?? 0;
       }
-      result.prospects = { lus: rows.length, importes: imported, exclus: payloads.length - kept.length };
+
+      // — Releads : le prospect existe déjà et redépose le formulaire —
+      // Sans ça le signal était perdu (upsert « ignoreDuplicates » : ni création,
+      // ni mise à jour). Trois garde-fous pour ne pas polluer les fiches à chaque
+      // passage du cron :
+      //   1. la ligne porte un id de lead Meta ET une date de soumission ;
+      //   2. cette date est postérieure à la création de la fiche (sinon c'est le
+      //      lead qui a créé la fiche, pas un retour) ;
+      //   3. la note de relead n'est pas déjà posée (marqueur = id du lead).
+      const RELANCABLES = new Set(["", "non assigné", "perdu", "sans suite"]);
+      let releads = 0;
+      const cles = kept.map((p) => p.external_id);
+      for (let i = 0; i < cles.length; i += 200) {
+        const { data: fiches } = await sb
+          .from("contacts")
+          .select("id, external_id, notes, created_at, statut_prospect, tags")
+          .in("external_id", cles.slice(i, i + 200));
+
+        for (const c of fiches ?? []) {
+          const lead = derniersLeads.get(c.external_id as string);
+          if (!lead?.id || !lead.date) continue;
+          if (lead.date <= new Date(c.created_at as string)) continue;
+
+          const marqueur = `[relead ${lead.date.toISOString().slice(0, 10)} · ${lead.id}]`;
+          const notes = (c.notes as string | null) ?? "";
+          if (notes.includes(marqueur)) continue;
+
+          const ligne = [`${marqueur} Nouvelle demande déposée via le formulaire Meta.`, lead.reponses]
+            .filter(Boolean).join("\n");
+          const maj: Record<string, unknown> = { notes: [notes, ligne].filter(Boolean).join("\n") };
+
+          // Un prospect qui revient redevient « nouveau » — sauf si un conseiller
+          // le travaille déjà (qualifié / en relance / rdv / gagné).
+          if (RELANCABLES.has(((c.statut_prospect as string | null) ?? "").trim())) {
+            maj.statut_prospect = "nouveau";
+          }
+          // Tag « nouveau prospect » : c'est le filtre où la direction regarde
+          // les leads à traiter.
+          const tags = (c.tags as string[] | null) ?? [];
+          if (!tags.includes("nouveau prospect")) maj.tags = [...tags, "nouveau prospect"];
+
+          const { error } = await sb.from("contacts").update(maj).eq("id", c.id);
+          if (error) throw new Error(`relead ${c.external_id}: ${error.message}`);
+          releads++;
+        }
+      }
+
+      result.prospects = {
+        lus: rows.length, importes: imported, exclus: payloads.length - kept.length, releads,
+      };
     }
 
     return new Response(JSON.stringify({ ok: true, ...result }), {

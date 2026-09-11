@@ -368,9 +368,12 @@ export default function Contacts() {
       alert("Import indisponible : déployez l'Edge Function « import-sheets ».");
       return;
     }
-    const p = (res as { prospects?: { importes?: number } })?.prospects;
+    const p = (res as { prospects?: { importes?: number; releads?: number } })?.prospects;
     refresh();
-    alert(`${p?.importes ?? 0} nouveau(x) prospect(s) importé(s) depuis Google Sheets, en « non affecté ».`);
+    const relead = p?.releads
+      ? ` ${p.releads} prospect(s) déjà connu(s) ont redéposé le formulaire : fiche annotée et repassée en « nouveau ».`
+      : '';
+    alert(`${p?.importes ?? 0} nouveau(x) prospect(s) importé(s) depuis Google Sheets, en « non affecté ».${relead}`);
   };
 
   const openNew = () => { setForm(empty()); setTagsText(''); setOpen(true); };
