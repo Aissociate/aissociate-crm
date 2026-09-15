@@ -19,6 +19,7 @@ const Formations = lazy(() => import('@/pages/Formations'));
 const PlansFormation = lazy(() => import('@/pages/PlansFormation'));
 const Devis = lazy(() => import('@/pages/Devis'));
 const Factures = lazy(() => import('@/pages/Factures'));
+const Tresorerie = lazy(() => import('@/pages/Tresorerie'));
 const Bpf = lazy(() => import('@/pages/Bpf'));
 const Dossiers = lazy(() => import('@/pages/Dossiers'));
 const DossierDetail = lazy(() => import('@/pages/DossierDetail'));
@@ -120,6 +121,7 @@ export default function App() {
         <Route path="/plans" element={<PlansFormation />} />
         <Route path="/devis" element={<Devis />} />
         <Route path="/factures" element={<Factures />} />
+        <Route path="/tresorerie" element={<ProtectedRoute managerOnly><Tresorerie /></ProtectedRoute>} />
         <Route path="/bpf" element={<ProtectedRoute managerOnly><Bpf /></ProtectedRoute>} />
         <Route path="/dossiers" element={<Dossiers />} />
         <Route path="/dossiers/:id" element={<DossierDetail />} />

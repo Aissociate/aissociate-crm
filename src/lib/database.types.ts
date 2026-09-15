@@ -420,6 +420,40 @@ export type QualiopiModeleDoc = Timestamps & {
   type_doc: string; titre: string; fichier_url: string | null; actif: boolean;
 };
 
+
+// ── Trésorerie (direction uniquement) ────────────────────────────────────────
+/** Statut d'un versement attendu. */
+export type EncaissementStatut = 'prevu' | 'encaisse' | 'annule';
+/** Périodicité d'une charge : `ponctuelle` = une seule échéance. */
+export type ChargeRecurrence = 'ponctuelle' | 'mensuelle' | 'trimestrielle' | 'annuelle';
+export type ChargeStatut = 'prevue' | 'payee' | 'annulee';
+
+/** Un versement attendu : échéance de l'échéancier d'une opportunité gagnée
+ *  (`opportunite_id`) ou entrée libre (subvention, apport…). */
+export type TresorerieEncaissement = Timestamps & {
+  id: string; opportunite_id: string | null; facture_id: string | null;
+  libelle: string; montant: number;
+  date_prevue: string; date_encaissement: string | null;
+  statut: EncaissementStatut; mode_reglement: string | null;
+  notes: string | null; created_by: string | null;
+};
+
+/** Charge saisie librement. Une charge récurrente est une projection : ses
+ *  occurrences sont calculées à l'affichage, d'où `statut`/`date_paiement`
+ *  réservés aux charges ponctuelles. */
+export type TresorerieCharge = Timestamps & {
+  id: string; libelle: string; categorie: string | null; fournisseur: string | null;
+  montant: number; date_echeance: string;
+  recurrence: ChargeRecurrence; recurrence_fin: string | null;
+  statut: ChargeStatut; date_paiement: string | null;
+  notes: string | null; created_by: string | null;
+};
+
+/** Ligne unique : solde bancaire connu à une date, origine du solde cumulé. */
+export type TresorerieConfig = {
+  id: boolean; solde_initial: number; date_solde: string;
+  updated_by: string | null; updated_at: string;
+};
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -498,6 +532,9 @@ export type Database = {
       questionnaire_envois: TableShape<QuestionnaireEnvoi>;
       questionnaire_reponses: TableShape<QuestionnaireReponse>;
       qualiopi_modeles_doc: TableShape<QualiopiModeleDoc>;
+      tresorerie_encaissements: TableShape<TresorerieEncaissement>;
+      tresorerie_charges: TableShape<TresorerieCharge>;
+      tresorerie_config: TableShape<TresorerieConfig>;
     };
     Views: EmptyMap;
     Functions: {
