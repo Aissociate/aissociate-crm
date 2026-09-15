@@ -454,6 +454,32 @@ export type TresorerieConfig = {
   id: boolean; solde_initial: number; date_solde: string;
   updated_by: string | null; updated_at: string;
 };
+
+// ── Positionnement (test d'entrée, lien tokenisé) ────────────────────────────
+export type PositionnementStatut = 'a_envoyer' | 'envoye' | 'relance' | 'complete' | 'clos';
+
+/** Lien `/positionnement/:token`. Tout y est facultatif : un lien de groupe
+ *  (`multi`) n'a ni contact ni destinataire nommé. */
+export type PositionnementLien = Timestamps & {
+  id: string; token: string; libelle: string;
+  contact_id: string | null; destinataire_nom: string | null; destinataire_email: string | null;
+  dossier_id: string | null; session_id: string | null; formation_intitule: string | null;
+  multi: boolean; actif: boolean; statut: PositionnementStatut;
+  sent_at: string | null; created_by: string | null;
+};
+
+/** Une réponse. `lien_id` null = saisie par le formateur depuis le CRM
+ *  (apprenant absent) ; `contact_id` null = apprenant hors base. */
+export type Positionnement = Timestamps & {
+  id: string; lien_id: string | null; contact_id: string | null;
+  dossier_id: string | null; session_id: string | null;
+  nom: string; email: string | null; organisation: string | null;
+  poste: string | null; secteur: string | null; formation_intitule: string | null;
+  origine: 'apprenant' | 'formateur';
+  reponses: Json; score: Json;
+  niveau: string | null; pct: number | null; synthese: string | null;
+  document_id: string | null; saisi_par: string | null; completed_at: string;
+};
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -535,6 +561,8 @@ export type Database = {
       tresorerie_encaissements: TableShape<TresorerieEncaissement>;
       tresorerie_charges: TableShape<TresorerieCharge>;
       tresorerie_config: TableShape<TresorerieConfig>;
+      positionnement_liens: TableShape<PositionnementLien>;
+      positionnements: TableShape<Positionnement>;
     };
     Views: EmptyMap;
     Functions: {
