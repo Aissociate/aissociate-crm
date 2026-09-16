@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck, Plus, Link2, Send, Eye, Trash2, FolderPlus, Users, UserPlus,
   Loader as Loader2, Check, Ban, Copy,
@@ -56,7 +56,7 @@ const lienVide = () => ({
 });
 
 export default function Positionnement() {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const liens = useCollection<PositionnementLien>('positionnement_liens', {
     orderBy: { column: 'created_at', ascending: false },
   });
@@ -71,6 +71,14 @@ export default function Positionnement() {
   const [onglet, setOnglet] = useState<Onglet>('reponses');
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Adresse d'expédition réelle (SMTP) pour la trace en Messagerie, comme
+  // ComposeMessageModal. `parametres` n'est lisible que par un admin : les
+  // autres profils retombent sur leur propre email.
+  const [smtpFrom, setSmtpFrom] = useState<string | null>(null);
+  useEffect(() => {
+    void supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle()
+      .then(({ data }) => setSmtpFrom(((data?.valeur ?? {}) as { from?: string }).from ?? null));
+  }, []);
 
   const loading = liens.loading || reponses.loading;
 
@@ -150,14 +158,37 @@ export default function Positionnement() {
       <p><a href="${url}" style="background:#ea6a1e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Compléter mon positionnement</a></p>
       <p>Ou copiez ce lien : ${url}</p>
       <p>Merci,<br/>L'équipe Aissociate</p>`;
+    // Version texte : c'est elle que la Messagerie affiche, lien compris.
+    const texte = [
+      `Bonjour ${l.destinataire_nom ?? ''},`,
+      '',
+      `${relance ? 'Petit rappel : merci de' : 'Avant votre formation, merci de'} compléter votre test de positionnement (15 à 20 minutes). Il n'y a pas de note : ce questionnaire sert à adapter le contenu et les cas pratiques à votre niveau réel.`,
+      '',
+      `Compléter mon positionnement : ${url}`,
+      '',
+      'Merci,',
+      "L'équipe Aissociate",
+    ].join('\n');
     try {
       const { error } = await supabase.functions.invoke('send-email', {
-        body: { to: l.destinataire_email, subject: l.libelle, html },
+        body: { to: l.destinataire_email, subject: l.libelle, html, text: texte },
       });
       if (error) throw error;
+      const envoyeLe = new Date().toISOString();
       await supabase.from('positionnement_liens').update({
-        statut: relance ? 'relance' : 'envoye', sent_at: new Date().toISOString(),
+        statut: relance ? 'relance' : 'envoye', sent_at: envoyeLe,
       }).eq('id', l.id);
+      // send-email ne fait qu'expédier en SMTP : sans cette ligne, le mail
+      // partait bien mais restait invisible dans la Messagerie et l'historique
+      // du contact. Même journalisation que ComposeMessageModal.
+      const { error: logErr } = await supabase.from('emails').insert({
+        destinataires: [l.destinataire_email], copie: [], sujet: l.libelle, corps: texte,
+        statut: 'envoye', canal: 'email', direction: 'sortant',
+        expediteur: smtpFrom ?? profile?.email ?? null,
+        contact_id: l.contact_id, dossier_id: l.dossier_id,
+        sent_at: envoyeLe, owner_id: session?.user.id ?? null, attachments: [],
+      });
+      if (logErr) setErreur(`Mail envoyé, mais non enregistré dans la Messagerie : ${logErr.message}`);
       await liens.refresh();
     } catch (e) {
       setErreur(`Envoi impossible (SMTP non configuré ?). ${e instanceof Error ? e.message : ''}`);
