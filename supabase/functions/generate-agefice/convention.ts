@@ -25,6 +25,8 @@ export type ConventionCtx = {
   jours: string[];
   /** Dates saisies en clair sur le plan, à défaut de journées planifiées. */
   datesTexte?: string;
+  /** Nombre de jours saisi : prime sur les journées planifiées et sur durée / 7. */
+  nbJours?: number;
   horaires: string;
   lieu: string;
   /** Lieu saisi en toutes lettres : imprimé tel quel, sans « présentiel au ». */
@@ -236,7 +238,7 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   const objectifs = (c.objectifs ?? "").split(/[;\n]+/).map((s) => s.trim().replace(/\.$/, "")).filter(Boolean)
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
   const modules = c.programme.map(module).filter((m) => m.titre || m.contenu);
-  const nbJours = c.jours.length || (c.dureeH ? Math.ceil(c.dureeH / 7) : 0);
+  const nbJours = c.nbJours || c.jours.length || (c.dureeH ? Math.ceil(c.dureeH / 7) : 0);
   const n = c.effectif.length;
 
   // ═══ Page 1 ═══

@@ -479,6 +479,8 @@ export type Positionnement = Timestamps & {
   reponses: Json; score: Json;
   niveau: string | null; pct: number | null; synthese: string | null;
   document_id: string | null; saisi_par: string | null; completed_at: string;
+  /** Plan de formation rédigé à partir de ce positionnement. */
+  plan_id: string | null;
 };
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;

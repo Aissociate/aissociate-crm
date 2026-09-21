@@ -131,6 +131,8 @@ Deno.serve(async (req: Request) => {
       dossierIds?: string[]; stagiaires?: string[]; prix?: number | null;
       /** Plan de formation qui complète la convention (objectifs, programme, durée, dates). */
       planId?: string | null;
+      /** Durée saisie dans la fenêtre : prime sur le plan et le catalogue. */
+      dureeH?: number | null; nbJours?: number | null;
     };
     const direct: Direct | null = body.direct ?? null;
     if (!planId && !direct) return json({ error: "planId manquant" }, 400);
@@ -252,7 +254,9 @@ Deno.serve(async (req: Request) => {
     const apprenant = [contact?.prenom, contact?.nom].filter(Boolean).join(" ");
     const intitule = plan.nom || formation?.intitule || "Formation";
     const prixHT = Number(devis?.total_ht ?? 0);
-    const dureeH = Number(plan.duree_heures ?? formation?.duree_heures ?? 0);
+    const dureeH = Number(direct?.dureeH) > 0
+      ? Number(direct?.dureeH)
+      : Number(plan.duree_heures ?? formation?.duree_heures ?? 0);
     const formateur = String(body.formateur ?? sessions[0]?.formateur ?? formation?.formateur ?? "");
     const dateDebut = sessions[0]?.date_debut ?? null;
     const dateFin = sessions.at(-1)?.date_fin ?? sessions.at(-1)?.date_debut ?? null;
@@ -762,6 +766,7 @@ Deno.serve(async (req: Request) => {
         datesTexte: plan.dates_session || "",
         dureeH,
         jours,
+        nbJours: Number(direct?.nbJours) > 0 ? Number(direct?.nbJours) : undefined,
         horaires: String(body.horaires ?? "09h00 – 12h00 ; 13h00 – 17h00"),
         lieu: lieuSession,
         lieuTexte: String(body.lieu ?? "").trim() || undefined,

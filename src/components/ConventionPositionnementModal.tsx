@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileSignature, Loader as Loader2 } from 'lucide-react';
+import { FileSignature, Loader as Loader2, Sparkles, Wand as Wand2, Link2 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -8,8 +8,9 @@ import { Button, Modal, Field, SearchSelect } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
 import { fullName, formatDate } from '@/lib/utils';
+import { generatePlanPdf } from '@/lib/generatePlanPdf';
 import type {
-  Positionnement as Pos, Contact, Dossier, SessionFormation, Entreprise, Formation, PlanFormation,
+  Positionnement as Pos, Contact, Dossier, SessionFormation, Entreprise, Formation, PlanFormation, PlanPdf,
 } from '@/lib/database.types';
 
 /**
@@ -21,7 +22,17 @@ import type {
  *
  * Un plan de formation peut compléter la convention : ses objectifs, son
  * programme, sa durée et ses dates, sur mesure, priment sur le catalogue.
+ * Il peut aussi être rédigé par l'IA à partir des réponses cochées (Edge
+ * Function `plan-positionnement`) : le plan est enregistré, lié aux réponses
+ * (`positionnements.plan_id`), mis en PDF (`generate-plan`), puis sert à la
+ * convention — « Tout générer par l'IA » enchaîne les trois étapes.
  */
+
+type PlanIA = {
+  planId: string; nom: string; objectifs: string[]; duree_heures: number; nbJours: number;
+  modules: { titre: string; contenu: string; duree_heures: number }[]; justification: string;
+};
+const nombre = (s: string) => Number(s.replace(/\s/g, '').replace(',', '.')) || null;
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -33,11 +44,15 @@ function plusFrequent(valeurs: (string | null | undefined)[]): string {
 }
 
 export default function ConventionPositionnementModal({
-  open, onClose, repondants, contacts, dossiers, sessions,
+  open, onClose, repondants, positionnements, onLie, contacts, dossiers, sessions,
 }: {
   open: boolean;
   onClose: () => void;
   repondants: Pos[];
+  /** Toutes les réponses : pour montrer celles déjà liées au plan choisi. */
+  positionnements: Pos[];
+  /** Appelé quand des réponses ont été liées à un plan. */
+  onLie?: () => void;
   contacts: Contact[];
   dossiers: Dossier[];
   sessions: SessionFormation[];
@@ -46,6 +61,7 @@ export default function ConventionPositionnementModal({
   const entreprises = useCollection<Entreprise>('entreprises', { orderBy: { column: 'raison_sociale', ascending: true } });
   const formations = useCollection<Formation>('formations', { orderBy: { column: 'intitule', ascending: true } });
   const plans = useCollection<PlanFormation>('plans_formation', { orderBy: { column: 'created_at', ascending: false } });
+  const pdfs = useCollection<PlanPdf>('plan_pdfs', { orderBy: { column: 'created_at', ascending: false } });
 
   const [entrepriseId, setEntrepriseId] = useState('');
   const [organisation, setOrganisation] = useState('');
@@ -57,6 +73,14 @@ export default function ConventionPositionnementModal({
   // Saisie libre, pré-remplie depuis la session choisie.
   const [lieu, setLieu] = useState('');
   const [formateur, setFormateur] = useState('');
+  // Durée imprimée dans la convention (et imposée à l'IA pour le plan).
+  const [dureeH, setDureeH] = useState('');
+  const [nbJours, setNbJours] = useState('');
+  const [consignes, setConsignes] = useState('');
+  const [avecPdfPlan, setAvecPdfPlan] = useState(true);
+  const [etape, setEtape] = useState<string | null>(null);
+  const [planIA, setPlanIA] = useState<PlanIA | null>(null);
+  const [avertissement, setAvertissement] = useState<string | null>(null);
   const [retenus, setRetenus] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -70,6 +94,7 @@ export default function ConventionPositionnementModal({
   useEffect(() => {
     if (!open) return;
     setResultat(null); setErreur(null); setSignataireId(''); setPrix(''); setPlanId('');
+    setNbJours(''); setConsignes(''); setPlanIA(null); setAvertissement(null);
     setRetenus(new Set(repondants.map((p) => p.id)));
 
     // Entreprise : celle des contacts du CRM si elle est unique, sinon
@@ -86,6 +111,8 @@ export default function ConventionPositionnementModal({
     const parIntitule = formations.data.find((f) => intitule && norm(f.intitule) === norm(intitule));
     const formation = depuisDossiers || parIntitule?.id || '';
     setFormationId(formation);
+    const f = formations.data.find((x) => x.id === formation);
+    setDureeH(f?.duree_heures ? String(f.duree_heures) : '');
     choisirSession(plusFrequent(repondants.map((p) => p.session_id)));
 
     // Plan : proposé d'office s'il est le seul de cette entreprise sur cette formation.
@@ -95,6 +122,7 @@ export default function ConventionPositionnementModal({
     if (candidats.length === 1) {
       setPlanId(candidats[0].id);
       if (candidats[0].contact_id) setSignataireId(candidats[0].contact_id);
+      if (candidats[0].duree_heures) setDureeH(String(candidats[0].duree_heures));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, repondants, entreprises.data.length, formations.data.length, plans.data.length]);
@@ -115,6 +143,22 @@ export default function ConventionPositionnementModal({
     if (p.formation_id) setFormationId(p.formation_id);
     if (p.entreprise_id) setEntrepriseId(p.entreprise_id);
     if (p.contact_id) setSignataireId(p.contact_id);
+    if (p.duree_heures) setDureeH(String(p.duree_heures));
+  };
+
+  /** Changer de formation reprend sa durée, sauf si un plan fixe déjà la sienne. */
+  const choisirFormation = (id: string) => {
+    setFormationId(id);
+    const f = formations.data.find((x) => x.id === id);
+    if (!planId && f?.duree_heures) setDureeH(String(f.duree_heures));
+  };
+
+  /** Lie les réponses cochées au plan : on retrouve ensuite d'où vient le plan. */
+  const lierReponses = async (pid: string) => {
+    const ids = choisis.map((p) => p.id);
+    if (!pid || !ids.length) return;
+    const { error } = await supabase.from('positionnements').update({ plan_id: pid }).in('id', ids);
+    if (!error) onLie?.();
   };
 
   const choisis = repondants.filter((p) => retenus.has(p.id));
@@ -147,7 +191,8 @@ export default function ConventionPositionnementModal({
     .filter((c) => !entrepriseId || c.entreprise_id === entrepriseId)
     .map((c) => ({ value: c.id, label: fullName(c.prenom, c.nom), sub: c.fonction ?? undefined }));
 
-  const generer = async () => {
+  const generer = async (planForce?: string) => {
+    const pid = planForce ?? planId;
     if (!choisis.length) { setErreur('Cochez au moins un stagiaire.'); return; }
     if (!entrepriseId && !organisation.trim()) { setErreur("Indiquez l'entreprise cocontractante."); return; }
     if (!formationId) { setErreur('Choisissez la formation du catalogue.'); return; }
@@ -162,7 +207,8 @@ export default function ConventionPositionnementModal({
             entrepriseId: entrepriseId || null,
             organisation: entrepriseId ? null : organisation.trim(),
             formationId, sessionId: sessionId || null, contactId: signataireId || null,
-            planId: planId || null,
+            planId: pid || null,
+            dureeH: nombre(dureeH), nbJours: nombre(nbJours),
             dossierIds: cibles.map((d) => d.id),
             stagiaires: choisis.map(nomDe),
             prix: Number(prix.replace(/\s/g, '').replace(',', '.')) || null,
@@ -173,12 +219,102 @@ export default function ConventionPositionnementModal({
       const res = data as { error?: string; fichier_url?: string; titre?: string; effectif?: number } | null;
       if (res?.error) throw new Error(res.error);
       setResultat({ fichier_url: res?.fichier_url ?? '', titre: res?.titre ?? 'Convention', effectif: res?.effectif ?? choisis.length });
+      if (pid) await lierReponses(pid);
+      pdfs.refresh();
     } catch (e) {
       setErreur(`Génération impossible : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
   };
+
+  /**
+   * Plan rédigé par l'IA d'après les réponses cochées, puis (option) son PDF
+   * et la convention. Un nouveau plan est toujours créé : un plan existant,
+   * peut-être retouché à la main, n'est jamais écrasé.
+   */
+  const genererPlanIA = async (puisConvention: boolean) => {
+    if (!choisis.length) { setErreur('Cochez au moins un répondant.'); return; }
+    if (!formationId) { setErreur('Choisissez la formation du catalogue.'); return; }
+    if (puisConvention && !entrepriseId && !organisation.trim()) { setErreur("Indiquez l'entreprise cocontractante."); return; }
+    setBusy(true); setErreur(null); setAvertissement(null);
+    try {
+      setEtape("Rédaction du plan par l'IA d'après le positionnement…");
+      const modaliteSession = sessions.find((s) => s.id === sessionId)?.modalite;
+      const { data, error } = await supabase.functions.invoke('plan-positionnement', {
+        body: {
+          formationId, positionnementIds: choisis.map((p) => p.id),
+          entrepriseId: entrepriseId || null, contactId: signataireId || null,
+          dureeH: nombre(dureeH), nbJours: nombre(nbJours), modalite: modaliteSession,
+          datesSession: planChoisi?.dates_session ?? null, consignes: consignes.trim() || undefined,
+          userId: session?.user.id ?? null,
+        },
+      });
+      if (error) throw new Error(await functionErrorMessage(error));
+      const res = data as (PlanIA & { error?: string }) | null;
+      if (!res || res.error) throw new Error(res?.error ?? 'Réponse vide');
+      setPlanIA(res); setPlanId(res.planId); setDureeH(String(res.duree_heures));
+      plans.refresh(); onLie?.();
+
+      if (avecPdfPlan) {
+        setEtape("Mise en forme du plan en PDF par l'IA (1 à 2 minutes)…");
+        const orga = entreprise?.raison_sociale || organisation.trim();
+        try {
+          await generatePlanPdf({
+            planId: res.planId,
+            contexte: {
+              nom: res.nom, objectifs: res.objectifs, duree_heures: res.duree_heures,
+              contenu: res.modules.map((m) => `${m.titre} (${m.duree_heures} h) — ${m.contenu}`),
+              modalite: modaliteSession ?? 'presentiel', dates_session: planChoisi?.dates_session ?? null,
+              formation: formations.data.find((f) => f.id === formationId)?.intitule,
+              apprenant: choisis.map(nomDe).join(', '), organisme: orga,
+              positionnement: {
+                justification: res.justification,
+                participants: choisis.map((p) => ({ nom: nomDe(p), niveau: p.niveau, reussite_pct: p.pct })),
+              },
+            },
+            apprenant: choisis.length === 1 ? nomDe(choisis[0]) : `${choisis.length} stagiaires`,
+            organismePartenaire: orga,
+            datesSession: planChoisi?.dates_session ?? null,
+            clientSiret: entreprise?.siret ?? null,
+            userId: session?.user.id ?? null,
+            contactId: signataireId || null, entrepriseId: entrepriseId || null,
+          });
+          pdfs.refresh();
+        } catch (e) {
+          // Le plan est enregistré : la convention peut se faire sans son PDF.
+          setAvertissement(`PDF du plan non produit : ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      if (puisConvention) {
+        setEtape('Génération de la convention…');
+        await generer(res.planId);
+      }
+    } catch (e) {
+      setErreur(`Plan IA impossible : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(false); setEtape(null);
+    }
+  };
+
+  // Réponses et documents déjà rattachés au plan choisi.
+  const reponsesLiees = planId ? positionnements.filter((p) => p.plan_id === planId) : [];
+  const documentsPlan = planId ? pdfs.data.filter((d) => d.plan_id === planId) : [];
+  const blocLiens = planId && (reponsesLiees.length > 0 || documentsPlan.length > 0) && (
+    <div className="rounded-lg border border-line bg-surface-2/50 p-3 text-xs">
+      <p className="mb-1 flex items-center gap-1 font-semibold text-fg"><Link2 className="h-3.5 w-3.5" /> Lié au plan « {planChoisi?.nom ?? planIA?.nom} »</p>
+      {reponsesLiees.length > 0 && (
+        <p className="text-muted">Positionnements : {reponsesLiees.map((p) => `${p.nom}${p.niveau ? ` (${p.niveau})` : ''}`).join(', ')}</p>
+      )}
+      {documentsPlan.map((d) => (
+        <div key={d.id} className="mt-1 flex items-center gap-2">
+          <span className="flex-1 truncate text-fg">{d.kind === 'convention' ? 'Convention' : 'Plan'} · {d.titre}</span>
+          {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <Modal
@@ -187,9 +323,19 @@ export default function ConventionPositionnementModal({
         <>
           <Button variant="secondary" onClick={onClose}>Fermer</Button>
           {!resultat && (
-            <Button onClick={generer} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSignature className="h-4 w-4" />} Générer la convention
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => genererPlanIA(false)} disabled={busy}
+                title="Rédige un plan adapté aux réponses cochées, sans générer la convention">
+                <Sparkles className="h-4 w-4" /> Plan par l'IA
+              </Button>
+              <Button variant="secondary" onClick={() => genererPlanIA(true)} disabled={busy}
+                title="Plan adapté au positionnement, son PDF, puis la convention">
+                <Wand2 className="h-4 w-4" /> Tout générer par l'IA
+              </Button>
+              <Button onClick={() => generer()} disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSignature className="h-4 w-4" />} Générer la convention
+              </Button>
+            </>
           )}
         </>
       }
@@ -213,10 +359,18 @@ export default function ConventionPositionnementModal({
             </span>
           </div>
           <p className="text-xs text-muted">Elle figure aussi dans les PDF générés de la page Plans de formation.</p>
+          {avertissement && <p className="text-xs text-amber-600 dark:text-amber-400">{avertissement}</p>}
+          {blocLiens}
         </div>
       ) : (
         <div className="space-y-4">
           {erreur && <div className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{erreur}</div>}
+          {etape && (
+            <div className="flex items-center gap-2 rounded-lg bg-brand-500/10 px-3 py-2 text-sm text-fg">
+              <Loader2 className="h-4 w-4 animate-spin text-brand-500" /> {etape}
+            </div>
+          )}
+          {avertissement && <p className="text-xs text-amber-600 dark:text-amber-400">{avertissement}</p>}
 
           <Field label={`Stagiaires (${choisis.length}/${repondants.length})`} hint="Répondants au test repris dans l'effectif de la convention.">
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
@@ -263,10 +417,37 @@ export default function ConventionPositionnementModal({
             </p>
           )}
 
+          {blocLiens}
+          {planIA && planIA.planId === planId && (
+            <div className="rounded-lg border border-brand-400/40 bg-brand-500/5 p-3 text-xs">
+              <p className="mb-1 font-semibold text-fg">Plan rédigé par l'IA · {planIA.duree_heures} h · {planIA.modules.length} modules</p>
+              <ul className="mb-1 list-disc pl-4 text-fg">
+                {planIA.modules.map((m, i) => <li key={i}>{m.titre} ({m.duree_heures} h)</li>)}
+              </ul>
+              {planIA.justification && <p className="text-muted">{planIA.justification}</p>}
+              <p className="mt-1 text-muted">Modifiable dans Plans de formation avant de générer la convention.</p>
+            </div>
+          )}
+
           <Field label="Formation" required>
-            <SearchSelect value={formationId} onChange={setFormationId} options={optionsFormations}
+            <SearchSelect value={formationId} onChange={choisirFormation} options={optionsFormations}
               emptyLabel="Choisir…" placeholder="Rechercher une formation…" />
           </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Durée de la formation (heures)" hint="Imprimée dans la convention et imposée à l'IA pour le plan.">
+              <input className="input" inputMode="decimal" value={dureeH} onChange={(e) => setDureeH(e.target.value)} placeholder="ex. 21" />
+            </Field>
+            <Field label="Nombre de jours" hint="Vide : jours planifiés de la session, sinon durée ÷ 7.">
+              <input className="input" inputMode="numeric" value={nbJours} onChange={(e) => setNbJours(e.target.value)} placeholder="ex. 3" />
+            </Field>
+          </div>
+          <Field label="Consignes pour l'IA" hint="Facultatif — ex. insister sur la conformité RGPD, public de commerciaux.">
+            <textarea className="input min-h-[60px]" value={consignes} onChange={(e) => setConsignes(e.target.value)} />
+          </Field>
+          <label className="-mt-2 flex items-center gap-2 text-xs text-muted">
+            <input type="checkbox" checked={avecPdfPlan} onChange={(e) => setAvecPdfPlan(e.target.checked)} />
+            Produire aussi le PDF du plan (1 à 2 minutes de plus)
+          </label>
           {(() => {
             const f = formations.data.find((x) => x.id === formationId);
             const suggestion = f?.prix ? Number(f.prix) * choisis.length : 0;

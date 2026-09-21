@@ -14,6 +14,7 @@ import {
 import PositionnementForm from '@/components/PositionnementForm';
 import PositionnementResultat from '@/components/PositionnementResultat';
 import ConventionPositionnementModal from '@/components/ConventionPositionnementModal';
+import { FileLink } from '@/components/FileUpload';
 import {
   noter, construireSynthese, reponsesVides, niveauDe,
   type Reponses, type Score,
@@ -21,7 +22,7 @@ import {
 import { formatDate, fullName, cn } from '@/lib/utils';
 import type {
   Positionnement as Pos, PositionnementLien, PositionnementStatut,
-  Contact, Dossier, SessionFormation, Profile,
+  Contact, Dossier, SessionFormation, Profile, PlanFormation, PlanPdf,
 } from '@/lib/database.types';
 
 /**
@@ -68,6 +69,9 @@ export default function Positionnement() {
   const dossiers = useCollection<Dossier>('dossiers');
   const sessions = useCollection<SessionFormation>('sessions_formation');
   const profiles = useCollection<Profile>('profiles');
+  // Plan rédigé d'après un positionnement, et ses documents (plan PDF, convention).
+  const plans = useCollection<PlanFormation>('plans_formation');
+  const plansPdf = useCollection<PlanPdf>('plan_pdfs', { orderBy: { column: 'created_at', ascending: false } });
 
   const [onglet, setOnglet] = useState<Onglet>('reponses');
   // Répondants cochés → convention de formation générée pour eux.
@@ -700,6 +704,28 @@ export default function Positionnement() {
 
             <PositionnementResultat score={scoreDe(vue)} synthese={vue.synthese ?? construireSynthese(vue.reponses as unknown as Reponses, scoreDe(vue))} />
 
+            {(() => {
+              // Plan de formation fondé sur ce positionnement, et ses documents.
+              const pid = reponses.data.find((r) => r.id === vue.id)?.plan_id ?? vue.plan_id;
+              const plan = pid ? plans.data.find((x) => x.id === pid) : null;
+              if (!pid) return null;
+              const docs = plansPdf.data.filter((d) => d.plan_id === pid);
+              return (
+                <div className="rounded-xl border border-line p-4">
+                  <p className="text-sm font-semibold text-fg">Plan de formation lié</p>
+                  <p className="mt-1 text-sm text-muted">
+                    {plan ? `${plan.nom} · ${plan.duree_heures} h · ${plan.contenu?.length ?? 0} module(s)` : 'Plan introuvable (supprimé ?)'}
+                  </p>
+                  {docs.map((d) => (
+                    <div key={d.id} className="mt-1 flex items-center gap-2 text-sm">
+                      <span className="flex-1 truncate text-fg">{d.kind === 'convention' ? 'Convention' : 'Plan'} · {d.titre}</span>
+                      {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
             <div className="rounded-xl border border-line p-4">
               <p className="text-sm font-semibold text-fg">Dossier client</p>
               {vue.document_id ? (
@@ -732,7 +758,9 @@ export default function Positionnement() {
 
       <ConventionPositionnementModal
         open={conventionOpen} onClose={() => setConventionOpen(false)}
-        repondants={repondantsChoisis} contacts={contacts.data}
+        repondants={repondantsChoisis} positionnements={reponses.data}
+        onLie={() => { reponses.refresh(); plans.refresh(); plansPdf.refresh(); }}
+        contacts={contacts.data}
         dossiers={dossiers.data} sessions={sessions.data}
       />
     </div>
