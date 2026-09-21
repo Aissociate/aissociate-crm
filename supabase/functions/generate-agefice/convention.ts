@@ -36,6 +36,21 @@ export type ConventionCtx = {
   effectif: string[];
   /** Coût total net de taxes ; null → à compléter. */
   prix: number | null;
+  /** Public concerné, imprimé sous l'intitulé (formation sur mesure). */
+  publicVise?: string;
+  /** Besoins issus du recueil / positionnement, en puces à l'article 1. */
+  besoins?: { titre: string; lignes: string[] };
+  /** Synthèse du recueil des besoins, en tête d'annexe avant le programme. */
+  recueil?: { titre: string; lignes: string[] }[];
+  /**
+   * Fiche descriptive du programme (Qualiopi, indicateur 1) : public, prérequis,
+   * accès, méthodes, évaluation, accessibilité, indicateurs… en tête d'annexe.
+   */
+  ficheProgramme?: { libelle: string; valeur: string }[];
+  /** Date de signature (« Fait à … le … ») ; vide → pointillés. */
+  faitLe?: string;
+  /** Image PNG/JPG de la signature de l'organisme, apposée sous son bloc. */
+  signatureOrganisme?: Uint8Array;
 };
 
 // Polices standard = encodage WinAnsi : on garde accents, €, tirets et
@@ -265,10 +280,15 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   article("Article 1 – Objet de la convention");
   para("La présente convention a pour objet la réalisation d'une action de formation professionnelle continue, au sens de l'article L.6313-1 du Code du travail, dont l'intitulé est :", { apres: 8 });
   encadre(`« ${c.intitule} »`);
+  if (c.publicVise) para([{ t: "Public concerné : ", b: true }, { t: c.publicVise }], { apres: 8 });
   if (objectifs.length) {
     para([{ t: "Objectifs de la formation :", b: true }], { apres: 6 });
     para(`À l'issue de la formation, ${n > 1 ? "les bénéficiaires seront capables" : "le bénéficiaire sera capable"} de :`, { apres: 6 });
     puces(objectifs);
+  }
+  if (c.besoins?.lignes.length) {
+    para([{ t: c.besoins.titre, b: true }], { apres: 6 });
+    puces(c.besoins.lignes);
   }
 
   article("Article 2 – Nature, durée et organisation de l'action");
@@ -326,7 +346,7 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   para("En cas de litige, le tribunal compétent est celui du ressort du siège de l'Organisme de formation.", { apres: 14 });
 
   place(110);
-  para(`Fait en 2 exemplaires originaux à ${org.ville || "……………………………"} le ……………………………`, { apres: 22 });
+  para(`Fait en 2 exemplaires originaux à ${org.ville || "……………………………"} le ${c.faitLe || "……………………………"}`, { apres: 22 });
   const col2 = W / 2 + 10;
   const deuxColonnes = (g: Run, d: Run, size = 10.5) => {
     page.drawText(txt(g.t), { x: M, y: y - size, size, font: fonte(g), color: ink });
@@ -336,6 +356,20 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   deuxColonnes({ t: "Pour l'Organisme de formation", b: true }, { t: "Pour le Client / Bénéficiaire", b: true });
   deuxColonnes({ t: "Nom, qualité, signature" }, { t: "Nom, qualité, signature, cachet" });
   if (responsable || c.representantEntreprise) deuxColonnes({ t: responsable, i: true }, { t: c.representantEntreprise, i: true }, 9.5);
+  // Signature de l'organisme : proportions conservées, plafonnée pour tenir
+  // dans sa colonne sans écraser le bloc (une image scannée peut être énorme).
+  if (c.signatureOrganisme?.length) {
+    const b = c.signatureOrganisme;
+    const img = b[0] === 0x89 && b[1] === 0x50 ? await pdf.embedPng(b)
+      : b[0] === 0xff && b[1] === 0xd8 ? await pdf.embedJpg(b) : null;
+    if (img) {
+      const echelle = Math.min(150 / img.width, 60 / img.height);
+      const w = img.width * echelle, h = img.height * echelle;
+      place(h + 8);
+      page.drawImage(img, { x: M, y: y - h - 4, width: w, height: h });
+      y -= h + 8;
+    }
+  }
 
   // ═══ Annexe : programme détaillé ═══
   if (modules.length) {
@@ -343,7 +377,20 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
     para([{ t: "ANNEXE – PROGRAMME DE LA FORMATION", b: true }], { size: 12, centre: true, apres: 4 });
     para([{ t: `Convention n° ${c.numero}`, i: true }], { size: 9.5, centre: true, apres: 12 });
     encadre(`« ${c.intitule} »`);
-    if (c.dureeH) para(`Durée : ${c.dureeH} heures`, { apres: 10 });
+    if (c.ficheProgramme?.length) {
+      // Fiche descriptive : « libellé : valeur », libellé en gras.
+      for (const l of c.ficheProgramme) para([{ t: `${l.libelle} : `, b: true }, { t: l.valeur }], { size: 9.5, apres: 3 });
+      espace(8);
+    } else if (c.dureeH) para(`Durée : ${c.dureeH} heures`, { apres: 10 });
+    // Formation sur mesure : ce que le recueil des besoins a établi, puis le
+    // programme qui en découle.
+    for (const bloc of c.recueil ?? []) {
+      if (!bloc.lignes.length) continue;
+      place(40);
+      para([{ t: bloc.titre, b: true }], { apres: 3 });
+      puces(bloc.lignes, 9.5);
+    }
+    if (c.recueil?.length) { place(40); para([{ t: "Programme de la journée", b: true }], { size: 11.5, apres: 6 }); }
     for (const m of modules) {
       if (m.titre) { place(40); para([{ t: m.titre, b: true }], { apres: 3 }); }
       if (m.contenu) para(m.contenu, { indent: 12, apres: 10 });
