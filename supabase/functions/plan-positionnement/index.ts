@@ -108,6 +108,14 @@ Deno.serve(async (req: Request) => {
       ? (await sb.from("entreprises").select("raison_sociale, secteur, effectif, naf").eq("id", body.entrepriseId).maybeSingle()).data
       : null;
 
+    // Contact du plan : seulement un membre de l'entreprise (jamais un prospect
+    // étranger, qui finirait « représentant » dans la convention).
+    let contactId: string | null = body.contactId ?? null;
+    if (contactId && body.entrepriseId) {
+      const { data: ct } = await sb.from("contacts").select("entreprise_id").eq("id", contactId).maybeSingle();
+      if (ct?.entreprise_id !== body.entrepriseId) contactId = null;
+    }
+
     const dureeH = Number(body.dureeH) > 0 ? Number(body.dureeH) : Number(formation.duree_heures ?? 0);
     const nbJours = Number(body.nbJours) > 0 ? Number(body.nbJours) : (dureeH ? Math.ceil(dureeH / 7) : 0);
 
@@ -188,7 +196,7 @@ Deno.serve(async (req: Request) => {
       nom: String(plan.nom || `Plan — ${formation.intitule}`).slice(0, 200),
       formation_id: formationId,
       entreprise_id: body.entrepriseId ?? null,
-      contact_id: body.contactId ?? null,
+      contact_id: contactId,
       objectifs: objectifs.join(" ; "),
       contenu: modules.map((m, i) => `${m.titre}${dureeH ? ` (${fmtH(heures[i])})` : ""} — ${m.contenu}`.trim()),
       duree_heures: dureeH,

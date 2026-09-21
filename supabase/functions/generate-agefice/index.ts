@@ -157,7 +157,9 @@ Deno.serve(async (req: Request) => {
           modalite: null, dates_session: null, objectifs: null,
           ...(planChoisi ?? {}),
           formation_id: direct.formationId ?? planChoisi?.formation_id ?? null,
-          contact_id: direct.contactId ?? planChoisi?.contact_id ?? null,
+          // Signataire : uniquement celui choisi à l'écran. Le contact du plan est
+          // souvent un prospect étranger à l'entreprise cocontractante.
+          contact_id: direct.contactId ?? null,
           // « Aucune entreprise » + organisation déclarée : le choix de l'écran prime.
           entreprise_id: direct.entrepriseId ?? (direct.organisation ? null : planChoisi?.entreprise_id ?? null),
           dossier_id: planChoisi?.dossier_id ?? direct.dossierIds?.[0] ?? null,
@@ -739,7 +741,11 @@ Deno.serve(async (req: Request) => {
 
       const modaliteSession = String(sessions[0]?.modalite ?? "");
       const civ = String(contact?.civilite ?? "").trim();
-      const representantEntreprise = contact
+      // « Représentée par » : seulement un contact rattaché à l'entreprise
+      // cocontractante (ou, sans entreprise au CRM, le signataire choisi).
+      const representeLEntreprise = !!contact
+        && (entreprise?.id ? contact.entreprise_id === entreprise.id : !!direct?.contactId);
+      const representantEntreprise = representeLEntreprise
         ? [/^(mme|madame)/i.test(civ) ? "Madame" : civ ? "Monsieur" : "", contact.prenom, String(contact.nom ?? "").toUpperCase()]
           .filter(Boolean).join(" ") + (contact.fonction ? `, ${contact.fonction}` : "")
         : "";

@@ -12,6 +12,7 @@ import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
 import { formatDate, fullName } from '@/lib/utils';
 import { generatePlanPdf } from '@/lib/generatePlanPdf';
 import { ensureDossierClient } from '@/lib/dossierClient';
+import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Financeur, PlanPdf, Dossier } from '@/lib/database.types';
 
 const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
@@ -56,6 +57,10 @@ export default function PlansFormation() {
   const financeurs = useCollection<Financeur>('financeurs');
   const pdfs = useCollection<PlanPdf>('plan_pdfs', { orderBy: { column: 'created_at', ascending: false } });
   const dossiers = useCollection<Dossier>('dossiers');
+  // Documents et plans produits ailleurs (écran Positionnement, IA) : la liste
+  // se met à jour sans recharger la page.
+  useRealtimeRefresh('plan_pdfs', pdfs.refresh);
+  useRealtimeRefresh('plans_formation', refresh);
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<PlanFormation>>(empty());

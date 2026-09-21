@@ -87,6 +87,13 @@ export default function ConventionPositionnementModal({
   const [resultat, setResultat] = useState<{ fichier_url: string; titre: string; effectif: number } | null>(null);
 
   const contactDe = (p: Pos) => contacts.find((c) => c.id === p.contact_id) ?? null;
+  /**
+   * Le signataire représente l'entreprise : un contact n'est repris (depuis un
+   * plan) que s'il est rattaché à cette entreprise. Le contact d'un plan est
+   * souvent un prospect sans lien avec elle.
+   */
+  const membreDe = (contactId: string | null | undefined, entId: string | null | undefined) =>
+    !!contactId && !!entId && contacts.find((c) => c.id === contactId)?.entreprise_id === entId;
   /** Nom porté sur la convention : celui du CRM si le répondant y est, sinon le nom déclaré. */
   const nomDe = (p: Pos) => { const c = contactDe(p); return c ? fullName(c.prenom, c.nom) : p.nom; };
 
@@ -117,11 +124,12 @@ export default function ConventionPositionnementModal({
 
     // Plan : proposé d'office s'il est le seul de cette entreprise sur cette formation.
     const entrepriseRetenue = entContacts.length === 1 ? entContacts[0] : parNom?.id ?? '';
-    const candidats = plans.data.filter((p) => formation && p.formation_id === formation
-      && (!entrepriseRetenue || p.entreprise_id === entrepriseRetenue));
+    const candidats = entrepriseRetenue
+      ? plans.data.filter((p) => formation && p.formation_id === formation && p.entreprise_id === entrepriseRetenue)
+      : [];
     if (candidats.length === 1) {
       setPlanId(candidats[0].id);
-      if (candidats[0].contact_id) setSignataireId(candidats[0].contact_id);
+      if (membreDe(candidats[0].contact_id, entrepriseRetenue)) setSignataireId(candidats[0].contact_id!);
       if (candidats[0].duree_heures) setDureeH(String(candidats[0].duree_heures));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,9 +149,16 @@ export default function ConventionPositionnementModal({
     const p = plans.data.find((x) => x.id === id);
     if (!p) return;
     if (p.formation_id) setFormationId(p.formation_id);
+    const ent = p.entreprise_id || entrepriseId;
     if (p.entreprise_id) setEntrepriseId(p.entreprise_id);
-    if (p.contact_id) setSignataireId(p.contact_id);
+    setSignataireId(membreDe(p.contact_id, ent) ? p.contact_id! : membreDe(signataireId, ent) ? signataireId : '');
     if (p.duree_heures) setDureeH(String(p.duree_heures));
+  };
+
+  /** Changer d'entreprise écarte un signataire qui n'en fait pas partie. */
+  const choisirEntreprise = (id: string) => {
+    setEntrepriseId(id);
+    if (!membreDe(signataireId, id)) setSignataireId('');
   };
 
   /** Changer de formation reprend sa durée, sauf si un plan fixe déjà la sienne. */
@@ -392,7 +407,7 @@ export default function ConventionPositionnementModal({
           </Field>
 
           <Field label="Entreprise cocontractante" hint="Sans entreprise au CRM, l'organisation déclarée est reprise telle quelle.">
-            <SearchSelect value={entrepriseId} onChange={setEntrepriseId} options={optionsEntreprises}
+            <SearchSelect value={entrepriseId} onChange={choisirEntreprise} options={optionsEntreprises}
               emptyLabel="Aucune (organisation déclarée)" placeholder="Rechercher une entreprise…" />
           </Field>
           {!entrepriseId && (

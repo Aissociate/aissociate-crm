@@ -234,7 +234,10 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   const responsable = [civ(r.civilite), r.prenom, (r.nom ?? "").toUpperCase()].filter(Boolean).join(" ")
     + (r.qualite ? `, ${r.qualite}` : "");
   const ent = c.entreprise;
-  const adresseEnt = ent ? [ent.adresse, [ent.code_postal, ent.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "";
+  const net = (s?: string | null) => (s ?? "").trim().replace(/^[\s,;]+|[\s,;]+$/g, "");
+  const adresseEnt = ent
+    ? [net(ent.adresse), [net(ent.code_postal), net(ent.ville)].filter(Boolean).join(" ")].filter(Boolean).join(", ")
+    : "";
   const objectifs = (c.objectifs ?? "").split(/[;\n]+/).map((s) => s.trim().replace(/\.$/, "")).filter(Boolean)
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
   const modules = c.programme.map(module).filter((m) => m.titre || m.contenu);
