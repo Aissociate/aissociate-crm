@@ -111,13 +111,36 @@ Deno.serve(async (req: Request) => {
     const planId: string | undefined = body.planId;
     const type = (body.type ?? "demande") as TypeDoc;
     const userId: string | null = body.userId ?? null;
-    if (!planId) return json({ error: "planId manquant" }, 400);
+    // Mode direct (écran Positionnement) : convention sans plan, l'effectif est
+    // choisi parmi les répondants au test, rattachés ou non à une entreprise.
+    type Direct = {
+      entrepriseId?: string | null; organisation?: string | null;
+      formationId?: string | null; intitule?: string | null;
+      contactId?: string | null; sessionId?: string | null;
+      dossierIds?: string[]; stagiaires?: string[];
+    };
+    const direct: Direct | null = body.direct ?? null;
+    if (!planId && !direct) return json({ error: "planId manquant" }, 400);
     if (!TYPES.includes(type)) return json({ error: `type inconnu (${TYPES.join(" | ")})` }, 400);
+    if (direct && type !== "convention") return json({ error: "Sans plan, seule la convention est générable" }, 400);
 
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     // ── Contexte commun ──
-    const { data: plan } = await sb.from("plans_formation").select("*").eq("id", planId).maybeSingle();
+    // En mode direct, un plan « virtuel » porte les mêmes champs : durée,
+    // contenu et modalité retombent sur la formation du catalogue.
+    // deno-lint-ignore no-explicit-any
+    const planDirect: Record<string, any> | null = direct
+      ? {
+          nom: direct.intitule ?? "", formation_id: direct.formationId ?? null,
+          contact_id: direct.contactId ?? null, entreprise_id: direct.entrepriseId ?? null,
+          dossier_id: direct.dossierIds?.[0] ?? null, contenu: null, duree_heures: null,
+          modalite: null, dates_session: null, objectifs: null,
+      }
+      : null;
+    const { data: plan } = planDirect
+      ? { data: planDirect }
+      : await sb.from("plans_formation").select("*").eq("id", planId).maybeSingle();
     if (!plan) return json({ error: "Plan de formation introuvable" }, 404);
 
     const { data: contact } = plan.contact_id
@@ -130,10 +153,23 @@ Deno.serve(async (req: Request) => {
     }
     const { data: formation } = plan.formation_id
       ? await sb.from("formations").select("*").eq("id", plan.formation_id).maybeSingle() : { data: null };
+    if (direct) {
+      plan.nom = plan.nom || formation?.intitule || "";
+      plan.contenu = formation?.programme ?? [];
+      plan.modalite = formation?.modalite ?? "presentiel";
+      // Répondant hors base : l'organisation déclarée tient lieu d'entreprise.
+      if (!entreprise && direct.organisation) entreprise = { raison_sociale: direct.organisation };
+    }
     // Prix : devis du même dossier, à défaut celui du contact — le plus récent.
     let devis = null;
     if (plan.dossier_id) {
       const r = await sb.from("devis").select("*").eq("dossier_id", plan.dossier_id)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      devis = r.data;
+    }
+    for (const id of direct?.dossierIds?.slice(1) ?? []) {
+      if (devis) break;
+      const r = await sb.from("devis").select("*").eq("dossier_id", id)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       devis = r.data;
     }
@@ -147,6 +183,11 @@ Deno.serve(async (req: Request) => {
     if (plan.dossier_id) {
       const r = await sb.from("sessions_formation")
         .select("id, date_debut, date_fin, lieu, formateur").eq("dossier_id", plan.dossier_id).order("date_debut");
+      sessions = r.data ?? [];
+    }
+    if (!sessions.length && direct?.sessionId) {
+      const r = await sb.from("sessions_formation")
+        .select("id, date_debut, date_fin, lieu, formateur").eq("id", direct.sessionId);
       sessions = r.data ?? [];
     }
 
@@ -213,7 +254,14 @@ Deno.serve(async (req: Request) => {
       [p.prenom, p.nom].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     let effectif: string[] = [];
 
-    if (type === "convention") {
+    if (direct) {
+      const vus = new Set<string>();
+      for (const brut of direct.stagiaires ?? []) {
+        const n = String(brut ?? "").replace(/ +/g, " ").trim();
+        if (n && !vus.has(n.toLowerCase())) { vus.add(n.toLowerCase()); effectif.push(n); }
+      }
+      effectif.sort((a, b) => a.localeCompare(b, "fr"));
+    } else if (type === "convention") {
       // Dossiers de l'entreprise sur cette formation → sessions « sûres ».
       const dossierIds = new Set<string>(plan.dossier_id ? [plan.dossier_id] : []);
       const contactsDossiers = new Set<string>(plan.contact_id ? [plan.contact_id] : []);
@@ -706,7 +754,7 @@ Deno.serve(async (req: Request) => {
     const cible = conventionEntreprise ? (entreprise?.raison_sociale || stagiaires) : (stagiaires || intitule);
     const titre = `${LIBELLE[type]} — ${cible}`;
     const { error: insErr } = await sb.from("plan_pdfs").insert({
-      plan_id: planId, titre, kind: type,
+      plan_id: planId ?? null, titre, kind: type,
       apprenant: stagiaires || null,
       organisme: entreprise?.raison_sociale ?? org.nom ?? null,
       fichier_url: chemin, created_by: userId,

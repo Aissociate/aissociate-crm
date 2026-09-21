@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck, Plus, Link2, Send, Eye, Trash2, FolderPlus, Users, UserPlus,
-  Loader as Loader2, Check, Ban, Copy,
+  Loader as Loader2, Check, Ban, Copy, FileSignature,
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui';
 import PositionnementForm from '@/components/PositionnementForm';
 import PositionnementResultat from '@/components/PositionnementResultat';
+import ConventionPositionnementModal from '@/components/ConventionPositionnementModal';
 import {
   noter, construireSynthese, reponsesVides, niveauDe,
   type Reponses, type Score,
@@ -69,6 +70,13 @@ export default function Positionnement() {
   const profiles = useCollection<Profile>('profiles');
 
   const [onglet, setOnglet] = useState<Onglet>('reponses');
+  // Répondants cochés → convention de formation générée pour eux.
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [conventionOpen, setConventionOpen] = useState(false);
+  const basculer = (id: string) => setSelection((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const repondantsChoisis = useMemo(
+    () => reponses.data.filter((p) => selection.has(p.id)), [reponses.data, selection],
+  );
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // Adresse d'expédition réelle (SMTP) pour la trace en Messagerie, comme
@@ -406,9 +414,25 @@ export default function Positionnement() {
             message="Créez un lien et diffusez-le, ou saisissez le positionnement d'un apprenant absent."
           />
         ) : (
+          <>
+          <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+            <span className="text-xs text-muted">
+              {selection.size ? `${selection.size} répondant(s) sélectionné(s)` : 'Cochez les répondants à reprendre dans une convention'}
+            </span>
+            <Button variant="secondary" disabled={!selection.size} onClick={() => setConventionOpen(true)}>
+              <FileSignature className="h-4 w-4" /> Générer la convention
+            </Button>
+          </div>
           <Table
             head={
               <tr>
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox" aria-label="Tout sélectionner"
+                    checked={selection.size > 0 && selection.size === reponses.data.length}
+                    onChange={(e) => setSelection(e.target.checked ? new Set(reponses.data.map((p) => p.id)) : new Set())}
+                  />
+                </th>
                 <th className="px-4 py-3">Apprenant</th>
                 <th className="px-4 py-3">Organisation</th>
                 <th className="px-4 py-3">Formation visée</th>
@@ -422,6 +446,9 @@ export default function Positionnement() {
           >
             {reponses.data.map((p) => (
               <tr key={p.id} className="hover:bg-surface-2/50">
+                <td className="px-4 py-3">
+                  <input type="checkbox" aria-label={`Sélectionner ${p.nom}`} checked={selection.has(p.id)} onChange={() => basculer(p.id)} />
+                </td>
                 <td className="px-4 py-3">
                   <p className="font-medium text-fg">{p.nom}</p>
                   <p className="text-xs text-muted">{p.email ?? p.poste ?? ''}</p>
@@ -452,6 +479,7 @@ export default function Positionnement() {
               </tr>
             ))}
           </Table>
+          </>
         )
       )}
 
@@ -701,6 +729,12 @@ export default function Positionnement() {
           </div>
         )}
       </Modal>
+
+      <ConventionPositionnementModal
+        open={conventionOpen} onClose={() => setConventionOpen(false)}
+        repondants={repondantsChoisis} contacts={contacts.data}
+        dossiers={dossiers.data} sessions={sessions.data}
+      />
     </div>
   );
 }
