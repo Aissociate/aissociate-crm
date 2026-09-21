@@ -9,7 +9,7 @@ import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
 import { fullName, formatDate } from '@/lib/utils';
 import type {
-  Positionnement as Pos, Contact, Dossier, SessionFormation, Entreprise, Formation,
+  Positionnement as Pos, Contact, Dossier, SessionFormation, Entreprise, Formation, PlanFormation,
 } from '@/lib/database.types';
 
 /**
@@ -18,6 +18,9 @@ import type {
  * alors l'organisation qu'ils ont déclarée. Le PDF est produit par l'Edge
  * Function `generate-agefice` en mode direct (sans plan de formation) et
  * rejoint la liste des PDF générés des Plans de formation.
+ *
+ * Un plan de formation peut compléter la convention : ses objectifs, son
+ * programme, sa durée et ses dates, sur mesure, priment sur le catalogue.
  */
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -42,6 +45,7 @@ export default function ConventionPositionnementModal({
   const { session } = useAuth();
   const entreprises = useCollection<Entreprise>('entreprises', { orderBy: { column: 'raison_sociale', ascending: true } });
   const formations = useCollection<Formation>('formations', { orderBy: { column: 'intitule', ascending: true } });
+  const plans = useCollection<PlanFormation>('plans_formation', { orderBy: { column: 'created_at', ascending: false } });
 
   const [entrepriseId, setEntrepriseId] = useState('');
   const [organisation, setOrganisation] = useState('');
@@ -49,6 +53,7 @@ export default function ConventionPositionnementModal({
   const [sessionId, setSessionId] = useState('');
   const [signataireId, setSignataireId] = useState('');
   const [prix, setPrix] = useState('');
+  const [planId, setPlanId] = useState('');
   const [retenus, setRetenus] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -61,7 +66,7 @@ export default function ConventionPositionnementModal({
   // Pré-remplissage à chaque ouverture, d'après les répondants choisis.
   useEffect(() => {
     if (!open) return;
-    setResultat(null); setErreur(null); setSignataireId(''); setPrix('');
+    setResultat(null); setErreur(null); setSignataireId(''); setPrix(''); setPlanId('');
     setRetenus(new Set(repondants.map((p) => p.id)));
 
     // Entreprise : celle des contacts du CRM si elle est unique, sinon
@@ -76,10 +81,30 @@ export default function ConventionPositionnementModal({
     const depuisDossiers = plusFrequent(repondants.map((p) => dossiers.find((d) => d.id === p.dossier_id)?.formation_id));
     const intitule = plusFrequent(repondants.map((p) => p.formation_intitule?.trim()));
     const parIntitule = formations.data.find((f) => intitule && norm(f.intitule) === norm(intitule));
-    setFormationId(depuisDossiers || parIntitule?.id || '');
+    const formation = depuisDossiers || parIntitule?.id || '';
+    setFormationId(formation);
     setSessionId(plusFrequent(repondants.map((p) => p.session_id)));
+
+    // Plan : proposé d'office s'il est le seul de cette entreprise sur cette formation.
+    const entrepriseRetenue = entContacts.length === 1 ? entContacts[0] : parNom?.id ?? '';
+    const candidats = plans.data.filter((p) => formation && p.formation_id === formation
+      && (!entrepriseRetenue || p.entreprise_id === entrepriseRetenue));
+    if (candidats.length === 1) {
+      setPlanId(candidats[0].id);
+      if (candidats[0].contact_id) setSignataireId(candidats[0].contact_id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, repondants, entreprises.data.length, formations.data.length]);
+  }, [open, repondants, entreprises.data.length, formations.data.length, plans.data.length]);
+
+  /** Choisir un plan reprend sa formation, son entreprise et son contact (signataire). */
+  const choisirPlan = (id: string) => {
+    setPlanId(id);
+    const p = plans.data.find((x) => x.id === id);
+    if (!p) return;
+    if (p.formation_id) setFormationId(p.formation_id);
+    if (p.entreprise_id) setEntrepriseId(p.entreprise_id);
+    if (p.contact_id) setSignataireId(p.contact_id);
+  };
 
   const choisis = repondants.filter((p) => retenus.has(p.id));
   const entreprise = entreprises.data.find((e) => e.id === entrepriseId) ?? null;
@@ -95,6 +120,16 @@ export default function ConventionPositionnementModal({
 
   const optionsEntreprises = entreprises.data.map((e) => ({ value: e.id, label: e.raison_sociale, sub: e.ville ?? undefined }));
   const optionsFormations = formations.data.map((f) => ({ value: f.id, label: f.intitule, sub: `${f.duree_heures} h` }));
+  const nomEntreprise = (id: string | null) => entreprises.data.find((e) => e.id === id)?.raison_sociale;
+  const intituleFormation = (id: string | null) => formations.data.find((f) => f.id === id)?.intitule;
+  // Plans de la formation retenue en premier, puis les autres.
+  const optionsPlans = [...plans.data]
+    .sort((a, b) => Number(b.formation_id === formationId) - Number(a.formation_id === formationId))
+    .map((p) => ({
+      value: p.id, label: p.nom,
+      sub: [nomEntreprise(p.entreprise_id), intituleFormation(p.formation_id), p.dates_session].filter(Boolean).join(' · ') || undefined,
+    }));
+  const planChoisi = plans.data.find((p) => p.id === planId) ?? null;
   const optionsSessions = sessions.map((s) => ({ value: s.id, label: s.titre, sub: formatDate(s.date_debut) }));
   // Signataire pour l'entreprise : de préférence un contact de l'entreprise.
   const optionsSignataires = contacts
@@ -114,6 +149,7 @@ export default function ConventionPositionnementModal({
             entrepriseId: entrepriseId || null,
             organisation: entrepriseId ? null : organisation.trim(),
             formationId, sessionId: sessionId || null, contactId: signataireId || null,
+            planId: planId || null,
             dossierIds: cibles.map((d) => d.id),
             stagiaires: choisis.map(nomDe),
             prix: Number(prix.replace(/\s/g, '').replace(',', '.')) || null,
@@ -199,6 +235,19 @@ export default function ConventionPositionnementModal({
           )}
           {entreprise && !entreprise.adresse && (
             <p className="text-xs text-muted">L'adresse de {entreprise.raison_sociale} n'est pas renseignée : elle restera à compléter sur la convention.</p>
+          )}
+
+          <Field label="Plan de formation" hint="Facultatif — complète la convention avec les objectifs, le programme, la durée et les dates du plan.">
+            <SearchSelect value={planId} onChange={choisirPlan} options={optionsPlans}
+              emptyLabel="Aucun (catalogue seul)" placeholder="Rechercher un plan…" />
+          </Field>
+          {planChoisi && (
+            <p className="-mt-2 text-xs text-muted">
+              {planChoisi.duree_heures ? `${planChoisi.duree_heures} h · ` : ''}{planChoisi.contenu?.length ?? 0} module(s)
+              {planChoisi.dates_session ? ` · ${planChoisi.dates_session}` : ''}
+              {planChoisi.formation_id && formationId && planChoisi.formation_id !== formationId
+                ? ' · attention : ce plan porte sur une autre formation' : ''}
+            </p>
           )}
 
           <Field label="Formation" required>

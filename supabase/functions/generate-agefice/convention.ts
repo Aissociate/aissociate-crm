@@ -23,6 +23,8 @@ export type ConventionCtx = {
   dureeH: number;
   /** Journées de formation (AAAA-MM-JJ). */
   jours: string[];
+  /** Dates saisies en clair sur le plan, à défaut de journées planifiées. */
+  datesTexte?: string;
   horaires: string;
   lieu: string;
   distanciel: boolean;
@@ -69,7 +71,9 @@ function module(x: unknown): { titre: string; contenu: string } {
     const o = x as Record<string, unknown>;
     return { titre: String(o.titre ?? o.title ?? ""), contenu: String(o.contenu ?? o.description ?? "") };
   }
-  return { titre: String(x ?? ""), contenu: "" };
+  // Ligne d'un plan : « Titre — contenu » (voir PlansFormation), sinon titre seul.
+  const [titre, ...reste] = String(x ?? "").split(" — ");
+  return { titre: titre.trim(), contenu: reste.join(" — ").trim() };
 }
 
 async function image(pdf: PDFDocument, url: string | undefined): Promise<PDFImage | null> {
@@ -264,7 +268,7 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   puces([
     "Nature de l'action : action de formation",
     `Durée totale : ${[nbJours ? `${nbJours} jour${nbJours > 1 ? "s" : ""}` : "", c.dureeH ? `${c.dureeH} heures` : ""].filter(Boolean).join(" – ") || "……………"}`,
-    `Dates : ${datesEnLettres(c.jours) || "……………………………"}`,
+    `Dates : ${datesEnLettres(c.jours) || c.datesTexte || "……………………………"}`,
     `Horaires : ${c.horaires}`,
     `Lieu de formation : ${c.distanciel ? "à distance (classe virtuelle)" : `présentiel au ${c.lieu || "……………………………"}`}`,
     `Effectif : ${effectifTexte || "……………"}`,

@@ -16,6 +16,15 @@ import type { PlanFormation, PlanStatut, Formation, Contact, Entreprise, Finance
 
 const STATUTS: PlanStatut[] = ['brouillon', 'valide', 'envoye', 'archive'];
 
+/** Module du programme catalogue en ligne de plan : « Titre — contenu ». */
+const ligneModule = (m: unknown): string => {
+  if (m && typeof m === 'object') {
+    const o = m as { titre?: string; contenu?: string };
+    return [o.titre, o.contenu].filter(Boolean).join(' — ');
+  }
+  return String(m ?? '');
+};
+
 // Documents AGEFICE, dans l'ordre du parcours du stagiaire. `piece` désigne la
 // pièce justificative du dossier que le document vient renseigner.
 type AgeficeKind = 'demande' | 'convention' | 'emargement' | 'attestation';
@@ -151,7 +160,8 @@ export default function PlansFormation() {
     set('formation_id', id || null);
     const f = formations.data.find((x) => x.id === id);
     if (f) {
-      setContenuText((f.programme ?? []).join('\n'));
+      // Modules du catalogue { titre, contenu } → une ligne « Titre — contenu ».
+      setContenuText((f.programme ?? []).map(ligneModule).join('\n'));
       setForm((prev) => ({
         ...prev, formation_id: id,
         nom: prev.nom || `Plan — ${f.intitule}`,

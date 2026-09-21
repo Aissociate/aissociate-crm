@@ -87,6 +87,16 @@ async function chargerGabarit(sb: any, url: string): Promise<Uint8Array> {
   return bytes;
 }
 
+/**
+ * Modules exploitables d'un programme. Les anciens plans ont pu enregistrer
+ * « [object Object] » (programme du catalogue aplati sans ses champs) : ces
+ * lignes sont écartées pour retomber sur le catalogue.
+ */
+function modulesValides(contenu: unknown): unknown[] {
+  if (!Array.isArray(contenu)) return [];
+  return contenu.filter((x) => (typeof x === "string" ? x.trim() && !x.includes("[object Object]") : !!x));
+}
+
 /** Comparaison tolérante des noms de champs (espaces multiples, casse). */
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 const CIVILITE_MME = /^(mme|madame)$/i;
@@ -119,6 +129,8 @@ Deno.serve(async (req: Request) => {
       formationId?: string | null; intitule?: string | null;
       contactId?: string | null; sessionId?: string | null;
       dossierIds?: string[]; stagiaires?: string[]; prix?: number | null;
+      /** Plan de formation qui complète la convention (objectifs, programme, durée, dates). */
+      planId?: string | null;
     };
     const direct: Direct | null = body.direct ?? null;
     if (!planId && !direct) return json({ error: "planId manquant" }, 400);
@@ -128,15 +140,25 @@ Deno.serve(async (req: Request) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     // ── Contexte commun ──
-    // En mode direct, un plan « virtuel » porte les mêmes champs : durée,
-    // contenu et modalité retombent sur la formation du catalogue.
+    // En mode direct, un plan « virtuel » porte les mêmes champs. S'il s'appuie
+    // sur un plan choisi, celui-ci fournit objectifs, programme, durée, dates et
+    // dossier ; les choix faits à l'écran (formation, entreprise, signataire)
+    // restent prioritaires. Sans plan, tout retombe sur la formation du catalogue.
+    const planChoisi = direct?.planId
+      ? (await sb.from("plans_formation").select("*").eq("id", direct.planId).maybeSingle()).data
+      : null;
+    if (direct?.planId && !planChoisi) return json({ error: "Plan de formation introuvable" }, 404);
     // deno-lint-ignore no-explicit-any
     const planDirect: Record<string, any> | null = direct
       ? {
-          nom: direct.intitule ?? "", formation_id: direct.formationId ?? null,
-          contact_id: direct.contactId ?? null, entreprise_id: direct.entrepriseId ?? null,
-          dossier_id: direct.dossierIds?.[0] ?? null, contenu: null, duree_heures: null,
+          nom: direct.intitule ?? "", contenu: null, duree_heures: null,
           modalite: null, dates_session: null, objectifs: null,
+          ...(planChoisi ?? {}),
+          formation_id: direct.formationId ?? planChoisi?.formation_id ?? null,
+          contact_id: direct.contactId ?? planChoisi?.contact_id ?? null,
+          // « Aucune entreprise » + organisation déclarée : le choix de l'écran prime.
+          entreprise_id: direct.entrepriseId ?? (direct.organisation ? null : planChoisi?.entreprise_id ?? null),
+          dossier_id: planChoisi?.dossier_id ?? direct.dossierIds?.[0] ?? null,
       }
       : null;
     const { data: plan } = planDirect
@@ -156,8 +178,8 @@ Deno.serve(async (req: Request) => {
       ? await sb.from("formations").select("*").eq("id", plan.formation_id).maybeSingle() : { data: null };
     if (direct) {
       plan.nom = plan.nom || formation?.intitule || "";
-      plan.contenu = formation?.programme ?? [];
-      plan.modalite = formation?.modalite ?? "presentiel";
+      if (!modulesValides(plan.contenu).length) plan.contenu = formation?.programme ?? [];
+      plan.modalite = plan.modalite || formation?.modalite || "presentiel";
       // Répondant hors base : l'organisation déclarée tient lieu d'entreprise.
       if (!entreprise && direct.organisation) entreprise = { raison_sociale: direct.organisation };
     }
@@ -732,9 +754,12 @@ Deno.serve(async (req: Request) => {
         entreprise,
         representantEntreprise,
         intitule: formation?.intitule || intitule,
-        objectifs: formation?.objectifs ?? plan.objectifs ?? null,
-        programme: Array.isArray(formation?.programme) && formation.programme.length
-          ? formation.programme : (plan.contenu ?? []),
+        // Le plan est sur mesure : ses objectifs et son programme priment sur
+        // ceux du catalogue, sauf s'ils sont vides ou mal formés.
+        objectifs: plan.objectifs || formation?.objectifs || null,
+        programme: modulesValides(plan.contenu).length ? modulesValides(plan.contenu)
+          : Array.isArray(formation?.programme) ? formation.programme : [],
+        datesTexte: plan.dates_session || "",
         dureeH,
         jours,
         horaires: String(body.horaires ?? "09h00 – 12h00 ; 13h00 – 17h00"),
@@ -770,7 +795,7 @@ Deno.serve(async (req: Request) => {
     const cible = conventionEntreprise ? (entreprise?.raison_sociale || stagiaires) : (stagiaires || intitule);
     const titre = `${LIBELLE[type]} — ${cible}`;
     const { error: insErr } = await sb.from("plan_pdfs").insert({
-      plan_id: planId ?? null, titre, kind: type,
+      plan_id: planId ?? direct?.planId ?? null, titre, kind: type,
       apprenant: stagiaires || null,
       organisme: entreprise?.raison_sociale ?? org.nom ?? null,
       fichier_url: chemin, created_by: userId,
