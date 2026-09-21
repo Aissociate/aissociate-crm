@@ -263,17 +263,26 @@ export default function Devis() {
               </div>
             </div>
             <div className="space-y-2">
+              {/* En-têtes de colonnes : une fois les champs remplis, leurs indications
+                  disparaissent ; sans titre, la quantité passait inaperçue. */}
+              <div className="grid grid-cols-12 gap-2 px-0.5 text-xs font-medium text-muted">
+                <span className="col-span-4">Désignation</span>
+                <span className="col-span-2">Quantité</span>
+                <span className="col-span-2">Unité</span>
+                <span className="col-span-2">Prix unitaire HT</span>
+                <span className="col-span-2 pr-7 text-right">Montant HT</span>
+              </div>
               {lines.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 items-start gap-2">
-                  <div className="col-span-5">
+                  <div className="col-span-4">
                     <input className="input" placeholder="Désignation" value={l.designation} onChange={(e) => setLigne(i, 'designation', e.target.value)} />
                     <input className="input mt-1 text-xs" placeholder="Description (optionnel)" value={l.description} onChange={(e) => setLigne(i, 'description', e.target.value)} />
                   </div>
-                  <input className="input col-span-1" type="number" placeholder="Qté" value={l.quantite} onChange={(e) => setLigne(i, 'quantite', e.target.value)} />
-                  <select className="input col-span-2" value={l.unite} onChange={(e) => setLigne(i, 'unite', e.target.value)}>
+                  <input className="input col-span-2" type="number" min={0} step="any" placeholder="Qté" aria-label="Quantité" value={l.quantite} onChange={(e) => setLigne(i, 'quantite', e.target.value)} />
+                  <select className="input col-span-2" aria-label="Unité" value={l.unite} onChange={(e) => setLigne(i, 'unite', e.target.value)}>
                     {UNITES.map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>
-                  <input className="input col-span-2" type="number" placeholder="PU HT" value={l.prix_unitaire_ht} onChange={(e) => setLigne(i, 'prix_unitaire_ht', e.target.value)} />
+                  <input className="input col-span-2" type="number" step="any" placeholder="PU HT" aria-label="Prix unitaire HT" value={l.prix_unitaire_ht} onChange={(e) => setLigne(i, 'prix_unitaire_ht', e.target.value)} />
                   <div className="col-span-2 flex items-center gap-1 pt-2">
                     <span className="flex-1 text-right text-sm text-fg">{formatMoney((Number(l.quantite) || 0) * (Number(l.prix_unitaire_ht) || 0))}</span>
                     <button onClick={() => removeLigne(i)} className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
