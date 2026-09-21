@@ -48,6 +48,7 @@ export default function ConventionPositionnementModal({
   const [formationId, setFormationId] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [signataireId, setSignataireId] = useState('');
+  const [prix, setPrix] = useState('');
   const [retenus, setRetenus] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export default function ConventionPositionnementModal({
   // Pré-remplissage à chaque ouverture, d'après les répondants choisis.
   useEffect(() => {
     if (!open) return;
-    setResultat(null); setErreur(null); setSignataireId('');
+    setResultat(null); setErreur(null); setSignataireId(''); setPrix('');
     setRetenus(new Set(repondants.map((p) => p.id)));
 
     // Entreprise : celle des contacts du CRM si elle est unique, sinon
@@ -115,6 +116,7 @@ export default function ConventionPositionnementModal({
             formationId, sessionId: sessionId || null, contactId: signataireId || null,
             dossierIds: cibles.map((d) => d.id),
             stagiaires: choisis.map(nomDe),
+            prix: Number(prix.replace(/\s/g, '').replace(',', '.')) || null,
           },
         },
       });
@@ -203,6 +205,16 @@ export default function ConventionPositionnementModal({
             <SearchSelect value={formationId} onChange={setFormationId} options={optionsFormations}
               emptyLabel="Choisir…" placeholder="Rechercher une formation…" />
           </Field>
+          {(() => {
+            const f = formations.data.find((x) => x.id === formationId);
+            const suggestion = f?.prix ? Number(f.prix) * choisis.length : 0;
+            return (
+              <Field label="Prix total de la formation (€, net de taxes)"
+                hint={`Article 8. Vide : devis du dossier s'il existe, sinon à compléter à la main.${suggestion ? ` Catalogue : ${suggestion.toLocaleString('fr-FR')} € pour ${choisis.length} stagiaire(s).` : ''}`}>
+                <input className="input" inputMode="decimal" value={prix} onChange={(e) => setPrix(e.target.value)} placeholder="ex. 1 600" />
+              </Field>
+            );
+          })()}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Session" hint="Dates, lieu et formateur.">
               <SearchSelect value={sessionId} onChange={setSessionId} options={optionsSessions}

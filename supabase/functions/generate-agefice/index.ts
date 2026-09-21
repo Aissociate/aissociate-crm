@@ -5,9 +5,9 @@
 //     (avant la formation). Le PDF AGEFICE est un vrai AcroForm : on renseigne
 //     ce que le CRM connaît et on NE L'APLATIT PAS, pour que le demandeur
 //     complète sa partie (état civil, n° de sécurité sociale, diplôme…) et signe.
-//   • `convention`  — CONVENTION DE FORMATION PROFESSIONNELLE (avant la formation),
-//     conclue avec l'entreprise : l'effectif reprend tous ses apprenants
-//     inscrits à cette formation, pas le seul contact du plan.
+//   • `convention`  — CONVENTION DE FORMATION PROFESSIONNELLE CONTINUE (avant la
+//     formation), au modèle de l'organisme (voir convention.ts), conclue avec
+//     l'entreprise : l'effectif reprend tous ses apprenants inscrits.
 //   • `emargement`  — FEUILLE D'ÉMARGEMENT (pendant la formation).
 //   • `attestation` — ATTESTATION D'ASSIDUITÉ DE FORMATION ET DE RÈGLEMENT (après).
 //
@@ -17,6 +17,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "npm:pdf-lib@1.17.1";
+import { construireConvention } from "./convention.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,7 +43,7 @@ const TYPES = ["demande", "convention", "emargement", "attestation"] as const;
 type TypeDoc = typeof TYPES[number];
 const LIBELLE: Record<TypeDoc, string> = {
   demande: "Demande préalable de financement AGEFICE",
-  convention: "Convention de formation AGEFICE",
+  convention: "Convention de formation",
   emargement: "Feuille d'émargement AGEFICE",
   attestation: "Attestation d'assiduité et de règlement AGEFICE",
 };
@@ -117,7 +118,7 @@ Deno.serve(async (req: Request) => {
       entrepriseId?: string | null; organisation?: string | null;
       formationId?: string | null; intitule?: string | null;
       contactId?: string | null; sessionId?: string | null;
-      dossierIds?: string[]; stagiaires?: string[];
+      dossierIds?: string[]; stagiaires?: string[]; prix?: number | null;
     };
     const direct: Direct | null = body.direct ?? null;
     if (!planId && !direct) return json({ error: "planId manquant" }, 400);
@@ -179,15 +180,15 @@ Deno.serve(async (req: Request) => {
       devis = r.data;
     }
     // Sessions planifiées du dossier → dates réelles de l'action de formation.
-    let sessions: { id: string; date_debut: string; date_fin: string | null; lieu: string | null; formateur: string | null }[] = [];
+    let sessions: { id: string; date_debut: string; date_fin: string | null; lieu: string | null; formateur: string | null; modalite?: string | null }[] = [];
     if (plan.dossier_id) {
       const r = await sb.from("sessions_formation")
-        .select("id, date_debut, date_fin, lieu, formateur").eq("dossier_id", plan.dossier_id).order("date_debut");
+        .select("id, date_debut, date_fin, lieu, formateur, modalite").eq("dossier_id", plan.dossier_id).order("date_debut");
       sessions = r.data ?? [];
     }
     if (!sessions.length && direct?.sessionId) {
       const r = await sb.from("sessions_formation")
-        .select("id, date_debut, date_fin, lieu, formateur").eq("id", direct.sessionId);
+        .select("id, date_debut, date_fin, lieu, formateur, modalite").eq("id", direct.sessionId);
       sessions = r.data ?? [];
     }
 
@@ -449,9 +450,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // Convention / émargement / attestation : modèles AGEFICE reconstruits
+    // Émargement / attestation : modèles AGEFICE reconstruits
     // ═════════════════════════════════════════════════════════════════════════
-    async function construirePdfPlat(kind: Exclude<TypeDoc, "demande">): Promise<Uint8Array> {
+    async function construirePdfPlat(kind: Exclude<TypeDoc, "demande" | "convention">): Promise<Uint8Array> {
       const pdf = await PDFDocument.create();
       const font = await pdf.embedFont(StandardFonts.Helvetica);
       const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -530,55 +531,6 @@ Deno.serve(async (req: Request) => {
         T("Cachet", M, y, { size: 8, color: muted });
         T("Cachet", W / 2 + 10, y, { size: 8, color: muted });
       };
-
-      if (kind === "convention") {
-        enTete("CONVENTION DE FORMATION PROFESSIONNELLE", "Modèle AGEFICE - Mars 2018");
-
-        para("Entre les soussignés :", { f: bold }); saut(0.3);
-        para(`1 - Organisme de formation : ${clean(org.nom)}, ${clean([org.adresse, org.code_postal, org.ville].filter(Boolean).join(" "))}`);
-        champ("Enregistré sous le n° de déclaration d'activité :", org.nda);
-        champ("auprès du préfet de région :", cfg.prefet_region);
-        champ("représenté par :", representant);
-        saut(0.4);
-        para(`2 - L'entreprise : ${clean(entreprise?.raison_sociale ?? "")}${entreprise?.adresse ? `, ${clean([entreprise.adresse, entreprise.code_postal, entreprise.ville].filter(Boolean).join(" "))}` : ""}`);
-        champ("représentée par :", apprenant);
-        saut(0.5);
-
-        para("Est conclue la convention suivante :", { f: bold }); saut(0.4);
-        T("Article 1 :", M, y, { size: 11, f: bold }); saut();
-        para("L'organisme de formation organise l'action de formation suivante :"); saut(0.3);
-        champ("1 - Intitulé :", intitule);
-        champ("2 - Nature de l'action (art. L.6313-1) :", "Action de formation");
-        champ("3 - Dates de l'action de formation :", datesTexte);
-        champ("4 - Durée et horaires :", dureeH ? `${dureeH} heures` : "");
-        champ("5 - Lieu de l'action de formation :", lieuFormation);
-        T("6 - Modalités de déroulement (moyens techniques et pédagogiques) :", M, y, { size: 10, f: bold }); saut();
-        para((plan.contenu ?? []).length ? (plan.contenu as string[]).map((c) => `- ${c}`).join("\n") : "", { size: 9.5, indent: 10 });
-        champ("7 - Type de formation :", plan.modalite);
-        champ("8 - Sanction et modalités d'évaluation :", "Attestation de fin de formation - évaluation continue");
-        if (effectif.length > 1) {
-          T(`9 - Effectif : ${effectif.length} stagiaires (nom et prénom) :`, M, y, { size: 10, f: bold }); saut();
-          para(effectif.map((n) => `- ${n}`).join("\n"), { size: 9.5, indent: 10 });
-        } else {
-          champ("9 - Effectif (nom et prénom du/des stagiaire/s) :", effectif[0] ?? apprenant);
-        }
-        champ("10 - Moyen de contrôle de l'assiduité :", "Attestation d'assiduité et feuilles d'émargement");
-        saut(0.6);
-
-        T("Article 2 :", M, y, { size: 11, f: bold }); saut();
-        para("En contrepartie de cette action de formation, le cocontractant s'engage à acquitter les frais suivants :"); saut(0.3);
-        champ("Frais de formation (total) :", prixHT ? `${eur(prixHT)} H.T.` : "");
-        champ("TVA :", "Exonérée (art. 261-4-4° a du CGI)");
-        champ("TOTAL GENERAL :", prixHT ? `${eur(prixHT)} T.T.C.` : "");
-        saut(0.6);
-
-        T("Article 3 : Clause de dédit", M, y, { size: 11, f: bold }); saut();
-        para("En cas d'inexécution totale ou partielle de la prestation de formation du fait du cocontractant, les sommes correspondant aux prestations non réalisées ne sont pas dues à l'organisme de formation, sauf annulation notifiée moins de 10 jours ouvrés avant le démarrage de l'action.", { size: 9.5 });
-        saut(0.5);
-        T("Article 4 :", M, y, { size: 11, f: bold }); saut();
-        para("La présente convention prend effet à compter de sa signature par l'entreprise. Fait en double exemplaire.");
-        signatures("Pour l'entreprise", "Pour l'organisme de formation");
-      }
 
       if (kind === "attestation") {
         enTete("ATTESTATION D'ASSIDUITÉ DE FORMATION ET DE RÈGLEMENT", "Modèle AGEFICE - 2025/2026");
@@ -731,10 +683,74 @@ Deno.serve(async (req: Request) => {
       return await pdf.save();
     }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // Convention : modèle de l'organisme (convention.ts)
+    // ═════════════════════════════════════════════════════════════════════════
+    async function construireConventionOrganisme(): Promise<Uint8Array> {
+      // Journées réelles : demi-journées planifiées, sinon les jours ouvrés
+      // couverts par les sessions.
+      let jours: string[] = [];
+      if (sessionIds.length) {
+        const { data } = await sb.from("emargement_creneaux").select("date").in("session_id", sessionIds);
+        jours = [...new Set((data ?? []).map((c: { date: string }) => String(c.date).slice(0, 10)))];
+      }
+      if (!jours.length) {
+        for (const s of sessions) {
+          const debut = new Date(String(s.date_debut).slice(0, 10) + "T12:00:00Z");
+          const fin = new Date(String(s.date_fin ?? s.date_debut).slice(0, 10) + "T12:00:00Z");
+          const plage = debut.getTime() !== fin.getTime();
+          for (const d = new Date(debut); d <= fin; d.setUTCDate(d.getUTCDate() + 1)) {
+            if (plage && (d.getUTCDay() === 0 || d.getUTCDay() === 6)) continue;
+            jours.push(d.toISOString().slice(0, 10));
+          }
+        }
+      }
+      // Numéro : année + rang de la convention dans l'année.
+      const an = new Date().getFullYear();
+      const { count } = await sb.from("plan_pdfs").select("id", { count: "exact", head: true })
+        .eq("kind", "convention").gte("created_at", `${an}-01-01`);
+      const numero = String(body.numero ?? `${an}-${String((count ?? 0) + 1).padStart(2, "0")}`);
+
+      const modaliteSession = String(sessions[0]?.modalite ?? "");
+      const civ = String(contact?.civilite ?? "").trim();
+      const representantEntreprise = contact
+        ? [/^(mme|madame)/i.test(civ) ? "Madame" : civ ? "Monsieur" : "", contact.prenom, String(contact.nom ?? "").toUpperCase()]
+          .filter(Boolean).join(" ") + (contact.fonction ? `, ${contact.fonction}` : "")
+        : "";
+      const prixSaisi = Number(direct?.prix ?? body.prix ?? 0);
+      const lieuSession = String(body.lieu ?? sessions[0]?.lieu ?? "")
+        || [entreprise?.adresse, [entreprise?.code_postal, entreprise?.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+
+      return await construireConvention({
+        org,
+        responsable: {
+          civilite: cfg.responsable_civilite, prenom: cfg.responsable_prenom,
+          nom: cfg.responsable_nom, qualite: cfg.responsable_qualite,
+        },
+        autoriteNda: cfg.prefet_region || "DEETS La Réunion",
+        numero,
+        entreprise,
+        representantEntreprise,
+        intitule: formation?.intitule || intitule,
+        objectifs: formation?.objectifs ?? plan.objectifs ?? null,
+        programme: Array.isArray(formation?.programme) && formation.programme.length
+          ? formation.programme : (plan.contenu ?? []),
+        dureeH,
+        jours,
+        horaires: String(body.horaires ?? "09h00 – 12h00 ; 13h00 – 17h00"),
+        lieu: lieuSession,
+        distanciel: modaliteSession === "distanciel" || modaliteSession === "e-learning",
+        effectif,
+        prix: prixSaisi > 0 ? prixSaisi : prixHT > 0 ? prixHT : null,
+      });
+    }
+
     let pdfBytes: Uint8Array;
 
     if (type === "demande") {
       pdfBytes = await construireDemande();
+    } else if (type === "convention") {
+      pdfBytes = await construireConventionOrganisme();
     } else {
       pdfBytes = await construirePdfPlat(type);
     }
