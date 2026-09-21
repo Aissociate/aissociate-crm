@@ -54,6 +54,9 @@ export default function ConventionPositionnementModal({
   const [signataireId, setSignataireId] = useState('');
   const [prix, setPrix] = useState('');
   const [planId, setPlanId] = useState('');
+  // Saisie libre, pré-remplie depuis la session choisie.
+  const [lieu, setLieu] = useState('');
+  const [formateur, setFormateur] = useState('');
   const [retenus, setRetenus] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -83,7 +86,7 @@ export default function ConventionPositionnementModal({
     const parIntitule = formations.data.find((f) => intitule && norm(f.intitule) === norm(intitule));
     const formation = depuisDossiers || parIntitule?.id || '';
     setFormationId(formation);
-    setSessionId(plusFrequent(repondants.map((p) => p.session_id)));
+    choisirSession(plusFrequent(repondants.map((p) => p.session_id)));
 
     // Plan : proposé d'office s'il est le seul de cette entreprise sur cette formation.
     const entrepriseRetenue = entContacts.length === 1 ? entContacts[0] : parNom?.id ?? '';
@@ -95,6 +98,14 @@ export default function ConventionPositionnementModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, repondants, entreprises.data.length, formations.data.length, plans.data.length]);
+
+  /** Choisir une session propose son lieu et son formateur (modifiables). */
+  function choisirSession(id: string) {
+    setSessionId(id);
+    const s = sessions.find((x) => x.id === id);
+    setLieu(s?.lieu ?? '');
+    setFormateur(s?.formateur ?? '');
+  }
 
   /** Choisir un plan reprend sa formation, son entreprise et son contact (signataire). */
   const choisirPlan = (id: string) => {
@@ -145,6 +156,8 @@ export default function ConventionPositionnementModal({
       const { data, error } = await supabase.functions.invoke('generate-agefice', {
         body: {
           type: 'convention', userId: session?.user.id ?? null,
+          // Vides : la fonction retombe sur la session, puis sur l'adresse de l'entreprise.
+          lieu: lieu.trim() || undefined, formateur: formateur.trim() || undefined,
           direct: {
             entrepriseId: entrepriseId || null,
             organisation: entrepriseId ? null : organisation.trim(),
@@ -266,12 +279,22 @@ export default function ConventionPositionnementModal({
           })()}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Session" hint="Dates, lieu et formateur.">
-              <SearchSelect value={sessionId} onChange={setSessionId} options={optionsSessions}
+              <SearchSelect value={sessionId} onChange={choisirSession} options={optionsSessions}
                 emptyLabel="Aucune" placeholder="Rechercher une session…" />
             </Field>
             <Field label="Signataire pour l'entreprise" hint="« Représentée par ».">
               <SearchSelect value={signataireId} onChange={setSignataireId} options={optionsSignataires}
                 emptyLabel="À compléter" placeholder="Rechercher un contact…" />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Lieu de formation" hint="Texte libre, imprimé tel quel. Vide : lieu de la session ou adresse de l'entreprise.">
+              <input className="input" value={lieu} onChange={(e) => setLieu(e.target.value)}
+                placeholder="ex. présentiel au 8, rue Pondichéry, 97438 Sainte-Marie" />
+            </Field>
+            <Field label="Formateur" hint="Texte libre. Vide : formateur de la session.">
+              <input className="input" value={formateur} onChange={(e) => setFormateur(e.target.value)}
+                placeholder="ex. Shanti MERALLI BALLOU" />
             </Field>
           </div>
         </div>

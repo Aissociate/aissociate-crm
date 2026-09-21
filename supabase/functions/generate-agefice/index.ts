@@ -764,6 +764,8 @@ Deno.serve(async (req: Request) => {
         jours,
         horaires: String(body.horaires ?? "09h00 – 12h00 ; 13h00 – 17h00"),
         lieu: lieuSession,
+        lieuTexte: String(body.lieu ?? "").trim() || undefined,
+        formateur: formateur.trim() || undefined,
         distanciel: modaliteSession === "distanciel" || modaliteSession === "e-learning",
         effectif,
         prix: prixSaisi > 0 ? prixSaisi : prixHT > 0 ? prixHT : null,

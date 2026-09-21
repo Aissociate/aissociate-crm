@@ -27,6 +27,9 @@ export type ConventionCtx = {
   datesTexte?: string;
   horaires: string;
   lieu: string;
+  /** Lieu saisi en toutes lettres : imprimé tel quel, sans « présentiel au ». */
+  lieuTexte?: string;
+  formateur?: string;
   distanciel: boolean;
   effectif: string[];
   /** Coût total net de taxes ; null → à compléter. */
@@ -270,7 +273,9 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
     `Durée totale : ${[nbJours ? `${nbJours} jour${nbJours > 1 ? "s" : ""}` : "", c.dureeH ? `${c.dureeH} heures` : ""].filter(Boolean).join(" – ") || "……………"}`,
     `Dates : ${datesEnLettres(c.jours) || c.datesTexte || "……………………………"}`,
     `Horaires : ${c.horaires}`,
-    `Lieu de formation : ${c.distanciel ? "à distance (classe virtuelle)" : `présentiel au ${c.lieu || "……………………………"}`}`,
+    `Lieu de formation : ${c.lieuTexte
+      || (c.distanciel ? "à distance (classe virtuelle)" : `présentiel au ${c.lieu || "……………………………"}`)}`,
+    ...(c.formateur ? [`Formateur : ${c.formateur}`] : []),
     `Effectif : ${effectifTexte || "……………"}`,
   ]);
   if (n > 1) {
