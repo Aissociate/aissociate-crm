@@ -103,12 +103,31 @@ export default function PlansFormation() {
       const err = (res as { error?: string } | null)?.error;
       if (err) throw new Error(err);
       pdfs.refresh();
-      alert(`${AGEFICE_DOCS.find((d) => d.kind === kind)?.label} généré.`);
+      // La convention est conclue avec l'entreprise : on annonce l'effectif
+      // retenu, pour que l'oubli d'un stagiaire se voie avant l'envoi.
+      const label = AGEFICE_DOCS.find((d) => d.kind === kind)?.label;
+      const effectif = (res as { effectif?: number } | null)?.effectif ?? 0;
+      alert(kind === 'convention' && effectif > 1
+        ? `${label} générée — ${effectif} stagiaires dans l'effectif.`
+        : `${label} généré.`);
     } catch (e) {
       alert(`Génération impossible : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setAgefId(null);
     }
+  };
+
+  // Dossiers visés par une convention : elle est conclue avec l'entreprise et
+  // vaut pour tous ses apprenants sur cette formation, or un dossier est ouvert
+  // par couple (contact, formation). Le plan n'en désigne qu'un : on réunit
+  // ceux de l'entreprise, plus celui du plan.
+  const dossiersConvention = (p: PlanFormation | undefined): Dossier[] => {
+    if (!p) return [];
+    const memeFormation = (d: Dossier) => !p.formation_id || d.formation_id === p.formation_id;
+    return dossiers.data.filter((d) =>
+      d.id === p.dossier_id
+      || (!!p.entreprise_id && d.entreprise_id === p.entreprise_id && memeFormation(d))
+      || (!!p.contact_id && d.contact_id === p.contact_id && memeFormation(d)));
   };
 
   const removePdf = async (d: PlanPdf) => {
@@ -286,6 +305,7 @@ export default function PlansFormation() {
                         La pièce visée dépend de la nature du document produit. */}
                     <AddToDossierButton
                       contactId={planOf(d.plan_id)?.contact_id ?? null}
+                      cibles={d.kind === 'convention' ? dossiersConvention(planOf(d.plan_id)) : undefined}
                       dossiers={dossiers.data} fichierUrl={d.fichier_url} sourceBucket="plans"
                       pieceLibelle={PIECE_POUR[d.kind] ?? 'Programme de formation'}
                       documentLabel={(AGEFICE_DOCS.find((a) => a.kind === d.kind)?.label ?? 'plan de formation').toLowerCase()}

@@ -5,7 +5,9 @@
 //     (avant la formation). Le PDF AGEFICE est un vrai AcroForm : on renseigne
 //     ce que le CRM connaît et on NE L'APLATIT PAS, pour que le demandeur
 //     complète sa partie (état civil, n° de sécurité sociale, diplôme…) et signe.
-//   • `convention`  — CONVENTION DE FORMATION PROFESSIONNELLE (avant la formation).
+//   • `convention`  — CONVENTION DE FORMATION PROFESSIONNELLE (avant la formation),
+//     conclue avec l'entreprise : l'effectif reprend tous ses apprenants
+//     inscrits à cette formation, pas le seul contact du plan.
 //   • `emargement`  — FEUILLE D'ÉMARGEMENT (pendant la formation).
 //   • `attestation` — ATTESTATION D'ASSIDUITÉ DE FORMATION ET DE RÈGLEMENT (après).
 //
@@ -198,6 +200,80 @@ Deno.serve(async (req: Request) => {
       ?? "",
     ) || [org.adresse, org.code_postal, org.ville].filter(Boolean).join(" ");
     const representant = [cfg.responsable_prenom, cfg.responsable_nom].filter(Boolean).join(" ");
+
+    // ── Effectif de la convention : les apprenants de l'entreprise ───────────
+    // Un dossier est ouvert par couple (contact, formation) : les stagiaires
+    // d'une même entreprise sont donc répartis sur plusieurs dossiers, et le
+    // plan n'en désigne qu'un. On réunit les participants des sessions
+    // rattachées aux dossiers de l'entreprise pour cette formation et ceux des
+    // sessions de la formation (inter-entreprises), puis on ne retient que les
+    // personnes rattachées à l'entreprise cocontractante.
+    type Inscrit = { session_id: string; nom: string; prenom: string | null; contact_id: string | null; statut: string };
+    const nomComplet = (p: { prenom?: string | null; nom?: string | null }) =>
+      [p.prenom, p.nom].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    let effectif: string[] = [];
+
+    if (type === "convention") {
+      // Dossiers de l'entreprise sur cette formation → sessions « sûres ».
+      const dossierIds = new Set<string>(plan.dossier_id ? [plan.dossier_id] : []);
+      const contactsDossiers = new Set<string>(plan.contact_id ? [plan.contact_id] : []);
+      if (entreprise?.id) {
+        let q = sb.from("dossiers").select("id, contact_id").eq("entreprise_id", entreprise.id);
+        if (plan.formation_id) q = q.eq("formation_id", plan.formation_id);
+        const { data: dos } = await q;
+        for (const d of dos ?? []) { dossierIds.add(d.id); if (d.contact_id) contactsDossiers.add(d.contact_id); }
+      }
+      const sessionsEntreprise = new Set<string>(sessions.map((s) => s.id));
+      if (dossierIds.size) {
+        const { data } = await sb.from("sessions_formation").select("id").in("dossier_id", [...dossierIds]);
+        for (const s of data ?? []) sessionsEntreprise.add(s.id);
+      }
+      // Sessions de la formation, toutes entreprises confondues.
+      const sessionsFormation = new Set<string>();
+      if (plan.formation_id) {
+        const { data } = await sb.from("sessions_formation").select("id").eq("formation_id", plan.formation_id);
+        for (const s of data ?? []) sessionsFormation.add(s.id);
+      }
+
+      const toutes = [...new Set([...sessionsEntreprise, ...sessionsFormation])];
+      let inscrits: Inscrit[] = [];
+      if (toutes.length) {
+        const { data } = await sb.from("session_participants")
+          .select("session_id, nom, prenom, contact_id, statut").in("session_id", toutes).order("nom");
+        inscrits = (data ?? []) as Inscrit[];
+      }
+      // Entreprise de rattachement des participants identifiés au CRM.
+      const entParContact = new Map<string, string | null>();
+      const contactIds = [...new Set(inscrits.map((i) => i.contact_id).filter(Boolean) as string[])];
+      if (contactIds.length) {
+        const { data } = await sb.from("contacts").select("id, entreprise_id").in("id", contactIds);
+        for (const c of data ?? []) entParContact.set(c.id, c.entreprise_id);
+      }
+      const retenu = (i: Inscrit): boolean => {
+        if (i.statut === "annule") return false;
+        // Bénéficiaire d'un dossier de l'entreprise : toujours dans l'effectif.
+        if (i.contact_id && contactsDossiers.has(i.contact_id)) return true;
+        const ent = i.contact_id ? entParContact.get(i.contact_id) ?? null : null;
+        if (ent && entreprise?.id) return ent === entreprise.id;
+        // Rattachement inconnu : retenu seulement depuis une session de l'entreprise.
+        return sessionsEntreprise.has(i.session_id);
+      };
+
+      const vus = new Set<string>();
+      const ajouter = (n: string) => {
+        const cle = n.toLowerCase();
+        if (!n || vus.has(cle)) return;
+        vus.add(cle); effectif.push(n);
+      };
+      for (const i of inscrits) if (retenu(i)) ajouter(nomComplet(i));
+      // Aucune session planifiée : on retombe sur les bénéficiaires des dossiers.
+      if (effectif.length === 0 && contactsDossiers.size) {
+        const { data } = await sb.from("contacts").select("nom, prenom").in("id", [...contactsDossiers]);
+        for (const c of data ?? []) ajouter(nomComplet(c));
+      }
+      effectif.sort((a, b) => a.localeCompare(b, "fr"));
+      if (effectif.length === 0 && apprenant) effectif = [apprenant];
+    }
 
     // ═════════════════════════════════════════════════════════════════════════
     // Demande préalable : remplissage du formulaire officiel, laissé éditable
@@ -432,7 +508,12 @@ Deno.serve(async (req: Request) => {
         para((plan.contenu ?? []).length ? (plan.contenu as string[]).map((c) => `- ${c}`).join("\n") : "", { size: 9.5, indent: 10 });
         champ("7 - Type de formation :", plan.modalite);
         champ("8 - Sanction et modalités d'évaluation :", "Attestation de fin de formation - évaluation continue");
-        champ("9 - Effectif (nom et prénom du/des stagiaire/s) :", apprenant);
+        if (effectif.length > 1) {
+          T(`9 - Effectif : ${effectif.length} stagiaires (nom et prénom) :`, M, y, { size: 10, f: bold }); saut();
+          para(effectif.map((n) => `- ${n}`).join("\n"), { size: 9.5, indent: 10 });
+        } else {
+          champ("9 - Effectif (nom et prénom du/des stagiaire/s) :", effectif[0] ?? apprenant);
+        }
         champ("10 - Moyen de contrôle de l'assiduité :", "Attestation d'assiduité et feuilles d'émargement");
         saut(0.6);
 
@@ -616,16 +697,23 @@ Deno.serve(async (req: Request) => {
       .upload(chemin, pdfBytes, { contentType: "application/pdf", upsert: false });
     if (upErr) return json({ error: `Dépôt du fichier impossible : ${upErr.message}` }, 500);
 
-    const titre = `${LIBELLE[type]} — ${apprenant || intitule}`;
+    // Convention d'entreprise : le cocontractant est l'entreprise, et l'effectif
+    // remplace l'apprenant unique dans la liste des documents produits.
+    const conventionEntreprise = type === "convention" && effectif.length > 1;
+    const stagiaires = conventionEntreprise
+      ? (effectif.length <= 3 ? effectif.join(", ") : `${effectif.slice(0, 3).join(", ")} +${effectif.length - 3}`)
+      : (effectif[0] ?? apprenant);
+    const cible = conventionEntreprise ? (entreprise?.raison_sociale || stagiaires) : (stagiaires || intitule);
+    const titre = `${LIBELLE[type]} — ${cible}`;
     const { error: insErr } = await sb.from("plan_pdfs").insert({
       plan_id: planId, titre, kind: type,
-      apprenant: apprenant || null,
+      apprenant: stagiaires || null,
       organisme: entreprise?.raison_sociale ?? org.nom ?? null,
       fichier_url: chemin, created_by: userId,
     });
     if (insErr) return json({ error: insErr.message }, 500);
 
-    return json({ ok: true, titre, fichier_url: chemin, kind: type });
+    return json({ ok: true, titre, fichier_url: chemin, kind: type, effectif: effectif.length });
 
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
