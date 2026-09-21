@@ -44,14 +44,15 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Formation',
     items: [
       { to: '/catalogue', label: 'Catalogue', icon: GraduationCap },
-      { to: '/plans', label: 'Plans de formation', icon: FileText },
       { to: '/devis', label: 'Devis', icon: ReceiptText },
       { to: '/factures', label: 'Factures', icon: Euro },
-      { to: '/dossiers', label: 'Dossiers', icon: FolderKanban },
+      // Dossier client : convention, plan individuel, paperasse, financeur, coffre-fort,
+      // historique, messagerie et calendrier. Plans de formation et Positionnement
+      // n'ont plus d'entrée propre : leurs pages restent accessibles depuis le dossier.
+      { to: '/dossiers', label: 'Dossiers clients', icon: FolderKanban },
       { to: '/calendrier', label: 'Calendrier', icon: CalendarDays },
       { to: '/emargement', label: 'Émargement', icon: CalendarCheck },
       { to: '/formateurs', label: 'Formateurs', icon: Presentation },
-      { to: '/positionnement', label: 'Positionnement', icon: ClipboardCheck },
       { to: '/qualiopi', label: 'Conformité Qualiopi', icon: BadgeCheck },
       { to: '/bpf', label: 'BPF', icon: FileSpreadsheet, managerOnly: true },
     ],

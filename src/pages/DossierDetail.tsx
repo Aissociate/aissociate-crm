@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2 } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2, FolderLock, Landmark, Mail, CalendarDays, FileSignature } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCollection } from '@/hooks/useCollection';
@@ -10,6 +10,11 @@ import { copyToBucket } from '@/lib/storage';
 import ContactFiche from '@/components/ContactFiche';
 import SignatureButton from '@/components/SignatureButton';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
+import HistoriqueContact from '@/components/HistoriqueContact';
+import OngletDocuments from '@/components/dossier/OngletDocuments';
+import OngletMessagerie from '@/components/dossier/OngletMessagerie';
+import OngletCalendrier from '@/components/dossier/OngletCalendrier';
+import { cn } from '@/lib/utils';
 import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
@@ -28,10 +33,28 @@ const STATUTS: DossierStatut[] = [
 ];
 const PIECE_STATUTS: PieceStatut[] = ['manquante', 'recue', 'validee', 'rejetee'];
 
+/**
+ * Le dossier client réunit toute la partie administrative d'un apprenant sur
+ * une formation (ex-pages Plans de formation, Positionnement, dossier Qualiopi).
+ * L'onglet ouvert est dans l'URL (?onglet=…) pour pouvoir y renvoyer.
+ */
+const ONGLETS = [
+  { cle: 'documents', label: 'Documents à générer', icon: FileSignature },
+  { cle: 'financeur', label: 'Financeur', icon: Landmark },
+  { cle: 'coffre', label: 'Coffre-fort', icon: FolderLock },
+  { cle: 'historique', label: 'Historique', icon: History },
+  { cle: 'messagerie', label: 'Messagerie', icon: Mail },
+  { cle: 'calendrier', label: 'Calendrier', icon: CalendarDays },
+] as const;
+type Onglet = typeof ONGLETS[number]['cle'];
+
 export default function DossierDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const onglet: Onglet = (ONGLETS.find((o) => o.cle === params.get('onglet'))?.cle ?? 'documents');
+  const choisirOnglet = (cle: Onglet) => setParams((p) => { p.set('onglet', cle); return p; }, { replace: true });
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [etapes, setEtapes] = useState<WorkflowEtape[]>([]);
   const [pieces, setPieces] = useState<DossierPiece[]>([]);
@@ -276,6 +299,22 @@ export default function DossierDetail() {
     setAutreTitre(''); setAutreDesc('');
   };
 
+  // ── Coffre-fort du bénéficiaire (documents du contact, tous dossiers confondus) ──
+  const ajouterAuCoffre = async (fichier_url: string, file?: File) => {
+    if (!dossier?.contact_id) return;
+    const { error } = await supabase.from('contact_documents').insert({
+      contact_id: dossier.contact_id, titre: file?.name || 'Document', fichier_url, created_by: session?.user.id ?? null,
+    });
+    if (error) { alert(error.message); return; }
+    void load();
+  };
+  const retirerDuCoffre = async (d: ContactDocument) => {
+    if (!confirm(`Supprimer « ${d.titre} » du coffre-fort ?`)) return;
+    const { error } = await supabase.from('contact_documents').delete().eq('id', d.id);
+    if (error) { alert(error.message); return; }
+    setCoffre((prev) => prev.filter((x) => x.id !== d.id));
+  };
+
   // Renvoi du code au signataire, sans recréer de demande : le lien reste le même.
   const [relanceId, setRelanceId] = useState<string | null>(null);
   const relancerSignature = async (s: SignatureDemande) => {
@@ -327,6 +366,24 @@ export default function DossierDetail() {
         }
       />
 
+      {/* Onglets du dossier client */}
+      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
+        {ONGLETS.map((o) => (
+          <button key={o.cle} onClick={() => choisirOnglet(o.cle)}
+            className={cn(
+              '-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+              onglet === o.cle ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-muted hover:text-fg',
+            )}>
+            <o.icon className="h-4 w-4" /> {o.label}
+          </button>
+        ))}
+      </div>
+
+      {onglet === 'documents' && (
+        <OngletDocuments dossier={dossier} contact={contact} pieces={pieces} onChanged={() => void load()} />
+      )}
+
+      {onglet === 'financeur' && (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {/* Workflow */}
@@ -426,6 +483,142 @@ export default function DossierDetail() {
             </div>
           </Card>
 
+          {/* Suivi des signatures électroniques du dossier */}
+          <Card>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 font-semibold text-fg">
+                <PenLine className="h-4 w-4 text-brand-500" /> Signatures électroniques
+              </h2>
+              <Badge className="bg-surface-2 text-muted">
+                {sigs.filter((s) => s.statut === 'signee').length}/{sigs.length} signée(s)
+              </Badge>
+            </div>
+            <p className="mb-4 text-sm text-muted">
+              Demandes envoyées depuis les pièces du dossier ou les documents générés.
+              Le bouton stylo, sur une pièce, lance une nouvelle demande.
+            </p>
+            {sigs.length === 0 ? (
+              <p className="text-xs text-muted">Aucune demande de signature pour ce dossier.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {sigs.map((s) => {
+                  const perime = s.statut === 'en_attente' && new Date(s.expire_at) < new Date();
+                  return (
+                    <li key={s.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-fg">{s.libelle}</p>
+                        <p className="truncate text-xs text-muted">
+                          {s.signataire_nom} · {s.signataire_email}
+                          {s.statut === 'signee' && s.signe_at
+                            ? ` · signé le ${formatDate(s.signe_at, 'dd/MM/yyyy HH:mm')}`
+                            : ` · expire le ${formatDate(s.expire_at)}`}
+                        </p>
+                      </div>
+                      {s.statut === 'signee'
+                        ? <Badge tone="success">Signé</Badge>
+                        : perime ? <Badge tone="danger">Lien expiré</Badge> : <Badge tone="warning">En attente</Badge>}
+                      {s.statut === 'signee' && s.fichier_signe_url && (
+                        <FileLink bucket={s.bucket as 'pieces'} value={s.fichier_signe_url} />
+                      )}
+                      {s.statut === 'en_attente' && (
+                        <button
+                          onClick={() => relancerSignature(s)}
+                          disabled={relanceId === s.id}
+                          title="Renvoyer le code au signataire"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 disabled:opacity-40 dark:text-brand-400"
+                        >
+                          <Send className="h-3.5 w-3.5" /> {relanceId === s.id ? 'Envoi…' : 'Renvoyer'}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+
+        </div>
+        <div className="space-y-6">
+          <Card>
+            <h2 className="mb-2 flex items-center gap-2 font-semibold text-fg"><Landmark className="h-4 w-4 text-brand-500" /> Financeur</h2>
+            {financeur ? (
+              <div className="space-y-1 text-sm">
+                <p className="font-medium text-fg">{financeur.nom}</p>
+                {financeur.email && <p className="text-muted">{financeur.email}</p>}
+                {financeur.specificites && <p className="whitespace-pre-line text-xs text-muted">{financeur.specificites}</p>}
+              </div>
+            ) : <p className="text-sm text-muted">Aucun financeur rattaché au dossier.</p>}
+          </Card>
+          <Card>
+            <h2 className="mb-4 font-semibold text-fg">Statut & financement</h2>
+            <div className="space-y-4">
+              <Field label="Statut du dossier">
+                <select className="input" value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })}>
+                  {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
+                </select>
+              </Field>
+              <Field label="Montant demandé (€)">
+                <input className="input" type="number" value={dossier.montant_demande ?? 0}
+                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} />
+              </Field>
+              <Field label="Montant accordé (€)">
+                <input className="input" type="number" value={dossier.montant_accorde ?? 0}
+                  onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} />
+              </Field>
+              <Field label="Notes">
+                <textarea className="input" rows={4} value={dossier.notes ?? ''}
+                  onChange={(e) => setDossier({ ...dossier, notes: e.target.value })} />
+              </Field>
+              <Button onClick={saveMeta} disabled={saving} className="w-full">
+                <Save className="h-4 w-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              <button onClick={removeDossier}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10">
+                <Trash2 className="h-4 w-4" /> Supprimer le dossier
+              </button>
+            </div>
+          </Card>
+        </div>
+      </div>
+      )}
+
+      {onglet === 'coffre' && (
+        <div className="space-y-6">
+          {/* Coffre-fort du bénéficiaire */}
+          <Card>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-semibold text-fg">
+                <FolderLock className="h-4 w-4 text-brand-500" /> Coffre-fort du bénéficiaire
+              </h2>
+              {dossier.contact_id && <FileUpload bucket="coffre" label="Ajouter un document" onUploaded={(v, f) => void ajouterAuCoffre(v, f)} />}
+            </div>
+            <p className="mb-4 text-sm text-muted">
+              Pièces d'identité, justificatifs, échanges… conservés pour le contact et partagés entre ses dossiers.
+              Le bouton dossier en copie un dans les pièces justificatives.
+            </p>
+            {coffre.length === 0 ? <p className="text-xs text-muted">Aucun document.</p> : (
+              <ul className="space-y-1.5">
+                {coffre.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                    <span className="text-fg">{d.titre}{d.categorie ? <span className="text-xs text-muted"> · {d.categorie}</span> : null}
+                      <span className="text-xs text-muted"> · {formatDate(d.created_at)}</span></span>
+                    <span className="flex items-center gap-2">
+                      {d.fichier_url && <FileLink bucket="coffre" value={d.fichier_url} />}
+                      {d.fichier_url && (
+                        <button onClick={() => ouvrirVersement(d)} title="Copier ce document dans les pièces justificatives"
+                          className="rounded p-1 text-muted transition hover:text-brand-600">
+                          <FolderPlus className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button onClick={() => void retirerDuCoffre(d)} title="Supprimer du coffre-fort"
+                        className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
           {/* Autres documents : dépôt libre, hors dossier financeur */}
           <Card>
             <div className="mb-1 flex items-center justify-between">
@@ -479,60 +672,6 @@ export default function DossierDetail() {
                 <FileUpload bucket="pieces" label="Déposer un document" onUploaded={addAutreDoc} />
               </div>
             </div>
-          </Card>
-
-          {/* Suivi des signatures électroniques du dossier */}
-          <Card>
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 font-semibold text-fg">
-                <PenLine className="h-4 w-4 text-brand-500" /> Signatures électroniques
-              </h2>
-              <Badge className="bg-surface-2 text-muted">
-                {sigs.filter((s) => s.statut === 'signee').length}/{sigs.length} signée(s)
-              </Badge>
-            </div>
-            <p className="mb-4 text-sm text-muted">
-              Demandes envoyées depuis les pièces du dossier ou les documents générés.
-              Le bouton stylo, sur une pièce, lance une nouvelle demande.
-            </p>
-            {sigs.length === 0 ? (
-              <p className="text-xs text-muted">Aucune demande de signature pour ce dossier.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {sigs.map((s) => {
-                  const perime = s.statut === 'en_attente' && new Date(s.expire_at) < new Date();
-                  return (
-                    <li key={s.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-fg">{s.libelle}</p>
-                        <p className="truncate text-xs text-muted">
-                          {s.signataire_nom} · {s.signataire_email}
-                          {s.statut === 'signee' && s.signe_at
-                            ? ` · signé le ${formatDate(s.signe_at, 'dd/MM/yyyy HH:mm')}`
-                            : ` · expire le ${formatDate(s.expire_at)}`}
-                        </p>
-                      </div>
-                      {s.statut === 'signee'
-                        ? <Badge tone="success">Signé</Badge>
-                        : perime ? <Badge tone="danger">Lien expiré</Badge> : <Badge tone="warning">En attente</Badge>}
-                      {s.statut === 'signee' && s.fichier_signe_url && (
-                        <FileLink bucket={s.bucket as 'pieces'} value={s.fichier_signe_url} />
-                      )}
-                      {s.statut === 'en_attente' && (
-                        <button
-                          onClick={() => relancerSignature(s)}
-                          disabled={relanceId === s.id}
-                          title="Renvoyer le code au signataire"
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 disabled:opacity-40 dark:text-brand-400"
-                        >
-                          <Send className="h-3.5 w-3.5" /> {relanceId === s.id ? 'Envoi…' : 'Renvoyer'}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
           </Card>
 
           {/* Centralisation client : production générée + documents téléversés */}
@@ -603,65 +742,22 @@ export default function DossierDetail() {
                   </ul>
                 )}
               </div>
-              {/* Coffre-fort du contact */}
-              <div>
-                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><FolderArchive className="h-4 w-4 text-muted" /> Coffre-fort du contact ({coffre.length})</p>
-                {coffre.length === 0 ? <p className="text-xs text-muted">Aucune pièce.</p> : (
-                  <ul className="space-y-1.5">
-                    {coffre.map((d) => (
-                      <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                        <span className="text-fg">{d.titre}{d.categorie ? <span className="text-xs text-muted"> · {d.categorie}</span> : null}</span>
-                        <span className="flex items-center gap-2">
-                          {d.fichier_url && <FileLink bucket="coffre" value={d.fichier_url} />}
-                          {d.fichier_url && (
-                            <button onClick={() => ouvrirVersement(d)} title="Copier ce document dans les pièces justificatives"
-                              className="rounded p-1 text-muted transition hover:text-brand-600">
-                              <FolderPlus className="h-4 w-4" />
-                            </button>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
             </div>
           </Card>
         </div>
+      )}
 
-        {/* Side panel */}
-        <div className="space-y-6">
-          <Card>
-            <h2 className="mb-4 font-semibold text-fg">Statut & financement</h2>
-            <div className="space-y-4">
-              <Field label="Statut du dossier">
-                <select className="input" value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })}>
-                  {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
-                </select>
-              </Field>
-              <Field label="Montant demandé (€)">
-                <input className="input" type="number" value={dossier.montant_demande ?? 0}
-                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} />
-              </Field>
-              <Field label="Montant accordé (€)">
-                <input className="input" type="number" value={dossier.montant_accorde ?? 0}
-                  onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} />
-              </Field>
-              <Field label="Notes">
-                <textarea className="input" rows={4} value={dossier.notes ?? ''}
-                  onChange={(e) => setDossier({ ...dossier, notes: e.target.value })} />
-              </Field>
-              <Button onClick={saveMeta} disabled={saving} className="w-full">
-                <Save className="h-4 w-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
-              </Button>
-              <button onClick={removeDossier}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10">
-                <Trash2 className="h-4 w-4" /> Supprimer le dossier
-              </button>
-            </div>
-          </Card>
-        </div>
-      </div>
+      {onglet === 'historique' && (
+        <Card>
+          {contact
+            ? <HistoriqueContact contactId={contact.id} contactCreatedAt={contact.created_at} onNavigate={() => undefined} />
+            : <p className="text-sm text-muted">Ce dossier n'a pas de bénéficiaire : pas d'historique à afficher.</p>}
+        </Card>
+      )}
+
+      {onglet === 'messagerie' && <OngletMessagerie dossier={dossier} contact={contact} />}
+
+      {onglet === 'calendrier' && <OngletCalendrier contact={contact} onChanged={() => void load()} />}
 
       {/* Fiche du contact du dossier, ouverte en surcouche */}
       {ficheOpen && contact && (

@@ -111,7 +111,13 @@ Deno.serve(async (req: Request) => {
     // Contact du plan : seulement un membre de l'entreprise (jamais un prospect
     // étranger, qui finirait « représentant » dans la convention).
     let contactId: string | null = body.contactId ?? null;
-    if (contactId && body.entrepriseId) {
+    // Plan individuel depuis un dossier client : le bénéficiaire du dossier est
+    // le contact du plan, et le plan est rattaché au dossier.
+    const dossier = body.dossierId
+      ? (await sb.from("dossiers").select("id, contact_id").eq("id", body.dossierId).maybeSingle()).data
+      : null;
+    if (dossier) contactId = dossier.contact_id;
+    else if (contactId && body.entrepriseId) {
       const { data: ct } = await sb.from("contacts").select("entreprise_id").eq("id", contactId).maybeSingle();
       if (ct?.entreprise_id !== body.entrepriseId) contactId = null;
     }
@@ -197,6 +203,7 @@ Deno.serve(async (req: Request) => {
       formation_id: formationId,
       entreprise_id: body.entrepriseId ?? null,
       contact_id: contactId,
+      ...(dossier ? { dossier_id: dossier.id } : {}),
       objectifs: objectifs.join(" ; "),
       contenu: modules.map((m, i) => `${m.titre}${dureeH ? ` (${fmtH(heures[i])})` : ""} — ${m.contenu}`.trim()),
       duree_heures: dureeH,

@@ -26,7 +26,18 @@ import type {
  * Function `plan-positionnement`) : le plan est enregistré, lié aux réponses
  * (`positionnements.plan_id`), mis en PDF (`generate-plan`), puis sert à la
  * convention — « Tout générer par l'IA » enchaîne les trois étapes.
+ *
+ * Depuis un dossier client, la fenêtre reçoit aussi des stagiaires sans
+ * positionnement (`autres` : apprenants de l'entreprise sur la formation) et
+ * un pré-remplissage (`prefill` : formation, entreprise, plan, session).
  */
+
+/** Stagiaire sans réponse au positionnement (apprenant d'un dossier). */
+export type StagiaireDossier = { id: string; nom: string; contact_id: string | null; dossier_id: string | null };
+export type PrefillConvention = {
+  formationId?: string | null; entrepriseId?: string | null; planId?: string | null;
+  sessionId?: string | null; signataireId?: string | null;
+};
 
 type PlanIA = {
   planId: string; nom: string; objectifs: string[]; duree_heures: number; nbJours: number;
@@ -44,11 +55,15 @@ function plusFrequent(valeurs: (string | null | undefined)[]): string {
 }
 
 export default function ConventionPositionnementModal({
-  open, onClose, repondants, positionnements, onLie, contacts, dossiers, sessions,
+  open, onClose, repondants, autres = [], prefill, positionnements, onLie, contacts, dossiers, sessions,
 }: {
   open: boolean;
   onClose: () => void;
   repondants: Pos[];
+  /** Stagiaires sans positionnement, cochables comme les répondants. */
+  autres?: StagiaireDossier[];
+  /** Valeurs imposées par le contexte (dossier), prioritaires sur la déduction. */
+  prefill?: PrefillConvention;
   /** Toutes les réponses : pour montrer celles déjà liées au plan choisi. */
   positionnements: Pos[];
   /** Appelé quand des réponses ont été liées à un plan. */
@@ -102,18 +117,22 @@ export default function ConventionPositionnementModal({
     if (!open) return;
     setResultat(null); setErreur(null); setSignataireId(''); setPrix(''); setPlanId('');
     setNbJours(''); setConsignes(''); setPlanIA(null); setAvertissement(null);
-    setRetenus(new Set(repondants.map((p) => p.id)));
+    setRetenus(new Set([...repondants.map((p) => p.id), ...autres.map((a) => a.id)]));
 
     // Entreprise : celle des contacts du CRM si elle est unique, sinon
     // l'organisation déclarée retrouvée parmi les entreprises connues.
-    const entContacts = [...new Set(repondants.map((p) => contactDe(p)?.entreprise_id).filter(Boolean) as string[])];
+    const entContacts = [...new Set([
+      ...repondants.map((p) => contactDe(p)?.entreprise_id),
+      ...autres.map((a) => contacts.find((c) => c.id === a.contact_id)?.entreprise_id),
+    ].filter(Boolean) as string[])];
     const orga = plusFrequent(repondants.map((p) => p.organisation?.trim()));
     const parNom = entreprises.data.find((e) => orga && norm(e.raison_sociale) === norm(orga));
     setEntrepriseId(entContacts.length === 1 ? entContacts[0] : parNom?.id ?? '');
     setOrganisation(orga);
 
     // Formation : celle des dossiers rattachés, sinon l'intitulé déclaré.
-    const depuisDossiers = plusFrequent(repondants.map((p) => dossiers.find((d) => d.id === p.dossier_id)?.formation_id));
+    const depuisDossiers = plusFrequent([...repondants.map((p) => p.dossier_id), ...autres.map((a) => a.dossier_id)]
+      .map((id) => dossiers.find((d) => d.id === id)?.formation_id));
     const intitule = plusFrequent(repondants.map((p) => p.formation_intitule?.trim()));
     const parIntitule = formations.data.find((f) => intitule && norm(f.intitule) === norm(intitule));
     const formation = depuisDossiers || parIntitule?.id || '';
@@ -132,8 +151,25 @@ export default function ConventionPositionnementModal({
       if (membreDe(candidats[0].contact_id, entrepriseRetenue)) setSignataireId(candidats[0].contact_id!);
       if (candidats[0].duree_heures) setDureeH(String(candidats[0].duree_heures));
     }
+
+    // Contexte imposé (dossier client) : prioritaire sur la déduction.
+    if (prefill?.formationId) {
+      setFormationId(prefill.formationId);
+      const fp = formations.data.find((x) => x.id === prefill.formationId);
+      if (fp?.duree_heures) setDureeH(String(fp.duree_heures));
+    }
+    if (prefill?.entrepriseId) setEntrepriseId(prefill.entrepriseId);
+    if (prefill?.sessionId) choisirSession(prefill.sessionId);
+    if (prefill?.planId) {
+      setPlanId(prefill.planId);
+      const pp = plans.data.find((x) => x.id === prefill.planId);
+      if (pp?.duree_heures) setDureeH(String(pp.duree_heures));
+    }
+    if (prefill?.signataireId && membreDe(prefill.signataireId, prefill.entrepriseId ?? entrepriseRetenue)) {
+      setSignataireId(prefill.signataireId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, repondants, entreprises.data.length, formations.data.length, plans.data.length]);
+  }, [open, repondants, autres.length, prefill?.formationId, prefill?.planId, entreprises.data.length, formations.data.length, plans.data.length]);
 
   /** Choisir une session propose son lieu et son formateur (modifiables). */
   function choisirSession(id: string) {
@@ -177,16 +213,19 @@ export default function ConventionPositionnementModal({
   };
 
   const choisis = repondants.filter((p) => retenus.has(p.id));
+  const autresChoisis = autres.filter((a) => retenus.has(a.id));
+  /** Effectif de la convention : répondants cochés puis stagiaires du dossier. */
+  const nomsEffectif = [...choisis.map(nomDe), ...autresChoisis.map((a) => a.nom)];
   const entreprise = entreprises.data.find((e) => e.id === entrepriseId) ?? null;
 
   // Dossiers où déposer la convention : ceux des répondants, et ceux de leurs
   // contacts sur la formation retenue (un dossier par contact et formation).
   const cibles = useMemo(() => {
-    const ids = new Set(choisis.map((p) => p.dossier_id).filter(Boolean) as string[]);
-    const contactIds = new Set(choisis.map((p) => p.contact_id).filter(Boolean) as string[]);
+    const ids = new Set([...choisis.map((p) => p.dossier_id), ...autresChoisis.map((a) => a.dossier_id)].filter(Boolean) as string[]);
+    const contactIds = new Set([...choisis.map((p) => p.contact_id), ...autresChoisis.map((a) => a.contact_id)].filter(Boolean) as string[]);
     return dossiers.filter((d) => ids.has(d.id)
       || (!!d.contact_id && contactIds.has(d.contact_id) && (!formationId || d.formation_id === formationId)));
-  }, [choisis, dossiers, formationId]);
+  }, [choisis, autresChoisis, dossiers, formationId]);
 
   const optionsEntreprises = entreprises.data.map((e) => ({ value: e.id, label: e.raison_sociale, sub: e.ville ?? undefined }));
   const optionsFormations = formations.data.map((f) => ({ value: f.id, label: f.intitule, sub: `${f.duree_heures} h` }));
@@ -208,7 +247,7 @@ export default function ConventionPositionnementModal({
 
   const generer = async (planForce?: string) => {
     const pid = planForce ?? planId;
-    if (!choisis.length) { setErreur('Cochez au moins un stagiaire.'); return; }
+    if (!nomsEffectif.length) { setErreur('Cochez au moins un stagiaire.'); return; }
     if (!entrepriseId && !organisation.trim()) { setErreur("Indiquez l'entreprise cocontractante."); return; }
     if (!formationId) { setErreur('Choisissez la formation du catalogue.'); return; }
     setBusy(true); setErreur(null);
@@ -225,7 +264,7 @@ export default function ConventionPositionnementModal({
             planId: pid || null,
             dureeH: nombre(dureeH), nbJours: nombre(nbJours),
             dossierIds: cibles.map((d) => d.id),
-            stagiaires: choisis.map(nomDe),
+            stagiaires: nomsEffectif,
             prix: Number(prix.replace(/\s/g, '').replace(',', '.')) || null,
           },
         },
@@ -233,7 +272,7 @@ export default function ConventionPositionnementModal({
       if (error) throw new Error(await functionErrorMessage(error));
       const res = data as { error?: string; fichier_url?: string; titre?: string; effectif?: number } | null;
       if (res?.error) throw new Error(res.error);
-      setResultat({ fichier_url: res?.fichier_url ?? '', titre: res?.titre ?? 'Convention', effectif: res?.effectif ?? choisis.length });
+      setResultat({ fichier_url: res?.fichier_url ?? '', titre: res?.titre ?? 'Convention', effectif: res?.effectif ?? nomsEffectif.length });
       if (pid) await lierReponses(pid);
       pdfs.refresh();
     } catch (e) {
@@ -249,7 +288,7 @@ export default function ConventionPositionnementModal({
    * peut-être retouché à la main, n'est jamais écrasé.
    */
   const genererPlanIA = async (puisConvention: boolean) => {
-    if (!choisis.length) { setErreur('Cochez au moins un répondant.'); return; }
+    if (!choisis.length) { setErreur("L'IA s'appuie sur le positionnement : cochez au moins un répondant au test."); return; }
     if (!formationId) { setErreur('Choisissez la formation du catalogue.'); return; }
     if (puisConvention && !entrepriseId && !organisation.trim()) { setErreur("Indiquez l'entreprise cocontractante."); return; }
     setBusy(true); setErreur(null); setAvertissement(null);
@@ -282,13 +321,13 @@ export default function ConventionPositionnementModal({
               contenu: res.modules.map((m) => `${m.titre} (${m.duree_heures} h) — ${m.contenu}`),
               modalite: modaliteSession ?? 'presentiel', dates_session: planChoisi?.dates_session ?? null,
               formation: formations.data.find((f) => f.id === formationId)?.intitule,
-              apprenant: choisis.map(nomDe).join(', '), organisme: orga,
+              apprenant: nomsEffectif.join(', '), organisme: orga,
               positionnement: {
                 justification: res.justification,
                 participants: choisis.map((p) => ({ nom: nomDe(p), niveau: p.niveau, reussite_pct: p.pct })),
               },
             },
-            apprenant: choisis.length === 1 ? nomDe(choisis[0]) : `${choisis.length} stagiaires`,
+            apprenant: nomsEffectif.length === 1 ? nomsEffectif[0] : `${nomsEffectif.length} stagiaires`,
             organismePartenaire: orga,
             datesSession: planChoisi?.dates_session ?? null,
             clientSiret: entreprise?.siret ?? null,
@@ -387,7 +426,7 @@ export default function ConventionPositionnementModal({
           )}
           {avertissement && <p className="text-xs text-amber-600 dark:text-amber-400">{avertissement}</p>}
 
-          <Field label={`Stagiaires (${choisis.length}/${repondants.length})`} hint="Répondants au test repris dans l'effectif de la convention.">
+          <Field label={`Stagiaires (${nomsEffectif.length}/${repondants.length + autres.length})`} hint="Personnes reprises dans l'effectif de la convention.">
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
               {repondants.map((p) => {
                 const c = contactDe(p);
@@ -403,6 +442,16 @@ export default function ConventionPositionnementModal({
                   </label>
                 );
               })}
+              {autres.map((a) => (
+                <label key={a.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-surface-2">
+                  <input
+                    type="checkbox" checked={retenus.has(a.id)}
+                    onChange={() => setRetenus((st) => { const n = new Set(st); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })}
+                  />
+                  <span className="flex-1 text-fg">{a.nom}</span>
+                  <span className="text-xs text-muted">sans positionnement</span>
+                </label>
+              ))}
             </div>
           </Field>
 
@@ -465,10 +514,10 @@ export default function ConventionPositionnementModal({
           </label>
           {(() => {
             const f = formations.data.find((x) => x.id === formationId);
-            const suggestion = f?.prix ? Number(f.prix) * choisis.length : 0;
+            const suggestion = f?.prix ? Number(f.prix) * nomsEffectif.length : 0;
             return (
               <Field label="Prix total de la formation (€, net de taxes)"
-                hint={`Article 8. Vide : devis du dossier s'il existe, sinon à compléter à la main.${suggestion ? ` Catalogue : ${suggestion.toLocaleString('fr-FR')} € pour ${choisis.length} stagiaire(s).` : ''}`}>
+                hint={`Article 8. Vide : devis du dossier s'il existe, sinon à compléter à la main.${suggestion ? ` Catalogue : ${suggestion.toLocaleString('fr-FR')} € pour ${nomsEffectif.length} stagiaire(s).` : ''}`}>
                 <input className="input" inputMode="decimal" value={prix} onChange={(e) => setPrix(e.target.value)} placeholder="ex. 1 600" />
               </Field>
             );
