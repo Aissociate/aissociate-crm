@@ -1,6 +1,6 @@
 /*
   Page « Agents IA » (employés virtuels) — reprise fidèle de la landing
-  landing_page_aissociate_v7_convertion.html. Toutes les règles sont
+  landing_page_aissociate_v7_convertion.html (+ canaux de la v8). Toutes les règles sont
   cantonnées sous .lp-agents pour ne pas déborder sur le reste du site
   (Tailwind), et les couleurs de la maquette sont conservées.
 */
@@ -107,3 +107,36 @@
   .lp-agents .formule.pop { transform: none; }
   .lp-agents #capture { margin: 30px 12px; }
 }
+
+/* ---- v8 : canaux — interagissez par mail, WhatsApp ou Telegram ---- */
+.lp-agents #canaux { padding: 64px 20px; background: var(--bg); }
+.lp-agents #canaux h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; text-align: center; }
+.lp-agents #canaux .sous { color: var(--muted); text-align: center; margin: 10px 0 34px; }
+.lp-agents .canaux-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: center; justify-items: center; }
+.lp-agents .canal-cards { display: flex; flex-direction: column; gap: 18px; width: 100%; }
+.lp-agents .canal { display: flex; align-items: center; gap: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.lp-agents .canal .icone { width: 52px; height: 52px; flex: 0 0 auto; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: var(--greenbg); }
+.lp-agents .canal h4 { font-size: 1.02rem; font-weight: 700; margin: 0; }
+.lp-agents .canal .txt p { font-size: .86rem; color: var(--muted); margin-top: 3px; }
+.lp-agents .logo-mail { width: 30px; height: 30px; color: #046A8E; }
+.lp-agents .logo-wa { width: 30px; height: 30px; color: #25D366; }
+.lp-agents .logo-tg { width: 30px; height: 30px; color: #2AABEE; }
+/* Maquette de téléphone WhatsApp */
+.lp-agents .phone { width: 280px; flex: 0 0 auto; background: #0F172A; border-radius: 34px; border: 10px solid #0F172A; box-shadow: 0 18px 40px rgba(15, 23, 42, .22); position: relative; overflow: hidden; }
+.lp-agents .phone::after { content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 56px; height: 6px; border-radius: 3px; background: #1E293B; }
+.lp-agents .wa { background: #E5DDD5; height: 600px; display: flex; flex-direction: column; }
+.lp-agents .wa-head { background: #075E54; color: #fff; padding: 12px 14px; display: flex; align-items: center; gap: 10px; font-size: .9rem; font-weight: 600; }
+.lp-agents .wa-head .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-family: 'JetBrains Mono', monospace; flex: 0 0 auto; }
+.lp-agents .wa-head small { opacity: .85; font-size: .72rem; display: block; font-weight: 400; }
+.lp-agents .wa-haut { padding: 6px 10px; text-align: center; background: rgba(7, 94, 84, .92); color: #fff; font-size: .62rem; border-radius: 0 0 10px 10px; margin: 0 30px; }
+.lp-agents .wa-body { flex: 1; padding: 6px 10px; display: flex; flex-direction: column; gap: 8px; }
+.lp-agents .wa-user { align-self: flex-end; background: #DCF8C6; color: #1F3C33; border-radius: 10px; padding: 7px 10px; font-size: .78rem; max-width: 80%; position: relative; }
+.lp-agents .wa-ai { color: var(--ink); background: #FFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 7px 10px; font-size: .78rem; max-width: 80%; }
+.lp-agents .wa-ai b { color: var(--green); }
+.lp-agents .wa-time { font-size: .58rem; color: #98A6B6; margin: 2px 0 0 60%; text-align: right; }
+.lp-agents .wa-typing { display: flex; align-items: center; gap: 5px; color: #64748B; font-size: .66rem; background: #FFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 5px 9px; max-width: 60%; }
+.lp-agents .wa-typing .dots { letter-spacing: 2px; }
+.lp-agents .wa-input { display: flex; align-items: center; background: #FFF; border-radius: 16px; padding: 8px 12px; margin: 0 6px 4px; gap: 8px; }
+.lp-agents .wa-input .fld { flex: 1; height: 20px; border-radius: 12px; background: #D9D9D9; opacity: .45; }
+.lp-agents .wa-input .mic { width: 16px; height: 16px; border-radius: 50%; background: #075E54; }
+@media (max-width: 760px) { .lp-agents .canaux-grid { grid-template-columns: 1fr; } }

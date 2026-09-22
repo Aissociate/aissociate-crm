@@ -57,7 +57,7 @@ export default function Header() {
 
             <Link
               to="/agents-ia"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
+              className="flex items-center gap-2 whitespace-nowrap text-slate-700 hover:text-orange-600 font-medium transition-colors"
             >
               <Bot className="w-4 h-4" />
               Agents IA
