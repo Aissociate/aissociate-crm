@@ -13,7 +13,8 @@ import { applyTemplateVars, templatesForCanal, DEFAULT_TEMPLATES, type MessageTe
 import type { Dossier, Document, Contact, EmailCanal } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
-type Attachment = { filename: string; url: string };
+// `bucket` : pièce reçue stockée en privé (transfert d'un message), à signer à l'envoi.
+type Attachment = { filename: string; url: string; bucket?: string };
 
 // Valeurs de pré-remplissage à l'ouverture (réinitialisées à chaque ouverture).
 export type ComposeInitial = {
@@ -220,7 +221,12 @@ export default function ComposeMessageModal({
       const url = await signedUrlFor(s.bucket, s.value);
       if (url) privees.push({ filename: s.filename, url });
     }
-    return [...privees, ...docAttachments, ...extraAttachments];
+    // Pièces d'un message transféré : celles reçues ne sont qu'un chemin privé,
+    // que le serveur d'envoi ne saurait pas télécharger sans URL signée.
+    const reprises = await Promise.all(extraAttachments.map(async (a) => (a.bucket
+      ? { filename: a.filename, url: (await signedUrlFor(a.bucket as Bucket, a.url)) ?? a.url }
+      : a)));
+    return [...privees, ...docAttachments, ...reprises];
   };
 
   const send = async (statut: 'brouillon' | 'envoye') => {

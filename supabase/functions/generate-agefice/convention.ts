@@ -58,7 +58,7 @@ export type ConventionCtx = {
 function txt(s: unknown): string {
   return String(s ?? "")
     .replace(/[  ]/g, " ")
-    .replace(/[^\x09\x0A\x0D\x20-\xFF€–—‘’“”…]/g, "");
+    .replace(/[^\x09\x0A\x0D\x20-\xFF€–—‘’“”…œŒ]/g, "");
 }
 
 const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];

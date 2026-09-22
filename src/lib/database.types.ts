@@ -162,7 +162,8 @@ export type KanbanCarte = Timestamps & {
 };
 export type EmailDirection = 'sortant' | 'entrant';
 export type EmailCanal = 'email' | 'whatsapp';
-export type EmailAttachment = { filename: string; url: string };
+/** Pièce jointe : URL complète (envoyée) ou chemin dans `bucket` privé (reçue, URL signée à l'ouverture). */
+export type EmailAttachment = { filename: string; url: string; bucket?: string; taille?: number; type?: string | null };
 export type Email = {
   id: string; dossier_id: string | null; contact_id: string | null; expediteur: string | null;
   destinataires: string[]; copie: string[]; sujet: string; corps: string | null; statut: string;

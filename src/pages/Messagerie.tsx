@@ -9,6 +9,7 @@ import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, TONE_TILE
 import { formatDate, fullName, cn } from '@/lib/utils';
 import { LinkedText } from '@/lib/linkify';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
+import PieceJointeLien from '@/components/PieceJointeLien';
 import ContactFiche from '@/components/ContactFiche';
 import { OPP_STAGE_LABELS } from '@/lib/constants';
 import { usePipelineColonnes } from '@/lib/pipeline';
@@ -726,11 +727,7 @@ export default function Messagerie() {
                               {e.corps && <p className="whitespace-pre-wrap break-words text-sm text-fg"><LinkedText text={e.corps} /></p>}
                               {e.attachments && e.attachments.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {e.attachments.map((a, i) => (
-                                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="inline-flex max-w-[14rem] items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs text-brand-600 dark:text-brand-400 hover:bg-surface">
-                                      <Paperclip className="h-3 w-3 shrink-0" /><span className="truncate">{a.filename}</span>
-                                    </a>
-                                  ))}
+                                  {e.attachments.map((a, i) => <PieceJointeLien key={i} piece={a} />)}
                                 </div>
                               )}
                               <div className="mt-2 flex items-center justify-end gap-1">

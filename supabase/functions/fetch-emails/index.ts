@@ -11,6 +11,42 @@ const corsHeaders = {
 
 interface ImapCfg { host: string; port: number; user: string; pass: string; }
 
+// ── Pièces jointes reçues ────────────────────────────────────────────────────
+// Déposées dans le bucket privé « emails » et référencées sur le message ; le
+// CRM signe l'URL à l'ouverture. Plafond par fichier : au-delà, la relève
+// (limitée à 150 s et en mémoire) risquerait d'échouer pour tout le lot.
+const PJ_MAX_OCTETS = 20 * 1024 * 1024;
+type PieceRecue = { filename: string; url: string; bucket: "emails"; taille: number; type: string | null };
+type PieceMime = {
+  filename?: string; content?: Uint8Array; contentType?: string;
+  contentDisposition?: string; related?: boolean;
+};
+
+async function enregistrerPiecesJointes(
+  // deno-lint-ignore no-explicit-any
+  sb: any, emailId: string, pieces: PieceMime[],
+): Promise<PieceRecue[]> {
+  const sortie: PieceRecue[] = [];
+  for (const [i, a] of pieces.entries()) {
+    // Images incrustées dans le corps (logo de signature, cid:) : pas des PJ.
+    if (a.related || (a.contentDisposition === "inline" && !a.filename)) continue;
+    const contenu = a.content;
+    if (!contenu?.length || contenu.length > PJ_MAX_OCTETS) {
+      if (contenu?.length) console.error("pj trop lourde", a.filename, contenu.length);
+      continue;
+    }
+    const nom = (a.filename || `piece-jointe-${i + 1}`).trim();
+    const nomSur = nom.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w.-]+/g, "_").slice(-120);
+    const chemin = `entrants/${emailId}/${i + 1}-${nomSur}`;
+    const { error } = await sb.storage.from("emails").upload(chemin, contenu, {
+      contentType: a.contentType || "application/octet-stream", upsert: true,
+    });
+    if (error) { console.error("pj", nom, error.message); continue; }
+    sortie.push({ filename: nom, url: chemin, bucket: "emails", taille: contenu.length, type: a.contentType ?? null });
+  }
+  return sortie;
+}
+
 async function loadImap(sb: ReturnType<typeof createClient>): Promise<ImapCfg | null> {
   const { data } = await sb.from("parametres").select("valeur").eq("cle", "imap").maybeSingle();
   const c = (data?.valeur ?? {}) as Record<string, unknown>;
@@ -422,6 +458,15 @@ Deno.serve(async (req: Request) => {
           } else {
             const nouveau = !!rows && rows.length > 0;
             if (nouveau) imported++;
+            // Pièces jointes du message, une seule fois (à sa première relève).
+            if (nouveau && (parsed.attachments ?? []).length) {
+              try {
+                const pjs = await enregistrerPiecesJointes(sb, rows![0].id, parsed.attachments as PieceMime[]);
+                if (pjs.length) await sb.from("emails").update({ attachments: pjs }).eq("id", rows![0].id);
+              } catch (e) {
+                console.error("pieces jointes", e); // ne doit jamais bloquer l'import
+              }
+            }
             // Journalisation dans le suivi du contact — uniquement pour un mail
             // réellement nouveau (l'upsert ignore les doublons), rattaché, et
             // RÉCENT : rattraper un arriéré de plusieurs mois créerait autant de

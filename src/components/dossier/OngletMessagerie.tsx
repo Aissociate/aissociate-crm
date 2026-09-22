@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, MessageCircle, ArrowDownLeft, ArrowUpRight, PenSquare, Reply, ExternalLink } from 'lucide-react';
+import { Mail, MessageCircle, ArrowDownLeft, ArrowUpRight, PenSquare, Reply, ExternalLink, FolderLock, Check, Paperclip } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { Button, Card, Badge, Spinner } from '@/components/ui';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
+import PieceJointeLien from '@/components/PieceJointeLien';
+import { copyToBucket, type Bucket } from '@/lib/storage';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatDate, fullName } from '@/lib/utils';
-import type { Dossier, Contact, Email } from '@/lib/database.types';
+import type { Dossier, Contact, Email, EmailAttachment } from '@/lib/database.types';
 
 /**
  * Onglet « Messagerie » du dossier client : derniers messages échangés avec le
@@ -17,6 +20,22 @@ export default function OngletMessagerie({ dossier, contact }: { dossier: Dossie
   const [emails, setEmails] = useState<Email[] | null>(null);
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeInitial | null>(null);
+  const { session } = useAuth();
+  // Pièces reçues déjà rangées dans le coffre-fort pendant cette visite.
+  const [ranges, setRanges] = useState<Set<string>>(new Set());
+
+  /** Copie une pièce reçue dans le coffre-fort du bénéficiaire (ex. convention signée en retour). */
+  const rangerAuCoffre = async (e: Email, a: EmailAttachment) => {
+    if (!dossier.contact_id || !a.bucket) return;
+    const { path, error } = await copyToBucket(a.bucket as Bucket, a.url, 'coffre');
+    if (error || !path) { alert(`Copie impossible : ${error ?? 'chemin vide'}`); return; }
+    const { error: insErr } = await supabase.from('contact_documents').insert({
+      contact_id: dossier.contact_id, titre: a.filename, categorie: 'Reçu par e-mail',
+      fichier_url: path, created_by: session?.user.id ?? null,
+    });
+    if (insErr) { alert(insErr.message); return; }
+    setRanges((prev) => new Set(prev).add(`${e.id}:${a.url}`));
+  };
 
   const charger = useCallback(async () => {
     const filtre = [`dossier_id.eq.${dossier.id}`, dossier.contact_id ? `contact_id.eq.${dossier.contact_id}` : '']
@@ -77,6 +96,25 @@ export default function OngletMessagerie({ dossier, contact }: { dossier: Dossie
                   {ouvert === e.id && (
                     <div className="border-t border-line px-3 py-3">
                       <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap font-sans text-sm text-fg">{e.corps ?? ''}</pre>
+                      {(e.attachments ?? []).length > 0 && (
+                        <div className="mt-3 space-y-1.5">
+                          <p className="flex items-center gap-1 text-xs font-medium text-muted"><Paperclip className="h-3.5 w-3.5" /> Pièces jointes</p>
+                          {(e.attachments ?? []).map((a, i) => {
+                            const range = ranges.has(`${e.id}:${a.url}`);
+                            return (
+                              <div key={i} className="flex flex-wrap items-center gap-2">
+                                <PieceJointeLien piece={a} />
+                                {a.bucket && dossier.contact_id && (
+                                  <button type="button" onClick={() => void rangerAuCoffre(e, a)} disabled={range}
+                                    className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand-600 disabled:text-emerald-600">
+                                    {range ? <><Check className="h-3.5 w-3.5" /> Dans le coffre-fort</> : <><FolderLock className="h-3.5 w-3.5" /> Ranger dans le coffre-fort</>}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       <div className="mt-2 flex justify-end">
                         <Button variant="secondary" onClick={() => repondre(e)}><Reply className="h-4 w-4" /> Répondre</Button>
                       </div>
