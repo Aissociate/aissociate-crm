@@ -68,13 +68,14 @@ export default function AgentsIA() {
     const nom = String(f.get('nom') ?? '').trim().replace(/\s+/g, ' ');
     const societe = String(f.get('societe') ?? '').trim();
     const tel = String(f.get('tel') ?? '').trim();
+    const email = String(f.get('email') ?? '').trim().toLowerCase();
     // « Marie Dupont » → prénom Marie, nom Dupont ; un seul mot → nom seul.
     const [premier, ...reste] = nom.split(' ');
     setEtat('envoi'); setErreur('');
     const { error } = await supabase.from('contact_requests').insert([{
       first_name: reste.length ? premier : null,
       last_name: reste.length ? reste.join(' ') : premier,
-      phone: tel, company: societe || null,
+      email: email || null, phone: tel, company: societe || null,
       request_type: 'Employés virtuels (Agents IA)',
       message: `Demande d'appel gratuit de 20 min — Employés virtuels, entreprise : ${societe}`,
       source: window.location.pathname, status: 'new',
@@ -199,6 +200,8 @@ export default function AgentsIA() {
               <input className="champ" type="text" id="ag-nom" name="nom" placeholder="Marie Dupont" autoComplete="name" required />
               <label htmlFor="ag-societe">Nom de votre entreprise</label>
               <input className="champ" type="text" id="ag-societe" name="societe" placeholder="Votre PME" autoComplete="organization" required />
+              <label htmlFor="ag-email">Votre e-mail</label>
+              <input className="champ" type="email" id="ag-email" name="email" placeholder="marie.dupont@votre-pme.re" autoComplete="email" required />
               <label htmlFor="ag-tel">Votre téléphone</label>
               <input className="champ" type="tel" id="ag-tel" name="tel" placeholder="06 92 00 00 00" autoComplete="tel" required />
               {/* Piège à robots : invisible pour un humain. */}
