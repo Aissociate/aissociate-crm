@@ -50,6 +50,7 @@ import SiteFormationDetail from '@/site/pages/FormationDetail';
 import SiteFormationDetailPage from '@/site/pages/FormationDetailPage';
 import SiteAssistance from '@/site/pages/Assistance';
 import SiteDevelopment from '@/site/pages/Development';
+import SiteAgentsIA from '@/site/pages/AgentsIA';
 import SiteBlog from '@/site/pages/Blog';
 import SiteBlogArticle from '@/site/pages/BlogArticle';
 import SiteAides from '@/site/pages/AidesFormation';
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/formations/:id" element={<SiteFormationDetailPage />} />
         <Route path="/assistance" element={<SiteAssistance />} />
         <Route path="/developpement" element={<SiteDevelopment />} />
+        <Route path="/agents-ia" element={<SiteAgentsIA />} />
         <Route path="/blog" element={<SiteBlog />} />
         <Route path="/blog/:slug" element={<SiteBlogArticle />} />
         <Route path="/aides-formation" element={<SiteAides />} />

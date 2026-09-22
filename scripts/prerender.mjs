@@ -131,6 +131,29 @@ const routes = [
     ],
   },
   {
+    // Page « Agents IA » (employés virtuels) : aligné sur le <SEO> de src/site/pages/AgentsIA.tsx.
+    path: '/agents-ia',
+    title: 'Employés virtuels IA pour PME à La Réunion — dès 99 €/mois | Aissociate',
+    description: "Des agents IA qui traitent vos messages clients en moins de 30 secondes, 24h/24 : secrétariat, relance commerciale, marketing. Installés et surveillés à La Réunion, en production en 15 jours ouvrés. Dès 99 €/mois.",
+    keywords: 'employé virtuel, agent IA PME, agent IA La Réunion, secrétaire virtuelle IA, automatisation relance devis, assistant IA entreprise 974',
+    schemas: [
+      {
+        '@context': 'https://schema.org', '@type': 'Service',
+        name: 'Employés virtuels IA pour PME',
+        serviceType: 'Agents IA installés et maintenus (secrétariat, relance commerciale, marketing)',
+        provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate' },
+        areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
+        url: `${SITE}/agents-ia/`, inLanguage: 'fr-FR',
+        offers: [
+          { '@type': 'Offer', name: 'SOLO', price: '99', priceCurrency: 'EUR', description: 'Secrétaire administrative virtuelle, par mois' },
+          { '@type': 'Offer', name: 'DUO', price: '170', priceCurrency: 'EUR', description: 'Secrétaire et responsable commercial virtuels, par mois' },
+          { '@type': 'Offer', name: 'TRIO', price: '249', priceCurrency: 'EUR', description: 'Secrétaire, commercial et marketing virtuels, par mois' },
+        ],
+      },
+      breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Agents IA', url: `${SITE}/agents-ia` }]),
+    ],
+  },
+  {
     path: '/aides-formation',
     title: 'Financer sa formation IA : CPF, OPCO, France Travail | Aissociate',
     description: "Toutes les aides pour financer votre formation en intelligence artificielle : CPF, OPCO, France Travail, plan de développement des compétences. Accompagnement par un organisme Qualiopi à La Réunion.",
@@ -401,6 +424,7 @@ async function generateSitemap(formations, blogArticles) {
     { loc: '/formations', priority: '0.95', changefreq: 'weekly' },
     { loc: '/assistance', priority: '0.75', changefreq: 'monthly' },
     { loc: '/developpement', priority: '0.75', changefreq: 'monthly' },
+    { loc: '/agents-ia', priority: '0.8', changefreq: 'monthly' },
     { loc: '/aides-formation', priority: '0.8', changefreq: 'monthly' },
     { loc: '/blog', priority: '0.85', changefreq: 'daily' },
     { loc: '/contact', priority: '0.75', changefreq: 'monthly' },

@@ -1,0 +1,109 @@
+/*
+  Page « Agents IA » (employés virtuels) — reprise fidèle de la landing
+  landing_page_aissociate_v7_convertion.html. Toutes les règles sont
+  cantonnées sous .lp-agents pour ne pas déborder sur le reste du site
+  (Tailwind), et les couleurs de la maquette sont conservées.
+*/
+.lp-agents {
+  --bg: #F1F5F9; --card: #FFFFFF; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0;
+  --green: #059669; --greenbg: #ECFDF5; --dark: #0F172A;
+  background: var(--bg); color: var(--ink); font-family: 'Inter', system-ui, sans-serif; line-height: 1.55;
+}
+.lp-agents *, .lp-agents *::before, .lp-agents *::after { box-sizing: border-box; }
+.lp-agents h1, .lp-agents h2, .lp-agents h3, .lp-agents p, .lp-agents ul { margin: 0; padding: 0; }
+.lp-agents .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+.lp-agents .hero { padding: 60px 20px 74px; background: var(--bg); position: relative; }
+.lp-agents .kicker { display: inline-flex; align-items: center; gap: 8px; background: var(--greenbg); color: var(--green); padding: 5px 12px; border-radius: 9999px; font-size: .83rem; font-weight: 600; }
+.lp-agents .kicker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.lp-agents .hero h1 { font-size: clamp(1.7rem, 3.2vw, 2.6rem); font-weight: 700; letter-spacing: -.01em; margin: 20px 0 16px; line-height: 1.15; }
+.lp-agents .hero h1 small { color: var(--green); font-size: inherit; }
+.lp-agents .lead { font-size: 1.1rem; color: var(--muted); max-width: 600px; }
+.lp-agents .mono-tag { margin-top: 22px; font-family: 'JetBrains Mono', monospace; font-size: .85rem; color: var(--muted); }
+.lp-agents .mono-tag code { background: var(--greenbg); color: var(--green); padding: 2px 8px; border-radius: 6px; }
+.lp-agents .points { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+.lp-agents .pt { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; font-size: .88rem; font-weight: 500; }
+.lp-agents .pt b { color: var(--green); font-weight: 700; }
+.lp-agents .hero-img { max-width: 1120px; margin: 34px auto; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 24px rgba(15, 23, 42, .14); border: 1px solid var(--line); }
+.lp-agents .hero-img img { width: 100%; height: auto; display: block; }
+
+.lp-agents .dialogue { background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 14px rgba(15, 23, 42, .08); overflow: hidden; margin: 34px auto; max-width: 620px; padding-bottom: 14px; }
+.lp-agents .dialogue-head { background: var(--greenbg); padding: 12px 16px; font-weight: 600; color: var(--green); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lp-agents .dialogue-head .dot { width: 28px; height: 28px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-family: 'JetBrains Mono', monospace; }
+.lp-agents .dialogue-head small { color: var(--muted); font-weight: 400; margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
+.lp-agents .msg { padding: 12px 15px; border-radius: 10px; max-width: 88%; font-size: .92rem; }
+.lp-agents .msg.user { background: #E2E8F0; color: var(--ink); margin: 10px 14px 0 auto; }
+.lp-agents .msg.ai { background: #fff; border: 1px solid var(--line); color: var(--ink); margin: 10px 0 0 14px; }
+.lp-agents .msg.ai b { color: var(--green); }
+.lp-agents .impact { background: var(--greenbg); color: #065f46; padding: 12px 15px; border-radius: 10px; font-weight: 600; font-size: .92rem; margin: 12px 14px 0; }
+
+.lp-agents .garanties { max-width: 760px; margin: 36px auto 20px; padding: 0 20px; }
+.lp-agents .garanties h2 { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; text-align: center; }
+.lp-agents .garanties p { color: var(--muted); text-align: center; margin: 8px 0 22px; font-size: .98rem; }
+.lp-agents .garanties .liste { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.lp-agents .garanties .liste div { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; font-size: .9rem; font-weight: 500; }
+.lp-agents .garanties .liste b { color: var(--green); }
+
+.lp-agents #equipe, .lp-agents #tarifs { padding: 64px 20px; background: var(--bg); }
+.lp-agents #equipe h2, .lp-agents #tarifs h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; text-align: center; }
+.lp-agents #equipe .sous { color: var(--muted); text-align: center; margin: 10px 0 28px; }
+.lp-agents .employes { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+.lp-agents .employe { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; transition: transform .15s; }
+.lp-agents .employe:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(15, 23, 42, .10); }
+.lp-agents .employe .photo { height: 200px; overflow: hidden; }
+.lp-agents .employe .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-agents .employe .body { padding: 16px 18px; }
+.lp-agents .employe .role-tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: .72rem; color: var(--green); background: var(--greenbg); padding: 2px 10px; border-radius: 6px; margin-bottom: 8px; }
+.lp-agents .employe h3 { font-size: 1.12rem; font-weight: 700; }
+.lp-agents .employe .role { font-size: .84rem; color: var(--muted); margin-bottom: 8px; }
+.lp-agents .employe ul { list-style: none; font-size: .9rem; }
+.lp-agents .employe ul li { padding-left: 16px; margin: 4px 0; }
+.lp-agents .employe ul li::before { content: "✓"; color: var(--green); font-weight: 700; margin-right: 7px; }
+.lp-agents .employe .inclus { display: block; text-align: center; background: var(--greenbg); color: var(--green); border-radius: 8px; padding: 8px; font-weight: 700; font-size: .88rem; margin-top: 12px; }
+
+.lp-agents .pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; max-width: 960px; margin: 26px auto; }
+.lp-agents .formule { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 26px; text-align: center; position: relative; }
+.lp-agents .formule.pop { border: 2px solid var(--green); transform: scale(1.03); }
+.lp-agents .formule.pop .tag { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--green); color: #fff; font-size: .72rem; padding: 4px 10px; border-radius: 9999px; font-weight: 600; white-space: nowrap; }
+.lp-agents .formule h3 { font-size: 1.15rem; font-weight: 700; }
+.lp-agents .formule .qui { font-size: .82rem; color: var(--green); font-weight: 600; margin-top: 2px; }
+.lp-agents .formule .prix { font-size: 1.9rem; font-weight: 700; }
+.lp-agents .formule .prix .par { color: var(--muted); font-size: .85rem; }
+.lp-agents .formule ul { list-style: none; margin-top: 14px; font-size: .9rem; }
+.lp-agents .formule ul li::before { content: "✓"; color: var(--green); font-weight: 700; margin-right: 6px; }
+.lp-agents .formule .btn { display: block; width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px; font-weight: 600; margin-top: 14px; cursor: pointer; color: var(--ink); font-family: inherit; font-size: .95rem; }
+.lp-agents .formule.pop .btn { background: var(--ink); color: #fff; border: none; }
+.lp-agents .mentions-tarifs { text-align: center; color: var(--muted); max-width: 680px; margin: 16px auto; font-size: .95rem; }
+
+/* Formulaire de rappel — design de la maquette conservé */
+.lp-agents #capture { background-color: var(--dark); border-radius: 20px; color: #fff; margin: 30px 20px; padding: 48px 20px; position: relative; overflow: hidden; background-size: cover; background-position: center; }
+.lp-agents #capture::before { content: ""; position: absolute; inset: 0; background: rgba(15, 23, 42, .72); z-index: 0; }
+.lp-agents #capture > * { position: relative; z-index: 1; }
+.lp-agents #capture h2 { font-size: 1.5rem; font-weight: 700; text-align: center; }
+.lp-agents #capture h2 .mono { color: var(--green); }
+.lp-agents #capture .reass { color: #CBD5E1; max-width: 560px; margin: 8px auto; text-align: center; }
+.lp-agents .form-capture { max-width: 560px; margin: 22px auto; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .18); border-radius: 16px; padding: 22px; }
+.lp-agents .form-capture .champ { display: block; width: 100%; margin-bottom: 12px; padding: 12px 14px; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .22); border-radius: 10px; color: #fff; font-size: .95rem; font-family: 'Inter', sans-serif; }
+.lp-agents .form-capture .champ::placeholder { color: #A7B3C9; }
+.lp-agents .form-capture .champ:focus { outline: 2px solid var(--green); outline-offset: 1px; }
+.lp-agents .form-capture label { display: block; font-size: .8rem; color: #CBD5E1; margin-bottom: 4px; }
+.lp-agents .form-capture button[type=submit] { display: block; width: 100%; background: var(--green); color: #fff; border: none; padding: 14px; border-radius: 12px; font-weight: 700; font-size: 1.05rem; cursor: pointer; font-family: inherit; }
+.lp-agents .form-capture button[type=submit]:disabled { opacity: .7; cursor: wait; }
+.lp-agents .form-capture .note { text-align: center; color: #A7B3C9; font-size: .8rem; margin-top: 10px; }
+.lp-agents .form-capture .piege { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.lp-agents .form-ok, .lp-agents .form-err { max-width: 560px; margin: 22px auto; color: #fff; border-radius: 16px; padding: 22px; text-align: center; font-weight: 700; }
+.lp-agents .form-ok { background: var(--green); }
+.lp-agents .form-err { background: #7a1f1f; }
+.lp-agents #capture .confiance { text-align: center; color: #CBD5E1; font-size: .82rem; margin-top: 14px; }
+
+.lp-agents .promesse { padding: 34px 20px; background: #fff; border-top: 1px solid var(--line); }
+.lp-agents .promesse .promise { font-size: 1rem; font-weight: 700; text-align: center; }
+.lp-agents .promesse .promise em { color: var(--green); font-style: normal; }
+.lp-agents .promesse small { display: block; color: var(--muted); text-align: center; margin-top: 8px; font-size: .85rem; }
+
+@media (max-width: 600px) {
+  .lp-agents .hero { padding: 44px 16px 54px; }
+  .lp-agents .employes, .lp-agents .pricing { grid-template-columns: 1fr; }
+  .lp-agents .formule.pop { transform: none; }
+  .lp-agents #capture { margin: 30px 12px; }
+}

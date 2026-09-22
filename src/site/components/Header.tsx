@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GraduationCap, Menu, X, Phone, PhoneCall, Code, BookOpen, Euro, MessageCircle } from 'lucide-react';
+import { GraduationCap, Menu, X, Phone, PhoneCall, Code, BookOpen, Euro, MessageCircle, Bot } from 'lucide-react';
 import AdminLogo from './AdminLogo';
 import { trackClick } from '@/lib/track';
 
@@ -53,6 +53,14 @@ export default function Header() {
             >
               <Code className="w-4 h-4" />
               Développement
+            </Link>
+
+            <Link
+              to="/agents-ia"
+              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
+            >
+              <Bot className="w-4 h-4" />
+              Agents IA
             </Link>
 
             <Link
@@ -127,6 +135,15 @@ export default function Header() {
             >
               <Code className="w-4 h-4" />
               Développement
+            </Link>
+
+            <Link
+              to="/agents-ia"
+              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <Bot className="w-4 h-4" />
+              Agents IA
             </Link>
 
             <Link

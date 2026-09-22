@@ -30,6 +30,12 @@
   </url>
 
   <url>
+    <loc>https://aissociate.re/agents-ia/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
     <loc>https://aissociate.re/aides-formation/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
