@@ -34,7 +34,7 @@ const REQUEST_TYPE_GROUPS: { label: string; options: string[] }[] = [
     "L'IA pour optimiser la prospection commerciale", "L'IA pour optimiser les ressources humaines",
     'Apprenez à maîtriser les marchés publics avec lemarchepublic.fr',
   ] },
-  { label: 'Services', options: ['Assistance IA', 'Développement sur mesure'] },
+  { label: 'Services', options: ['Assistance IA', 'Développement sur mesure', 'Employé virtuel'] },
 ];
 
 const empty = (): Partial<Contact> => ({
@@ -406,12 +406,16 @@ export default function Contacts() {
   };
 
   // Saisie interne : reprend le formulaire public et crée OU met à jour le contact
-  // (dédoublonnage par e-mail). Type « Assistance » => tag « Assistance », sans affectation.
+  // (dédoublonnage par e-mail). Type « Assistance » => tag « Assistance », sans affectation ;
+  // type « Employé virtuel » => tag « Agent IA ».
   const submitIntake = async () => {
     if (!intake.lastName.trim() && !intake.email.trim()) { alert('Renseignez au moins le nom ou l\'e-mail.'); return; }
     setIntakeSaving(true);
     const isAssist = /assistance/i.test(intake.requestType);
-    const assistTags = isAssist ? ['Assistance'] : [];
+    const assistTags = [
+      ...(isAssist ? ['Assistance'] : []),
+      ...(/employ[eé]s?[ -]virtuel|agents? ia/i.test(intake.requestType) ? ['Agent IA'] : []),
+    ];
     let existing: Contact | null = null;
     if (intake.email.trim()) {
       const { data: ex } = await supabase.from('contacts').select('*').eq('email', intake.email.trim()).limit(1).maybeSingle();
@@ -656,7 +660,7 @@ export default function Contacts() {
                 {(c.tags ?? []).length > 0 && (
                   <span className="mt-1 flex flex-wrap gap-1">
                     {(c.tags ?? []).map((t) => (
-                      <Badge key={t} tone={t.toLowerCase() === 'assistance' ? 'info' : t.toLowerCase() === 'nouveau prospect' ? 'warning' : 'neutral'}>
+                      <Badge key={t} tone={t.toLowerCase() === 'assistance' || t.toLowerCase() === 'agent ia' ? 'info' : t.toLowerCase() === 'nouveau prospect' ? 'warning' : 'neutral'}>
                         <Tag className="mr-1 h-3 w-3" />{t}
                       </Badge>
                     ))}

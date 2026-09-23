@@ -231,6 +231,7 @@ export default function Contact() {
                     <optgroup label="Autres services">
                       <option value="assistance">Assistance IA</option>
                       <option value="developpement">Développement</option>
+                      <option value="Employé virtuel">Employé virtuel (Agents IA)</option>
                       <option value="autre">Autre demande</option>
                     </optgroup>
                   </select>

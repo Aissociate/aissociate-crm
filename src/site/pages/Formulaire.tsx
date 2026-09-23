@@ -267,6 +267,7 @@ const Formulaire = () => {
                   <optgroup label="Services">
                     <option value="Assistance IA">Assistance IA - Accompagnement personnalisé</option>
                     <option value="Développement sur mesure">Développement sur mesure - Solutions IA</option>
+                    <option value="Employé virtuel">Employé virtuel - Agents IA pour votre entreprise</option>
                   </optgroup>
                 </select>
               </div>
