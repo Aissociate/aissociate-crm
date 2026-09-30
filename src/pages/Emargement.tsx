@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, Link2, Copy, Check, Send, Loader as Loader2, ShieldCheck, UserCheck } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, Link2, Check, Send, Loader as Loader2, ShieldCheck, UserCheck, UserPlus } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Card, Button, Field, Modal, Spinner, Badge, EmptyState, type Tone } from '@/components/ui';
+import { PageHeader, Card, Button, Field, Modal, Spinner, Badge, EmptyState, SearchSelect, type Tone } from '@/components/ui';
 import { formatDate, fullName, ymdLocal } from '@/lib/utils';
 import type {
-  SessionFormation, SessionParticipant, EmargementCreneau, EmargementAcces, EmargementSignature,
+  Contact, SessionFormation, SessionParticipant, EmargementCreneau, EmargementAcces, EmargementSignature,
 } from '@/lib/database.types';
 
 const DEMIS: { key: 'matin' | 'apres_midi'; label: string }[] = [
@@ -26,8 +26,21 @@ function joursEntre(debut: string, fin: string | null): string[] {
   return out.slice(0, 60); // garde-fou
 }
 
+const escHtml = (v: unknown) =>
+  String(v ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]!));
+
+/** Feuille composée à la main : date, demi-journées et participants choisis. */
+type Feuille = { date: string; matin: boolean; apresMidi: boolean; choisis: Set<string>; envoyer: boolean };
+const feuilleVide = (participants: SessionParticipant[]): Feuille => ({
+  date: ymdLocal(new Date()), matin: true, apresMidi: true,
+  choisis: new Set(participants.map((p) => p.id)), envoyer: true,
+});
+
 export default function Emargement() {
-  const { session: auth } = useAuth();
+  const { session: auth, profile } = useAuth();
+  const contacts = useCollection<Contact>('contacts', {
+    select: 'id, nom, prenom, email', orderBy: { column: 'nom', ascending: true },
+  });
   const sessions = useCollection<SessionFormation>('sessions_formation', {
     orderBy: { column: 'date_debut', ascending: false },
   });
@@ -45,6 +58,15 @@ export default function Emargement() {
   const [declar, setDeclar] = useState<{ creneau: EmargementCreneau; participant: SessionParticipant } | null>(null);
   const [declarStatut, setDeclarStatut] = useState<EmargementSignature['statut']>('present');
   const [declarMotif, setDeclarMotif] = useState('');
+  // Nouvelle feuille : date, demi-journées et participants choisis, puis envoi par e-mail.
+  const [feuille, setFeuille] = useState<Feuille | null>(null);
+  const [ajoutLibre, setAjoutLibre] = useState({ nom: '', prenom: '', email: '' });
+  // Adresse d'expédition réelle pour la trace en Messagerie (cf. Positionnement).
+  const [smtpFrom, setSmtpFrom] = useState<string | null>(null);
+  useEffect(() => {
+    void supabase.from('parametres').select('valeur').eq('cle', 'smtp').maybeSingle()
+      .then(({ data }) => setSmtpFrom(((data?.valeur ?? {}) as { from?: string }).from ?? null));
+  }, []);
 
   const charger = useCallback(async () => {
     if (!selected) { setParticipants([]); setCreneaux([]); setAcces([]); setSignatures([]); return; }
@@ -123,7 +145,120 @@ export default function Emargement() {
     setTimeout(() => setCopie(null), 2000);
   };
 
-  const ouvrirDeclaratif = (creneau: EmargementCreneau, participant: SessionParticipant) => {
+  const optionsContacts = useMemo(
+    () => contacts.data.map((c) => ({ value: c.id, label: fullName(c.prenom, c.nom), sub: c.email ?? undefined })),
+    [contacts.data],
+  );
+
+  /** Inscrit un participant à la session depuis la feuille, et le coche. */
+  const ajouterParticipant = async (ligne: { nom: string; prenom: string | null; email: string | null; contact_id: string | null }) => {
+    if (!selected) return;
+    const email = ligne.email?.trim().toLowerCase() || null;
+    const doublon = participants.find((p) =>
+      (ligne.contact_id && p.contact_id === ligne.contact_id) || (email && p.email?.toLowerCase() === email));
+    if (doublon) {
+      setFeuille((f) => f && { ...f, choisis: new Set(f.choisis).add(doublon.id) });
+      return;
+    }
+    setBusy('ajout');
+    const { data, error } = await supabase.from('session_participants')
+      .insert({ session_id: selected.id, ...ligne, email }).select().single();
+    setBusy(null);
+    if (error) { alert(error.message); return; }
+    const p = data as SessionParticipant;
+    setParticipants((prev) => [...prev, p].sort((a, b) => a.nom.localeCompare(b.nom)));
+    setFeuille((f) => f && { ...f, choisis: new Set(f.choisis).add(p.id) });
+  };
+
+  const ajouterContact = (id: string) => {
+    const c = contacts.data.find((x) => x.id === id);
+    if (c) void ajouterParticipant({ nom: c.nom, prenom: c.prenom, email: c.email, contact_id: c.id });
+  };
+
+  const ajouterLibre = async () => {
+    if (!ajoutLibre.nom.trim()) { alert('Renseignez au moins le nom.'); return; }
+    await ajouterParticipant({
+      nom: ajoutLibre.nom.trim(), prenom: ajoutLibre.prenom.trim() || null,
+      email: ajoutLibre.email.trim() || null, contact_id: null,
+    });
+    setAjoutLibre({ nom: '', prenom: '', email: '' });
+  };
+
+  /** Envoie au participant le lien de sa feuille d'émargement, et le trace en Messagerie. */
+  const envoyerLien = async (p: SessionParticipant, dateFeuille: string, demis: string[]): Promise<boolean> => {
+    const a = await assurerAcces(p);
+    if (!a || !p.email || !selected) return false;
+    const url = `${window.location.origin}/emargement/${a.token}`;
+    const quand = `${formatDate(dateFeuille, 'EEEE d MMMM yyyy')} (${demis.join(' et ').toLowerCase()})`;
+    const sujet = `Feuille d'émargement — ${selected.titre}`;
+    const html = `
+      <p>Bonjour ${escHtml(p.prenom ?? p.nom)},</p>
+      <p>Voici votre feuille d'émargement pour la formation «&nbsp;<strong>${escHtml(selected.titre)}</strong>&nbsp;»
+      du ${escHtml(quand)}.</p>
+      <p><a href="${url}" style="background:#ea6a1e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Signer ma feuille d'émargement</a></p>
+      <p>Sur la page, cliquez sur « Recevoir mon code » : un code vous est envoyé par e-mail pour valider
+      votre signature. Vous pouvez signer à partir du jour de la formation.</p>
+      <p>Ou copiez ce lien : ${url}</p>
+      <p>Merci,<br/>L'équipe Aissociate</p>`;
+    // Version texte : c'est elle que la Messagerie affiche, lien compris.
+    const texte = [
+      `Bonjour ${p.prenom ?? p.nom},`,
+      '',
+      `Voici votre feuille d'émargement pour la formation « ${selected.titre} » du ${quand}.`,
+      '',
+      `Signer ma feuille d'émargement : ${url}`,
+      '',
+      'Sur la page, cliquez sur « Recevoir mon code » : un code vous est envoyé par e-mail pour valider votre signature. Vous pouvez signer à partir du jour de la formation.',
+      '',
+      'Merci,',
+      "L'équipe Aissociate",
+    ].join('\n');
+    const { error } = await supabase.functions.invoke('send-email', { body: { to: p.email, subject: sujet, html, text: texte } });
+    if (error) return false;
+    await supabase.from('emails').insert({
+      destinataires: [p.email], copie: [], sujet, corps: texte,
+      statut: 'envoye', canal: 'email', direction: 'sortant',
+      expediteur: smtpFrom ?? profile?.email ?? null,
+      contact_id: p.contact_id, sent_at: new Date().toISOString(),
+      owner_id: auth?.user.id ?? null, attachments: [],
+    });
+    return true;
+  };
+
+  const creerFeuille = async () => {
+    if (!selected || !feuille) return;
+    const demis = DEMIS.filter((d) => (d.key === 'matin' ? feuille.matin : feuille.apresMidi));
+    if (!feuille.date) { alert('Choisissez la date.'); return; }
+    if (demis.length === 0) { alert('Cochez au moins une demi-journée.'); return; }
+    const choisis = participants.filter((p) => feuille.choisis.has(p.id));
+    if (choisis.length === 0) { alert('Cochez au moins un participant.'); return; }
+    setBusy('feuille');
+    const { error } = await supabase.from('emargement_creneaux').upsert(
+      demis.map((d) => ({ session_id: selected.id, date: feuille.date, demi_journee: d.key })),
+      { onConflict: 'session_id,date,demi_journee', ignoreDuplicates: true },
+    );
+    if (error) { setBusy(null); alert(error.message); return; }
+    const sansEmail: string[] = [];
+    const echecs: string[] = [];
+    let envoyes = 0;
+    if (feuille.envoyer) {
+      for (const p of choisis) {
+        if (!p.email) { sansEmail.push(fullName(p.prenom, p.nom)); continue; }
+        if (await envoyerLien(p, feuille.date, demis.map((d) => d.label))) envoyes++;
+        else echecs.push(fullName(p.prenom, p.nom));
+      }
+    }
+    setBusy(null);
+    setFeuille(null);
+    void charger();
+    const bilan = [`Feuille du ${formatDate(feuille.date)} créée.`];
+    if (feuille.envoyer) bilan.push(`${envoyes} e-mail(s) envoyé(s).`);
+    if (sansEmail.length) bilan.push(`Sans adresse e-mail : ${sansEmail.join(', ')}.`);
+    if (echecs.length) bilan.push(`Envoi impossible (SMTP ?) : ${echecs.join(', ')}.`);
+    alert(bilan.join('\n'));
+  };
+
+  const ouvrirDeclaratif =(creneau: EmargementCreneau, participant: SessionParticipant) => {
     const existante = sigDe.get(`${creneau.id}:${participant.id}`);
     setDeclarStatut(existante?.statut ?? 'present');
     setDeclarMotif(existante?.motif ?? '');
@@ -168,6 +303,10 @@ export default function Emargement() {
               </select>
             </Field>
           </div>
+          <Button onClick={() => setFeuille(feuilleVide(participants))} disabled={!selected}>
+            <CalendarPlus className="h-4 w-4" />
+            Nouvelle feuille
+          </Button>
           <Button variant="secondary" onClick={genererCreneaux} disabled={!selected || busy === 'creneaux'}>
             {busy === 'creneaux' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
             Créer les demi-journées
@@ -185,7 +324,7 @@ export default function Emargement() {
       {!selected ? (
         <EmptyState title="Aucune session" message="Créez une session dans le calendrier pour démarrer un émargement." />
       ) : creneaux.length === 0 ? (
-        <EmptyState title="Aucune demi-journée" message="Cliquez sur « Créer les demi-journées » pour générer la grille d'émargement." />
+        <EmptyState title="Aucune demi-journée" message="Cliquez sur « Nouvelle feuille » pour choisir la date et les participants, ou sur « Créer les demi-journées » pour toute la durée de la session." />
       ) : participants.length === 0 ? (
         <EmptyState title="Aucun participant" message="Inscrivez des participants à la session depuis le calendrier." />
       ) : loading ? (
@@ -272,6 +411,98 @@ export default function Emargement() {
           </div>
         </Card>
       )}
+
+      {/* Nouvelle feuille : date, demi-journées et participants choisis à la main */}
+      <Modal
+        open={!!feuille} onClose={() => setFeuille(null)} title="Nouvelle feuille d'émargement" wide
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setFeuille(null)}>Annuler</Button>
+            <Button onClick={creerFeuille} disabled={busy === 'feuille'}>
+              {busy === 'feuille' ? <Loader2 className="h-4 w-4 animate-spin" /> : feuille?.envoyer ? <Send className="h-4 w-4" /> : <CalendarPlus className="h-4 w-4" />}
+              {feuille?.envoyer ? `Créer et envoyer (${feuille.choisis.size})` : 'Créer la feuille'}
+            </Button>
+          </>
+        }
+      >
+        {feuille && selected && (
+          <div className="space-y-5">
+            <p className="text-sm text-muted">Session : <strong className="text-fg">{selected.titre}</strong></p>
+            <div className="flex flex-wrap items-end gap-4">
+              <Field label="Date">
+                <input type="date" className="input" value={feuille.date}
+                  onChange={(e) => setFeuille({ ...feuille, date: e.target.value })} />
+              </Field>
+              <label className="flex items-center gap-2 pb-2 text-sm text-fg">
+                <input type="checkbox" checked={feuille.matin} onChange={(e) => setFeuille({ ...feuille, matin: e.target.checked })} />
+                Matin
+              </label>
+              <label className="flex items-center gap-2 pb-2 text-sm text-fg">
+                <input type="checkbox" checked={feuille.apresMidi} onChange={(e) => setFeuille({ ...feuille, apresMidi: e.target.checked })} />
+                Après-midi
+              </label>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold text-fg">Participants</span>
+                {participants.length > 0 && (
+                  <button type="button" className="text-xs text-brand-600 hover:underline"
+                    onClick={() => setFeuille({
+                      ...feuille,
+                      choisis: feuille.choisis.size === participants.length ? new Set() : new Set(participants.map((p) => p.id)),
+                    })}>
+                    {feuille.choisis.size === participants.length ? 'Tout décocher' : 'Tout cocher'}
+                  </button>
+                )}
+              </div>
+              {participants.length === 0 ? (
+                <p className="text-sm text-muted">Aucun participant pour l'instant : ajoutez-en ci-dessous.</p>
+              ) : (
+                <ul className="max-h-60 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+                  {participants.map((p) => (
+                    <li key={p.id}>
+                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-surface-2">
+                        <input type="checkbox" checked={feuille.choisis.has(p.id)}
+                          onChange={() => {
+                            const n = new Set(feuille.choisis);
+                            if (n.has(p.id)) n.delete(p.id); else n.add(p.id);
+                            setFeuille({ ...feuille, choisis: n });
+                          }} />
+                        <span className="flex-1 text-sm text-fg">{fullName(p.prenom, p.nom)}</span>
+                        <span className={`text-xs ${p.email ? 'text-muted' : 'text-amber-600'}`}>{p.email ?? 'sans e-mail'}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="space-y-3 rounded-lg bg-surface-2 p-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-fg"><UserPlus className="h-4 w-4" /> Ajouter un participant</span>
+              <Field label="Depuis les contacts du CRM">
+                <SearchSelect value="" onChange={ajouterContact} options={optionsContacts}
+                  placeholder="Rechercher un contact…" disabled={busy === 'ajout'} />
+              </Field>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1.4fr_auto] sm:items-end">
+                <Field label="Nom"><input className="input" value={ajoutLibre.nom} onChange={(e) => setAjoutLibre({ ...ajoutLibre, nom: e.target.value })} /></Field>
+                <Field label="Prénom"><input className="input" value={ajoutLibre.prenom} onChange={(e) => setAjoutLibre({ ...ajoutLibre, prenom: e.target.value })} /></Field>
+                <Field label="E-mail"><input type="email" className="input" value={ajoutLibre.email} onChange={(e) => setAjoutLibre({ ...ajoutLibre, email: e.target.value })} /></Field>
+                <Button variant="secondary" onClick={ajouterLibre} disabled={busy === 'ajout'}>Ajouter</Button>
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm text-fg">
+              <input type="checkbox" className="mt-0.5" checked={feuille.envoyer}
+                onChange={(e) => setFeuille({ ...feuille, envoyer: e.target.checked })} />
+              <span>
+                Envoyer la feuille par e-mail aux participants cochés
+                <span className="block text-xs text-muted">Chacun reçoit son lien de signature et valide avec un code reçu par e-mail.</span>
+              </span>
+            </label>
+          </div>
+        )}
+      </Modal>
 
       {/* Repli déclaratif : le formateur atteste à la place du stagiaire */}
       <Modal
