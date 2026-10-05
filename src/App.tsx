@@ -21,6 +21,7 @@ const Devis = lazy(() => import('@/pages/Devis'));
 const Factures = lazy(() => import('@/pages/Factures'));
 const Tresorerie = lazy(() => import('@/pages/Tresorerie'));
 const Positionnement = lazy(() => import('@/pages/Positionnement'));
+const Evaluations = lazy(() => import('@/pages/Evaluations'));
 const Bpf = lazy(() => import('@/pages/Bpf'));
 const Dossiers = lazy(() => import('@/pages/Dossiers'));
 const DossierDetail = lazy(() => import('@/pages/DossierDetail'));
@@ -68,6 +69,7 @@ const SiteSignature = lazy(() => import('@/site/pages/Signature'));
 const SiteEmargement = lazy(() => import('@/site/pages/Emargement'));
 const SiteEspaceClient = lazy(() => import('@/site/pages/EspaceClient'));
 const SitePositionnement = lazy(() => import('@/site/pages/Positionnement'));
+const SiteEvaluation = lazy(() => import('@/site/pages/Evaluation'));
 
 function LazyFallback() {
   return (
@@ -111,6 +113,7 @@ export default function App() {
       <Route path="/emargement/:token" element={<SiteEmargement />} />
       <Route path="/espace/:token" element={<SiteEspaceClient />} />
       <Route path="/positionnement/:token" element={<SitePositionnement />} />
+      <Route path="/evaluation/:token" element={<SiteEvaluation />} />
 
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
@@ -137,6 +140,7 @@ export default function App() {
         <Route path="/documents" element={<Documents />} />
         <Route path="/qualiopi" element={<Qualiopi />} />
         <Route path="/positionnement" element={<Positionnement />} />
+        <Route path="/evaluations" element={<Evaluations />} />
         <Route path="/messagerie" element={<Messagerie />} />
         <Route path="/assistant" element={<Assistant />} />
         <Route path="/blog-admin" element={<ProtectedRoute managerOnly><BlogAdmin /></ProtectedRoute>} />

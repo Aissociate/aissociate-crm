@@ -21,6 +21,8 @@ Disallow: /onboarding
 Disallow: /qualiopi
 Disallow: /q/
 Disallow: /q
+Disallow: /evaluation/
+Disallow: /evaluations
 Disallow: /signature/
 Disallow: /signature
 Disallow: /emargement/

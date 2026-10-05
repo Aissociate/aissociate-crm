@@ -6,6 +6,8 @@
 //     dont date_debut >= depuis sont concernées (protège les sessions passées).
 //   - fenêtres d'envoi : positionnement ~J-3 avant le début ; à chaud dès la fin ;
 //     à froid à J+90 de la fin. Relance unique 7 jours après un envoi sans réponse.
+//   - évaluations par lien (`evaluation_liens`) : envoyées à leur échéance
+//     `envoi_prevu_le` (froid = fin de formation + 30 jours).
 //
 // L'e-mail part via la fonction `send-email` (config SMTP existante).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -94,7 +96,50 @@ Deno.serve(async (req: Request) => {
       } catch (_e) { skipped++; }
     }
 
-    return json({ ok: true, sent, relanced, skipped });
+    // ── Évaluations par lien (/evaluation/:token) arrivées à échéance ──────────
+    // Typiquement le froid à J+30 de la fin. Liens nominatifs seulement ; même
+    // garde-fou `depuis`, appliqué à la date de fin de formation.
+    const today = new Date(now).toISOString().slice(0, 10);
+    const { data: echus } = await sb.from("evaluation_liens")
+      .select("id, type, token, libelle, destinataire_nom, destinataire_email, contact_id, dossier_id, date_fin_formation")
+      .eq("statut", "a_envoyer").eq("actif", true).eq("multi", false)
+      .not("destinataire_email", "is", null).lte("envoi_prevu_le", today);
+    let evalSent = 0;
+    for (const l of echus ?? []) {
+      if (depuis && (!l.date_fin_formation || new Date(l.date_fin_formation).getTime() < depuis)) { skipped++; continue; }
+      try {
+        const link = `${site}/evaluation/${l.token}`;
+        // Même texte que messageInvitation() (src/lib/evaluation.ts).
+        const intro = l.type === "chaud"
+          ? "Merci d'avoir participé à la formation. Pourriez-vous prendre 5 minutes pour nous dire ce que vous en avez pensé ? Vos réponses nous servent directement à améliorer nos formations."
+          : "Il y a environ un mois, vous suiviez votre formation. Où en êtes-vous ? Ce court questionnaire (5 minutes) nous permet de mesurer ce que la formation vous a réellement apporté au quotidien.";
+        const bouton = l.type === "chaud" ? "Donner mon avis" : "Répondre au questionnaire";
+        const texte = [`Bonjour ${l.destinataire_nom ?? ""},`, "", intro, "", `${bouton} : ${link}`, "", "Merci,", "L'équipe Aissociate"].join("\n");
+        const html = `
+          <p>Bonjour ${l.destinataire_nom ?? ""},</p>
+          <p>${intro}</p>
+          <p><a href="${link}" style="background:#ea6a1e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">${bouton}</a></p>
+          <p>Ou copiez ce lien : ${link}</p>
+          <p>Merci,<br/>L'équipe Aissociate</p>`;
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SERVICE}` },
+          body: JSON.stringify({ to: l.destinataire_email, subject: l.libelle, html, text: texte }),
+        });
+        if (!r.ok) throw new Error(`send-email ${r.status}`);
+        const envoyeLe = new Date().toISOString();
+        await sb.from("evaluation_liens").update({ statut: "envoye", sent_at: envoyeLe }).eq("id", l.id);
+        // Trace en Messagerie, comme un envoi depuis le CRM.
+        await sb.from("emails").insert({
+          destinataires: [l.destinataire_email], copie: [], sujet: l.libelle, corps: texte,
+          statut: "envoye", canal: "email", direction: "sortant",
+          contact_id: l.contact_id, dossier_id: l.dossier_id, sent_at: envoyeLe, attachments: [],
+        });
+        evalSent++;
+      } catch (_e) { skipped++; }
+    }
+
+    return json({ ok: true, sent, relanced, evaluations: evalSent, skipped });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Erreur serveur" }, 500);
   }

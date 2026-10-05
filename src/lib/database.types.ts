@@ -483,6 +483,30 @@ export type Positionnement = Timestamps & {
   /** Plan de formation rédigé à partir de ce positionnement. */
   plan_id: string | null;
 };
+// ── Évaluations de fin de formation (à chaud / à froid J+30, lien tokenisé) ──
+export type EvaluationLien = Timestamps & {
+  id: string; token: string; type: 'chaud' | 'froid'; libelle: string;
+  contact_id: string | null; destinataire_nom: string | null; destinataire_email: string | null;
+  dossier_id: string | null; session_id: string | null; formation_intitule: string | null;
+  date_fin_formation: string | null;
+  /** Échéance d'envoi (fin de formation + 30 j pour un froid). */
+  envoi_prevu_le: string | null;
+  /** Réponse à chaud dont ce lien à froid est la suite. */
+  source_evaluation_id: string | null;
+  multi: boolean; actif: boolean; statut: PositionnementStatut;
+  sent_at: string | null; created_by: string | null;
+};
+
+export type Evaluation = Timestamps & {
+  id: string; type: 'chaud' | 'froid'; lien_id: string | null; contact_id: string | null;
+  dossier_id: string | null; session_id: string | null;
+  nom: string; email: string | null; organisation: string | null;
+  poste: string | null; formation_intitule: string | null;
+  origine: 'apprenant' | 'formateur';
+  reponses: Json; note_globale: number | null; pct: number | null; nps: number | null;
+  synthese: string | null; document_id: string | null; saisi_par: string | null; completed_at: string;
+};
+
 type TableShape<Row extends Record<string, unknown>> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -566,6 +590,8 @@ export type Database = {
       tresorerie_config: TableShape<TresorerieConfig>;
       positionnement_liens: TableShape<PositionnementLien>;
       positionnements: TableShape<Positionnement>;
+      evaluation_liens: TableShape<EvaluationLien>;
+      evaluations: TableShape<Evaluation>;
     };
     Views: EmptyMap;
     Functions: {

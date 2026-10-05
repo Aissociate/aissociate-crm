@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileSignature, FileText, Sparkles, Plus, Loader as Loader2, ClipboardCheck, Send, Copy, Check,
-  FolderCheck, ExternalLink, RefreshCw,
+  FolderCheck, ExternalLink, RefreshCw, MessageSquareHeart, CalendarClock,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,15 +16,20 @@ import AddToDossierButton from '@/components/AddToDossierButton';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
 import ConventionPositionnementModal, { type StagiaireDossier } from '@/components/ConventionPositionnementModal';
 import { formatDate, fullName } from '@/lib/utils';
+import {
+  echeanceFroid, messageInvitation, LIBELLES_DEFAUT, TYPE_LABELS, DELAI_FROID_JOURS, type EvaluationType,
+} from '@/lib/evaluation';
 import type {
   Dossier, Contact, DossierPiece, Formation, PlanFormation, PlanPdf, Positionnement as Pos,
   PositionnementLien, SessionFormation, SessionParticipant, QualiopiDossierDoc, QualiopiModeleDoc,
+  Evaluation, EvaluationLien,
 } from '@/lib/database.types';
 
 /**
  * Onglet « Documents à générer » du dossier client : convention, plan
  * individuel de formation, et le reste de la paperasse (documents AGEFICE,
- * justificatifs Qualiopi des sessions, test de positionnement).
+ * justificatifs Qualiopi des sessions, test de positionnement, évaluations à
+ * chaud et à froid).
  *
  * Tout ce qui est produit ici se dépose d'un clic dans les pièces du dossier
  * (bouton dossier) et reste listé dans Plans de formation.
@@ -74,6 +79,8 @@ export default function OngletDocuments({
   const [pdfs, setPdfs] = useState<PlanPdf[]>([]);
   const [positionnements, setPositionnements] = useState<Pos[]>([]);
   const [liens, setLiens] = useState<PositionnementLien[]>([]);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [liensEval, setLiensEval] = useState<EvaluationLien[]>([]);
   const [participations, setParticipations] = useState<SessionParticipant[]>([]);
   const [qDocs, setQDocs] = useState<QualiopiDossierDoc[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,7 +88,8 @@ export default function OngletDocuments({
   const [info, setInfo] = useState<string | null>(null);
   const [conventionOpen, setConventionOpen] = useState(false);
   const [planAgefice, setPlanAgefice] = useState('');
-  const [mail, setMail] = useState<{ initial: ComposeInitial; lienId: string } | null>(null);
+  // `table` : le lien envoyé (positionnement ou évaluation) passe à « envoyé » au retour.
+  const [mail, setMail] = useState<{ initial: ComposeInitial; lienId: string; table: 'positionnement_liens' | 'evaluation_liens' } | null>(null);
   const [copie, setCopie] = useState<string | null>(null);
 
   const entrepriseId = dossier.entreprise_id ?? contact?.entreprise_id ?? null;
@@ -114,6 +122,14 @@ export default function OngletDocuments({
     ]);
     setPositionnements(pos ?? []);
     setLiens(li ?? []);
+
+    // Évaluations à chaud / à froid du bénéficiaire ou du dossier.
+    const [{ data: ev }, { data: le }] = await Promise.all([
+      supabase.from('evaluations').select('*').or(filtre).order('completed_at', { ascending: false }),
+      supabase.from('evaluation_liens').select('*').or(filtre).order('created_at', { ascending: false }),
+    ]);
+    setEvaluations(ev ?? []);
+    setLiensEval(le ?? []);
 
     // Qualiopi : sessions où le bénéficiaire est inscrit → justificatifs.
     if (dossier.contact_id) {
@@ -246,7 +262,7 @@ export default function OngletDocuments({
     }
     const url = urlLien(lien.token);
     setMail({
-      lienId: lien.id,
+      lienId: lien.id, table: 'positionnement_liens',
       initial: {
         canal: 'email', dest: contact.email ?? '', contactId: contact.id, dossierId: dossier.id,
         sujet: lien.libelle,
@@ -262,6 +278,50 @@ export default function OngletDocuments({
     try { await navigator.clipboard.writeText(urlLien(token)); setCopie(token); setTimeout(() => setCopie(null), 1500); }
     catch { setErreur('Copie impossible : sélectionnez le lien à la main.'); }
   };
+
+  // ── Évaluations à chaud / à froid ─────────────────────────────────────────
+  const urlEval = (token: string) => `${window.location.origin}/evaluation/${token}`;
+  /** Fin de formation : session du dossier, à défaut aujourd'hui. */
+  const finFormation = (sessionDossier?.date_fin ?? sessionDossier?.date_debut ?? new Date().toISOString()).slice(0, 10);
+
+  const lienEvalPersonnel = async (type: EvaluationType): Promise<EvaluationLien> => {
+    if (!contact) throw new Error('Le dossier n’a pas de bénéficiaire.');
+    const existant = liensEval.find((l) => l.type === type && !l.multi && l.actif && l.statut !== 'complete');
+    if (existant) return existant;
+    const { data, error } = await supabase.from('evaluation_liens').insert({
+      type, libelle: LIBELLES_DEFAUT[type],
+      contact_id: contact.id, destinataire_nom: fullName(contact.prenom, contact.nom),
+      destinataire_email: contact.email, dossier_id: dossier.id, session_id: sessionDossier?.id ?? null,
+      formation_intitule: formation?.intitule ?? sessionDossier?.titre ?? null,
+      date_fin_formation: finFormation,
+      envoi_prevu_le: type === 'froid' ? echeanceFroid(finFormation) : null,
+      created_by: userId,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return data as EvaluationLien;
+  };
+
+  const envoyerEval = (type: EvaluationType) => appeler(`ev-${type}`, async () => {
+    const lien = await lienEvalPersonnel(type);
+    const { texte } = messageInvitation(type, lien.destinataire_nom, urlEval(lien.token), lien.statut !== 'a_envoyer');
+    setMail({
+      lienId: lien.id, table: 'evaluation_liens',
+      initial: {
+        canal: 'email', dest: contact?.email ?? '', contactId: contact?.id, dossierId: dossier.id,
+        sujet: lien.libelle, corps: texte,
+      },
+    });
+  });
+
+  const copierLienEval = async (token: string) => {
+    try { await navigator.clipboard.writeText(urlEval(token)); setCopie(token); setTimeout(() => setCopie(null), 1500); }
+    catch { setErreur('Copie impossible : sélectionnez le lien à la main.'); }
+  };
+
+  const programmerFroid = () => appeler('ev-prog', async () => {
+    const lien = await lienEvalPersonnel('froid');
+    setInfo(`Évaluation à froid programmée : envoi prévu le ${formatDate(lien.envoi_prevu_le ?? '')} (fin de formation + ${DELAI_FROID_JOURS} jours). Elle apparaîtra dans « Évaluations » à l'échéance.`);
+  });
 
   const optionsPlans = plans.map((p) => ({ value: p.id, label: p.nom, sub: `${p.duree_heures} h · ${formatDate(p.created_at)}` }));
   const pdfsDe = (kind: string) => pdfs.filter((d) => d.kind === kind);
@@ -451,6 +511,53 @@ export default function OngletDocuments({
               </div>
             ))}
           </div>
+
+          {/* Évaluations à chaud / à froid */}
+          <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-medium text-fg"><MessageSquareHeart className="h-4 w-4 text-muted" /> Évaluations de fin de formation</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" onClick={() => void envoyerEval('chaud')} disabled={!!busy || !contact}>
+                  {busy === 'ev-chaud' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Envoyer l'évaluation à chaud
+                </Button>
+                {liensEval.some((l) => l.type === 'froid' && !l.multi && l.actif && l.statut === 'a_envoyer') ? (
+                  <Button variant="secondary" onClick={() => void envoyerEval('froid')} disabled={!!busy || !contact}>
+                    {busy === 'ev-froid' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Envoyer le froid maintenant
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={() => void programmerFroid()} disabled={!!busy || !contact}>
+                    {busy === 'ev-prog' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />} Programmer le froid J+{DELAI_FROID_JOURS}
+                  </Button>
+                )}
+                <Link to="/evaluations" className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand-600">
+                  <ExternalLink className="h-3.5 w-3.5" /> Liens de groupe et toutes les réponses
+                </Link>
+              </div>
+            </div>
+            {evaluations.length === 0 ? <p className="text-xs text-muted">Aucune réponse pour l'instant.</p> : (
+              <ul className="space-y-1.5">
+                {evaluations.map((e) => (
+                  <li key={e.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                    <Badge tone={e.type === 'chaud' ? 'warning' : 'info'}>{TYPE_LABELS[e.type]}</Badge>
+                    <span className="min-w-0 flex-1 truncate text-fg">{e.nom}</span>
+                    <Badge tone="success">{e.note_globale != null ? `${Number(e.note_globale).toLocaleString('fr-FR')} / 5` : '—'}{e.nps != null ? ` · reco ${e.nps}/10` : ''}</Badge>
+                    <span className="text-xs text-muted">{formatDate(e.completed_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {liensEval.filter((l) => l.actif && l.statut !== 'complete').map((l) => (
+              <div key={l.id} className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span>
+                  {TYPE_LABELS[l.type]} · lien {l.multi ? 'de groupe' : 'personnel'} · {l.statut}
+                  {l.sent_at ? ` · envoyé le ${formatDate(l.sent_at)}` : l.envoi_prevu_le ? ` · envoi prévu le ${formatDate(l.envoi_prevu_le)}` : ''}
+                </span>
+                <button onClick={() => void copierLienEval(l.token)} className="inline-flex items-center gap-1 hover:text-brand-600">
+                  {copie === l.token ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} Copier le lien
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </Card>
 
@@ -473,7 +580,7 @@ export default function OngletDocuments({
         open={!!mail} onClose={() => setMail(null)} initial={mail?.initial ?? {}}
         onSent={() => {
           const id = mail?.lienId;
-          if (id) void supabase.from('positionnement_liens').update({ statut: 'envoye', sent_at: new Date().toISOString() }).eq('id', id).then(() => charger());
+          if (id && mail) void supabase.from(mail.table).update({ statut: 'envoye', sent_at: new Date().toISOString() }).eq('id', id).then(() => charger());
         }}
       />
     </div>
