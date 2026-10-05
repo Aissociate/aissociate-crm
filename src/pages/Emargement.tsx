@@ -325,10 +325,21 @@ export default function Emargement() {
         <EmptyState title="Aucune session" message="Créez une session dans le calendrier pour démarrer un émargement." />
       ) : creneaux.length === 0 ? (
         <EmptyState title="Aucune demi-journée" message="Cliquez sur « Nouvelle feuille » pour choisir la date et les participants, ou sur « Créer les demi-journées » pour toute la durée de la session." />
-      ) : participants.length === 0 ? (
-        <EmptyState title="Aucun participant" message="Inscrivez des participants à la session depuis le calendrier." />
       ) : loading ? (
         <div className="flex justify-center py-12"><Spinner className="h-7 w-7" /></div>
+      ) : participants.length === 0 ? (
+        // Demi-journées créées mais personne d'inscrit : sans cette porte
+        // d'entrée, la grille (et donc l'envoi des liens) restait invisible.
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line bg-surface py-14 text-center">
+          <p className="font-medium text-fg">Aucun participant inscrit à cette session</p>
+          <p className="mt-1 max-w-md text-sm text-muted">
+            {creneaux.length} demi-journée(s) prête(s). Ajoutez les participants (contacts du CRM ou saisie libre)
+            et envoyez-leur leur lien de signature.
+          </p>
+          <Button className="mt-4" onClick={() => setFeuille(feuilleVide(participants))}>
+            <UserPlus className="h-4 w-4" /> Ajouter des participants et envoyer les liens
+          </Button>
+        </div>
       ) : (
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
