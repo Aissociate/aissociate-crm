@@ -183,7 +183,7 @@ export default function ComposeMessageModal({
   // décompte « dernière interaction » (liste Contacts) reparte à zéro, et
   // programme la relance de suivi (ticket « création automatique d'actions »).
   // Pas de résumé IA ici : l'utilisateur vient d'écrire le message lui-même.
-  const logInteraction = async (kind: 'email' | 'whatsapp') => {
+  const logInteraction = async (kind: 'email' | 'whatsapp', contactId: string | null) => {
     if (!contactId) return;
     const { date, heure } = nowParts();
     const suite = prochaineHeureOuvrable();
@@ -229,8 +229,24 @@ export default function ComposeMessageModal({
     return [...privees, ...docAttachments, ...reprises];
   };
 
+  // Message composé sans fiche liée (« Nouveau message » de la Messagerie) :
+  // on rattache le contact retrouvé par l'adresse ou le numéro du destinataire,
+  // sinon ni l'historique ni la relance automatique n'étaient créés.
+  const contactCible = (): string | null => {
+    if (contactId) return contactId;
+    if (canal === 'whatsapp') {
+      const tel = digits(dest);
+      if (tel.length < 9) return null;
+      return contacts.find((c) => digits(c.telephone).endsWith(tel.slice(-9)))?.id ?? null;
+    }
+    const adresses = dest.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+    return contacts.find((c) => [c.email, c.email2, c.email3]
+      .some((e) => e && adresses.includes(e.trim().toLowerCase())))?.id ?? null;
+  };
+
   const send = async (statut: 'brouillon' | 'envoye') => {
     setSaving(true);
+    const cibleId = contactCible();
     const attachments: Attachment[] = await buildAttachments();
 
     if (canal === 'whatsapp') {
@@ -241,11 +257,11 @@ export default function ComposeMessageModal({
       const { error } = await supabase.from('emails').insert({
         destinataires: [dest], sujet: sujet || 'WhatsApp', corps, statut: 'envoye', canal: 'whatsapp',
         direction: 'sortant', expediteur: smtpFrom ?? profile?.email ?? null,
-        contact_id: contactId, sent_at: new Date().toISOString(), owner_id: session?.user.id, attachments: [],
+        contact_id: cibleId, sent_at: new Date().toISOString(), owner_id: session?.user.id, attachments: [],
       });
       setSaving(false);
       if (error) { alert(error.message); return; }
-      await logInteraction('whatsapp');
+      await logInteraction('whatsapp', cibleId);
       onClose(); onSent?.();
       return;
     }
@@ -268,7 +284,7 @@ export default function ComposeMessageModal({
     const row = {
       destinataires, copie: copies, sujet, corps, statut: finalStatut, attachments, canal: 'email' as const,
       expediteur: smtpFrom ?? profile?.email ?? null,
-      dossier_id: dossierId || null, contact_id: contactId,
+      dossier_id: dossierId || null, contact_id: cibleId,
       sent_at: finalStatut === 'envoye' ? new Date().toISOString() : null,
       owner_id: session?.user.id,
     };
@@ -279,7 +295,7 @@ export default function ComposeMessageModal({
       : await supabase.from('emails').insert(row);
     setSaving(false);
     if (error) { alert(error.message); return; }
-    if (finalStatut === 'envoye') await logInteraction('email');
+    if (finalStatut === 'envoye') await logInteraction('email', cibleId);
     onClose(); onSent?.();
   };
 
