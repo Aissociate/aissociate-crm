@@ -611,6 +611,11 @@ export type Database = {
         Args: { p_garde: string; p_doublon: string };
         Returns: undefined;
       };
+      /** Crée une formation hors catalogue public (actif = false) et la rattache au dossier. */
+      creer_formation_sur_mesure: {
+        Args: { p_dossier: string; p_intitule: string; p_duree_heures?: number };
+        Returns: string;
+      };
     };
     Enums: {
       user_role: UserRole;

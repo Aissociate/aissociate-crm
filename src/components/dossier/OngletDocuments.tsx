@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileSignature, FileText, Sparkles, Plus, Loader as Loader2, ClipboardCheck, Send, Copy, Check,
-  FolderCheck, ExternalLink, RefreshCw, MessageSquareHeart, CalendarClock,
+  FolderCheck, ExternalLink, RefreshCw, MessageSquareHeart, CalendarClock, GraduationCap, PenLine, X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -91,6 +91,8 @@ export default function OngletDocuments({
   // `table` : le lien envoyé (positionnement ou évaluation) passe à « envoyé » au retour.
   const [mail, setMail] = useState<{ initial: ComposeInitial; lienId: string; table: 'positionnement_liens' | 'evaluation_liens' } | null>(null);
   const [copie, setCopie] = useState<string | null>(null);
+  // Formation sur mesure : saisie du titre et de la durée.
+  const [surMesure, setSurMesure] = useState<{ intitule: string; duree: string } | null>(null);
 
   const entrepriseId = dossier.entreprise_id ?? contact?.entreprise_id ?? null;
   const formation = formations.data.find((f) => f.id === dossier.formation_id) ?? null;
@@ -160,6 +162,29 @@ export default function OngletDocuments({
     return data as Record<string, unknown>;
   };
 
+  // ── Formation du dossier ───────────────────────────────────────────────────
+  const choisirFormation = (id: string) => appeler('formation', async () => {
+    const { error } = await supabase.from('dossiers').update({ formation_id: id || null }).eq('id', dossier.id);
+    if (error) throw new Error(error.message);
+    onChanged();
+  });
+  const creerSurMesure = () => appeler('formation', async () => {
+    const intitule = surMesure?.intitule.trim() ?? '';
+    if (!intitule) throw new Error('Indiquez le titre de la formation.');
+    const { error } = await supabase.rpc('creer_formation_sur_mesure', {
+      p_dossier: dossier.id, p_intitule: intitule, p_duree_heures: Number(surMesure?.duree.replace(',', '.')) || 0,
+    });
+    if (error) throw new Error(error.message);
+    setSurMesure(null);
+    formations.refresh();
+    onChanged();
+    setInfo('Formation sur mesure créée (hors catalogue public) et rattachée au dossier.');
+  });
+  // Catalogue public, plus la formation actuelle du dossier si elle est sur mesure.
+  const optionsFormations = formations.data
+    .filter((f) => f.actif || f.id === dossier.formation_id)
+    .map((f) => ({ value: f.id, label: f.intitule, sub: `${f.duree_heures} h${f.actif ? '' : ' · sur mesure'}` }));
+
   // ── Convention : stagiaires de l'entreprise sur la même formation ──────────
   const autresDossiers = useMemo(() => (entrepriseId && dossier.formation_id
     ? tousDossiers.data.filter((d) => d.entreprise_id === entrepriseId && d.formation_id === dossier.formation_id)
@@ -189,7 +214,7 @@ export default function OngletDocuments({
 
   // ── Plan individuel ────────────────────────────────────────────────────────
   const creerPlanCatalogue = () => appeler('plan-catalogue', async () => {
-    if (!formation) throw new Error("Le dossier n'a pas de formation : renseignez-la pour partir du catalogue.");
+    if (!formation) throw new Error("Le dossier n'a pas de formation : choisissez-la ou donnez un titre sur mesure dans « Formation du dossier ».");
     const { error } = await supabase.from('plans_formation').insert({
       nom: `Plan — ${formation.intitule}${contact ? ` — ${fullName(contact.prenom, contact.nom)}` : ''}`,
       formation_id: formation.id, contact_id: dossier.contact_id, entreprise_id: entrepriseId,
@@ -345,6 +370,47 @@ export default function OngletDocuments({
     <div className="space-y-6">
       {erreur && <div className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">{erreur}</div>}
       {info && <div className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">{info}</div>}
+
+      {/* ── Formation du dossier ── */}
+      <Card>
+        <h2 className="mb-1 flex items-center gap-2 font-semibold text-fg"><GraduationCap className="h-4 w-4 text-brand-500" /> Formation du dossier</h2>
+        <p className="mb-3 text-sm text-muted">
+          Choisissez une formation du catalogue, ou donnez un titre sur mesure : elle sert à la convention, au plan et aux documents du financeur.
+        </p>
+        {surMesure ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[16rem] flex-1">
+              <Field label="Titre de la formation sur mesure">
+                <input className="input" autoFocus value={surMesure.intitule} placeholder="Ex. : L'IA au service du cabinet comptable"
+                  onChange={(e) => setSurMesure({ ...surMesure, intitule: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void creerSurMesure(); }} />
+              </Field>
+            </div>
+            <div className="w-28">
+              <Field label="Durée (h)">
+                <input className="input" inputMode="decimal" value={surMesure.duree}
+                  onChange={(e) => setSurMesure({ ...surMesure, duree: e.target.value })} />
+              </Field>
+            </div>
+            <Button onClick={() => void creerSurMesure()} disabled={!!busy || !surMesure.intitule.trim()}>
+              {busy === 'formation' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Rattacher
+            </Button>
+            <Button variant="ghost" onClick={() => setSurMesure(null)} disabled={!!busy}><X className="h-4 w-4" /> Annuler</Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[16rem] max-w-xl flex-1">
+              <SearchSelect value={dossier.formation_id ?? ''} onChange={(v) => void choisirFormation(v)}
+                options={optionsFormations} placeholder="Choisir une formation du catalogue…" disabled={!!busy} />
+            </div>
+            <Button variant="secondary" onClick={() => setSurMesure({ intitule: '', duree: formation?.duree_heures ? String(formation.duree_heures) : '' })} disabled={!!busy}>
+              <PenLine className="h-4 w-4" /> Titre sur mesure
+            </Button>
+            {busy === 'formation' && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
+            {formation && !formation.actif && <Badge tone="info">Sur mesure</Badge>}
+          </div>
+        )}
+      </Card>
 
       {/* ── Convention ── */}
       <Card>
