@@ -5,6 +5,8 @@ interface GenInput {
   planId: string | null;
   contexte: Record<string, unknown>; // données du plan envoyées à l'IA
   apprenant: string;
+  /** Effectif imprimé sur le plan (« Effectif : N participants »). */
+  nbParticipants?: number | null;
   organismePartenaire: string;
   datesSession?: string | null;
   clientSiret?: string | null;
@@ -28,6 +30,7 @@ export async function generatePlanPdf(input: GenInput): Promise<{ titre: string 
       meta: {
         planId: input.planId,
         apprenant: input.apprenant,
+        nbParticipants: input.nbParticipants ?? null,
         organismePartenaire: input.organismePartenaire,
         datesSession: input.datesSession ?? null,
         clientSiret: input.clientSiret ?? null,

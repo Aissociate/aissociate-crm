@@ -243,14 +243,24 @@ export default function OngletDocuments({
       contexte: {
         nom: p.nom, objectifs: p.objectifs, contenu: p.contenu, duree_heures: p.duree_heures,
         modalite: p.modalite, dates_session: p.dates_session, formation: formation?.intitule,
-        apprenant: contact ? fullName(contact.prenom, contact.nom) : '',
+        apprenant: contact ? fullName(contact.prenom, contact.nom) : '', nb_participants: p.nb_participants,
       },
-      apprenant: contact ? fullName(contact.prenom, contact.nom) : '',
+      apprenant: contact ? fullName(contact.prenom, contact.nom) : '', nbParticipants: p.nb_participants,
       organismePartenaire: '', datesSession: p.dates_session, clientSiret: contact?.siret ?? null,
       userId, contactId: dossier.contact_id, entrepriseId, financeurId: dossier.financeur_id,
     });
     setInfo('PDF du plan produit.');
   });
+
+  /** Effectif (« pax ») du plan : repris par son PDF et par la convention. */
+  const changerPax = (p: PlanFormation, valeur: string) => {
+    const n = Math.round(Number(valeur.replace(',', '.'))) || null;
+    if (n === p.nb_participants || (n !== null && n < 1)) return;
+    void appeler(`pax-${p.id}`, async () => {
+      const { error } = await supabase.from('plans_formation').update({ nb_participants: n }).eq('id', p.id);
+      if (error) throw new Error(error.message);
+    });
+  };
 
   // ── AGEFICE ────────────────────────────────────────────────────────────────
   const genererAgefice = (kind: string) => appeler(`agefice-${kind}`, async () => {
@@ -456,6 +466,13 @@ export default function OngletDocuments({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{p.nom}</span>
                   <span className="text-xs text-muted">{p.duree_heures} h · {p.contenu?.length ?? 0} module(s) · {formatDate(p.created_at)}</span>
+                  <label className="flex items-center gap-1 text-xs text-muted" title="Nombre de participants imprimé sur le plan et la convention">
+                    <input key={`${p.id}-${p.nb_participants ?? ''}`} className="input h-8 w-16 py-0 text-xs" inputMode="numeric"
+                      defaultValue={p.nb_participants ?? ''} placeholder="1" disabled={!!busy}
+                      onBlur={(e) => changerPax(p, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+                    pax
+                  </label>
                   <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => void planEnPdf(p)} disabled={!!busy}
                     title="Mise en forme du plan par l'IA (1 à 2 minutes)">
                     {busy === `pdf-${p.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} PDF (IA)

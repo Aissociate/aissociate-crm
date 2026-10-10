@@ -133,6 +133,8 @@ Deno.serve(async (req: Request) => {
       planId?: string | null;
       /** Durée saisie dans la fenêtre : prime sur le plan et le catalogue. */
       dureeH?: number | null; nbJours?: number | null;
+      /** Effectif saisi à la main : prime sur le plan et sur le nombre de stagiaires nommés. */
+      nbParticipants?: number | null;
     };
     const direct: Direct | null = body.direct ?? null;
     if (!planId && !direct) return json({ error: "planId manquant" }, 400);
@@ -351,6 +353,10 @@ Deno.serve(async (req: Request) => {
       effectif.sort((a, b) => a.localeCompare(b, "fr"));
       if (effectif.length === 0 && apprenant) effectif = [apprenant];
     }
+    // Effectif saisi (« pax ») : il prime sur le décompte des noms, souvent incomplet.
+    const nbSaisi = Number(direct?.nbParticipants) > 0 ? Number(direct?.nbParticipants)
+      : Number(plan.nb_participants) > 0 ? Number(plan.nb_participants) : 0;
+    const nbEffectif = type === "convention" ? Math.round(nbSaisi) || effectif.length : effectif.length;
 
     // ═════════════════════════════════════════════════════════════════════════
     // Demande préalable : remplissage du formulaire officiel, laissé éditable
@@ -575,7 +581,7 @@ Deno.serve(async (req: Request) => {
         champ("Date de démarrage :", frDate(dateDebut));
         champ("Date de fin :", frDate(dateFin));
         champ("Nom et qualité du formateur :", formateur);
-        champ("Nombre de participants :", "1");
+        champ("Nombre de participants :", String(Math.round(nbSaisi) || 1));
         saut(0.5);
 
         // Tableau des durées prévues / réalisées
@@ -778,7 +784,7 @@ Deno.serve(async (req: Request) => {
         lieuTexte: String(body.lieu ?? "").trim() || undefined,
         formateur: formateur.trim() || undefined,
         distanciel: modaliteSession === "distanciel" || modaliteSession === "e-learning",
-        effectif,
+        effectif, nbParticipants: nbEffectif,
         prix: prixSaisi > 0 ? prixSaisi : prixHT > 0 ? prixHT : null,
       });
     }
@@ -801,21 +807,23 @@ Deno.serve(async (req: Request) => {
 
     // Convention d'entreprise : le cocontractant est l'entreprise, et l'effectif
     // remplace l'apprenant unique dans la liste des documents produits.
-    const conventionEntreprise = type === "convention" && effectif.length > 1;
+    const conventionEntreprise = type === "convention" && nbEffectif > 1;
     const stagiaires = conventionEntreprise
       ? (effectif.length <= 3 ? effectif.join(", ") : `${effectif.slice(0, 3).join(", ")} +${effectif.length - 3}`)
       : (effectif[0] ?? apprenant);
-    const cible = conventionEntreprise ? (entreprise?.raison_sociale || stagiaires) : (stagiaires || intitule);
+    const stagiairesTitre = conventionEntreprise && nbEffectif > effectif.length
+      ? `${nbEffectif} participants${stagiaires ? ` (${stagiaires})` : ""}` : stagiaires;
+    const cible = conventionEntreprise ? (entreprise?.raison_sociale || stagiairesTitre) : (stagiaires || intitule);
     const titre = `${LIBELLE[type]} — ${cible}`;
     const { error: insErr } = await sb.from("plan_pdfs").insert({
       plan_id: planId ?? direct?.planId ?? null, titre, kind: type,
-      apprenant: stagiaires || null,
+      apprenant: stagiairesTitre || null,
       organisme: entreprise?.raison_sociale ?? org.nom ?? null,
       fichier_url: chemin, created_by: userId,
     });
     if (insErr) return json({ error: insErr.message }, 500);
 
-    return json({ ok: true, titre, fichier_url: chemin, kind: type, effectif: effectif.length });
+    return json({ ok: true, titre, fichier_url: chemin, kind: type, effectif: nbEffectif });
 
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);

@@ -122,6 +122,8 @@ export type PlanFormation = Timestamps & {
   contenu: string[]; duree_heures: number; modalite: string; statut: PlanStatut;
   version: number; owner_id: string | null; dossier_id: string | null;
   dates_session: string | null;
+  /** Effectif saisi à la main (« pax ») ; prime sur le décompte des stagiaires nommés. */
+  nb_participants: number | null;
 };
 export type Workflow = Timestamps & {
   id: string; nom: string; financeur_id: string | null; actif: boolean;

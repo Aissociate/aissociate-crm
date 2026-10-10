@@ -43,7 +43,7 @@ const PIECE_POUR: Record<string, string> = {
 const empty = (): Partial<PlanFormation> => ({
   nom: '', formation_id: null, contact_id: null, entreprise_id: null, financeur_id: null,
   objectifs: '', contenu: [], duree_heures: 0, modalite: 'presentiel', statut: 'brouillon', version: 1, dossier_id: null,
-  dates_session: '',
+  dates_session: '', nb_participants: null,
 });
 
 export default function PlansFormation() {
@@ -81,12 +81,12 @@ export default function PlansFormation() {
     try {
       const contexte = {
         nom: p.nom, objectifs: p.objectifs, contenu: p.contenu, duree_heures: p.duree_heures,
-        modalite: p.modalite, dates_session: p.dates_session, formation: formName(p.formation_id),
+        modalite: p.modalite, dates_session: p.dates_session, formation: formName(p.formation_id), nb_participants: p.nb_participants,
         apprenant: cName(p.contact_id), organisme: eName(p.entreprise_id), financeur: fName(p.financeur_id),
       };
       await generatePlanPdf({
         planId: p.id, contexte,
-        apprenant: cName(p.contact_id),
+        apprenant: cName(p.contact_id), nbParticipants: p.nb_participants,
         organismePartenaire: eName(p.entreprise_id) || fName(p.financeur_id),
         datesSession: p.dates_session ?? null,
         clientSiret: contacts.data.find((x) => x.id === p.contact_id)?.siret
@@ -195,6 +195,7 @@ export default function PlansFormation() {
       duree_heures: Number(form.duree_heures ?? 0),
       contenu: contenuText.split('\n').map((l) => l.trim()).filter(Boolean),
       dates_session: (form.dates_session ?? '').trim() || null,
+      nb_participants: Number(form.nb_participants) > 0 ? Math.round(Number(form.nb_participants)) : null,
       owner_id: form.owner_id ?? session?.user.id,
     };
     const { error } = form.id
@@ -379,6 +380,7 @@ export default function PlansFormation() {
           <div className="col-span-2"><Field label="Objectifs"><textarea className="input" rows={2} value={form.objectifs ?? ''} onChange={(e) => set('objectifs', e.target.value)} /></Field></div>
           <div className="col-span-2"><Field label="Contenu / modules (une ligne par module)"><textarea className="input" rows={5} value={contenuText} onChange={(e) => setContenuText(e.target.value)} /></Field></div>
           <Field label="Durée (heures)"><input className="input" type="number" value={form.duree_heures ?? 0} onChange={(e) => set('duree_heures', e.target.value)} /></Field>
+          <Field label="Nombre de participants (pax)" hint="Vide : décompte des stagiaires nommés."><input className="input" type="number" min={1} value={form.nb_participants ?? ''} onChange={(e) => set('nb_participants', e.target.value === '' ? null : e.target.value)} /></Field>
           <Field label="Modalité"><select className="input" value={form.modalite ?? 'presentiel'} onChange={(e) => set('modalite', e.target.value)}>
             {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
           </select></Field>

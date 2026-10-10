@@ -91,6 +91,8 @@ export default function ConventionPositionnementModal({
   // Durée imprimée dans la convention (et imposée à l'IA pour le plan).
   const [dureeH, setDureeH] = useState('');
   const [nbJours, setNbJours] = useState('');
+  // Effectif saisi (« pax ») : vide → nombre de stagiaires cochés.
+  const [nbPax, setNbPax] = useState('');
   const [consignes, setConsignes] = useState('');
   const [avecPdfPlan, setAvecPdfPlan] = useState(true);
   const [etape, setEtape] = useState<string | null>(null);
@@ -116,7 +118,7 @@ export default function ConventionPositionnementModal({
   useEffect(() => {
     if (!open) return;
     setResultat(null); setErreur(null); setSignataireId(''); setPrix(''); setPlanId('');
-    setNbJours(''); setConsignes(''); setPlanIA(null); setAvertissement(null);
+    setNbJours(''); setNbPax(''); setConsignes(''); setPlanIA(null); setAvertissement(null);
     setRetenus(new Set([...repondants.map((p) => p.id), ...autres.map((a) => a.id)]));
 
     // Entreprise : celle des contacts du CRM si elle est unique, sinon
@@ -150,6 +152,7 @@ export default function ConventionPositionnementModal({
       setPlanId(candidats[0].id);
       if (membreDe(candidats[0].contact_id, entrepriseRetenue)) setSignataireId(candidats[0].contact_id!);
       if (candidats[0].duree_heures) setDureeH(String(candidats[0].duree_heures));
+      if (candidats[0].nb_participants) setNbPax(String(candidats[0].nb_participants));
     }
 
     // Contexte imposé (dossier client) : prioritaire sur la déduction.
@@ -164,6 +167,7 @@ export default function ConventionPositionnementModal({
       setPlanId(prefill.planId);
       const pp = plans.data.find((x) => x.id === prefill.planId);
       if (pp?.duree_heures) setDureeH(String(pp.duree_heures));
+      if (pp?.nb_participants) setNbPax(String(pp.nb_participants));
     }
     if (prefill?.signataireId && membreDe(prefill.signataireId, prefill.entrepriseId ?? entrepriseRetenue)) {
       setSignataireId(prefill.signataireId);
@@ -189,6 +193,7 @@ export default function ConventionPositionnementModal({
     if (p.entreprise_id) setEntrepriseId(p.entreprise_id);
     setSignataireId(membreDe(p.contact_id, ent) ? p.contact_id! : membreDe(signataireId, ent) ? signataireId : '');
     if (p.duree_heures) setDureeH(String(p.duree_heures));
+    setNbPax(p.nb_participants ? String(p.nb_participants) : '');
   };
 
   /** Changer d'entreprise écarte un signataire qui n'en fait pas partie. */
@@ -216,6 +221,8 @@ export default function ConventionPositionnementModal({
   const autresChoisis = autres.filter((a) => retenus.has(a.id));
   /** Effectif de la convention : répondants cochés puis stagiaires du dossier. */
   const nomsEffectif = [...choisis.map(nomDe), ...autresChoisis.map((a) => a.nom)];
+  /** Nombre de participants imprimé : la saisie prime sur les noms cochés. */
+  const pax = Math.round(nombre(nbPax) ?? 0) || nomsEffectif.length;
   const entreprise = entreprises.data.find((e) => e.id === entrepriseId) ?? null;
 
   // Dossiers où déposer la convention : ceux des répondants, et ceux de leurs
@@ -247,7 +254,7 @@ export default function ConventionPositionnementModal({
 
   const generer = async (planForce?: string) => {
     const pid = planForce ?? planId;
-    if (!nomsEffectif.length) { setErreur('Cochez au moins un stagiaire.'); return; }
+    if (!nomsEffectif.length && !nombre(nbPax)) { setErreur('Cochez au moins un stagiaire, ou indiquez le nombre de participants.'); return; }
     if (!entrepriseId && !organisation.trim()) { setErreur("Indiquez l'entreprise cocontractante."); return; }
     if (!formationId) { setErreur('Choisissez la formation du catalogue.'); return; }
     setBusy(true); setErreur(null);
@@ -265,6 +272,7 @@ export default function ConventionPositionnementModal({
             dureeH: nombre(dureeH), nbJours: nombre(nbJours),
             dossierIds: cibles.map((d) => d.id),
             stagiaires: nomsEffectif,
+            nbParticipants: nombre(nbPax) ? pax : null,
             prix: Number(prix.replace(/\s/g, '').replace(',', '.')) || null,
           },
         },
@@ -272,7 +280,9 @@ export default function ConventionPositionnementModal({
       if (error) throw new Error(await functionErrorMessage(error));
       const res = data as { error?: string; fichier_url?: string; titre?: string; effectif?: number } | null;
       if (res?.error) throw new Error(res.error);
-      setResultat({ fichier_url: res?.fichier_url ?? '', titre: res?.titre ?? 'Convention', effectif: res?.effectif ?? nomsEffectif.length });
+      setResultat({ fichier_url: res?.fichier_url ?? '', titre: res?.titre ?? 'Convention', effectif: res?.effectif ?? pax });
+      // L'effectif saisi est mémorisé sur le plan, pour son PDF et les prochaines conventions.
+      if (pid && nombre(nbPax)) await supabase.from('plans_formation').update({ nb_participants: pax }).eq('id', pid);
       if (pid) await lierReponses(pid);
       pdfs.refresh();
     } catch (e) {
@@ -308,6 +318,7 @@ export default function ConventionPositionnementModal({
       const res = data as (PlanIA & { error?: string }) | null;
       if (!res || res.error) throw new Error(res?.error ?? 'Réponse vide');
       setPlanIA(res); setPlanId(res.planId); setDureeH(String(res.duree_heures));
+      if (nombre(nbPax)) await supabase.from('plans_formation').update({ nb_participants: pax }).eq('id', res.planId);
       plans.refresh(); onLie?.();
 
       if (avecPdfPlan) {
@@ -327,7 +338,8 @@ export default function ConventionPositionnementModal({
                 participants: choisis.map((p) => ({ nom: nomDe(p), niveau: p.niveau, reussite_pct: p.pct })),
               },
             },
-            apprenant: nomsEffectif.length === 1 ? nomsEffectif[0] : `${nomsEffectif.length} stagiaires`,
+            apprenant: pax === 1 && nomsEffectif.length === 1 ? nomsEffectif[0] : `${pax} stagiaires`,
+            nbParticipants: pax,
             organismePartenaire: orga,
             datesSession: planChoisi?.dates_session ?? null,
             clientSiret: entreprise?.siret ?? null,
@@ -426,7 +438,11 @@ export default function ConventionPositionnementModal({
           )}
           {avertissement && <p className="text-xs text-amber-600 dark:text-amber-400">{avertissement}</p>}
 
-          <Field label={`Stagiaires (${nomsEffectif.length}/${repondants.length + autres.length})`} hint="Personnes reprises dans l'effectif de la convention.">
+          <Field label="Nombre de participants (pax)" hint={`Imprimé dans la convention et le plan. Vide : ${nomsEffectif.length} (stagiaires cochés ci-dessous).`}>
+            <input className="input max-w-[10rem]" inputMode="numeric" value={nbPax} onChange={(e) => setNbPax(e.target.value)}
+              placeholder={String(nomsEffectif.length || 'ex. 3')} />
+          </Field>
+          <Field label={`Stagiaires (${nomsEffectif.length}/${repondants.length + autres.length})`} hint="Personnes nommées dans la convention. Au-delà, les participants restent « à désigner ».">
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
               {repondants.map((p) => {
                 const c = contactDe(p);
@@ -514,10 +530,10 @@ export default function ConventionPositionnementModal({
           </label>
           {(() => {
             const f = formations.data.find((x) => x.id === formationId);
-            const suggestion = f?.prix ? Number(f.prix) * nomsEffectif.length : 0;
+            const suggestion = f?.prix ? Number(f.prix) * pax : 0;
             return (
               <Field label="Prix total de la formation (€, net de taxes)"
-                hint={`Article 8. Vide : devis du dossier s'il existe, sinon à compléter à la main.${suggestion ? ` Catalogue : ${suggestion.toLocaleString('fr-FR')} € pour ${nomsEffectif.length} stagiaire(s).` : ''}`}>
+                hint={`Article 8. Vide : devis du dossier s'il existe, sinon à compléter à la main.${suggestion ? ` Catalogue : ${suggestion.toLocaleString('fr-FR')} € pour ${pax} stagiaire(s).` : ''}`}>
                 <input className="input" inputMode="decimal" value={prix} onChange={(e) => setPrix(e.target.value)} placeholder="ex. 1 600" />
               </Field>
             );

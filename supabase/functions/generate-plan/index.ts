@@ -175,6 +175,9 @@ Deno.serve(async (req: Request) => {
           "N'évoque aucune autre modalité, même à titre d'option : jamais « ou à distance », « ou en présentiel », " +
           "« au choix du bénéficiaire », ni aucune formulation laissant un choix."
         : "",
+      Number(m.nbParticipants) > 1
+        ? `EFFECTIF : ${Number(m.nbParticipants)} participants. Rédige le plan pour ce groupe (« les participants »), pas pour un bénéficiaire unique.`
+        : "",
       clientContext
         ? "Contexte client complet (JSON) — prends-le pleinement en compte pour personnaliser le plan (situation, besoins, entreprise, financement, dossiers, historique de suivi) :\n" + JSON.stringify(clientContext)
         : "",
@@ -299,6 +302,7 @@ Deno.serve(async (req: Request) => {
       `Référence : ${planRef}`,
       `Version : ${m.version ?? "1"}`,
       m.apprenant ? `Apprenant : ${m.apprenant}` : "",
+      Number(m.nbParticipants) > 0 ? `Effectif : ${Number(m.nbParticipants)} participant${Number(m.nbParticipants) > 1 ? "s" : ""}` : "",
       m.clientSiret ? `SIRET : ${m.clientSiret}` : "",
       m.organismePartenaire ? `Partenaire : ${m.organismePartenaire}` : "",
       m.datesSession ? `Dates de session : ${m.datesSession}` : "",

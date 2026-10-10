@@ -34,6 +34,8 @@ export type ConventionCtx = {
   formateur?: string;
   distanciel: boolean;
   effectif: string[];
+  /** Effectif saisi (« pax ») : prime sur le nombre de noms connus. */
+  nbParticipants?: number;
   /** Coût total net de taxes ; null → à compléter. */
   prix: number | null;
   /** Public concerné, imprimé sous l'intitulé (formation sur mesure). */
@@ -257,7 +259,9 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
   const modules = c.programme.map(module).filter((m) => m.titre || m.contenu);
   const nbJours = c.nbJours || c.jours.length || (c.dureeH ? Math.ceil(c.dureeH / 7) : 0);
-  const n = c.effectif.length;
+  const n = Math.max(c.nbParticipants || 0, 0) || c.effectif.length;
+  // Participants pas encore nommés (effectif saisi supérieur aux noms connus).
+  const aDesigner = Math.max(0, n - c.effectif.length);
 
   // ═══ Page 1 ═══
   nouvellePage();
@@ -292,7 +296,7 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
   }
 
   article("Article 2 – Nature, durée et organisation de l'action");
-  const effectifTexte = n > 1 ? `${n} participants` : n === 1 ? `1 participant / individuel : ${c.effectif[0]}` : "";
+  const effectifTexte = n > 1 ? `${n} participants` : n === 1 ? (c.effectif[0] ? `1 participant / individuel : ${c.effectif[0]}` : "1 participant") : "";
   puces([
     "Nature de l'action : action de formation",
     `Durée totale : ${[nbJours ? `${nbJours} jour${nbJours > 1 ? "s" : ""}` : "", c.dureeH ? `${c.dureeH} heures` : ""].filter(Boolean).join(" – ") || "……………"}`,
@@ -303,9 +307,10 @@ export async function construireConvention(c: ConventionCtx): Promise<Uint8Array
     ...(c.formateur ? [`Formateur : ${c.formateur}`] : []),
     `Effectif : ${effectifTexte || "……………"}`,
   ]);
-  if (n > 1) {
+  if (n > 1 && c.effectif.length) {
     para([{ t: "Liste des participants :", b: true }], { apres: 4 });
-    puces(c.effectif);
+    puces([...c.effectif, ...(aDesigner
+      ? [`${aDesigner} autre${aDesigner > 1 ? "s" : ""} participant${aDesigner > 1 ? "s" : ""} à désigner`] : [])]);
   }
 
   article("Article 3 – Programme de la formation");
