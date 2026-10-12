@@ -6,13 +6,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Bot, Send, User, FileText, Sparkles, Plus, History, Check, X,
-  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines,
+  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines, Undo2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Spinner, Badge } from '@/components/ui';
 import DicteeVocale from '@/components/DicteeVocale';
 import type { EntiteRef } from '@/components/ApercuEntite';
+import { appelAgent, defaireActionIA, etatAnnulation } from '@/lib/agentIA';
 import type { AiAction, AiConversation } from '@/lib/database.types';
 
 type Source = { label: string; url: string | null };
@@ -111,11 +112,17 @@ type CardProps = {
   modifs: Record<string, string> | undefined;
   onModif: (id: string, cle: string, valeur: string) => void;
   onVoir?: (e: EntiteRef) => void;
+  onDefaire: (id: string) => Promise<void>;
 };
 
 /** Carte de validation d'une action proposée par l'IA. */
-function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onModif, onVoir }: CardProps) {
-  const [busy, setBusy] = useState<'execute' | 'cancel' | null>(null);
+function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onModif, onVoir, onDefaire }: CardProps) {
+  const [busy, setBusy] = useState<'execute' | 'cancel' | 'undo' | null>(null);
+  const annulation = etatAnnulation(action);
+  const defaire = async () => {
+    setBusy('undo');
+    try { await onDefaire(action.id); } finally { setBusy(null); }
+  };
   const [edition, setEdition] = useState(false);
   const decide = async (mode: 'execute' | 'cancel') => {
     setBusy(mode);
@@ -187,10 +194,21 @@ function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onM
             </Button>
           )}
         </div>
-      ) : (
-        <p className={`mt-2 flex items-center gap-1.5 text-sm ${statutUi[action.statut]?.cls ?? 'text-muted'}`}>
-          {statutUi[action.statut]?.icon} {statutUi[action.statut]?.text}
+      ) : annulation.faiteLe ? (
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted">
+          <Undo2 className="h-4 w-4" /> Exécutée puis défaite
         </p>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className={`flex items-center gap-1.5 text-sm ${statutUi[action.statut]?.cls ?? 'text-muted'}`}>
+            {statutUi[action.statut]?.icon} {statutUi[action.statut]?.text}
+          </p>
+          {annulation.possible && (
+            <Button variant="ghost" onClick={() => void defaire()} disabled={busy !== null} className="!px-2 !py-1 text-xs">
+              {busy === 'undo' ? <Spinner className="h-3.5 w-3.5" /> : <Undo2 className="h-3.5 w-3.5" />} Défaire
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -283,31 +301,21 @@ export default function AssistantChat({
   };
 
   const decideAction = async (id: string, decision: 'execute' | 'cancel') => {
-    const { data: sess } = await supabase.auth.getSession();
-    const token = sess.session?.access_token;
-    if (!token) return;
     const retouches = decision === 'execute' ? modifs[id] : undefined;
     try {
-      const res = await fetch(FUNCTIONS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-        },
-        // `origin` : base des liens publics (émargement, évaluation) envoyés par l'agent.
-        body: JSON.stringify({ mode: decision, action_id: id, origin: window.location.origin, ...(retouches ? { args: retouches } : {}) }),
+      // `origin` : base des liens publics (émargement, évaluation) envoyés par l'agent.
+      const { ok, status, data } = await appelAgent({
+        mode: decision, action_id: id, origin: window.location.origin, ...(retouches ? { args: retouches } : {}),
       });
-      const body = await res.json();
       setActions((prev) => ({
         ...prev,
         [id]: {
           ...prev[id],
           args: retouches ? { ...prev[id]?.args, ...retouches } : prev[id]?.args,
-          statut: res.ok ? (decision === 'execute' ? 'executee' : 'annulee') : 'erreur',
-          resultat: res.ok
-            ? (body?.entite ? { entite: body.entite, entite_id: body.entite_id } : prev[id]?.resultat ?? null)
-            : { erreur: body?.error ?? `HTTP ${res.status}` },
+          statut: ok ? (decision === 'execute' ? 'executee' : 'annulee') : 'erreur',
+          resultat: ok
+            ? ((data?.resultat as Record<string, unknown> | undefined) ?? prev[id]?.resultat ?? null)
+            : { erreur: data?.error ?? `HTTP ${status}` },
         },
       }));
     } catch (err) {
@@ -315,6 +323,17 @@ export default function AssistantChat({
         ...prev,
         [id]: { ...prev[id], statut: 'erreur', resultat: { erreur: err instanceof Error ? err.message : String(err) } },
       }));
+    }
+  };
+
+  const defaireAction = async (id: string) => {
+    const action = actions[id];
+    if (!action) return;
+    try {
+      const resultat = await defaireActionIA(action);
+      setActions((prev) => ({ ...prev, [id]: { ...prev[id], resultat } }));
+    } catch (err) {
+      setMessages((m) => [...m, { role: 'assistant', content: `⚠️ ${err instanceof Error ? err.message : String(err)}` }]);
     }
   };
 
@@ -515,7 +534,7 @@ export default function AssistantChat({
                   key={id} action={actions[id]} onDecision={decideAction}
                   selectionnee={!deselection[id]}
                   onSelection={(aid, v) => setDeselection((prev) => ({ ...prev, [aid]: !v }))}
-                  modifs={modifs[id]} onModif={modifier} onVoir={onEntite}
+                  modifs={modifs[id]} onModif={modifier} onVoir={onEntite} onDefaire={defaireAction}
                 />
               ))}
               {m.sources && m.sources.length > 0 && (

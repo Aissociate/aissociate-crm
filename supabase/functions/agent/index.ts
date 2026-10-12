@@ -17,6 +17,9 @@
 //   { mode: "chat", message, conversation_id?, contexte? }  → flux SSE
 //   { mode: "execute", action_id, args? }                   → JSON
 //     `args` : textes retouchés par l'utilisateur avant validation.
+//   { mode: "undo", action_id }                             → JSON
+//     Défait une action exécutée, d'après le plan rangé à l'exécution
+//     (`resultat.annulation`, voir annulation.ts).
 //   { mode: "cancel",  action_id }                          → JSON
 //   { mode: "transcribe", audio (base64), format }          → JSON { texte }
 //     Dictée vocale des instructions : STT via OpenRouter, modèle
@@ -35,6 +38,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { decrireMetier, definitionsMetier, executerMetier, lireMetier } from "./outils_metier.ts";
+import { appliquerAnnulation, instantane, planAnnulation, type Annulation } from "./annulation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -686,6 +690,29 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Mode execute / cancel : action déjà validée par l'utilisateur ──
+    if (mode === "undo") {
+      const actionId = String(body.action_id ?? "");
+      const { data: action } = await db.from("ai_actions").select("*").eq("id", actionId).maybeSingle();
+      if (!action) return json({ error: "Action introuvable" }, 404);
+      const resultat = (action.resultat ?? {}) as Record<string, unknown>;
+      const plan = resultat.annulation as Annulation | undefined;
+      if (action.statut !== "executee") return json({ error: "Seule une action exécutée peut être défaite." }, 409);
+      if (resultat.annulee_le) return json({ error: "Action déjà défaite." }, 409);
+      if (!plan?.possible) return json({ error: (plan && !plan.possible ? plan.raison : null) ?? "Cette action ne peut pas être défaite." }, 400);
+
+      const r = await appliquerAnnulation(db, plan.etapes);
+      if (!r.ok) {
+        return json({ error: r.faites ? `${r.erreur} (${r.faites} étape(s) déjà défaite(s)).` : r.erreur }, 400);
+      }
+      const annuleeLe = new Date().toISOString();
+      await db.from("ai_actions").update({ resultat: { ...resultat, annulee_le: annuleeLe } }).eq("id", actionId);
+      await db.rpc("log_audit", {
+        p_action: `ia_annulation_${action.outil}`, p_entite: String(resultat.entite ?? "ai_actions"),
+        p_entite_id: (resultat.entite_id as string | null) ?? null, p_details: { description: action.description, etapes: plan.etapes },
+      });
+      return json({ ok: true, annulee_le: annuleeLe });
+    }
+
     if (mode === "execute" || mode === "cancel") {
       const actionId = String(body.action_id ?? "");
       const { data: action } = await db.from("ai_actions").select("*").eq("id", actionId).maybeSingle();
@@ -712,21 +739,26 @@ Deno.serve(async (req: Request) => {
 
       // Origine du CRM (liens publics) : fournie par le navigateur, limitée à http(s).
       const origin = /^https?:\/\/[^/\s]+$/.test(String(body.origin ?? "")) ? String(body.origin) : null;
+      // Valeurs d'avant, relues juste avant d'écrire : de quoi défaire ensuite.
+      const avant = await instantane(db, action.outil, action.args ?? {});
       const res = await executeAction(db, authHeader, SUPABASE_URL, action.outil, action.args ?? {}, origin);
       if (!res.ok) {
         await db.from("ai_actions").update({ statut: "erreur", resultat: { erreur: res.erreur } }).eq("id", actionId);
         return json({ error: res.erreur }, 400);
       }
+      const resultat = {
+        entite: res.entite, entite_id: res.entite_id, ...(res.resultat ? { detail: res.resultat } : {}),
+        annulation: planAnnulation(action.outil, action.args ?? {}, res, avant),
+      };
       await db.from("ai_actions").update({
-        statut: "executee", executed_at: new Date().toISOString(),
-        resultat: { entite: res.entite, entite_id: res.entite_id, ...(res.resultat ? { detail: res.resultat } : {}) },
+        statut: "executee", executed_at: new Date().toISOString(), resultat,
       }).eq("id", actionId);
       // Journal d'audit : qui a validé quoi, avec quels arguments.
       await db.rpc("log_audit", {
         p_action: `ia_${action.outil}`, p_entite: res.entite,
         p_entite_id: res.entite_id, p_details: { description: action.description, args: action.args },
       });
-      return json({ ok: true, statut: "executee", entite: res.entite, entite_id: res.entite_id });
+      return json({ ok: true, statut: "executee", entite: res.entite, entite_id: res.entite_id, resultat });
     }
 
     // ── Mode chat (SSE) ──

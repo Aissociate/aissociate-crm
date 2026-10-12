@@ -558,7 +558,7 @@ export async function executerMetier(x: ExecMetier, outil: string, a: Record<str
         const r = await appelFonction(x, "generate-devis", { devisId: devis.id });
         pdf = r.ok ? "généré" : `échec (${r.erreur})`;
       }
-      return { ok: true, entite: "devis", entite_id: devis.id, resultat: { numero: devis.numero, dossier_id: dossier.id, ...(pdf ? { pdf } : {}) } };
+      return { ok: true, entite: "devis", entite_id: devis.id, resultat: { numero: devis.numero, dossier_id: dossier.id, dossier_cree: dossier.cree, ...(pdf ? { pdf } : {}) } };
     }
     case "proposer_maj_statut_devis": {
       const { error } = await db.from("devis").update({ statut: String(a.statut) }).eq("id", String(a.devis_id));
@@ -727,6 +727,7 @@ export async function executerMetier(x: ExecMetier, outil: string, a: Record<str
       const { data: l, error: e1 } = await db.from("contact_requests").select("*").eq("id", String(a.lead_id)).single();
       if (e1) return echec(e1);
       let contactId: string | null = l.contact_id;
+      let cree = false;
       if (!contactId && l.email) {
         const { data: ex } = await db.from("contacts").select("id").ilike("email", l.email).limit(1).maybeSingle();
         contactId = ex?.id ?? null;
@@ -739,9 +740,10 @@ export async function executerMetier(x: ExecMetier, outil: string, a: Record<str
         }).select("id").single();
         if (error) return echec(error);
         contactId = c.id;
+        cree = true;
       }
       await db.from("contact_requests").update({ status: "converti", contact_id: contactId }).eq("id", l.id);
-      return { ok: true, entite: "contacts", entite_id: contactId };
+      return { ok: true, entite: "contacts", entite_id: contactId, resultat: { contact_cree: cree } };
     }
     default: return null;
   }
