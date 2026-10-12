@@ -77,6 +77,11 @@ export function definitionsMetier(ctx: CtxMetier, tool: Tool): void {
   };
 
   // ── Lectures ──
+  if (on("contacts")) {
+    tool("lire_conversation_enregistree",
+      "Transcription et compte-rendu d'une conversation enregistrée (appel, rendez-vous) : point de départ pour proposer les suites à donner dans le CRM. Le compte-rendu est déjà déposé sur la fiche du contact lié : ne pas le reproposer en note.",
+      { conversation_id: { type: "string" } }, ["conversation_id"]);
+  }
   if (on("devis")) {
     tool("fiche_devis", "Détail d'un devis : en-tête, lignes, contact et dossier liés.",
       { devis_id: { type: "string" }, numero: { type: "string" } });
@@ -211,6 +216,25 @@ export function definitionsMetier(ctx: CtxMetier, tool: Tool): void {
 export async function lireMetier(ctx: CtxMetier, name: string, a: Record<string, unknown>): Promise<unknown | null> {
   const { db, finances } = ctx;
   switch (name) {
+    case "lire_conversation_enregistree": {
+      const { data: c } = await db.from("conversations")
+        .select("id, titre, telephone, contact_id, demarree_at, duree_secondes, statut, transcription, compte_rendu, action_id")
+        .eq("id", String(a.conversation_id)).maybeSingle();
+      if (!c) return { erreur: "Conversation introuvable (ou hors de votre périmètre)." };
+      if (c.statut !== "traitee") return { erreur: `Conversation pas encore transcrite (statut : ${c.statut}).` };
+      const contact = c.contact_id
+        ? (await db.from("contacts").select("id, nom, prenom, email, telephone, statut_prospect").eq("id", c.contact_id).maybeSingle()).data
+        : null;
+      const transcription = String(c.transcription ?? "");
+      return {
+        interlocuteur: contact ?? { titre: c.titre, telephone: c.telephone, note: "Aucune fiche liée : la retrouver (rechercher_contacts) ou proposer sa création." },
+        date: c.demarree_at, duree_minutes: Math.round(Number(c.duree_secondes ?? 0) / 60),
+        compte_rendu_depose_sur_la_fiche: Boolean(c.action_id),
+        analyse: c.compte_rendu,
+        transcription: transcription.length > 24000 ? `${transcription.slice(0, 24000)}
+[…transcription tronquée]` : transcription,
+      };
+    }
     case "fiche_devis": {
       let q = db.from("devis").select("id, numero, statut, date_emission, date_validite, objet, conditions, total_ht, total_ttc, contact_id, dossier_id, financeur_id, fichier_url");
       q = a.devis_id ? q.eq("id", String(a.devis_id)) : q.ilike("numero", `%${a.numero ?? ""}%`);

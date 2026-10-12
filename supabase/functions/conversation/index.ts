@@ -7,9 +7,10 @@
 //   2. la transcription complète est analysée par le modèle de chat pour en
 //      tirer un compte-rendu structuré (résumé, besoin, formation envisagée,
 //      financement, prochaine action…) ;
-//   3. le résultat est déversé dans le CRM : action « appel » réalisée sur la
-//      fiche contact, relance planifiée, et champs de qualification encore
-//      vides complétés (jamais écrasés — la saisie humaine prime).
+//   3. le compte-rendu est déposé sur la fiche contact (action « appel »
+//      réalisée). Rien d'autre n'est écrit : les suites (relance, champs de
+//      qualification, devis…) sont PROPOSÉES par l'assistant IA (outil
+//      `lire_conversation_enregistree` de l'agent) et attendent validation.
 //
 //   action 'traiter' → { conversation_id }
 //   action 'relancer' → même chose, en repartant d'une conversation en erreur
@@ -49,18 +50,6 @@ Réponds UNIQUEMENT par un objet JSON valide, sans texte autour, avec ces clés 
 }
 
 "delai_jours" : 0 si la relance est à faire au prochain créneau ouvrable, sinon le nombre de jours convenu.`;
-
-// Première heure ouvrable à venir (9 h), en cohérence avec le CRM.
-function prochaineHeureOuvrable(joursDeDelai = 0): { date: string; heure: string } {
-  const d = new Date();
-  d.setDate(d.getDate() + Math.max(0, joursDeDelai));
-  const ouvre = (x: Date) => x.getDay() >= 1 && x.getDay() <= 5;
-  if (!ouvre(d) || (joursDeDelai <= 0 && d.getHours() >= 9)) {
-    do { d.setDate(d.getDate() + 1); } while (!ouvre(d));
-  }
-  const p = (n: number) => String(n).padStart(2, "0");
-  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, heure: "09:00" };
-}
 
 function nowParts(): { date: string; heure: string } {
   const d = new Date();
@@ -246,7 +235,7 @@ Deno.serve(async (req: Request) => {
         },
       };
 
-      // 6) Déversement CRM — uniquement si la conversation est rattachée à un contact.
+      // 6) Compte-rendu sur la fiche — uniquement si la conversation est rattachée à un contact.
       let actionId: string | null = null;
       if (conv.contact_id) {
         const { date, heure } = nowParts();
@@ -266,32 +255,6 @@ Deno.serve(async (req: Request) => {
           auteur_id: conv.auteur_id,
         }).select("id").maybeSingle();
         actionId = act?.id ?? null;
-
-        if (analyse.prochaine_action.description) {
-          const suite = prochaineHeureOuvrable(analyse.prochaine_action.delai_jours);
-          await sb.from("contact_actions").insert({
-            contact_id: conv.contact_id,
-            date_action: suite.date,
-            heure_action: suite.heure,
-            type: "relance",
-            description: analyse.prochaine_action.description.slice(0, 2000),
-            faite: false,
-            auteur_id: conv.auteur_id,
-          });
-        }
-
-        // Qualification : on ne remplit que les champs restés vides.
-        const { data: contact } = await sb.from("contacts")
-          .select("besoin_resume, formation_envisagee, financement_envisage, interet")
-          .eq("id", conv.contact_id).maybeSingle();
-        if (contact) {
-          const patch: Record<string, string> = {};
-          if (!str(contact.besoin_resume) && analyse.besoin_resume) patch.besoin_resume = analyse.besoin_resume;
-          if (!str(contact.formation_envisagee) && analyse.formation_envisagee) patch.formation_envisagee = analyse.formation_envisagee;
-          if (!str(contact.financement_envisage) && analyse.financement_envisage) patch.financement_envisage = analyse.financement_envisage;
-          if (!str(contact.interet) && analyse.interet) patch.interet = analyse.interet;
-          if (Object.keys(patch).length) await sb.from("contacts").update(patch).eq("id", conv.contact_id);
-        }
       }
 
       await sb.from("conversations").update({

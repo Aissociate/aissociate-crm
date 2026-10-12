@@ -37,3 +37,13 @@ export async function traiterConversation(
     erreur: "Le traitement dure plus longtemps que prévu. Le compte-rendu apparaîtra dans la fiche du contact dès qu'il sera prêt.",
   };
 }
+
+/**
+ * Demande adressée à l'assistant IA après une conversation enregistrée : il
+ * lit la transcription (outil `lire_conversation_enregistree`) et propose les
+ * suites à donner dans le CRM, à valider une à une.
+ */
+export function messageAnalyseConversation(conversationId: string, interlocuteur: string | null): string {
+  return `Je viens d'enregistrer une conversation${interlocuteur ? ` avec ${interlocuteur}` : ''} (conversation ${conversationId}). `
+    + 'Lis-la, résume-moi l\'essentiel en quelques lignes, puis propose toutes les actions à faire dans le CRM en conséquence.';
+}

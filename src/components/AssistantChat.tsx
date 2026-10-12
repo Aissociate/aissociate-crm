@@ -3,10 +3,10 @@
 // prop `compact`). L'IA consulte le CRM via des outils (périmètre = RLS de
 // l'utilisateur) et PROPOSE ses écritures : chaque action apparaît en carte
 // « Valider / Annuler » et n'est exécutée qu'après validation explicite.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Bot, Send, User, FileText, Sparkles, Plus, History, Check, X,
-  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck,
+  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -206,10 +206,18 @@ type Props = {
   variant?: 'standard' | 'jarvis';
   /** Fiche concernée par la dernière proposition (aperçu du mode avancé). */
   onEntite?: (e: EntiteRef) => void;
+  /** Message envoyé de l'extérieur (ex. analyse d'une conversation enregistrée) ;
+   *  un nouvel `id` déclenche l'envoi. */
+  envoi?: { id: number; texte: string } | null;
+  /** Bouton « conversation enregistrée » dans la barre de saisie. */
+  onEnregistrer?: () => void;
+  /** Contenu affiché juste au-dessus de la saisie (panneau d'enregistrement). */
+  panneauSaisie?: ReactNode;
 };
 
 export default function AssistantChat({
   contexte = null, compact = false, suggestions = SUGGESTIONS_DEFAUT, variant = 'standard', onEntite,
+  envoi = null, onEnregistrer, panneauSaisie,
 }: Props) {
   const { isManager, profile } = useAuth();
   const jarvis = variant === 'jarvis';
@@ -395,6 +403,16 @@ export default function AssistantChat({
     }
   };
 
+  // Envoi déclenché de l'extérieur : une seule fois par `id` (le mode strict de
+  // React rejoue les effets en développement).
+  const envoiTraite = useRef<number | null>(null);
+  useEffect(() => {
+    if (!envoi || envoiTraite.current === envoi.id) return;
+    envoiTraite.current = envoi.id;
+    void ask(envoi.texte);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envoi]);
+
   return (
     <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${jarvis ? '' : 'bg-surface'} ${compact || jarvis ? '' : 'rounded-xl border border-line'}`}>
       {/* Barre d'outils du fil : mode, historique, nouvelle conversation */}
@@ -551,6 +569,8 @@ export default function AssistantChat({
         </div>
       )}
 
+      {panneauSaisie}
+
       {/* Saisie */}
       <form
         onSubmit={(e) => { e.preventDefault(); void ask(input); }}
@@ -558,6 +578,13 @@ export default function AssistantChat({
           ? 'mx-auto mb-4 flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-line bg-surface p-2 shadow-lg shadow-brand-500/5'
           : `flex items-end gap-2 border-t border-line bg-surface ${compact ? 'p-2' : 'p-3'}`}
       >
+        {onEnregistrer && (
+          <button type="button" onClick={onEnregistrer} disabled={loading}
+            title="Enregistrer ou importer une conversation"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line text-muted transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:hover:text-brand-400">
+            <AudioLines className="h-5 w-5" />
+          </button>
+        )}
         <DicteeVocale
           disabled={loading}
           onTexte={(t) => setInput((v) => (v ? `${v.trimEnd()} ${t}` : t))}

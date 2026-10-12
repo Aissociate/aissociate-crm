@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mic, Square, Pause, Play, Phone, UserPlus, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Loader2, ArrowLeft, RefreshCw, ChevronRight } from 'lucide-react';
+import { Mic, Square, Pause, Play, Phone, UserPlus, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Loader2, ArrowLeft, RefreshCw, ChevronRight, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn, fullName } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
-import { EnregistreurSegmente, formatDuree, micSupporte, normaliserTelephone, type SegmentAudio } from '@/lib/audioRecorder';
-import { traiterConversation } from '@/lib/conversation';
-import type { Contact, Conversation, ConversationAnalyse, ConversationSegment } from '@/lib/database.types';
+import { formatDuree, normaliserTelephone } from '@/lib/audioRecorder';
+import { traiterConversation, messageAnalyseConversation } from '@/lib/conversation';
+import { useCaptureConversation } from '@/hooks/useCaptureConversation';
+import type { Contact, Conversation, ConversationAnalyse } from '@/lib/database.types';
 
 type ContactLeger = Pick<Contact, 'id' | 'nom' | 'prenom' | 'telephone' | 'email' | 'statut_prospect'>;
-type EtatSegment = ConversationSegment & { statut: 'envoi' | 'ok' | 'erreur' };
 type Etape = 'preparation' | 'enregistrement' | 'finalisation' | 'envoi' | 'resultat';
-
-const extensionDe = (mime: string): string => {
-  if (mime.includes('webm')) return 'webm';
-  if (mime.includes('mp4') || mime.includes('m4a')) return 'm4a';
-  if (mime.includes('ogg')) return 'ogg';
-  return 'bin';
-};
 
 /**
  * Capture mobile — page pensée pour un téléphone Android, ouverte par le
@@ -26,7 +19,9 @@ const extensionDe = (mime: string): string => {
  *
  * Déroulé : on choisit l'interlocuteur (numéro composé ou contact existant),
  * on enregistre l'entretien au micro, l'audio part par tranches au fil de
- * l'eau, puis le serveur transcrit et déverse le compte-rendu dans la fiche.
+ * l'eau, puis le serveur transcrit et dépose le compte-rendu dans la fiche.
+ * Les suites (relance, mise à jour de la fiche, devis…) sont PROPOSÉES par
+ * l'assistant IA, sur le poste de commande, et attendent une validation.
  *
  * Limite Android à connaître : aucun navigateur n'a accès au flux d'un appel
  * téléphonique. On enregistre le micro — donc l'appel doit être passé en
@@ -41,22 +36,14 @@ export default function CaptureMobile() {
   const [nouveauNom, setNouveauNom] = useState('');
 
   const [etape, setEtape] = useState<Etape>('preparation');
-  const [secondes, setSecondes] = useState(0);
-  const [niveau, setNiveau] = useState(0);
-  const [enPause, setEnPause] = useState(false);
-  const [segments, setSegments] = useState<EtatSegment[]>([]);
-  const [erreur, setErreur] = useState<string | null>(null);
+  const capture = useCaptureConversation();
+  const { secondes, niveau, enPause, segments, erreur, setErreur } = capture;
   const [analyse, setAnalyse] = useState<ConversationAnalyse | null>(null);
   const [transcription, setTranscription] = useState('');
   const [voirTranscription, setVoirTranscription] = useState(false);
   const [historique, setHistorique] = useState<Conversation[]>([]);
 
-  const enregistreur = useRef<EnregistreurSegmente | null>(null);
   const conversationId = useRef<string | null>(null);
-  const segmentsRef = useRef<ConversationSegment[]>([]);
-  const enversRef = useRef(0);          // téléversements en cours
-  const arretRef = useRef(false);       // le micro a rendu son dernier segment
-  const secondesRef = useRef(0);
 
   useEffect(() => { document.title = 'Capture mobile — Aissociate'; }, []);
 
@@ -97,42 +84,9 @@ export default function CaptureMobile() {
   const telephoneRetenu = contact?.telephone?.trim() || (chercheNumero ? recherche.trim() : '');
   const pretADemarrer = Boolean(contact) || (chercheNumero && (!creerContact || nouveauNom.trim().length > 1));
 
-  // ── Téléversement d'un segment ──────────────────────────────────────────────
-  const envoyerSegment = useCallback(async (seg: SegmentAudio) => {
-    const convId = conversationId.current;
-    if (!convId) return;
-    const path = `${convId}/${String(seg.index).padStart(3, '0')}.${extensionDe(seg.mime)}`;
-    const entree: EtatSegment = {
-      index: seg.index, path, duree: seg.duree, taille: seg.blob.size, mime: seg.mime, statut: 'envoi',
-    };
-    setSegments((prev) => [...prev, entree]);
-    enversRef.current += 1;
-
-    const { error } = await supabase.storage.from('conversations')
-      .upload(path, seg.blob, { contentType: seg.mime, upsert: true });
-    enversRef.current -= 1;
-
-    if (error) {
-      setSegments((prev) => prev.map((s) => (s.index === seg.index ? { ...s, statut: 'erreur' } : s)));
-      setErreur(`Le morceau ${seg.index + 1} n'a pas pu être envoyé : ${error.message}`);
-      return;
-    }
-    setSegments((prev) => prev.map((s) => (s.index === seg.index ? { ...s, statut: 'ok' } : s)));
-
-    // La ligne est mise à jour après chaque morceau : une coupure ne perd que
-    // le morceau en cours.
-    const { statut: _ignore, ...persiste } = entree;
-    segmentsRef.current = [...segmentsRef.current, persiste];
-    await supabase.from('conversations').update({
-      segments: segmentsRef.current, duree_secondes: secondesRef.current,
-    }).eq('id', convId);
-  }, []);
-
   // ── Démarrage ───────────────────────────────────────────────────────────────
   const demarrer = async () => {
     setErreur(null);
-    if (!micSupporte()) { setErreur("Ce navigateur ne sait pas enregistrer le micro. Utilisez Chrome sur Android."); return; }
-
     let contactId = contact?.id ?? null;
     // Numéro inconnu : on crée la fiche prospect tout de suite, pour que le
     // compte-rendu ait où atterrir.
@@ -146,71 +100,23 @@ export default function CaptureMobile() {
       if (data) { setContact(data as ContactLeger); contactId = data.id; void chargerContacts(); }
     }
 
-    const { data: conv, error: convErr } = await supabase.from('conversations').insert({
-      contact_id: contactId,
-      telephone: telephoneRetenu || 'inconnu',
+    const id = await capture.demarrer({
+      contactId,
+      telephone: telephoneRetenu,
       titre: contact ? fullName(contact.prenom, contact.nom) : (nouveauNom.trim() || telephoneRetenu),
-      auteur_id: session?.user.id ?? null,
-      source: 'micro',
-      statut: 'en_cours',
-    }).select('id').maybeSingle();
-    if (convErr || !conv) { setErreur(`Impossible d'ouvrir la conversation : ${convErr?.message ?? 'inconnu'}`); return; }
-
-    conversationId.current = conv.id;
-    segmentsRef.current = [];
-    secondesRef.current = 0;
-    arretRef.current = false;
-    setSegments([]); setSecondes(0); setAnalyse(null); setTranscription('');
-
-    const rec = new EnregistreurSegmente({
-      onSegment: (seg) => { void envoyerSegment(seg); },
-      onTick: (s) => { secondesRef.current = s; setSecondes(s); },
-      onLevel: setNiveau,
-      onArret: () => { arretRef.current = true; },
-      onError: (m) => setErreur(m),
     });
-    try {
-      await rec.demarrer();
-    } catch {
-      setErreur("Micro refusé. Autorisez l'accès au microphone dans les réglages du navigateur, puis réessayez.");
-      await supabase.from('conversations').delete().eq('id', conv.id);
-      conversationId.current = null;
-      return;
-    }
-    enregistreur.current = rec;
-    setEnPause(false);
+    if (!id) return;
+    conversationId.current = id;
+    setAnalyse(null); setTranscription('');
     setEtape('enregistrement');
-  };
-
-  const basculerPause = () => {
-    const rec = enregistreur.current;
-    if (!rec) return;
-    if (rec.enPause) { rec.reprendre(); setEnPause(false); } else { rec.pause(); setEnPause(true); }
   };
 
   // ── Arrêt : on attend le dernier morceau et la fin des téléversements ───────
   const terminer = async () => {
     setEtape('finalisation');
-    enregistreur.current?.arreter();
-    enregistreur.current = null;
-    setNiveau(0);
-
-    const debut = Date.now();
-    while ((!arretRef.current || enversRef.current > 0) && Date.now() - debut < 60000) {
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    const convId = conversationId.current;
-    if (convId) {
-      await supabase.from('conversations').update({
-        statut: 'a_traiter', segments: segmentsRef.current, duree_secondes: secondesRef.current,
-      }).eq('id', convId);
-    }
-    if (!segmentsRef.current.length) {
-      setErreur("Aucun audio n'a été enregistré.");
-      setEtape('preparation');
-      return;
-    }
-    await envoyerAuCrm();
+    const id = await capture.terminer();
+    if (!id) { setEtape('preparation'); return; }
+    await envoyerAuCrm(id);
   };
 
   // ── Transcription + compte-rendu côté serveur ──────────────────────────────
@@ -230,14 +136,11 @@ export default function CaptureMobile() {
 
   const nouvelleCapture = () => {
     conversationId.current = null;
-    segmentsRef.current = [];
-    setEtape('preparation'); setSegments([]); setSecondes(0); setRecherche('');
+    capture.reinitialiser();
+    setEtape('preparation'); setRecherche('');
     setContact(null); setCreerContact(false); setNouveauNom('');
     setAnalyse(null); setTranscription(''); setErreur(null); setVoirTranscription(false);
   };
-
-  // Quitter la page pendant l'enregistrement libère le micro.
-  useEffect(() => () => { enregistreur.current?.arreter(); }, []);
 
   const enregistre = etape === 'enregistrement';
 
@@ -368,7 +271,7 @@ export default function CaptureMobile() {
 
             {enregistre && (
               <div className="mt-5 flex items-center justify-center gap-3">
-                <button onClick={basculerPause} className="btn btn-secondary h-14 w-14 justify-center rounded-full p-0">
+                <button onClick={capture.basculerPause} className="btn btn-secondary h-14 w-14 justify-center rounded-full p-0">
                   {enPause ? <Play className="h-6 w-6" /> : <Pause className="h-6 w-6" />}
                 </button>
                 <button onClick={() => void terminer()} className="btn btn-danger h-16 w-16 justify-center rounded-full p-0">
@@ -425,7 +328,7 @@ export default function CaptureMobile() {
                 )}
                 {analyse.prochaine_action?.description && (
                   <p className="mt-3 rounded-lg bg-brand-500/10 p-3 text-sm text-fg">
-                    <strong>Relance planifiée :</strong> {analyse.prochaine_action.description}
+                    <strong>Relance suggérée :</strong> {analyse.prochaine_action.description}
                   </p>
                 )}
 
@@ -454,8 +357,18 @@ export default function CaptureMobile() {
               </div>
             )}
 
-            <div className="mt-4 flex gap-2">
-              <button onClick={nouvelleCapture} className="btn btn-primary flex-1 justify-center">
+            {analyse && conversationId.current && (
+              <Link
+                to="/commande"
+                state={{ messageInitial: messageAnalyseConversation(conversationId.current, contact ? fullName(contact.prenom, contact.nom) : null) }}
+                className="btn btn-primary mt-4 w-full justify-center"
+              >
+                <Sparkles className="h-4 w-4" /> Voir les actions proposées par l'IA
+              </Link>
+            )}
+
+            <div className="mt-2 flex gap-2">
+              <button onClick={nouvelleCapture} className="btn btn-secondary flex-1 justify-center">
                 <Mic className="h-4 w-4" /> Nouvelle capture
               </button>
               {contact && (
