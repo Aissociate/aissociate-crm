@@ -74,10 +74,13 @@ async function readSse(res: Response, onEvent: (event: string, data: Record<stri
 const LIBELLES_ARGS: Record<string, string> = {
   destinataire: 'Destinataire', sujet: 'Objet', corps: 'Message', note: 'Note',
   description: 'Description', type: 'Type', date_action: 'Date (AAAA-MM-JJ)', heure_action: 'Heure (HH:MM)',
+  objet: 'Objet', titre: 'Titre', conditions: 'Conditions', compte_rendu: 'Compte-rendu', raison_sociale: 'Raison sociale',
+  date_validite: 'Validité (AAAA-MM-JJ)', date_debut: 'Début', date_fin: 'Fin', lieu: 'Lieu', notes: 'Notes',
+  formation_envisagee: 'Formation envisagée', financement_envisage: 'Financement', dates_session: 'Dates', nom_plan: 'Nom',
   statut_prospect: 'Statut', statut: 'Statut', etape: 'Étape', nom: 'Nom', prenom: 'Prénom',
   email: 'Email', telephone: 'Téléphone', ville: 'Ville', besoin_resume: 'Besoin',
 };
-const CHAMPS_LONGS = new Set(['corps', 'note', 'description', 'besoin_resume']);
+const CHAMPS_LONGS = new Set(['corps', 'note', 'description', 'besoin_resume', 'conditions', 'compte_rendu', 'notes', 'objectifs']);
 
 /** Arguments que l'utilisateur peut retoucher : textes, hors identifiants. */
 function argsModifiables(action: AiAction): [string, string][] {
@@ -93,7 +96,10 @@ export function entiteDeAction(action: AiAction): EntiteRef | null {
   if (typeof a.opportunite_id === 'string') return { type: 'opportunite', id: a.opportunite_id };
   if (typeof a.contact_id === 'string') return { type: 'contact', id: a.contact_id };
   const entite = action.resultat?.entite, id = action.resultat?.entite_id;
-  if (entite === 'contacts' && typeof id === 'string') return { type: 'contact', id };
+  if (typeof id !== 'string') return null;
+  if (entite === 'contacts') return { type: 'contact', id };
+  if (entite === 'dossiers') return { type: 'dossier', id };
+  if (entite === 'opportunites') return { type: 'opportunite', id };
   return null;
 }
 
@@ -281,7 +287,8 @@ export default function AssistantChat({
           Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
         },
-        body: JSON.stringify({ mode: decision, action_id: id, ...(retouches ? { args: retouches } : {}) }),
+        // `origin` : base des liens publics (émargement, évaluation) envoyés par l'agent.
+        body: JSON.stringify({ mode: decision, action_id: id, origin: window.location.origin, ...(retouches ? { args: retouches } : {}) }),
       });
       const body = await res.json();
       setActions((prev) => ({
