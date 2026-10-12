@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { EnregistreurSegmente, micSupporte, type SegmentAudio } from '@/lib/audioRecorder';
+import { EnregistreurSegmente, micSupporte, versWav16k, type SegmentAudio } from '@/lib/audioRecorder';
 import type { ConversationSegment } from '@/lib/database.types';
 
 /**
@@ -110,7 +110,15 @@ export function useCaptureConversation() {
     if (!id) return null;
 
     const rec = new EnregistreurSegmente({
-      onSegment: (seg) => { void envoyerSegment(seg); },
+      // Chaque morceau part en WAV : la transcription (Gemini) refuse le webm.
+      // Le compteur d'envois est pris tout de suite, pour que `terminer`
+      // attende aussi les conversions en cours.
+      onSegment: (seg) => {
+        enversRef.current += 1;
+        void versWav16k(seg.blob)
+          .then((wav) => envoyerSegment(wav ? { ...seg, blob: wav, mime: 'audio/wav' } : seg))
+          .finally(() => { enversRef.current -= 1; });
+      },
       onTick: (s) => { secondesRef.current = s; setSecondes(s); },
       onLevel: setNiveau,
       onArret: () => { arretRef.current = true; },

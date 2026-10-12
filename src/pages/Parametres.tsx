@@ -487,8 +487,8 @@ export default function Parametres() {
             <Field label="Modèle de l'assistant (agent)" hint="Doit gérer le tool calling de façon fiable — défaut : anthropic/claude-sonnet-4.5">
               <input className="input" value={ai.model_agent ?? ''} onChange={(e) => setAi({ ...ai, model_agent: e.target.value })} placeholder="anthropic/claude-sonnet-4.5" />
             </Field>
-            <Field label="Modèle de transcription vocale (dictée)" hint="Dictée de l'assistant — défaut : openai/gpt-4o-mini-transcribe (~0,003 $/min). La capture mobile garde whisper-1 si vide.">
-              <input className="input" value={ai.model_stt ?? ''} onChange={(e) => setAi({ ...ai, model_stt: e.target.value })} placeholder="openai/gpt-4o-mini-transcribe" />
+            <Field label="Modèle de transcription vocale" hint="Dictée et conversations enregistrées — défaut : google/gemini-3.8-flash (avec le vocabulaire du CRM, ~0,0015 $/min). Un id « whisper » ou « transcribe » utilise la transcription brute. Repli automatique sur openai/gpt-4o-mini-transcribe.">
+              <input className="input" value={ai.model_stt ?? ''} onChange={(e) => setAi({ ...ai, model_stt: e.target.value })} placeholder="google/gemini-3.8-flash" />
             </Field>
             <div className="lg:col-span-2">
               <Field label="Prompt de génération (configurable)" hint="Doit demander une réponse JSON {titre, sections:[{titre,contenu}]}">

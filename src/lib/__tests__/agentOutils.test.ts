@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { appliquerAnnulation, instantane, planAnnulation } from '../../../supabase/functions/agent/annulation';
 import { decrireMetier, executerMetier, type CtxMetier } from '../../../supabase/functions/agent/outils_metier';
+import { MODELE_STT_DEFAUT, MODELE_STT_SECOURS, transcrire } from '../../../supabase/functions/_shared/stt';
 import { fauxDb, type FauxDb } from './fauxSupabase';
 
 const client = (db: FauxDb) => db as unknown as SupabaseClient;
@@ -128,5 +129,44 @@ describe('outils métier', () => {
   it("laisse la main à index.ts pour les outils qu'il ne connaît pas", async () => {
     expect(await executerMetier(exec(fauxDb()), 'proposer_note_contact', {})).toBeNull();
     expect(await decrireMetier(ctx(fauxDb()), 'proposer_note_contact', {})).toBeNull();
+  });
+});
+
+describe('transcription (stt)', () => {
+  const appels: { url: string; corps: Record<string, unknown> }[] = [];
+  const repondre = (reponses: Record<string, { ok: boolean; json: unknown }>) => {
+    appels.length = 0;
+    globalThis.fetch = (async (url: string, init: { body: string }) => {
+      appels.push({ url, corps: JSON.parse(init.body) });
+      const r = Object.entries(reponses).find(([cle]) => url.includes(cle))![1];
+      return { ok: r.ok, status: r.ok ? 200 : 500, json: async () => r.json } as Response;
+    }) as unknown as typeof fetch;
+  };
+  const demande = { apiKey: 'k', audio: 'AAA', format: 'wav', mode: 'dictee' as const };
+
+  it('passe par Gemini en chat, avec le vocabulaire dans la consigne', async () => {
+    repondre({ 'chat/completions': { ok: true, json: { choices: [{ message: { content: 'Relance Cyril Tartampion jeudi.' } }] } } });
+    const r = await transcrire({ ...demande, vocabulaire: ['Cyril Tartampion'] });
+    expect(r).toEqual({ ok: true, texte: 'Relance Cyril Tartampion jeudi.', modele: MODELE_STT_DEFAUT });
+    expect(JSON.stringify(appels[0].corps)).toContain('Cyril Tartampion');
+  });
+
+  it('bascule sur le modèle de secours si Gemini échoue', async () => {
+    repondre({ 'chat/completions': { ok: false, json: {} }, 'audio/transcriptions': { ok: true, json: { text: 'texte brut' } } });
+    const r = await transcrire(demande);
+    expect(r).toEqual({ ok: true, texte: 'texte brut', modele: MODELE_STT_SECOURS });
+  });
+
+  it("n'envoie pas de webm à Gemini : directement le secours", async () => {
+    repondre({ 'audio/transcriptions': { ok: true, json: { text: 'ok' } } });
+    await transcrire({ ...demande, format: 'webm' });
+    expect(appels.map((a) => a.url)).toEqual(['https://openrouter.ai/api/v1/audio/transcriptions']);
+  });
+
+  it('un modèle « whisper » configuré utilise la transcription brute', async () => {
+    repondre({ 'audio/transcriptions': { ok: true, json: { text: 'ok' } } });
+    const r = await transcrire({ ...demande, modele: 'openai/whisper-1' });
+    expect(r).toMatchObject({ ok: true, modele: 'openai/whisper-1' });
+    expect(appels).toHaveLength(1);
   });
 });

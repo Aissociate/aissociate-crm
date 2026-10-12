@@ -3,7 +3,9 @@
 //
 // L'audio a déjà été téléversé segment par segment dans le bucket privé
 // « conversations » par le téléphone. Ici, côté serveur :
-//   1. chaque segment est transcrit (OpenRouter /audio/transcriptions) ;
+//   1. chaque segment est transcrit (voir _shared/stt.ts : Gemini avec le nom
+//      de l'interlocuteur et le catalogue en vocabulaire, repli sur un modèle
+//      de transcription classique) ;
 //   2. la transcription complète est analysée par le modèle de chat pour en
 //      tirer un compte-rendu structuré (résumé, besoin, formation envisagée,
 //      financement, prochaine action…) ;
@@ -21,6 +23,7 @@
 // téléphone suit l'avancement en relisant la ligne `conversations`.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { transcrire } from "../_shared/stt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,12 +76,14 @@ function base64(bytes: Uint8Array): string {
 function formatOf(mime: string | undefined, path: string): string {
   const m = (mime ?? "").toLowerCase();
   if (m.includes("webm")) return "webm";
-  if (m.includes("ogg")) return "ogg";
-  if (m.includes("mp4") || m.includes("m4a") || m.includes("aac")) return "m4a";
+  if (m.includes("ogg") || m.includes("opus")) return "ogg";
+  if (m.includes("aac")) return "aac";
+  if (m.includes("flac")) return "flac";
+  if (m.includes("mp4") || m.includes("m4a")) return "m4a";
   if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
   if (m.includes("wav")) return "wav";
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return ext || "webm";
+  return ext === "opus" ? "ogg" : (ext || "webm");
 }
 
 /** Extrait le premier objet JSON d'une réponse de modèle (au cas où il bavarde). */
@@ -144,7 +149,6 @@ Deno.serve(async (req: Request) => {
     const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
     const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
     if (!apiKey) return json({ error: "Clé OpenRouter absente (Paramètres > IA)" }, 400);
-    const modelStt = ai.model_stt || "openai/whisper-1";
     const modelChat = ai.model || "anthropic/claude-opus-4.8";
 
     await sb.from("conversations").update({ statut: "traitement", erreur: null }).eq("id", conversationId);
@@ -155,6 +159,17 @@ Deno.serve(async (req: Request) => {
     const travail = async (): Promise<void> => {
       // 4) Transcrire chaque segment. Un segment illisible ne perd pas les autres.
       const ordered = [...segments].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      // Vocabulaire : l'interlocuteur et le catalogue, pour l'orthographe des noms.
+      const [{ data: contact }, { data: formations }] = await Promise.all([
+        conv.contact_id
+          ? sb.from("contacts").select("nom, prenom").eq("id", conv.contact_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        sb.from("formations").select("intitule").eq("actif", true).limit(60),
+      ]);
+      const vocabulaire = [
+        contact ? `${contact.prenom ?? ""} ${contact.nom ?? ""}`.trim() : "", str(conv.titre),
+        ...(formations ?? []).map((f) => str(f.intitule)),
+      ];
       const morceaux: string[] = [];
       const echecs: number[] = [];
 
@@ -164,23 +179,12 @@ Deno.serve(async (req: Request) => {
         if (dlErr || !blob) { echecs.push(seg.index ?? 0); continue; }
         const bytes = new Uint8Array(await blob.arrayBuffer());
 
-        const resp = await fetch("https://openrouter.ai/api/v1/audio/transcriptions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://aissociate.crm",
-            "X-Title": "CRM Formation AIssociate",
-          },
-          body: JSON.stringify({
-            model: modelStt,
-            language: "fr",
-            input_audio: { data: base64(bytes), format: formatOf(seg.mime, seg.path) },
-          }),
+        const r = await transcrire({
+          apiKey, audio: base64(bytes), format: formatOf(seg.mime, seg.path), mode: "entretien",
+          modele: ai.model_stt, vocabulaire, titre: "CRM Formation AIssociate",
         });
-        if (!resp.ok) { echecs.push(seg.index ?? 0); continue; }
-        const out = await resp.json();
-        const texte = str(out?.text);
+        if (!r.ok) { echecs.push(seg.index ?? 0); continue; }
+        const texte = r.texte;
         if (texte) morceaux.push(texte);
       }
 

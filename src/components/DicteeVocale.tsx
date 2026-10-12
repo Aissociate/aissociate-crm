@@ -1,11 +1,12 @@
 // Bouton micro : dictée vocale des instructions de l'assistant IA.
 // Enregistre un unique blob (dictée courte, 2 min max), l'envoie en base64 à
-// l'Edge Function `agent` (mode "transcribe") et rend le texte via onTexte —
+// l'Edge Function `agent` (mode "transcribe", converti en WAV : la transcription
+// passe par Gemini, qui refuse le webm) et rend le texte via onTexte —
 // le texte atterrit dans le champ de saisie, l'utilisateur relit avant d'envoyer.
 import { useEffect, useRef, useState } from 'react';
 import { Mic, Square } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { pickMime, micSupporte, formatDuree } from '@/lib/audioRecorder';
+import { pickMime, micSupporte, formatDuree, versWav16k } from '@/lib/audioRecorder';
 import { Spinner } from '@/components/ui';
 
 const MAX_SECONDES = 120;
@@ -71,7 +72,12 @@ export default function DicteeVocale({ onTexte, onErreur, disabled }: Props) {
           Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
         },
-        body: JSON.stringify({ mode: 'transcribe', audio: await blobToBase64(blob), format: formatOf(mime) }),
+        body: await (async () => {
+          const wav = await versWav16k(blob);
+          return JSON.stringify(wav
+            ? { mode: 'transcribe', audio: await blobToBase64(wav), format: 'wav' }
+            : { mode: 'transcribe', audio: await blobToBase64(blob), format: formatOf(mime) });
+        })(),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error((body as { error?: string } | null)?.error ?? `HTTP ${res.status}`);
