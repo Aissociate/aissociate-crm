@@ -218,3 +218,27 @@ body {
 .animate-slide-in-right {
   animation: slide-in-right 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
+
+/* ── Mode avancé : orbe de l'assistant ── */
+.orbe-ia {
+  width: 88px;
+  height: 88px;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.9), transparent 38%),
+    radial-gradient(circle at 50% 50%, #fb9a3c, #ea6a1e 55%, #7c2d12 100%);
+  box-shadow: 0 0 40px 6px rgb(249 115 22 / 0.35), inset 0 0 18px rgb(255 255 255 / 0.25);
+  animation: orbe-respire 4s ease-in-out infinite;
+}
+.mode-avance-fond {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgb(249 115 22 / 0.10), transparent 70%),
+    rgb(var(--app));
+}
+@keyframes orbe-respire {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 40px 6px rgb(249 115 22 / 0.30), inset 0 0 18px rgb(255 255 255 / 0.25); }
+  50% { transform: scale(1.05); box-shadow: 0 0 56px 12px rgb(249 115 22 / 0.45), inset 0 0 18px rgb(255 255 255 / 0.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbe-ia { animation: none; }
+}

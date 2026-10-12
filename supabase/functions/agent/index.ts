@@ -15,7 +15,8 @@
 //
 // Modes (POST JSON) :
 //   { mode: "chat", message, conversation_id?, contexte? }  → flux SSE
-//   { mode: "execute", action_id }                          → JSON
+//   { mode: "execute", action_id, args? }                   → JSON
+//     `args` : textes retouchés par l'utilisateur avant validation.
 //   { mode: "cancel",  action_id }                          → JSON
 //   { mode: "transcribe", audio (base64), format }          → JSON { texte }
 //     Dictée vocale des instructions : STT via OpenRouter, modèle
@@ -687,6 +688,19 @@ Deno.serve(async (req: Request) => {
       if (mode === "cancel") {
         await db.from("ai_actions").update({ statut: "annulee" }).eq("id", actionId);
         return json({ ok: true, statut: "annulee" });
+      }
+
+      // Retouches de l'utilisateur avant validation : uniquement des textes déjà
+      // présents dans la proposition, jamais un identifiant (la cible de
+      // l'action ne change pas). Les arguments retouchés sont conservés.
+      const retouches = (body.args ?? null) as Record<string, unknown> | null;
+      if (retouches && typeof retouches === "object") {
+        const args = { ...(action.args ?? {}) } as Record<string, unknown>;
+        for (const [k, v] of Object.entries(retouches)) {
+          if (typeof v === "string" && typeof args[k] === "string" && !k.endsWith("_id")) args[k] = v;
+        }
+        action.args = args;
+        await db.from("ai_actions").update({ args }).eq("id", actionId);
       }
 
       const res = await executeAction(db, authHeader, SUPABASE_URL, action.outil, action.args ?? {});

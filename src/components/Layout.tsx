@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Euro, Wallet, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Euro, Wallet, ClipboardCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn, isConseillerInactif } from '@/lib/utils';
@@ -10,6 +10,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import BugReporter from '@/components/BugReporter';
 import NotificationBell from '@/components/NotificationBell';
 import GlobalSearch from '@/components/GlobalSearch';
+import { useModeAvance } from '@/hooks/useModeAvance';
 
 interface NavItem {
   to: string;
@@ -84,6 +85,28 @@ export default function Layout() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
+  // Mode avancé : barre d'icônes au lieu du menu complet, poste de commande IA
+  // en page d'accueil. À l'ouverture du CRM, le tableau de bord laisse la place
+  // au poste de commande (une seule fois : le tableau reste accessible).
+  const [modeAvance, setModeAvance] = useModeAvance();
+  const redirige = useRef(false);
+  useEffect(() => {
+    if (redirige.current) return;
+    redirige.current = true;
+    if (modeAvance && location.pathname === '/dashboard') navigate('/commande', { replace: true });
+  }, [modeAvance, location.pathname, navigate]);
+  const basculerMode = () => {
+    const actif = !modeAvance;
+    setModeAvance(actif);
+    if (actif) navigate('/commande');
+    else if (location.pathname === '/commande') navigate('/dashboard');
+  };
+  const rail = modeAvance;
+  const sections = rail
+    ? [{ title: 'Mode avancé', items: [{ to: '/commande', label: 'Poste de commande', icon: Sparkles }] as NavItem[] }, ...SECTIONS]
+    : SECTIONS;
+  const pleinePage = location.pathname === '/commande';
+
   // Recherche globale : Ctrl+K / ⌘K ou clic sur le bouton de la sidebar.
   const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {
@@ -140,34 +163,37 @@ export default function Layout() {
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-line bg-surface transition-transform lg:static lg:translate-x-0',
+          rail && 'lg:w-16',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex items-center justify-between border-b border-line px-4 py-4">
-          <Logo size="md" tagline />
+        <div className={cn('flex items-center justify-between border-b border-line px-4 py-4', rail && 'lg:justify-center lg:px-2')}>
+          <div className={cn(rail && 'lg:hidden')}><Logo size="md" tagline /></div>
+          {rail && <div className="hidden lg:block"><Logo size="sm" /></div>}
           <button className="lg:hidden" onClick={() => setOpen(false)}>
             <X className="h-5 w-5 text-muted" />
           </button>
         </div>
 
-        <div className="px-3 pt-3">
+        <div className={cn('px-3 pt-3', rail && 'lg:px-2')}>
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-fg"
+            title="Rechercher (Ctrl K)"
+            className={cn('flex w-full items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-fg', rail && 'lg:justify-center lg:px-0')}
           >
             <Search className="h-4 w-4" />
-            <span className="flex-1 text-left">Rechercher…</span>
-            <kbd className="rounded border border-line px-1.5 py-0.5 text-[10px] font-semibold">Ctrl K</kbd>
+            <span className={cn('flex-1 text-left', rail && 'lg:hidden')}>Rechercher…</span>
+            <kbd className={cn('rounded border border-line px-1.5 py-0.5 text-[10px] font-semibold', rail && 'lg:hidden')}>Ctrl K</kbd>
           </button>
         </div>
 
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-          {SECTIONS.map((section) => {
+        <nav className={cn('flex-1 space-y-5 overflow-y-auto px-3 py-4', rail && 'lg:space-y-3 lg:px-2')}>
+          {sections.map((section) => {
             const items = section.items.filter(visible);
             if (items.length === 0) return null;
             return (
               <div key={section.title}>
-                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted/70">
+                <p className={cn('px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted/70', rail && 'lg:hidden')}>
                   {section.title}
                 </p>
                 <div className="space-y-0.5">
@@ -177,9 +203,11 @@ export default function Layout() {
                       to={item.to}
                       end={item.to === '/'}
                       onClick={() => setOpen(false)}
+                      title={rail ? item.label : undefined}
                       className={({ isActive }) =>
                         cn(
-                          'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                          'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                          rail && 'lg:justify-center lg:px-0',
                           isActive
                             ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
                             : 'text-muted hover:bg-surface-2 hover:text-fg',
@@ -187,9 +215,9 @@ export default function Layout() {
                       }
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
-                      <span className="flex-1">{item.label}</span>
+                      <span className={cn('flex-1', rail && 'lg:hidden')}>{item.label}</span>
                       {item.to === '/messagerie' && unreadMails > 0 && (
-                        <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white" title={`${unreadMails} mail(s) entrant(s) non lu(s)`}>
+                        <span className={cn('inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white', rail && 'lg:absolute lg:right-0.5 lg:top-0.5 lg:min-w-[16px] lg:px-1 lg:text-[10px]')} title={`${unreadMails} mail(s) entrant(s) non lu(s)`}>
                           {unreadMails > 99 ? '99+' : unreadMails}
                         </span>
                       )}
@@ -201,12 +229,27 @@ export default function Layout() {
           })}
         </nav>
 
-        <div className="border-t border-line p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500/15 text-sm font-semibold text-brand-600 dark:text-brand-400">
+        <div className={cn('border-t border-line p-3', rail && 'lg:px-2')}>
+          <button
+            onClick={basculerMode}
+            title={modeAvance ? 'Revenir au mode classique' : 'Passer en mode avancé (assistant IA au centre)'}
+            className={cn(
+              'mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition',
+              modeAvance
+                ? 'bg-brand-500 text-white hover:bg-brand-600'
+                : 'border border-brand-500/30 text-brand-600 hover:bg-brand-500/10 dark:text-brand-400',
+              rail && 'lg:justify-center lg:px-0',
+            )}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <span className={cn('flex-1 text-left', rail && 'lg:hidden')}>{modeAvance ? 'Mode avancé activé' : 'Mode avancé'}</span>
+          </button>
+          <div className={cn('flex items-center gap-3 rounded-lg px-2 py-2', rail && 'lg:flex-col lg:gap-1 lg:px-0')}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-sm font-semibold text-brand-600 dark:text-brand-400"
+              title={rail ? `${profile?.prenom ?? ''} ${profile?.nom ?? ''}`.trim() : undefined}>
               {initials(profile?.nom, profile?.prenom)}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className={cn('min-w-0 flex-1', rail && 'lg:hidden')}>
               <p className="truncate text-sm font-medium text-fg">
                 {profile?.prenom} {profile?.nom}
               </p>
@@ -236,9 +279,13 @@ export default function Layout() {
             <Menu className="h-5 w-5 text-fg" />
           </button>
           <Logo size="sm" />
-          <ThemeToggle className="ml-auto" />
+          <button onClick={basculerMode} title={modeAvance ? 'Revenir au mode classique' : 'Passer en mode avancé'}
+            className={cn('ml-auto rounded-lg p-2 transition', modeAvance ? 'bg-brand-500 text-white' : 'text-brand-600 hover:bg-surface-2 dark:text-brand-400')}>
+            <Sparkles className="h-4 w-4" />
+          </button>
+          <ThemeToggle />
         </header>
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className={cn('flex-1', pleinePage ? 'min-h-0 overflow-hidden' : 'overflow-y-auto p-4 sm:p-6 lg:p-8')}>
           <Outlet />
         </main>
       </div>

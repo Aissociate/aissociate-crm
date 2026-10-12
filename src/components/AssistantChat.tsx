@@ -6,12 +6,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Bot, Send, User, FileText, Sparkles, Plus, History, Check, X,
-  Wrench, CircleCheck, CircleX, TriangleAlert,
+  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Spinner, Badge } from '@/components/ui';
 import DicteeVocale from '@/components/DicteeVocale';
+import type { EntiteRef } from '@/components/ApercuEntite';
 import type { AiAction, AiConversation } from '@/lib/database.types';
 
 type Source = { label: string; url: string | null };
@@ -69,9 +70,47 @@ async function readSse(res: Response, onEvent: (event: string, data: Record<stri
   }
 }
 
+/** Libellés lisibles des arguments modifiables d'une proposition. */
+const LIBELLES_ARGS: Record<string, string> = {
+  destinataire: 'Destinataire', sujet: 'Objet', corps: 'Message', note: 'Note',
+  description: 'Description', type: 'Type', date_action: 'Date (AAAA-MM-JJ)', heure_action: 'Heure (HH:MM)',
+  statut_prospect: 'Statut', statut: 'Statut', etape: 'Étape', nom: 'Nom', prenom: 'Prénom',
+  email: 'Email', telephone: 'Téléphone', ville: 'Ville', besoin_resume: 'Besoin',
+};
+const CHAMPS_LONGS = new Set(['corps', 'note', 'description', 'besoin_resume']);
+
+/** Arguments que l'utilisateur peut retoucher : textes, hors identifiants. */
+function argsModifiables(action: AiAction): [string, string][] {
+  return Object.entries(action.args ?? {})
+    .filter(([k, v]) => typeof v === 'string' && !k.endsWith('_id'))
+    .map(([k, v]) => [k, v as string]);
+}
+
+/** Fiche visée par une proposition, pour l'aperçu du mode avancé. */
+export function entiteDeAction(action: AiAction): EntiteRef | null {
+  const a = action.args ?? {};
+  if (typeof a.dossier_id === 'string') return { type: 'dossier', id: a.dossier_id };
+  if (typeof a.opportunite_id === 'string') return { type: 'opportunite', id: a.opportunite_id };
+  if (typeof a.contact_id === 'string') return { type: 'contact', id: a.contact_id };
+  const entite = action.resultat?.entite, id = action.resultat?.entite_id;
+  if (entite === 'contacts' && typeof id === 'string') return { type: 'contact', id };
+  return null;
+}
+
+type CardProps = {
+  action: AiAction;
+  onDecision: (id: string, mode: 'execute' | 'cancel') => Promise<void>;
+  selectionnee: boolean;
+  onSelection: (id: string, v: boolean) => void;
+  modifs: Record<string, string> | undefined;
+  onModif: (id: string, cle: string, valeur: string) => void;
+  onVoir?: (e: EntiteRef) => void;
+};
+
 /** Carte de validation d'une action proposée par l'IA. */
-function ActionCard({ action, onDecision }: { action: AiAction; onDecision: (id: string, mode: 'execute' | 'cancel') => Promise<void> }) {
+function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onModif, onVoir }: CardProps) {
   const [busy, setBusy] = useState<'execute' | 'cancel' | null>(null);
+  const [edition, setEdition] = useState(false);
   const decide = async (mode: 'execute' | 'cancel') => {
     setBusy(mode);
     try { await onDecision(action.id, mode); } finally { setBusy(null); }
@@ -82,28 +121,65 @@ function ActionCard({ action, onDecision }: { action: AiAction; onDecision: (id:
     expiree: { icon: <CircleX className="h-4 w-4" />, text: 'Expirée (non traitée sous 24 h)', cls: 'text-muted' },
     erreur: { icon: <TriangleAlert className="h-4 w-4" />, text: `Erreur : ${(action.resultat?.erreur as string) ?? 'inconnue'}`, cls: 'text-red-600 dark:text-red-400' },
   };
+  const enAttente = action.statut === 'proposee';
+  const champs = argsModifiables(action);
+  const entite = entiteDeAction(action);
+  const modifiee = modifs && Object.keys(modifs).length > 0;
   return (
-    <div className="mt-2 rounded-lg border border-brand-500/30 bg-brand-500/5 p-3">
+    <div className={`mt-2 rounded-lg border p-3 ${enAttente && !selectionnee ? 'border-line bg-surface-2/50' : 'border-brand-500/30 bg-brand-500/5'}`}>
       <div className="flex items-start gap-2">
-        <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" />
+        {enAttente ? (
+          <input type="checkbox" checked={selectionnee} onChange={(e) => onSelection(action.id, e.target.checked)}
+            title="Inclure dans la validation groupée" className="mt-1 h-4 w-4 shrink-0 accent-brand-500" />
+        ) : (
+          <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" />
+        )}
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-600 dark:text-brand-400">Action proposée</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-brand-600 dark:text-brand-400">
+            Action proposée{modifiee ? ' · modifiée' : ''}
+          </p>
           <p className="mt-0.5 break-words text-sm text-fg">{action.description}</p>
-          {action.outil === 'proposer_envoi_email' && action.statut === 'proposee' && (
+          {edition && enAttente ? (
+            <div className="mt-2 space-y-2">
+              {champs.map(([cle, valeur]) => {
+                const v = modifs?.[cle] ?? valeur;
+                return (
+                  <label key={cle} className="block">
+                    <span className="text-xs text-muted">{LIBELLES_ARGS[cle] ?? cle}</span>
+                    {CHAMPS_LONGS.has(cle) ? (
+                      <textarea className="input mt-0.5 min-h-[90px] text-sm" value={v} onChange={(e) => onModif(action.id, cle, e.target.value)} />
+                    ) : (
+                      <input className="input mt-0.5 text-sm" value={v} onChange={(e) => onModif(action.id, cle, e.target.value)} />
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          ) : action.outil === 'proposer_envoi_email' && enAttente && (
             <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-line bg-surface p-2 text-xs text-muted">
-              {String(action.args.corps ?? '')}
+              {String(modifs?.corps ?? action.args.corps ?? '')}
             </pre>
           )}
         </div>
       </div>
-      {action.statut === 'proposee' ? (
-        <div className="mt-2 flex gap-2">
+      {enAttente ? (
+        <div className="mt-2 flex flex-wrap gap-2">
           <Button onClick={() => decide('execute')} disabled={busy !== null} className="!px-3 !py-1.5 text-sm">
             {busy === 'execute' ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />} Valider
           </Button>
+          {champs.length > 0 && (
+            <Button variant="ghost" onClick={() => setEdition((v) => !v)} disabled={busy !== null} className="!px-3 !py-1.5 text-sm">
+              <Pencil className="h-4 w-4" /> {edition ? 'Fermer' : 'Modifier'}
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => decide('cancel')} disabled={busy !== null} className="!px-3 !py-1.5 text-sm">
-            <X className="h-4 w-4" /> Annuler
+            <X className="h-4 w-4" /> Refuser
           </Button>
+          {entite && onVoir && (
+            <Button variant="ghost" onClick={() => onVoir(entite)} className="!px-3 !py-1.5 text-sm">
+              <Eye className="h-4 w-4" /> Voir la fiche
+            </Button>
+          )}
         </div>
       ) : (
         <p className={`mt-2 flex items-center gap-1.5 text-sm ${statutUi[action.statut]?.cls ?? 'text-muted'}`}>
@@ -120,10 +196,22 @@ type Props = {
   /** Panneau embarqué dans une fiche : espacements réduits, accueil resserré. */
   compact?: boolean;
   suggestions?: string[];
+  /** « jarvis » : présentation épurée du mode avancé (pas de cadre, fil centré). */
+  variant?: 'standard' | 'jarvis';
+  /** Fiche concernée par la dernière proposition (aperçu du mode avancé). */
+  onEntite?: (e: EntiteRef) => void;
 };
 
-export default function AssistantChat({ contexte = null, compact = false, suggestions = SUGGESTIONS_DEFAUT }: Props) {
-  const { isManager } = useAuth();
+export default function AssistantChat({
+  contexte = null, compact = false, suggestions = SUGGESTIONS_DEFAUT, variant = 'standard', onEntite,
+}: Props) {
+  const { isManager, profile } = useAuth();
+  const jarvis = variant === 'jarvis';
+  // Sélection pour la validation groupée (cochée par défaut) et retouches
+  // apportées aux arguments avant exécution.
+  const [deselection, setDeselection] = useState<Record<string, boolean>>({});
+  const [modifs, setModifs] = useState<Record<string, Record<string, string>>>({});
+  const [lotEnCours, setLotEnCours] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [actions, setActions] = useState<Record<string, AiAction>>({});
   const [conversations, setConversations] = useState<AiConversation[]>([]);
@@ -152,6 +240,8 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
   const openConversation = async (id: string) => {
     setShowHistory(false);
     setConversationId(id);
+    setDeselection({});
+    setModifs({});
     const [{ data: msgs }, { data: acts }] = await Promise.all([
       supabase.from('ai_messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true }).limit(100),
       supabase.from('ai_actions').select('*').eq('conversation_id', id).order('created_at', { ascending: true }),
@@ -173,6 +263,8 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
     setConversationId(null);
     setMessages([]);
     setActions({});
+    setDeselection({});
+    setModifs({});
     setShowHistory(false);
   };
 
@@ -180,6 +272,7 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return;
+    const retouches = decision === 'execute' ? modifs[id] : undefined;
     try {
       const res = await fetch(FUNCTIONS_URL, {
         method: 'POST',
@@ -188,15 +281,18 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
           Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
         },
-        body: JSON.stringify({ mode: decision, action_id: id }),
+        body: JSON.stringify({ mode: decision, action_id: id, ...(retouches ? { args: retouches } : {}) }),
       });
       const body = await res.json();
       setActions((prev) => ({
         ...prev,
         [id]: {
           ...prev[id],
+          args: retouches ? { ...prev[id]?.args, ...retouches } : prev[id]?.args,
           statut: res.ok ? (decision === 'execute' ? 'executee' : 'annulee') : 'erreur',
-          resultat: res.ok ? prev[id]?.resultat ?? null : { erreur: body?.error ?? `HTTP ${res.status}` },
+          resultat: res.ok
+            ? (body?.entite ? { entite: body.entite, entite_id: body.entite_id } : prev[id]?.resultat ?? null)
+            : { erreur: body?.error ?? `HTTP ${res.status}` },
         },
       }));
     } catch (err) {
@@ -206,6 +302,23 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
       }));
     }
   };
+
+  const enAttente = Object.values(actions).filter((a) => a.statut === 'proposee');
+  const selection = enAttente.filter((a) => !deselection[a.id]);
+
+  /** Validation (ou refus) groupée, une action après l'autre : l'ordre compte
+   *  (créer un contact avant de lui planifier une relance). */
+  const deciderLot = async (decision: 'execute' | 'cancel') => {
+    const cibles = decision === 'execute' ? selection : enAttente;
+    setLotEnCours(true);
+    try {
+      const ordre = cibles.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+      for (const a of ordre) await decideAction(a.id, decision);
+    } finally { setLotEnCours(false); }
+  };
+
+  const modifier = (id: string, cle: string, valeur: string) =>
+    setModifs((prev) => ({ ...prev, [id]: { ...prev[id], [cle]: valeur } }));
 
   const ask = async (question: string) => {
     const q = question.trim();
@@ -245,7 +358,10 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
         } else if (event === 'action') {
           const a = data as unknown as AiAction;
           turnActionIds.push(a.id);
-          setActions((prev) => ({ ...prev, [a.id]: { ...a, statut: 'proposee', resultat: null } as AiAction }));
+          const recue = { ...a, statut: 'proposee', resultat: null, created_at: a.created_at ?? new Date().toISOString() } as AiAction;
+          setActions((prev) => ({ ...prev, [a.id]: recue }));
+          const entite = entiteDeAction(recue);
+          if (entite) onEntite?.(entite);
         } else if (event === 'done') {
           finished = true;
           setMessages((m) => [...m, {
@@ -273,9 +389,9 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
   };
 
   return (
-    <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface ${compact ? '' : 'rounded-xl border border-line'}`}>
+    <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${jarvis ? '' : 'bg-surface'} ${compact || jarvis ? '' : 'rounded-xl border border-line'}`}>
       {/* Barre d'outils du fil : mode, historique, nouvelle conversation */}
-      <div className={`flex items-center justify-between gap-2 border-b border-line ${compact ? 'px-3 py-2' : 'px-4 py-2.5'}`}>
+      <div className={`flex items-center justify-between gap-2 ${jarvis ? '' : 'border-b border-line'} ${compact ? 'px-3 py-2' : 'px-4 py-2.5'}`}>
         <div className="flex min-w-0 items-center gap-2 text-sm text-muted">
           <Bot className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" />
           {contexte
@@ -313,8 +429,29 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
       )}
 
       {/* Fil de conversation */}
-      <div className={`flex-1 space-y-4 overflow-y-auto ${compact ? 'p-3' : 'p-4'}`}>
-        {messages.length === 0 && (
+      <div className={`flex-1 overflow-y-auto ${compact ? 'p-3' : 'p-4'}`}>
+       <div className={`space-y-4 ${jarvis ? 'mx-auto w-full max-w-3xl' : ''}`}>
+        {messages.length === 0 && jarvis && (
+          <div className="mx-auto max-w-2xl py-10 text-center">
+            <div className="orbe-ia mx-auto mb-6" aria-hidden="true" />
+            <p className="text-2xl font-semibold text-fg">
+              Bonjour{profile?.prenom ? ` ${profile.prenom}` : ''}, que fait-on ?
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              Dites ou écrivez ce qui s'est passé ou ce que vous voulez obtenir. Je consulte le CRM
+              {isManager ? ' (accès direction)' : ' (périmètre conseiller)'} et je vous propose les actions : rien ne s'exécute sans votre validation.
+            </p>
+            <div className="mt-6 grid gap-2 sm:grid-cols-2">
+              {suggestions.map((s) => (
+                <button key={s} onClick={() => void ask(s)} className="rounded-xl border border-line bg-surface/70 px-3 py-2.5 text-left text-sm text-fg backdrop-blur transition hover:border-brand-300 hover:bg-surface">
+                  <Sparkles className="mb-1 h-3.5 w-3.5 text-brand-500" /> {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.length === 0 && !jarvis && (
           <div className={`mx-auto max-w-xl text-center ${compact ? 'py-4' : 'py-8'}`}>
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400"><Bot className="h-6 w-6" /></div>
             <p className="font-medium text-fg">{contexte ? `Posez une question sur ${contexte.label}` : 'Posez une question, ou demandez une action'}</p>
@@ -349,7 +486,12 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
               )}
               <p className="whitespace-pre-wrap break-words text-sm text-fg">{m.content}</p>
               {m.actionIds?.map((id) => actions[id] && (
-                <ActionCard key={id} action={actions[id]} onDecision={decideAction} />
+                <ActionCard
+                  key={id} action={actions[id]} onDecision={decideAction}
+                  selectionnee={!deselection[id]}
+                  onSelection={(aid, v) => setDeselection((prev) => ({ ...prev, [aid]: !v }))}
+                  modifs={modifs[id]} onModif={modifier} onVoir={onEntite}
+                />
               ))}
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-2 border-t border-line pt-2">
@@ -382,12 +524,32 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
           </div>
         )}
         <div ref={endRef} />
+       </div>
       </div>
+
+      {/* Validation groupée des propositions en attente */}
+      {enAttente.length > 1 && (
+        <div className={`border-t border-line bg-brand-500/5 ${compact ? 'px-2 py-2' : 'px-3 py-2'}`}>
+          <div className={`flex flex-wrap items-center gap-2 ${jarvis ? 'mx-auto max-w-3xl' : ''}`}>
+            <p className="flex-1 text-sm text-fg">
+              <strong>{enAttente.length}</strong> actions en attente · {selection.length} sélectionnée{selection.length > 1 ? 's' : ''}
+            </p>
+            <Button onClick={() => void deciderLot('execute')} disabled={lotEnCours || selection.length === 0} className="!px-3 !py-1.5 text-sm">
+              {lotEnCours ? <Spinner className="h-4 w-4" /> : <CheckCheck className="h-4 w-4" />} Valider la sélection
+            </Button>
+            <Button variant="ghost" onClick={() => void deciderLot('cancel')} disabled={lotEnCours} className="!px-3 !py-1.5 text-sm">
+              <X className="h-4 w-4" /> Tout refuser
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Saisie */}
       <form
         onSubmit={(e) => { e.preventDefault(); void ask(input); }}
-        className={`flex items-end gap-2 border-t border-line bg-surface ${compact ? 'p-2' : 'p-3'}`}
+        className={jarvis
+          ? 'mx-auto mb-4 flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-line bg-surface p-2 shadow-lg shadow-brand-500/5'
+          : `flex items-end gap-2 border-t border-line bg-surface ${compact ? 'p-2' : 'p-3'}`}
       >
         <DicteeVocale
           disabled={loading}
@@ -396,7 +558,7 @@ export default function AssistantChat({ contexte = null, compact = false, sugges
         />
         <textarea
           className="input max-h-40 min-h-[44px] flex-1 resize-none"
-          placeholder="Votre question ou votre demande d'action…"
+          placeholder={jarvis ? "Ex. : j'ai eu Cyril Martin, il attend un devis pour 3 personnes…" : "Votre question ou votre demande d'action…"}
           value={input}
           rows={1}
           onChange={(e) => setInput(e.target.value)}

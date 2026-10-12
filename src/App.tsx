@@ -33,6 +33,7 @@ const Documents = lazy(() => import('@/pages/Documents'));
 const Qualiopi = lazy(() => import('@/pages/Qualiopi'));
 const Messagerie = lazy(() => import('@/pages/Messagerie'));
 const Assistant = lazy(() => import('@/pages/Assistant'));
+const Commande = lazy(() => import('@/pages/Commande'));
 const BlogAdmin = lazy(() => import('@/pages/BlogAdmin'));
 const Newsletter = lazy(() => import('@/pages/Newsletter'));
 const Recrutement = lazy(() => import('@/pages/Recrutement'));
@@ -143,6 +144,7 @@ export default function App() {
         <Route path="/evaluations" element={<Evaluations />} />
         <Route path="/messagerie" element={<Messagerie />} />
         <Route path="/assistant" element={<Assistant />} />
+        <Route path="/commande" element={<Commande />} />
         <Route path="/blog-admin" element={<ProtectedRoute managerOnly><BlogAdmin /></ProtectedRoute>} />
         <Route path="/newsletter" element={<ProtectedRoute managerOnly><Newsletter /></ProtectedRoute>} />
         <Route
