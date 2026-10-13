@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
-  addMonths, subMonths, isSameMonth, isSameDay, format, parseISO,
-  startOfDay, endOfDay, isWithinInterval,
+  addMonths, addWeeks, addDays, isSameMonth, isSameDay, format, parseISO,
+  startOfDay, endOfDay, isWithinInterval, differenceInCalendarDays,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronRight, Plus, Trash2, Users, MapPin, Clock, CalendarDays,
+  ChevronLeft, ChevronRight, Plus, Trash2, Users, MapPin, Clock, CalendarDays, User,
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,6 +25,15 @@ const PART_STATUTS: { v: ParticipantStatut; label: string }[] = [
   { v: 'absent', label: 'Absent' }, { v: 'annule', label: 'Annulé' },
 ];
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+type Vue = 'mois' | 'semaine' | 'jour';
+const VUES: { v: Vue; label: string }[] = [
+  { v: 'mois', label: 'Mois' }, { v: 'semaine', label: 'Semaine' }, { v: 'jour', label: 'Jour' },
+];
+const CLE_VUE = 'calendrier:vue';
+const vueInitiale = (): Vue => {
+  try { const v = localStorage.getItem(CLE_VUE); return v === 'semaine' || v === 'jour' ? v : 'mois'; } catch { return 'mois'; }
+};
 
 const toInput = (iso: string | null | undefined) =>
   iso ? format(parseISO(iso), "yyyy-MM-dd'T'HH:mm") : '';
@@ -45,6 +54,8 @@ export default function Calendrier() {
   const { session } = useAuth();
   const [searchParams] = useSearchParams();
   // Ouverture sur le mois d'une session via ?date=YYYY-MM-DD (lien depuis la fiche contact).
+  const [vue, setVueEtat] = useState<Vue>(vueInitiale);
+  const setVue = (v: Vue) => { setVueEtat(v); try { localStorage.setItem(CLE_VUE, v); } catch { /* stockage indisponible */ } };
   const [month, setMonth] = useState<Date>(() => {
     const d = searchParams.get('date');
     const parsed = d ? parseISO(d) : null;
@@ -65,10 +76,23 @@ export default function Calendrier() {
 
   const set = (k: keyof Form, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
-  const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
-    end: endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
-  });
+  // `month` sert de date de référence pour les trois vues.
+  const days = vue === 'mois'
+    ? eachDayOfInterval({
+      start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
+      end: endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
+    })
+    : vue === 'semaine'
+      ? eachDayOfInterval({ start: startOfWeek(month, { weekStartsOn: 1 }), end: endOfWeek(month, { weekStartsOn: 1 }) })
+      : [month];
+  const decaler = (sens: 1 | -1) => setMonth((m) => (
+    vue === 'mois' ? addMonths(m, sens) : vue === 'semaine' ? addWeeks(m, sens) : addDays(m, sens)));
+  const titrePeriode = vue === 'mois'
+    ? format(month, 'MMMM yyyy', { locale: fr })
+    : vue === 'semaine'
+      ? `${format(days[0], 'd MMM', { locale: fr })} – ${format(days[6], 'd MMM yyyy', { locale: fr })}`
+      : format(month, 'EEEE d MMMM yyyy', { locale: fr });
+  const ouvrirJour = (day: Date) => { setMonth(day); setVue('jour'); };
 
   const loadParticipants = useCallback(async (sessionId: string) => {
     const { data } = await supabase.from('session_participants').select('*')
@@ -155,7 +179,40 @@ export default function Calendrier() {
       const fin = s.date_fin ? parseISO(s.date_fin) : debut;
       const end = fin < debut ? debut : fin;
       return isWithinInterval(day, { start: startOfDay(debut), end: endOfDay(end) });
-    });
+    }).sort((a, b) => format(parseISO(a.date_debut), 'HH:mm').localeCompare(format(parseISO(b.date_debut), 'HH:mm')));
+
+  /** « J2/3 » pour une session sur plusieurs jours, sinon l'heure de début. */
+  const repere = (s: SessionFormation, day: Date) => {
+    const debut = parseISO(s.date_debut);
+    const fin = s.date_fin ? parseISO(s.date_fin) : debut;
+    const total = Math.max(0, differenceInCalendarDays(fin, debut)) + 1;
+    if (total === 1 || isSameDay(day, debut)) return format(debut, 'HH:mm');
+    return `J${differenceInCalendarDays(day, debut) + 1}/${total}`;
+  };
+
+  // Vue jour : nombre de participants de chaque session affichée.
+  const [nbInscrits, setNbInscrits] = useState<Record<string, number>>({});
+  const idsJour = vue === 'jour' ? sessionsOfDay(month).map((s) => s.id).join(',') : '';
+  useEffect(() => {
+    if (!idsJour) return;
+    void supabase.from('session_participants').select('session_id').in('session_id', idsJour.split(','))
+      .then(({ data }) => {
+        const n: Record<string, number> = {};
+        for (const r of data ?? []) n[r.session_id] = (n[r.session_id] ?? 0) + 1;
+        setNbInscrits(n);
+      });
+  }, [idsJour]);
+
+  const pastille = (s: SessionFormation, day: Date) => (
+    <button
+      key={s.id} onClick={() => openEdit(s)}
+      className="block w-full truncate rounded px-1.5 py-0.5 text-left text-xs font-medium text-white hover:opacity-90"
+      style={{ backgroundColor: s.couleur }}
+      title={`${s.titre}${s.lieu ? ` — ${s.lieu}` : ''}`}
+    >
+      {repere(s, day)} {s.titre}
+    </button>
+  );
 
   return (
     <div>
@@ -166,61 +223,102 @@ export default function Calendrier() {
       />
 
       <div className="card p-4">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <button onClick={() => setMonth(subMonths(month, 1))} className="rounded-lg p-2 text-muted hover:bg-surface-2"><ChevronLeft className="h-5 w-5" /></button>
-            <h2 className="min-w-[180px] text-center text-lg font-semibold capitalize text-fg">
-              {format(month, 'MMMM yyyy', { locale: fr })}
-            </h2>
-            <button onClick={() => setMonth(addMonths(month, 1))} className="rounded-lg p-2 text-muted hover:bg-surface-2"><ChevronRight className="h-5 w-5" /></button>
+            <button onClick={() => decaler(-1)} className="rounded-lg p-2 text-muted hover:bg-surface-2"><ChevronLeft className="h-5 w-5" /></button>
+            <h2 className="min-w-[220px] text-center text-lg font-semibold capitalize text-fg">{titrePeriode}</h2>
+            <button onClick={() => decaler(1)} className="rounded-lg p-2 text-muted hover:bg-surface-2"><ChevronRight className="h-5 w-5" /></button>
           </div>
-          <Button variant="secondary" onClick={() => setMonth(new Date())}><CalendarDays className="h-4 w-4" /> Aujourd'hui</Button>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-line p-0.5 text-sm">
+              {VUES.map(({ v, label }) => (
+                <button key={v} onClick={() => setVue(v)}
+                  className={`rounded-md px-3 py-1 font-medium transition ${vue === v ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'text-muted hover:text-fg'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" onClick={() => setMonth(new Date())}><CalendarDays className="h-4 w-4" /> Aujourd'hui</Button>
+          </div>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
         ) : (
           <>
-            <div className="grid grid-cols-7 gap-px border-b border-line pb-1 text-center text-xs font-semibold uppercase text-muted">
-              {WEEKDAYS.map((d) => <div key={d} className="py-1">{d}</div>)}
-            </div>
-            <div className="grid grid-cols-7 gap-px bg-line">
-              {days.map((day) => {
-                const inMonth = isSameMonth(day, month);
-                const today = isSameDay(day, new Date());
-                const items = sessionsOfDay(day);
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={`min-h-[104px] bg-surface p-1.5 ${inMonth ? '' : 'opacity-50'}`}
-                    onDoubleClick={() => openNew(day)}
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${today ? 'bg-brand-600 font-semibold text-white' : 'text-muted'}`}>
-                        {format(day, 'd')}
-                      </span>
-                      <button onClick={() => openNew(day)} className="rounded p-0.5 text-muted opacity-0 hover:bg-surface-2 hover:text-brand-600 group-hover:opacity-100" title="Ajouter">
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="space-y-1">
-                      {items.slice(0, 3).map((s) => (
-                        <button
-                          key={s.id} onClick={() => openEdit(s)}
-                          className="block w-full truncate rounded px-1.5 py-0.5 text-left text-xs font-medium text-white hover:opacity-90"
-                          style={{ backgroundColor: s.couleur }}
-                          title={s.titre}
-                        >
-                          {format(parseISO(s.date_debut), 'HH:mm')} {s.titre}
+            {vue !== 'jour' && (
+              <div className="grid grid-cols-7 gap-px border-b border-line pb-1 text-center text-xs font-semibold uppercase text-muted">
+                {WEEKDAYS.map((d) => <div key={d} className="py-1">{d}</div>)}
+              </div>
+            )}
+
+            {/* Mois et semaine : toutes les sessions de chaque jour, sans « +N autre(s) ». */}
+            {vue !== 'jour' && (
+              <div className="grid grid-cols-7 gap-px bg-line">
+                {days.map((day) => {
+                  const inMonth = vue === 'semaine' || isSameMonth(day, month);
+                  const today = isSameDay(day, new Date());
+                  const items = sessionsOfDay(day);
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={`group bg-surface p-1.5 ${vue === 'semaine' ? 'min-h-[320px]' : 'min-h-[104px]'} ${inMonth ? '' : 'opacity-50'}`}
+                      onDoubleClick={() => openNew(day)}
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <button onClick={() => ouvrirJour(day)} title="Voir la journée"
+                          className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs hover:ring-2 hover:ring-brand-500/40 ${today ? 'bg-brand-600 font-semibold text-white' : 'text-muted'}`}>
+                          {vue === 'semaine' ? format(day, 'd MMM', { locale: fr }) : format(day, 'd')}
                         </button>
-                      ))}
-                      {items.length > 3 && <p className="px-1 text-[11px] text-muted">+{items.length - 3} autre(s)</p>}
+                        <button onClick={() => openNew(day)} className="rounded p-0.5 text-muted opacity-0 hover:bg-surface-2 hover:text-brand-600 group-hover:opacity-100" title="Ajouter">
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {items.map((s) => pastille(s, day))}
+                        {vue === 'semaine' && items.length === 0 && <p className="px-1 text-[11px] text-muted/60">—</p>}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="mt-2 text-xs text-muted">Astuce : double-cliquez sur un jour pour créer une session.</p>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Jour : le détail de chaque session. */}
+            {vue === 'jour' && (sessionsOfDay(month).length === 0 ? (
+              <div className="rounded-lg border border-dashed border-line py-12 text-center text-sm text-muted" onDoubleClick={() => openNew(month)}>
+                Aucune session ce jour-là.
+                <div className="mt-3"><Button variant="secondary" onClick={() => openNew(month)}><Plus className="h-4 w-4" /> Créer une session</Button></div>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {sessionsOfDay(month).map((s) => (
+                  <li key={s.id}>
+                    <button onClick={() => openEdit(s)}
+                      className="flex w-full items-stretch gap-3 rounded-lg border border-line bg-surface text-left transition hover:bg-surface-2">
+                      <span className="w-1.5 shrink-0 rounded-l-lg" style={{ backgroundColor: s.couleur }} />
+                      <span className="w-24 shrink-0 py-3 text-sm font-semibold tabular-nums text-fg">
+                        {repere(s, month)}
+                        {s.date_fin && isSameDay(parseISO(s.date_fin), month) && (
+                          <span className="block text-xs font-normal text-muted">→ {format(parseISO(s.date_fin), 'HH:mm')}</span>
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1 py-3 pr-3">
+                        <span className="block font-medium text-fg">{s.titre}</span>
+                        <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                          {s.lieu && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{s.lieu}</span>}
+                          {s.modalite && <span>{s.modalite}</span>}
+                          {s.formateur && <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" />{s.formateur}</span>}
+                          <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{nbInscrits[s.id] ?? 0} participant(s)</span>
+                        </span>
+                        {s.notes && <span className="mt-1 block line-clamp-2 text-xs text-muted">{s.notes}</span>}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ))}
+            <p className="mt-2 text-xs text-muted">Astuce : cliquez sur un numéro de jour pour voir la journée ; double-cliquez sur un jour pour créer une session.</p>
           </>
         )}
       </div>
