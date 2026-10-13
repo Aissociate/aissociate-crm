@@ -1,5 +1,7 @@
 # MCP CRM — brancher le CRM sur Claude
 
+> Serveur **distant** (claude.ai, Claude Desktop, n8n, jeton personnel) : voir [README-distant.md](README-distant.md).
+
 Serveur MCP local qui donne à Claude un accès direct au CRM : consulter les
 contacts, le pipeline, les dossiers, les devis, les sessions, la base
 documentaire, et **proposer** des écritures que tu valides ensuite dans le CRM.

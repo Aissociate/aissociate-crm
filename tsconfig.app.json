@@ -23,5 +23,5 @@
   "include": ["src"],
   // Ce test importe le code Deno des Edge Functions (spécifiers npm:, lib récente) :
   // vitest l'exécute, mais il n'a pas sa place dans la vérification de types du front.
-  "exclude": ["src/lib/__tests__/agentOutils.test.ts"]
+  "exclude": ["src/lib/__tests__/agentOutils.test.ts", "src/lib/__tests__/mcpJeton.test.ts"]
 }

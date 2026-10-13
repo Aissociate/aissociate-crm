@@ -7,6 +7,7 @@ import { FileUpload, FileLink } from '@/components/FileUpload';
 import { buildSignatureHtml, type SignatureCfg } from '@/lib/signature';
 import { TEMPLATE_PLACEHOLDERS, DEFAULT_TEMPLATES, type MessageTemplate } from '@/lib/messageTemplates';
 import { functionErrorMessage } from '@/lib/invokeError';
+import { JetonsMcpCard } from '@/components/JetonsMcpCard';
 
 type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
@@ -379,6 +380,9 @@ export default function Parametres() {
 
         {/* Signatures propres à chaque utilisateur */}
         <UserSignaturesCard />
+
+        {/* Jetons du serveur MCP distant (agents externes) */}
+        <JetonsMcpCard />
 
         {/* Modèles de messages — réponses rapides (e-mail / WhatsApp) */}
         <Card className="lg:col-span-2">

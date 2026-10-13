@@ -360,6 +360,11 @@ export type AiMessage = {
   etapes: { outil: string; label: string }[] | null;
   created_at: string;
 };
+/** Jeton personnel du serveur MCP distant : seule l'empreinte SHA-256 est stockée. */
+export type McpJeton = {
+  id: string; user_id: string; libelle: string; empreinte: string; prefixe: string;
+  created_at: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null;
+};
 export type AiActionStatut = 'proposee' | 'executee' | 'annulee' | 'erreur';
 export type AiAction = {
   id: string; conversation_id: string | null; user_id: string;
@@ -576,6 +581,7 @@ export type Database = {
       ai_conversations: TableShape<AiConversation>;
       ai_messages: TableShape<AiMessage>;
       ai_actions: TableShape<AiAction>;
+      mcp_jetons: TableShape<McpJeton>;
       parametres: TableShape<Parametre>;
       contact_requests: TableShape<ContactRequest>;
       page_views: TableShape<PageView>;
@@ -618,6 +624,12 @@ export type Database = {
         Args: { p_dossier: string; p_intitule: string; p_duree_heures?: number };
         Returns: string;
       };
+      /** Crée un jeton MCP personnel ; le jeton en clair n'est renvoyé qu'ici. */
+      creer_jeton_mcp: {
+        Args: { p_libelle: string; p_jours?: number | null };
+        Returns: { id: string; jeton: string; prefixe: string; expires_at: string | null };
+      };
+      revoquer_jeton_mcp: { Args: { p_id: string }; Returns: undefined };
     };
     Enums: {
       user_role: UserRole;

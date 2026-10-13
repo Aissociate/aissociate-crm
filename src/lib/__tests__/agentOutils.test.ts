@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { appliquerAnnulation, instantane, planAnnulation } from '../../../supabase/functions/agent/annulation';
-import { decrireMetier, executerMetier, type CtxMetier } from '../../../supabase/functions/agent/outils_metier';
+import { decrireMetier, executerMetier, type CtxMetier } from '../../../supabase/functions/_shared/agent/outils_metier';
 import { MODELE_STT_DEFAUT, MODELE_STT_SECOURS, transcrire } from '../../../supabase/functions/_shared/stt';
 import { fauxDb, type FauxDb } from './fauxSupabase';
 
