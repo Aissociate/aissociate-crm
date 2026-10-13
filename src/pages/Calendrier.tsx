@@ -5,9 +5,10 @@ import {
   startOfDay, endOfDay, isWithinInterval, differenceInCalendarDays,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, Users, MapPin, Clock, CalendarDays, User,
+  Phone, Mail, CalendarClock, ListTodo, Check,
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,7 +17,7 @@ import { PageHeader, Button, Modal, Field, Spinner } from '@/components/ui';
 import { MODALITES } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
 import type {
-  SessionFormation, SessionParticipant, ParticipantStatut, Formation, Contact, Formateur,
+  SessionFormation, SessionParticipant, ParticipantStatut, Formation, Contact, Formateur, ContactAction,
 } from '@/lib/database.types';
 
 const COULEURS = ['#ea6a1e', '#10b981', '#6366f1', '#ef4444', '#0ea5e9', '#a855f7', '#64748b'];
@@ -31,6 +32,13 @@ const VUES: { v: Vue; label: string }[] = [
   { v: 'mois', label: 'Mois' }, { v: 'semaine', label: 'Semaine' }, { v: 'jour', label: 'Jour' },
 ];
 const CLE_VUE = 'calendrier:vue';
+const CLE_ACTIONS = 'calendrier:actions';
+
+/** Rendez-vous et relances des fiches contacts affichés à côté des sessions. */
+type ActionCal = Pick<ContactAction, 'id' | 'contact_id' | 'date_action' | 'heure_action' | 'type' | 'description' | 'faite'>
+  & { contacts: { nom: string; prenom: string | null } | null };
+const ICONE_ACTION: Record<string, typeof Phone> = { appel: Phone, email: Mail, rdv: CalendarClock };
+const heureAction = (a: ActionCal) => (a.heure_action ? a.heure_action.slice(0, 5) : '');
 const vueInitiale = (): Vue => {
   try { const v = localStorage.getItem(CLE_VUE); return v === 'semaine' || v === 'jour' ? v : 'mois'; } catch { return 'mois'; }
 };
@@ -54,7 +62,16 @@ export default function Calendrier() {
   const { session } = useAuth();
   const [searchParams] = useSearchParams();
   // Ouverture sur le mois d'une session via ?date=YYYY-MM-DD (lien depuis la fiche contact).
+  const navigate = useNavigate();
   const [vue, setVueEtat] = useState<Vue>(vueInitiale);
+  // Rendez-vous et relances des contacts : affichés par défaut, masquables.
+  const [voirActions, setVoirActionsEtat] = useState(() => {
+    try { return localStorage.getItem(CLE_ACTIONS) !== '0'; } catch { return true; }
+  });
+  const setVoirActions = (v: boolean) => {
+    setVoirActionsEtat(v);
+    try { localStorage.setItem(CLE_ACTIONS, v ? '1' : '0'); } catch { /* stockage indisponible */ }
+  };
   const setVue = (v: Vue) => { setVueEtat(v); try { localStorage.setItem(CLE_VUE, v); } catch { /* stockage indisponible */ } };
   const [month, setMonth] = useState<Date>(() => {
     const d = searchParams.get('date');
@@ -93,6 +110,30 @@ export default function Calendrier() {
       ? `${format(days[0], 'd MMM', { locale: fr })} – ${format(days[6], 'd MMM yyyy', { locale: fr })}`
       : format(month, 'EEEE d MMMM yyyy', { locale: fr });
   const ouvrirJour = (day: Date) => { setMonth(day); setVue('jour'); };
+
+  // Actions des fiches contacts sur la période affichée : tout ce qui reste à
+  // faire (appels, relances…) et les rendez-vous, même faits. Les centaines
+  // d'appels et d'e-mails déjà faits n'y sont pas : ils noieraient le planning.
+  const [actions, setActions] = useState<ActionCal[]>([]);
+  const debutPeriode = format(days[0], 'yyyy-MM-dd');
+  const finPeriode = format(days[days.length - 1], 'yyyy-MM-dd');
+  const chargerActions = useCallback(async () => {
+    const { data } = await supabase.from('contact_actions')
+      .select('id, contact_id, date_action, heure_action, type, description, faite, contacts(nom, prenom)')
+      .gte('date_action', debutPeriode).lte('date_action', finPeriode)
+      .or('faite.eq.false,type.eq.rdv')
+      .order('heure_action', { ascending: true, nullsFirst: false })
+      .limit(1000);
+    setActions((data ?? []) as unknown as ActionCal[]);
+  }, [debutPeriode, finPeriode]);
+  useEffect(() => { if (voirActions) void chargerActions(); }, [voirActions, chargerActions]);
+  const actionsOfDay = (day: Date) => (voirActions ? actions.filter((a) => a.date_action === format(day, 'yyyy-MM-dd')) : []);
+  const ouvrirContact = (a: ActionCal) => navigate(`/contacts?id=${a.contact_id}`);
+  const marquerFaite = async (a: ActionCal) => {
+    setActions((prev) => prev.map((x) => (x.id === a.id ? { ...x, faite: true } : x)));
+    const { error } = await supabase.from('contact_actions').update({ faite: true }).eq('id', a.id);
+    if (error) { alert(error.message); void chargerActions(); }
+  };
 
   const loadParticipants = useCallback(async (sessionId: string) => {
     const { data } = await supabase.from('session_participants').select('*')
@@ -203,6 +244,30 @@ export default function Calendrier() {
       });
   }, [idsJour]);
 
+  const pastilleAction = (a: ActionCal) => {
+    const Icone = ICONE_ACTION[a.type] ?? ListTodo;
+    const qui = a.contacts ? fullName(a.contacts.prenom, a.contacts.nom) : 'Contact';
+    return (
+      <button
+        key={a.id} onClick={() => ouvrirContact(a)}
+        className={`flex w-full items-center gap-1 truncate rounded border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-left text-xs text-sky-700 hover:bg-sky-500/20 dark:text-sky-300 ${a.faite ? 'line-through opacity-60' : ''}`}
+        title={`${a.type} — ${qui} : ${a.description}`}
+      >
+        <Icone className="h-3 w-3 shrink-0" />
+        <span className="truncate">{heureAction(a)} {qui}</span>
+      </button>
+    );
+  };
+
+  /** Sessions puis actions du jour, mêlées par heure (sans heure : en fin de journée). */
+  const elementsDuJour = (day: Date) => {
+    const cle = (h: string) => h || '99:99';
+    return [
+      ...sessionsOfDay(day).map((x) => ({ h: format(parseISO(x.date_debut), 'HH:mm'), el: pastille(x, day) })),
+      ...actionsOfDay(day).map((a) => ({ h: heureAction(a), el: pastilleAction(a) })),
+    ].sort((x, y) => cle(x.h).localeCompare(cle(y.h))).map((x) => x.el);
+  };
+
   const pastille = (s: SessionFormation, day: Date) => (
     <button
       key={s.id} onClick={() => openEdit(s)}
@@ -238,6 +303,11 @@ export default function Calendrier() {
                 </button>
               ))}
             </div>
+            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm text-muted hover:text-fg"
+              title="Appels, relances et rendez-vous planifiés sur les fiches contacts">
+              <input type="checkbox" checked={voirActions} onChange={(e) => setVoirActions(e.target.checked)} className="accent-sky-500" />
+              Rendez-vous & relances
+            </label>
             <Button variant="secondary" onClick={() => setMonth(new Date())}><CalendarDays className="h-4 w-4" /> Aujourd'hui</Button>
           </div>
         </div>
@@ -258,7 +328,7 @@ export default function Calendrier() {
                 {days.map((day) => {
                   const inMonth = vue === 'semaine' || isSameMonth(day, month);
                   const today = isSameDay(day, new Date());
-                  const items = sessionsOfDay(day);
+                  const items = elementsDuJour(day);
                   return (
                     <div
                       key={day.toISOString()}
@@ -275,7 +345,7 @@ export default function Calendrier() {
                         </button>
                       </div>
                       <div className="space-y-1">
-                        {items.map((s) => pastille(s, day))}
+                        {items}
                         {vue === 'semaine' && items.length === 0 && <p className="px-1 text-[11px] text-muted/60">—</p>}
                       </div>
                     </div>
@@ -284,40 +354,76 @@ export default function Calendrier() {
               </div>
             )}
 
-            {/* Jour : le détail de chaque session. */}
-            {vue === 'jour' && (sessionsOfDay(month).length === 0 ? (
+            {/* Jour : le détail de chaque session, puis les rendez-vous et relances. */}
+            {vue === 'jour' && (sessionsOfDay(month).length === 0 && actionsOfDay(month).length === 0 ? (
               <div className="rounded-lg border border-dashed border-line py-12 text-center text-sm text-muted" onDoubleClick={() => openNew(month)}>
-                Aucune session ce jour-là.
+                Rien de prévu ce jour-là.
                 <div className="mt-3"><Button variant="secondary" onClick={() => openNew(month)}><Plus className="h-4 w-4" /> Créer une session</Button></div>
               </div>
             ) : (
-              <ul className="space-y-2">
-                {sessionsOfDay(month).map((s) => (
-                  <li key={s.id}>
-                    <button onClick={() => openEdit(s)}
-                      className="flex w-full items-stretch gap-3 rounded-lg border border-line bg-surface text-left transition hover:bg-surface-2">
-                      <span className="w-1.5 shrink-0 rounded-l-lg" style={{ backgroundColor: s.couleur }} />
-                      <span className="w-24 shrink-0 py-3 text-sm font-semibold tabular-nums text-fg">
-                        {repere(s, month)}
-                        {s.date_fin && isSameDay(parseISO(s.date_fin), month) && (
-                          <span className="block text-xs font-normal text-muted">→ {format(parseISO(s.date_fin), 'HH:mm')}</span>
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1 py-3 pr-3">
-                        <span className="block font-medium text-fg">{s.titre}</span>
-                        <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                          {s.lieu && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{s.lieu}</span>}
-                          {s.modalite && <span>{s.modalite}</span>}
-                          {s.formateur && <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" />{s.formateur}</span>}
-                          <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{nbInscrits[s.id] ?? 0} participant(s)</span>
-                        </span>
-                        {s.notes && <span className="mt-1 block line-clamp-2 text-xs text-muted">{s.notes}</span>}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-5">
+                {sessionsOfDay(month).length > 0 && (
+                  <section>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Sessions ({sessionsOfDay(month).length})</h3>
+                    <ul className="space-y-2">
+                      {sessionsOfDay(month).map((s) => (
+                        <li key={s.id}>
+                          <button onClick={() => openEdit(s)}
+                            className="flex w-full items-stretch gap-3 rounded-lg border border-line bg-surface text-left transition hover:bg-surface-2">
+                            <span className="w-1.5 shrink-0 rounded-l-lg" style={{ backgroundColor: s.couleur }} />
+                            <span className="w-24 shrink-0 py-3 text-sm font-semibold tabular-nums text-fg">
+                              {repere(s, month)}
+                              {s.date_fin && isSameDay(parseISO(s.date_fin), month) && (
+                                <span className="block text-xs font-normal text-muted">→ {format(parseISO(s.date_fin), 'HH:mm')}</span>
+                              )}
+                            </span>
+                            <span className="min-w-0 flex-1 py-3 pr-3">
+                              <span className="block font-medium text-fg">{s.titre}</span>
+                              <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                                {s.lieu && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{s.lieu}</span>}
+                                {s.modalite && <span>{s.modalite}</span>}
+                                {s.formateur && <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" />{s.formateur}</span>}
+                                <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{nbInscrits[s.id] ?? 0} participant(s)</span>
+                              </span>
+                              {s.notes && <span className="mt-1 block line-clamp-2 text-xs text-muted">{s.notes}</span>}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {actionsOfDay(month).length > 0 && (
+                  <section>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Rendez-vous & relances ({actionsOfDay(month).length})</h3>
+                    <ul className="space-y-2">
+                      {actionsOfDay(month).map((a) => {
+                        const Icone = ICONE_ACTION[a.type] ?? ListTodo;
+                        return (
+                          <li key={a.id} className={`flex items-start gap-3 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 ${a.faite ? 'opacity-60' : ''}`}>
+                            <span className="w-14 shrink-0 text-sm font-semibold tabular-nums text-fg">{heureAction(a) || '—'}</span>
+                            <Icone className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+                            <button onClick={() => ouvrirContact(a)} className="min-w-0 flex-1 text-left">
+                              <span className="block font-medium text-fg hover:underline">
+                                {a.contacts ? fullName(a.contacts.prenom, a.contacts.nom) : 'Contact'}
+                                <span className="ml-2 text-xs font-normal capitalize text-muted">{a.type}</span>
+                              </span>
+                              <span className={`mt-0.5 block line-clamp-2 text-sm text-muted ${a.faite ? 'line-through' : ''}`}>{a.description}</span>
+                            </button>
+                            {!a.faite ? (
+                              <Button variant="ghost" onClick={() => void marquerFaite(a)} className="!px-2 !py-1 text-xs" title="Marquer comme fait">
+                                <Check className="h-3.5 w-3.5" /> Fait
+                              </Button>
+                            ) : <span className="text-xs text-muted">Fait</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
+              </div>
             ))}
+
             <p className="mt-2 text-xs text-muted">Astuce : cliquez sur un numéro de jour pour voir la journée ; double-cliquez sur un jour pour créer une session.</p>
           </>
         )}
