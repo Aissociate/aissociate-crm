@@ -8,7 +8,8 @@ import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, Se
 import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
 import SignatureButton from '@/components/SignatureButton';
-import { MODALITES, PLAN_STATUT_LABELS } from '@/lib/constants';
+import { PLAN_STATUT_LABELS } from '@/lib/constants';
+import ModaliteField from '@/components/ModaliteField';
 import { formatDate, fullName } from '@/lib/utils';
 import { generatePlanPdf } from '@/lib/generatePlanPdf';
 import { ensureDossierClient } from '@/lib/dossierClient';
@@ -381,9 +382,7 @@ export default function PlansFormation() {
           <div className="col-span-2"><Field label="Contenu / modules (une ligne par module)"><textarea className="input" rows={5} value={contenuText} onChange={(e) => setContenuText(e.target.value)} /></Field></div>
           <Field label="Durée (heures)"><input className="input" type="number" value={form.duree_heures ?? 0} onChange={(e) => set('duree_heures', e.target.value)} /></Field>
           <Field label="Nombre de participants (pax)" hint="Vide : décompte des stagiaires nommés."><input className="input" type="number" min={1} value={form.nb_participants ?? ''} onChange={(e) => set('nb_participants', e.target.value === '' ? null : e.target.value)} /></Field>
-          <Field label="Modalité"><select className="input" value={form.modalite ?? 'presentiel'} onChange={(e) => set('modalite', e.target.value)}>
-            {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select></Field>
+          <Field label="Modalité" hint="Imprimée telle quelle sur le PDF : précisez-la à la main si besoin."><ModaliteField key={`${open}-${form.id ?? 'new'}`} value={form.modalite} onChange={(v) => set('modalite', v)} /></Field>
           <div className="col-span-2"><Field label="Dates de session" hint="Affichées sur le PDF (ex. « Les 4 et 5 août 2026 »)"><input className="input" placeholder="ex. Les 4 et 5 août 2026" value={form.dates_session ?? ''} onChange={(e) => set('dates_session', e.target.value)} /></Field></div>
           <Field label="Bénéficiaire (contact)"><SearchSelect
             value={form.contact_id ?? ''}

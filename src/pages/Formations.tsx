@@ -4,7 +4,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge } from '@/components/ui';
-import { MODALITES } from '@/lib/constants';
+import ModaliteField from '@/components/ModaliteField';
 import { formatMoney } from '@/lib/utils';
 import type { Formation } from '@/lib/database.types';
 
@@ -111,9 +111,7 @@ export default function Formations() {
           <div className="col-span-2"><Field label="Programme (une ligne par module)"><textarea className="input" rows={4} value={programmeText} onChange={(e) => setProgrammeText(e.target.value)} /></Field></div>
           <Field label="Durée (heures)"><input className="input" type="number" value={form.duree_heures ?? 0} onChange={(e) => set('duree_heures', e.target.value)} /></Field>
           <Field label="Prix (€)"><input className="input" type="number" value={form.prix ?? 0} onChange={(e) => set('prix', e.target.value)} /></Field>
-          <Field label="Modalité"><select className="input" value={form.modalite} onChange={(e) => set('modalite', e.target.value)}>
-            {MODALITES.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select></Field>
+          <Field label="Modalité"><ModaliteField key={`${open}-${form.id ?? 'new'}`} value={form.modalite} onChange={(v) => set('modalite', v)} /></Field>
           <Field label="Public visé"><input className="input" value={form.public_vise ?? ''} onChange={(e) => set('public_vise', e.target.value)} /></Field>
           <div className="col-span-2"><Field label="Prérequis"><input className="input" value={form.prerequis ?? ''} onChange={(e) => set('prerequis', e.target.value)} /></Field></div>
           <div className="col-span-2">

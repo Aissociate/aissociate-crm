@@ -86,7 +86,11 @@ const MODALITE_LABELS: Record<string, string> = {
   mixte: "Hybride (présentiel et à distance)",
   "e-learning": "E-learning (formation en ligne)",
 };
-const modaliteLabel = (code: unknown) => MODALITE_LABELS[String(code ?? "").trim().toLowerCase()] ?? "";
+// Code standard → libellé ; sinon modalité saisie à la main, reprise mot pour mot.
+const modaliteLabel = (code: unknown) => {
+  const v = String(code ?? "").trim();
+  return MODALITE_LABELS[v.toLowerCase()] ?? v;
+};
 
 // Formes rédigées, pour réécrire une phrase sans la casser (`avec` conserve la
 // préposition trouvée dans le texte d'origine).
@@ -171,7 +175,8 @@ Deno.serve(async (req: Request) => {
     const userContent = [
       "Données du plan de formation (JSON) :\n" + JSON.stringify(plan),
       modLabel
-        ? `MODALITÉ CONTRACTUELLE DE LA SESSION : ${modLabel}. C'est la seule modalité autorisée dans le document. ` +
+        ? `MODALITÉ CONTRACTUELLE DE LA SESSION : « ${modLabel} ». C'est la seule modalité autorisée dans le document : ` +
+          "chaque fois que tu indiques la modalité, recopie ce libellé mot pour mot, sans le reformuler ni le compléter. " +
           "N'évoque aucune autre modalité, même à titre d'option : jamais « ou à distance », « ou en présentiel », " +
           "« au choix du bénéficiaire », ni aucune formulation laissant un choix."
         : "",
