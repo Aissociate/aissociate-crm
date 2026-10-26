@@ -51,6 +51,7 @@ const corsHeaders = {
 
 const MAX_ROUNDS = 8;
 const TOOL_RESULT_MAX = 14000;
+const INTERROMPU = "⏹ Réponse interrompue par l'utilisateur.";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -175,6 +176,30 @@ async function suiviActions(db: SupabaseClient, conversationId: string): Promise
     "Suivi des actions de cette conversation (état réel, à jour) :",
     ...lignes,
     "Appuie-toi sur ce suivi : ne re-propose pas une action déjà validée ou en attente, et sers-toi des identifiants créés pour la suite (ex. joindre le PDF d'un devis créé à l'email annoncé).",
+  ].join("\n");
+}
+
+/**
+ * Mémoire d'une fiche : extraits des AUTRES conversations de l'utilisateur
+ * ouvertes sur cette même fiche (prospect, dossier). La conversation courante
+ * est déjà dans l'historique ; celles-ci donnent la continuité d'une session à
+ * l'autre (ce qui a été dit, promis, décidé).
+ */
+async function memoireFiche(db: SupabaseClient, userId: string, ficheId: string, conversationId: string): Promise<string> {
+  const { data: convs } = await db.from("ai_conversations").select("id")
+    .eq("user_id", userId).eq("contexte->>id", ficheId).neq("id", conversationId)
+    .order("updated_at", { ascending: false }).limit(5);
+  if (!convs?.length) return "";
+  const { data: msgs } = await db.from("ai_messages").select("role, content, created_at")
+    .in("conversation_id", convs.map((c) => c.id)).order("created_at", { ascending: false }).limit(20);
+  const lignes = (msgs ?? []).reverse()
+    .filter((m) => !String(m.content).startsWith("[Suivi]"))
+    .map((m) => `- ${String(m.created_at).slice(0, 10)} ${m.role === "user" ? "Utilisateur" : "Assistant"} : ${String(m.content).replace(/\s+/g, " ").slice(0, 500)}`);
+  if (!lignes.length) return "";
+  return [
+    "Mémoire des échanges précédents sur cette fiche (sessions antérieures, du plus ancien au plus récent) :",
+    ...lignes,
+    "Sers-t'en pour la continuité (engagements, documents promis, décisions), sans la réciter. Vérifie l'état actuel avec les outils avant d'agir.",
   ].join("\n");
 }
 
@@ -392,12 +417,20 @@ Deno.serve(async (req: Request) => {
       .select("role, content").eq("conversation_id", conversationId)
       .order("created_at", { ascending: false }).limit(12);
     const history = (past ?? []).reverse().map((m) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
-    const suivi = await suiviActions(db, conversationId as string);
+    const [suiviConv, memoire] = await Promise.all([
+      suiviActions(db, conversationId as string),
+      contexte?.id ? memoireFiche(db, user.id, contexte.id, conversationId as string) : Promise.resolve(""),
+    ]);
+    const suivi = [memoire, suiviConv].filter(Boolean).join("\n\n");
 
     await db.from("ai_messages").insert({ conversation_id: conversationId, user_id: user.id, role: "user", content: question });
 
     const encoder = new TextEncoder();
+    // Bouton « Stop » : le navigateur coupe le flux ; on interrompt alors
+    // l'appel au modèle en cours et on n'enchaîne plus aucun outil.
+    const stop = new AbortController();
     const stream = new ReadableStream({
+      cancel() { stop.abort(); },
       async start(controller) {
         const emit = (event: string, payload: unknown) => {
           try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)); } catch { /* flux fermé */ }
@@ -419,8 +452,9 @@ Deno.serve(async (req: Request) => {
 
           let answer = "";
           for (let round = 0; round < MAX_ROUNDS; round++) {
+            if (stop.signal.aborted) break;
             const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
+              method: "POST", signal: stop.signal,
               headers: {
                 "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json",
                 "HTTP-Referer": "https://aissociate.crm", "X-Title": "CRM AIssociate Agent",
@@ -447,6 +481,7 @@ Deno.serve(async (req: Request) => {
             if (!calls.length) { answer = String(msg.content ?? ""); break; }
 
             for (const call of calls) {
+              if (stop.signal.aborted) break;
               const name = call.function.name;
               let args: Record<string, unknown> = {};
               try { args = JSON.parse(call.function.arguments || "{}"); } catch { /* args vides */ }
@@ -464,6 +499,7 @@ Deno.serve(async (req: Request) => {
               });
             }
           }
+          if (stop.signal.aborted) answer = INTERROMPU;
           if (!answer) answer = "Je n'ai pas pu conclure (trop d'étapes). Reformulez ou précisez votre demande.";
 
           await db.from("ai_messages").insert({
@@ -476,8 +512,16 @@ Deno.serve(async (req: Request) => {
           const sources = ctx.sources.filter((s) => { if (seen.has(s.label)) return false; seen.add(s.label); return true; });
           emit("done", { answer, sources });
         } catch (err) {
-          console.error("[agent] erreur boucle:", err instanceof Error ? err.message : String(err));
-          emit("error", { message: err instanceof Error ? err.message : String(err) });
+          if (stop.signal.aborted) {
+            // Arrêt demandé : l'historique garde une trace, sans message d'erreur.
+            await db.from("ai_messages").insert({
+              conversation_id: conversationId, user_id: user.id, role: "assistant",
+              content: INTERROMPU, etapes: etapes.length ? etapes : null,
+            });
+          } else {
+            console.error("[agent] erreur boucle:", err instanceof Error ? err.message : String(err));
+            emit("error", { message: err instanceof Error ? err.message : String(err) });
+          }
         } finally {
           try { controller.close(); } catch { /* déjà fermé */ }
         }

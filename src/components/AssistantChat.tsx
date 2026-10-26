@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Bot, Send, User, FileText, Sparkles, Plus, History, Check, X,
-  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines, Undo2, Paperclip,
+  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines, Undo2, Paperclip, Square,
 } from 'lucide-react';
 import { candidatsPiecesJointes, piecesDeArgs, type PieceJointeIA } from '@/lib/piecesJointesIA';
 import { supabase } from '@/lib/supabase';
@@ -350,6 +350,23 @@ export default function AssistantChat({
   }, []);
   useEffect(() => { void loadConversations(); }, [loadConversations]);
 
+  // ── Session : à l'ouverture, on reprend la dernière conversation de la
+  // fiche (session propre au prospect) ou, hors fiche, la dernière
+  // conversation générale. « + » démarre une nouvelle conversation.
+  // `generation` écarte une reprise arrivée après une saisie ou un changement de fiche.
+  const generation = useRef(0);
+  useEffect(() => {
+    const g = ++generation.current;
+    newConversation();
+    let q = supabase.from('ai_conversations').select('id').order('updated_at', { ascending: false }).limit(1);
+    if (profile?.id) q = q.eq('user_id', profile.id);
+    q = contexte ? q.eq('contexte->>id', contexte.id) : q.is('contexte', null);
+    void q.maybeSingle().then(({ data }) => {
+      if (data && generation.current === g) void openConversation(data.id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contexte?.id]);
+
   // Depuis une fiche, l'historique montre les conversations DE cette fiche.
   const conversationsVisibles = contexte
     ? conversations.filter((c) => (c.contexte as AssistantContexte | null)?.id === contexte.id)
@@ -472,15 +489,23 @@ export default function AssistantChat({
   const modifier = (id: string, cle: string, valeur: string) =>
     setModifs((prev) => ({ ...prev, [id]: { ...prev[id], [cle]: valeur } }));
 
+  // Bouton « Stop » : coupe le flux ; l'Edge Function interrompt alors l'appel
+  // au modèle et n'enchaîne plus d'outil. Les propositions déjà faites restent.
+  const arret = useRef<AbortController | null>(null);
+  const arreter = () => arret.current?.abort();
+
   const ask = async (question: string) => {
     const q = question.trim();
     if (!q || loading) return;
+    generation.current += 1;  // une reprise de session en vol ne doit plus écraser le fil
     setMessages((m) => [...m, { role: 'user', content: q }]);
     setInput('');
     setLoading(true);
     setLiveSteps([]);
 
     const turnActionIds: string[] = [];
+    const ctrl = new AbortController();
+    arret.current = ctrl;
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
@@ -494,6 +519,7 @@ export default function AssistantChat({
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
         },
         body: JSON.stringify({ mode: 'chat', message: q, conversation_id: conversationId, contexte }),
+        signal: ctrl.signal,
       });
       if (!res.ok || !res.headers.get('Content-Type')?.includes('text/event-stream')) {
         const body = await res.json().catch(() => null);
@@ -530,11 +556,20 @@ export default function AssistantChat({
       if (!finished) throw new Error('Flux interrompu avant la réponse.');
       void loadConversations();
     } catch (err) {
-      setMessages((m) => [...m, {
-        role: 'assistant',
-        content: `⚠️ ${err instanceof Error ? err.message : String(err)}\n\nVérifiez le déploiement de l'Edge Function « agent » et la clé OpenRouter (Paramètres › IA).`,
-      }]);
+      if (ctrl.signal.aborted) {
+        setMessages((m) => [...m, {
+          role: 'assistant', content: '⏹ Réponse interrompue.',
+          actionIds: turnActionIds.length ? [...turnActionIds] : undefined,
+        }]);
+        void loadConversations();
+      } else {
+        setMessages((m) => [...m, {
+          role: 'assistant',
+          content: `⚠️ ${err instanceof Error ? err.message : String(err)}\n\nVérifiez le déploiement de l'Edge Function « agent » et la clé OpenRouter (Paramètres › IA).`,
+        }]);
+      }
     } finally {
+      if (arret.current === ctrl) arret.current = null;
       setLoading(false);
       setLiveSteps([]);
     }
@@ -742,7 +777,13 @@ export default function AssistantChat({
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(input); } }}
           disabled={loading}
         />
-        <Button type="submit" disabled={loading || !input.trim()}><Send className="h-4 w-4" />{compact ? '' : ' Envoyer'}</Button>
+        {loading ? (
+          <Button type="button" variant="secondary" onClick={arreter} title="Arrêter la réponse en cours">
+            <Square className="h-4 w-4 fill-current" />{compact ? '' : ' Stop'}
+          </Button>
+        ) : (
+          <Button type="submit" disabled={!input.trim()}><Send className="h-4 w-4" />{compact ? '' : ' Envoyer'}</Button>
+        )}
       </form>
     </div>
   );
