@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Phone, Mail, MessageCircle, Mic, TrendingUp, FileText, PenLine, FolderKanban,
-  ClipboardList, CalendarDays, ListChecks, FolderLock, Globe, UserPlus, CalendarClock,
+  ClipboardList, CalendarDays, ListChecks, FolderLock, Globe, UserPlus, CalendarClock, ArrowDownUp,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Badge, Spinner, type Tone } from '@/components/ui';
@@ -44,10 +44,23 @@ const FAMILLE_STYLE: Record<Famille, string> = {
   systeme: 'bg-surface-2 text-muted',
 };
 
-const jourLabel = (iso: string) =>
-  new Date(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
-const heureLabel = (iso: string) => {
-  const d = new Date(iso);
+// Les sources mélangent trois formats : horodatage UTC (« …T12:05:00+00:00 »),
+// date + heure locales (actions : « 2026-10-26T15:32 ») et date seule (devis).
+// Comparées comme du texte, l'heure UTC et l'heure locale se croisaient et la
+// journée apparaissait dans le désordre ; une date seule, lue comme minuit UTC,
+// s'affichait « 04:00 » à La Réunion. Tout est ramené à un instant réel.
+const instant = (date: string): number =>
+  new Date(/^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T00:00` : date).getTime();
+const pad2 = (n: number) => String(n).padStart(2, '0');
+/** Jour LOCAL « AAAA-MM-JJ » d'une date, pour le regroupement. */
+const jourDe = (date: string) => {
+  const d = new Date(instant(date));
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+const jourLabel = (jour: string) =>
+  new Date(`${jour}T12:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+const heureLabel = (date: string) => {
+  const d = new Date(instant(date));
   return d.getHours() || d.getMinutes() ? d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
 };
 
@@ -133,7 +146,8 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
       }
       for (const v of devis.data ?? []) {
         out.push({
-          date: v.date_emission ?? v.created_at,
+          // Émis le jour de sa création : l'heure de création le place dans la journée.
+          date: v.date_emission && v.date_emission !== jourDe(v.created_at) ? v.date_emission : v.created_at,
           famille: 'commercial',
           icone: <FileText className="h-3.5 w-3.5" />,
           titre: `Devis ${v.numero}`,
@@ -219,15 +233,18 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
         titre: 'Fiche contact créée',
       });
 
-      out.sort((a, b) => (a.date < b.date ? 1 : -1));
       setEvts(out);
     })();
     return () => { vivant = false; };
   }, [contactId, contactCreatedAt]);
 
+  // Ordre : plus récents d'abord par défaut, ou chronologique (plus anciens d'abord).
+  const [recentsDabord, setRecentsDabord] = useState(true);
   const visibles = useMemo(
-    () => (evts ?? []).filter((e) => filtre === 'tout' || e.famille === filtre),
-    [evts, filtre],
+    () => (evts ?? [])
+      .filter((e) => filtre === 'tout' || e.famille === filtre)
+      .sort((a, b) => (recentsDabord ? instant(b.date) - instant(a.date) : instant(a.date) - instant(b.date))),
+    [evts, filtre, recentsDabord],
   );
   const compteDe = (f: Famille | 'tout') =>
     f === 'tout' ? evts?.length ?? 0 : (evts ?? []).filter((e) => e.famille === f).length;
@@ -239,7 +256,7 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
   // Groupage par jour pour la lecture (la liste reste un seul flux trié).
   const groupes: { jour: string; items: Evt[] }[] = [];
   for (const e of visibles) {
-    const jour = e.date.slice(0, 10);
+    const jour = jourDe(e.date);
     const dernier = groupes[groupes.length - 1];
     if (dernier && dernier.jour === jour) dernier.items.push(e);
     else groupes.push({ jour, items: [e] });
@@ -259,6 +276,11 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
             {f.label} <span className="opacity-60">{compteDe(f.cle)}</span>
           </button>
         ))}
+        <button onClick={() => setRecentsDabord((v) => !v)}
+          title="Inverser l'ordre d'affichage"
+          className="ml-auto inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-muted transition hover:border-brand-300 hover:text-fg">
+          <ArrowDownUp className="h-3 w-3" /> {recentsDabord ? 'Plus récents d\'abord' : 'Plus anciens d\'abord'}
+        </button>
       </div>
 
       {visibles.length === 0 && <p className="py-8 text-center text-sm text-muted">Aucun élément dans cette catégorie.</p>}
