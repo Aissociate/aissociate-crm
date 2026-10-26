@@ -39,6 +39,8 @@ const SUGGESTIONS_DEFAUT = [
 ];
 
 const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent`;
+/** Message de suivi envoyé automatiquement après validation (affiché en note discrète). */
+const PREFIXE_SUIVI = '[Suivi]';
 
 /** Parse un flux SSE et invoque `onEvent(event, data)` pour chaque message. */
 async function readSse(res: Response, onEvent: (event: string, data: Record<string, unknown>) => void) {
@@ -177,7 +179,7 @@ export function entiteDeAction(action: AiAction): EntiteRef | null {
 
 type CardProps = {
   action: AiAction;
-  onDecision: (id: string, mode: 'execute' | 'cancel') => Promise<void>;
+  onDecision: (id: string, mode: 'execute' | 'cancel') => Promise<unknown>;
   selectionnee: boolean;
   onSelection: (id: string, v: boolean) => void;
   modifs: Record<string, string> | undefined;
@@ -283,6 +285,8 @@ function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onM
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <p className={`flex items-center gap-1.5 text-sm ${statutUi[action.statut]?.cls ?? 'text-muted'}`}>
             {statutUi[action.statut]?.icon} {statutUi[action.statut]?.text}
+            {action.statut === 'executee' && typeof (action.resultat?.detail as { numero?: unknown } | undefined)?.numero === 'string'
+              && <span className="text-muted">· n° {(action.resultat?.detail as { numero: string }).numero}</span>}
           </p>
           {annulation.possible && (
             <Button variant="ghost" onClick={() => void defaire()} disabled={busy !== null} className="!px-2 !py-1 text-xs">
@@ -381,10 +385,12 @@ export default function AssistantChat({
     setDeselection({});
     setModifs({});
     setPjModifs({});
+    aSuivre.current = [];
     setShowHistory(false);
   };
 
-  const decideAction = async (id: string, decision: 'execute' | 'cancel') => {
+  /** `true` si l'action a été exécutée sans erreur. */
+  const decideAction = async (id: string, decision: 'execute' | 'cancel'): Promise<boolean> => {
     // Pièces jointes retirées ou ajoutées : seules les clés partent, le serveur
     // les relit avec les droits de l'utilisateur.
     const pj = decision === 'execute' ? pjModifs[id] : undefined;
@@ -406,12 +412,33 @@ export default function AssistantChat({
             : { erreur: data?.error ?? `HTTP ${status}` },
         },
       }));
+      return ok && decision === 'execute';
     } catch (err) {
       setActions((prev) => ({
         ...prev,
         [id]: { ...prev[id], statut: 'erreur', resultat: { erreur: err instanceof Error ? err.message : String(err) } },
       }));
+      return false;
     }
+  };
+
+  // ── Suivi : une fois toutes les propositions traitées, l'assistant est
+  // relancé avec ce qui vient d'être exécuté, pour enchaîner sur la suite
+  // annoncée (ex. l'email avec le devis créé en pièce jointe). Un email envoyé
+  // clôt la séquence : pas de relance pour lui seul.
+  const aSuivre = useRef<string[]>([]);
+  const suivreSiFini = (executees: string[], decidees: string[]) => {
+    aSuivre.current.push(...executees);
+    if (enAttente.some((a) => !decidees.includes(a.id))) return;
+    const ids = aSuivre.current;
+    aSuivre.current = [];
+    const utiles = ids.map((id) => actions[id]).filter((a) => a && a.outil !== 'proposer_envoi_email');
+    if (!utiles.length) return;
+    void ask(`${PREFIXE_SUIVI} J'ai validé : ${utiles.map((a) => a.description).join(' ; ')}. Enchaîne sur la suite que tu avais annoncée s'il y en a une (par exemple l'email avec le document créé en pièce jointe) ; sinon, confirme en une phrase.`);
+  };
+  const deciderEtSuivre = async (id: string, decision: 'execute' | 'cancel') => {
+    const ok = await decideAction(id, decision);
+    suivreSiFini(ok ? [id] : [], [id]);
   };
 
   const defaireAction = async (id: string) => {
@@ -435,7 +462,10 @@ export default function AssistantChat({
     setLotEnCours(true);
     try {
       const ordre = cibles.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
-      for (const a of ordre) await decideAction(a.id, decision);
+      const executees: string[] = [];
+      for (const a of ordre) if (await decideAction(a.id, decision)) executees.push(a.id);
+      setLotEnCours(false);
+      suivreSiFini(executees, ordre.map((a) => a.id));
     } finally { setLotEnCours(false); }
   };
 
@@ -601,7 +631,12 @@ export default function AssistantChat({
           </div>
         )}
 
-        {messages.map((m, i) => (
+        {messages.map((m, i) => m.role === 'user' && m.content.startsWith(PREFIXE_SUIVI) ? (
+          <p key={i} className="flex items-center justify-center gap-1.5 text-center text-xs text-muted">
+            <CheckCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            Actions validées : l'assistant enchaîne sur la suite.
+          </p>
+        ) : (
           <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
             <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${m.role === 'user' ? 'bg-surface-2 text-muted' : 'bg-brand-500/10 text-brand-600 dark:text-brand-400'}`}>
               {m.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
@@ -619,7 +654,7 @@ export default function AssistantChat({
               <p className="whitespace-pre-wrap break-words text-sm text-fg">{m.content}</p>
               {m.actionIds?.map((id) => actions[id] && (
                 <ActionCard
-                  key={id} action={actions[id]} onDecision={decideAction}
+                  key={id} action={actions[id]} onDecision={deciderEtSuivre}
                   selectionnee={!deselection[id]}
                   onSelection={(aid, v) => setDeselection((prev) => ({ ...prev, [aid]: !v }))}
                   modifs={modifs[id]} onModif={modifier} onVoir={onEntite} onDefaire={defaireAction}

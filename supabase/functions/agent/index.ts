@@ -41,7 +41,7 @@ import { executerMetier } from "../_shared/agent/outils_metier.ts";
 import { buildTools, chargerDroits, runReadTool, runWriteProposal, type Ctx } from "../_shared/agent/outils.ts";
 import { appliquerAnnulation, instantane, planAnnulation, type Annulation } from "./annulation.ts";
 import { transcrire } from "../_shared/stt.ts";
-import { decrirePiecesJointes, piecesPourEnvoi } from "../_shared/agent/pieces_jointes.ts";
+import { decrirePiecesJointes, listerPiecesJointes, piecesPourEnvoi } from "../_shared/agent/pieces_jointes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -153,7 +153,32 @@ async function executeAction(
 // Prompt système
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(master: string, ctx: Ctx, contexte: { type?: string; id?: string; label?: string } | null): string {
+/**
+ * Suivi des propositions de la conversation : l'historique ne garde que les
+ * messages, si bien que l'IA ignorait qu'un devis avait été créé (et son id)
+ * et ne pouvait pas enchaîner, par exemple en le joignant à un email.
+ */
+async function suiviActions(db: SupabaseClient, conversationId: string): Promise<string> {
+  const { data } = await db.from("ai_actions").select("outil, description, statut, resultat")
+    .eq("conversation_id", conversationId).order("created_at", { ascending: true }).limit(30);
+  if (!data?.length) return "";
+  const etat: Record<string, string> = { proposee: "en attente de validation", executee: "VALIDÉE et exécutée", annulee: "refusée", erreur: "en erreur", expiree: "expirée" };
+  const lignes = data.map((a) => {
+    const r = (a.resultat ?? {}) as Record<string, unknown>;
+    const cree = r.entite_id ? ` → ${r.entite} id=${r.entite_id}` : "";
+    const detail = r.detail ? ` ${JSON.stringify(r.detail).slice(0, 300)}` : "";
+    const defaite = r.annulee_le ? " (défaite ensuite)" : "";
+    const err = a.statut === "erreur" && r.erreur ? ` : ${String(r.erreur).slice(0, 200)}` : "";
+    return `- [${etat[a.statut] ?? a.statut}${defaite}] ${a.description}${a.statut === "executee" ? cree + detail : err}`;
+  });
+  return [
+    "Suivi des actions de cette conversation (état réel, à jour) :",
+    ...lignes,
+    "Appuie-toi sur ce suivi : ne re-propose pas une action déjà validée ou en attente, et sers-toi des identifiants créés pour la suite (ex. joindre le PDF d'un devis créé à l'email annoncé).",
+  ].join("\n");
+}
+
+function buildSystemPrompt(master: string, ctx: Ctx, contexte: { type?: string; id?: string; label?: string } | null, suivi = ""): string {
   const parts = [
     master,
     `Date du jour : ${new Date().toISOString().slice(0, 10)}.`,
@@ -172,6 +197,7 @@ function buildSystemPrompt(master: string, ctx: Ctx, contexte: { type?: string; 
   if (contexte?.type && contexte?.label) {
     parts.push(`L'utilisateur a ouvert l'assistant depuis la fiche ${contexte.type} « ${contexte.label} » (id: ${contexte.id}). Sauf indication contraire, ses questions portent sur cette fiche : commence par la consulter avec l'outil adapté.`);
   }
+  if (suivi) parts.push(suivi);
   return parts.join("\n\n");
 }
 
@@ -228,6 +254,18 @@ Deno.serve(async (req: Request) => {
       if (!r.ok) return json({ error: r.erreur }, 502);
       const texte = r.texte;
       return json({ ok: true, texte });
+    }
+
+    // ── Mode pieces_jointes : fichiers joignables (ajout manuel dans la carte d'un email) ──
+    if (mode === "pieces_jointes") {
+      let contactId = body.contact_id ? String(body.contact_id) : undefined;
+      const dest = String(body.destinataire ?? "").split(",")[0].trim();
+      if (!contactId && dest) {
+        const { data } = await db.from("contacts").select("id").ilike("email", dest).limit(1).maybeSingle();
+        contactId = data?.id ?? undefined;
+      }
+      const pieces = await listerPiecesJointes(db, { contact_id: contactId, dossier_id: body.dossier_id ? String(body.dossier_id) : undefined });
+      return json({ pieces_jointes: pieces });
     }
 
     // ── Mode execute / cancel : action déjà validée par l'utilisateur ──
@@ -354,6 +392,7 @@ Deno.serve(async (req: Request) => {
       .select("role, content").eq("conversation_id", conversationId)
       .order("created_at", { ascending: false }).limit(12);
     const history = (past ?? []).reverse().map((m) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
+    const suivi = await suiviActions(db, conversationId as string);
 
     await db.from("ai_messages").insert({ conversation_id: conversationId, user_id: user.id, role: "user", content: question });
 
@@ -373,7 +412,7 @@ Deno.serve(async (req: Request) => {
 
           const tools = buildTools(ctx);
           const messages: Record<string, unknown>[] = [
-            { role: "system", content: buildSystemPrompt(master, ctx, contexte) },
+            { role: "system", content: buildSystemPrompt(master, ctx, contexte, suivi) },
             ...history,
             { role: "user", content: question.slice(0, 6000) },
           ];

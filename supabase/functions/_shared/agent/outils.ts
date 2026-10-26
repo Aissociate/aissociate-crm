@@ -121,7 +121,7 @@ export function buildTools(ctx: Ctx) {
         telephone: { type: "string" }, ville: { type: "string" }, besoin_resume: { type: "string" },
       }, ["nom"]);
     tool("lister_pieces_jointes",
-      "Fichiers joignables à un email : pièces des dossiers du contact (ou du dossier donné), coffre-fort du contact et espace documentaire. Renvoie pour chacun une `cle` à passer dans `pieces_jointes` de proposer_envoi_email.",
+      "Fichiers joignables à un email : PDF des devis et factures du contact, plans et documents AGEFICE, pièces de ses dossiers, coffre-fort du contact et espace documentaire. Un devis ou document créé par une action validée y figure dès que son PDF existe. Renvoie pour chacun une `cle` à passer dans `pieces_jointes` de proposer_envoi_email.",
       {
         contact_id: { type: "string" }, dossier_id: { type: "string" },
         recherche: { type: "string", description: "Filtre sur le nom du fichier ou son origine (ex. « devis », « programme »)" },

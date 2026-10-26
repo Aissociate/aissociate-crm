@@ -1,16 +1,21 @@
 // Pièces jointes des e-mails proposés par l'assistant IA.
 //
-// Une pièce est désignée par une clé « source:id » — mêmes sources que la
-// modale de composition (ComposeMessageModal) :
+// Une pièce est désignée par une clé « source:id » :
 //   • piece:<id>    → `dossier_pieces` (bucket privé « pieces ») ;
 //   • coffre:<id>   → `contact_documents` (bucket privé « coffre ») ;
+//   • devis:<id>    → PDF d'un devis (bucket « devis ») ;
+//   • facture:<id>  → PDF d'une facture (bucket « factures ») ;
+//   • plan:<id>     → `plan_pdfs`, plans et documents AGEFICE (bucket « plans ») ;
 //   • document:<id> → `documents`, l'espace documentaire (bucket public).
 // Toutes les lectures passent par le client RLS : l'IA (et l'utilisateur qui
 // retouche la proposition) ne peut joindre qu'un fichier qu'il voit déjà.
+// Un devis ou un document créé par une action validée dans la conversation est
+// donc joignable dès que son PDF existe.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 
 export type PieceJointe = { cle: string; nom: string; origine: string };
 type Resolue = PieceJointe & { bucket: string; valeur: string };
+type Ligne = Record<string, unknown>;
 
 const MAX_PJ = 10;
 
@@ -25,6 +30,44 @@ const nomFichier = (libelle: string, valeur: string) => {
   return ext && !libelle.toLowerCase().endsWith(ext.toLowerCase()) ? `${libelle}${ext}` : libelle;
 };
 
+type Source = { table: string; select: string; bucket: string; libelle: (r: Ligne) => string; origine: (r: Ligne) => string };
+const SOURCES: Record<string, Source> = {
+  piece: {
+    table: "dossier_pieces", select: "id, libelle, fichier_url, dossiers(reference)", bucket: "pieces",
+    libelle: (r) => String(r.libelle),
+    origine: (r) => `Dossier ${(r.dossiers as { reference?: string } | null)?.reference ?? ""}`.trim(),
+  },
+  coffre: {
+    table: "contact_documents", select: "id, titre, fichier_url", bucket: "coffre",
+    libelle: (r) => String(r.titre), origine: () => "Coffre-fort du contact",
+  },
+  devis: {
+    table: "devis", select: "id, numero, objet, fichier_url", bucket: "devis",
+    libelle: (r) => `Devis ${r.numero}`, origine: (r) => `Devis${r.objet ? ` · ${r.objet}` : ""}`,
+  },
+  facture: {
+    table: "factures", select: "id, numero, objet, fichier_url", bucket: "factures",
+    libelle: (r) => `Facture ${r.numero}`, origine: (r) => `Facture${r.objet ? ` · ${r.objet}` : ""}`,
+  },
+  plan: {
+    table: "plan_pdfs", select: "id, titre, fichier_url", bucket: "plans",
+    libelle: (r) => String(r.titre), origine: () => "Plan / document AGEFICE",
+  },
+  document: {
+    table: "documents", select: "id, titre, categorie, fichier_url", bucket: "documents",
+    libelle: (r) => String(r.titre), origine: (r) => `Espace documentaire${r.categorie ? ` · ${r.categorie}` : ""}`,
+  },
+};
+
+const enPiece = (src: string, r: Ligne): Resolue => {
+  const s = SOURCES[src];
+  return {
+    cle: `${src}:${r.id}`, nom: nomFichier(s.libelle(r), String(r.fichier_url)), origine: s.origine(r),
+    bucket: s.bucket, valeur: String(r.fichier_url),
+  };
+};
+const vide = Promise.resolve({ data: [] as Ligne[] });
+
 /** Pièces joignables pour un contact et/ou un dossier (dossiers du contact inclus). */
 export async function listerPiecesJointes(
   db: SupabaseClient, a: { contact_id?: string; dossier_id?: string; recherche?: string },
@@ -35,75 +78,78 @@ export async function listerPiecesJointes(
     const { data } = await db.from("dossiers").select("id").eq("contact_id", a.contact_id);
     for (const d of data ?? []) dossierIds.add(d.id as string);
   }
-  const [pieces, coffre, docs] = await Promise.all([
+  // Devis, factures et plans : rattachés au contact OU à l'un de ses dossiers.
+  const lien = [
+    ...(a.contact_id ? [`contact_id.eq.${a.contact_id}`] : []),
+    ...(dossierIds.size ? [`dossier_id.in.(${[...dossierIds].join(",")})`] : []),
+  ].join(",");
+  const lies = (src: string) => {
+    const s = SOURCES[src];
+    return lien
+      ? db.from(s.table).select(s.select).or(lien).not("fichier_url", "is", null).order("created_at", { ascending: false }).limit(30)
+      : vide;
+  };
+  const plans = lien
+    ? await db.from("plans_formation").select("id").or(lien).limit(50)
+    : { data: [] as Ligne[] };
+  const planIds = (plans.data ?? []).map((p) => String((p as Ligne).id));
+
+  const [pieces, coffre, devis, factures, planPdfs, docs] = await Promise.all([
     dossierIds.size
-      ? db.from("dossier_pieces").select("id, libelle, fichier_url, dossiers(reference)")
-        .in("dossier_id", [...dossierIds]).not("fichier_url", "is", null)
-      : Promise.resolve({ data: [] }),
+      ? db.from("dossier_pieces").select(SOURCES.piece.select).in("dossier_id", [...dossierIds]).not("fichier_url", "is", null)
+      : vide,
     a.contact_id
-      ? db.from("contact_documents").select("id, titre, fichier_url").eq("contact_id", a.contact_id).not("fichier_url", "is", null)
-      : Promise.resolve({ data: [] }),
-    db.from("documents").select("id, titre, categorie, fichier_url").not("fichier_url", "is", null)
+      ? db.from("contact_documents").select(SOURCES.coffre.select).eq("contact_id", a.contact_id).not("fichier_url", "is", null)
+      : vide,
+    lies("devis"),
+    lies("facture"),
+    planIds.length
+      ? db.from("plan_pdfs").select(SOURCES.plan.select).in("plan_id", planIds).not("fichier_url", "is", null).order("created_at", { ascending: false })
+      : vide,
+    db.from("documents").select(SOURCES.document.select).not("fichier_url", "is", null)
       .order("created_at", { ascending: false }).limit(60),
   ]);
-  const liste: PieceJointe[] = [
-    ...((pieces.data ?? []) as Record<string, unknown>[]).map((p) => ({
-      cle: `piece:${p.id}`, nom: nomFichier(String(p.libelle), String(p.fichier_url)),
-      origine: `Dossier ${(p.dossiers as { reference?: string } | null)?.reference ?? ""}`.trim(),
-    })),
-    ...((coffre.data ?? []) as Record<string, unknown>[]).map((d) => ({
-      cle: `coffre:${d.id}`, nom: nomFichier(String(d.titre), String(d.fichier_url)), origine: "Coffre-fort du contact",
-    })),
-    ...((docs.data ?? []) as Record<string, unknown>[]).map((d) => ({
-      cle: `document:${d.id}`, nom: nomFichier(String(d.titre), String(d.fichier_url)),
-      origine: `Espace documentaire${d.categorie ? ` · ${d.categorie}` : ""}`,
-    })),
-  ];
+  const liste: PieceJointe[] = ([
+    ["devis", devis], ["facture", factures], ["plan", planPdfs], ["piece", pieces], ["coffre", coffre], ["document", docs],
+  ] as [string, { data: unknown }][]).flatMap(([src, r]) =>
+    ((r.data ?? []) as Ligne[]).map((x) => { const { cle, nom, origine } = enPiece(src, x); return { cle, nom, origine }; }));
   const s = (a.recherche ?? "").trim().toLowerCase();
   return s ? liste.filter((p) => p.nom.toLowerCase().includes(s) || p.origine.toLowerCase().includes(s)) : liste;
 }
 
-/** Relit chaque clé (RLS) ; les clés inconnues ou hors périmètre sont écartées. */
+/** Relit chaque clé (RLS) ; les clés inconnues, hors périmètre ou sans fichier sont écartées. */
 async function resoudre(db: SupabaseClient, cles: string[]): Promise<{ ok: Resolue[]; rejetees: string[] }> {
-  const ids = { piece: [] as string[], coffre: [] as string[], document: [] as string[] };
   const uniques = [...new Set(cles.map(String))].slice(0, MAX_PJ);
+  const parSource = new Map<string, string[]>();
   for (const c of uniques) {
     const [src, id] = c.split(":");
-    if (id && src in ids) ids[src as keyof typeof ids].push(id);
+    if (id && SOURCES[src]) parSource.set(src, [...(parSource.get(src) ?? []), id]);
   }
-  const [p, c, d] = await Promise.all([
-    ids.piece.length ? db.from("dossier_pieces").select("id, libelle, fichier_url").in("id", ids.piece) : Promise.resolve({ data: [] }),
-    ids.coffre.length ? db.from("contact_documents").select("id, titre, fichier_url").in("id", ids.coffre) : Promise.resolve({ data: [] }),
-    ids.document.length ? db.from("documents").select("id, titre, fichier_url").in("id", ids.document) : Promise.resolve({ data: [] }),
-  ]);
   const trouvees = new Map<string, Resolue>();
-  for (const r of (p.data ?? []) as Record<string, unknown>[]) if (r.fichier_url) trouvees.set(`piece:${r.id}`, {
-    cle: `piece:${r.id}`, nom: nomFichier(String(r.libelle), String(r.fichier_url)), origine: "Dossier", bucket: "pieces", valeur: String(r.fichier_url),
-  });
-  for (const r of (c.data ?? []) as Record<string, unknown>[]) if (r.fichier_url) trouvees.set(`coffre:${r.id}`, {
-    cle: `coffre:${r.id}`, nom: nomFichier(String(r.titre), String(r.fichier_url)), origine: "Coffre-fort", bucket: "coffre", valeur: String(r.fichier_url),
-  });
-  for (const r of (d.data ?? []) as Record<string, unknown>[]) if (r.fichier_url) trouvees.set(`document:${r.id}`, {
-    cle: `document:${r.id}`, nom: nomFichier(String(r.titre), String(r.fichier_url)), origine: "Espace documentaire", bucket: "documents", valeur: String(r.fichier_url),
-  });
+  await Promise.all([...parSource].map(async ([src, ids]) => {
+    const s = SOURCES[src];
+    const { data } = await db.from(s.table).select(s.select).in("id", ids);
+    for (const r of (data ?? []) as Ligne[]) if (r.fichier_url) trouvees.set(`${src}:${r.id}`, enPiece(src, r));
+  }));
   return {
     ok: uniques.map((k) => trouvees.get(k)).filter((x): x is Resolue => !!x),
     rejetees: uniques.filter((k) => !trouvees.has(k)),
   };
 }
 
+const clesDe = (v: unknown[]) => v.map((x) => typeof x === "string" ? x : String((x as { cle?: string })?.cle ?? ""));
+
 /** Clés → pièces affichables (nom, origine), rangées dans les args de la proposition. */
 export async function decrirePiecesJointes(db: SupabaseClient, cles: unknown): Promise<{ pieces: PieceJointe[]; rejetees: string[] }> {
   if (!Array.isArray(cles) || !cles.length) return { pieces: [], rejetees: [] };
-  const { ok, rejetees } = await resoudre(db, cles.map((x) => typeof x === "string" ? x : String((x as { cle?: string })?.cle ?? "")));
+  const { ok, rejetees } = await resoudre(db, clesDe(cles));
   return { pieces: ok.map(({ cle, nom, origine }) => ({ cle, nom, origine })), rejetees };
 }
 
 /** Pièces → { filename, url } pour send-email (URL signée 24 h pour les buckets privés). */
 export async function piecesPourEnvoi(db: SupabaseClient, pieces: unknown): Promise<{ filename: string; url: string }[] | { erreur: string }> {
   if (!Array.isArray(pieces) || !pieces.length) return [];
-  const cles = pieces.map((x) => typeof x === "string" ? x : String((x as { cle?: string })?.cle ?? ""));
-  const { ok, rejetees } = await resoudre(db, cles);
+  const { ok, rejetees } = await resoudre(db, clesDe(pieces));
   if (rejetees.length) return { erreur: `Pièce(s) jointe(s) introuvable(s) ou sans fichier : ${rejetees.join(", ")}. Retirez-les puis validez à nouveau.` };
   const out: { filename: string; url: string }[] = [];
   for (const r of ok) {
