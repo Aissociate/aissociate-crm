@@ -53,6 +53,18 @@ const MAX_ROUNDS = 8;
 const TOOL_RESULT_MAX = 14000;
 const INTERROMPU = "⏹ Réponse interrompue par l'utilisateur.";
 
+/**
+ * Date « AAAA-MM-JJ » et heure « HH:MM » à La Réunion. Le serveur tourne en
+ * UTC : sans fuseau, un email envoyé par l'IA était journalisé sans heure (lu
+ * 12:00 dans l'historique) et la date basculait la veille entre 0 h et 4 h.
+ */
+function maintenantLocal(): { date: string; heure: string } {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Indian/Reunion", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return { date: `${p.year}-${p.month}-${p.day}`, heure: `${p.hour}:${p.minute}` };
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
@@ -83,7 +95,7 @@ async function executeAction(
     case "proposer_note_contact": {
       const { data: c, error: e1 } = await db.from("contacts").select("notes").eq("id", String(a.contact_id)).single();
       if (e1) return { ok: false, erreur: e1.message };
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = maintenantLocal().date;
       const notes = [c.notes, `[${stamp} — assistant IA] ${a.note}`].filter(Boolean).join("\n\n");
       const { error } = await db.from("contacts").update({ notes }).eq("id", String(a.contact_id));
       if (error) return { ok: false, erreur: error.message };
@@ -128,7 +140,7 @@ async function executeAction(
       }).select("id").maybeSingle();
       if (a.contact_id) {
         await db.from("contact_actions").insert({
-          contact_id: String(a.contact_id), date_action: new Date().toISOString().slice(0, 10),
+          contact_id: String(a.contact_id), date_action: maintenantLocal().date, heure_action: maintenantLocal().heure,
           type: "email", description: `Email envoyé (assistant IA) — ${a.sujet}`, faite: true,
         });
       }
@@ -206,7 +218,7 @@ async function memoireFiche(db: SupabaseClient, userId: string, ficheId: string,
 function buildSystemPrompt(master: string, ctx: Ctx, contexte: { type?: string; id?: string; label?: string } | null, suivi = ""): string {
   const parts = [
     master,
-    `Date du jour : ${new Date().toISOString().slice(0, 10)}.`,
+    `Date du jour : ${maintenantLocal().date} (heure de La Réunion : ${maintenantLocal().heure}).`,
     [
       "Tu disposes d'OUTILS pour interroger le CRM : utilise-les systématiquement au lieu de deviner.",
       "Pour tout chiffre agrégé (totaux, répartitions, CA), utilise l'outil `statistiques` — ne compte jamais toi-même une liste.",
