@@ -9,6 +9,7 @@
 //     validé la proposition dans le CRM (mode `execute` de `agent`).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { decrireMetier, definitionsMetier, lireMetier } from "./outils_metier.ts";
+import { decrirePiecesJointes, listerPiecesJointes } from "./pieces_jointes.ts";
 
 export type Droits = {
   documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;
@@ -119,12 +120,20 @@ export function buildTools(ctx: Ctx) {
         nom: { type: "string" }, prenom: { type: "string" }, email: { type: "string" },
         telephone: { type: "string" }, ville: { type: "string" }, besoin_resume: { type: "string" },
       }, ["nom"]);
+    tool("lister_pieces_jointes",
+      "Fichiers joignables à un email : pièces des dossiers du contact (ou du dossier donné), coffre-fort du contact et espace documentaire. Renvoie pour chacun une `cle` à passer dans `pieces_jointes` de proposer_envoi_email.",
+      {
+        contact_id: { type: "string" }, dossier_id: { type: "string" },
+        recherche: { type: "string", description: "Filtre sur le nom du fichier ou son origine (ex. « devis », « programme »)" },
+      });
     tool("proposer_envoi_email",
-      "Propose l'envoi d'un email (à valider ; rien ne part sans validation). Rédiger un corps complet et professionnel.",
+      "Propose l'envoi d'un email (à valider ; rien ne part sans validation). Rédiger un corps complet et professionnel. Si le texte annonce un document (« ci-joint », « vous trouverez », devis, programme, convention…), appeler d'abord lister_pieces_jointes et joindre le fichier correspondant via `pieces_jointes` ; ne jamais annoncer une pièce qui n'est pas jointe.",
       {
         destinataire: { type: "string" }, sujet: { type: "string" },
         corps: { type: "string", description: "Corps du message en texte simple" },
         contact_id: { type: "string", description: "Contact lié, si applicable" },
+        dossier_id: { type: "string", description: "Dossier lié, si applicable" },
+        pieces_jointes: { type: "array", items: { type: "string" }, description: "Clés renvoyées par lister_pieces_jointes (ex. « piece:… », « coffre:… », « document:… »)" },
       }, ["destinataire", "sujet", "corps"]);
   }
   if (on("pipeline")) {
@@ -331,6 +340,15 @@ export async function runReadTool(ctx: Ctx, name: string, a: Record<string, unkn
       return { candidats: data ?? [] };
     }
 
+    case "lister_pieces_jointes": {
+      const pieces = await listerPiecesJointes(db, {
+        contact_id: a.contact_id ? String(a.contact_id) : undefined,
+        dossier_id: a.dossier_id ? String(a.dossier_id) : undefined,
+        recherche: a.recherche ? String(a.recherche) : undefined,
+      });
+      return { total: pieces.length, pieces_jointes: pieces };
+    }
+
     case "statistiques": {
       switch (String(a.domaine)) {
         case "pipeline": {
@@ -432,8 +450,10 @@ async function buildProposalDescription(ctx: Ctx, name: string, a: Record<string
     }
     case "proposer_creation_contact":
       return `Créer le contact ${[a.prenom, a.nom].filter(Boolean).join(" ")}${a.email ? ` <${a.email}>` : ""}`;
-    case "proposer_envoi_email":
-      return `Envoyer un email à ${a.destinataire} — objet : « ${a.sujet} »`;
+    case "proposer_envoi_email": {
+      const pj = Array.isArray(a.pieces_jointes) ? a.pieces_jointes.length : 0;
+      return `Envoyer un email à ${a.destinataire} — objet : « ${a.sujet} »${pj ? ` (${pj} pièce${pj > 1 ? "s" : ""} jointe${pj > 1 ? "s" : ""})` : ""}`;
+    }
     case "proposer_deplacement_opportunite": {
       const { data } = await ctx.db.from("opportunites").select("titre").eq("id", String(a.opportunite_id)).maybeSingle();
       if (!data) return { erreur: "Opportunité introuvable (ou hors périmètre)." };
@@ -458,6 +478,15 @@ export async function runWriteProposal(ctx: Ctx, name: string, a: Record<string,
     if (!valides.includes(String(a.etape))) {
       return { erreur: `Étape inconnue « ${a.etape} ». Étapes valides : ${valides.join(", ")}.` };
     }
+  }
+  // Pièces jointes : les clés de l'IA sont relues (RLS) et rangées avec leur
+  // nom, pour que la carte de validation les affiche et permette de les retirer.
+  if (name === "proposer_envoi_email" && a.pieces_jointes !== undefined) {
+    const { pieces, rejetees } = await decrirePiecesJointes(ctx.db, a.pieces_jointes);
+    if (rejetees.length) {
+      return { erreur: `Pièce(s) jointe(s) inconnue(s) : ${rejetees.join(", ")}. Utiliser une clé renvoyée par lister_pieces_jointes.` };
+    }
+    a = { ...a, pieces_jointes: pieces };
   }
   const desc = await buildProposalDescription(ctx, name, a);
   if (typeof desc !== "string") return desc;

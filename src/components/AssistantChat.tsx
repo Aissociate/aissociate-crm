@@ -6,8 +6,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Bot, Send, User, FileText, Sparkles, Plus, History, Check, X,
-  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines, Undo2,
+  Wrench, CircleCheck, CircleX, TriangleAlert, Pencil, Eye, CheckCheck, AudioLines, Undo2, Paperclip,
 } from 'lucide-react';
+import { candidatsPiecesJointes, piecesDeArgs, type PieceJointeIA } from '@/lib/piecesJointesIA';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Spinner, Badge } from '@/components/ui';
@@ -90,6 +91,76 @@ function argsModifiables(action: AiAction): [string, string][] {
     .map(([k, v]) => [k, v as string]);
 }
 
+/**
+ * Pièces jointes d'un email proposé : celles choisies par l'IA, chacune
+ * révocable, et un ajout manuel parmi les fichiers du contact, de ses dossiers
+ * et de l'espace documentaire. Lecture seule une fois l'action traitée.
+ */
+function PiecesJointesEmail({ action, pieces, modifiable, onChange }: {
+  action: AiAction; pieces: PieceJointeIA[]; modifiable: boolean; onChange: (p: PieceJointeIA[]) => void;
+}) {
+  const [ajout, setAjout] = useState(false);
+  const [candidats, setCandidats] = useState<PieceJointeIA[] | null>(null);
+  const [filtre, setFiltre] = useState('');
+  const ouvrirAjout = () => {
+    setAjout((v) => !v);
+    if (candidats === null) void candidatsPiecesJointes(action.args ?? {}).then(setCandidats).catch(() => setCandidats([]));
+  };
+  const retenues = new Set(pieces.map((p) => p.cle));
+  const f = filtre.trim().toLowerCase();
+  const proposables = (candidats ?? []).filter((c) => !retenues.has(c.cle)
+    && (!f || c.nom.toLowerCase().includes(f) || c.origine.toLowerCase().includes(f)));
+  if (!modifiable && pieces.length === 0) return null;
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-xs text-muted">Pièces jointes ({pieces.length})</p>
+      {pieces.length === 0 && <p className="text-xs italic text-muted">Aucune pièce jointe.</p>}
+      <div className="flex flex-wrap gap-1.5">
+        {pieces.map((p) => (
+          <span key={p.cle} title={p.origine}
+            className="inline-flex max-w-full items-center gap-1 rounded-md border border-line bg-surface px-2 py-0.5 text-xs text-fg">
+            <Paperclip className="h-3 w-3 shrink-0 text-muted" />
+            <span className="truncate">{p.nom}</span>
+            {modifiable && (
+              <button type="button" onClick={() => onChange(pieces.filter((x) => x.cle !== p.cle))}
+                title="Retirer cette pièce" className="rounded p-0.5 text-muted hover:text-red-600">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </span>
+        ))}
+        {modifiable && (
+          <button type="button" onClick={ouvrirAjout}
+            className="inline-flex items-center gap-1 rounded-md border border-dashed border-line px-2 py-0.5 text-xs text-brand-600 hover:border-brand-400 dark:text-brand-400">
+            <Plus className="h-3 w-3" /> Ajouter une pièce
+          </button>
+        )}
+      </div>
+      {modifiable && ajout && (
+        <div className="mt-2 rounded-md border border-line bg-surface p-2">
+          <input className="input mb-1.5 text-xs" placeholder="Filtrer (nom, dossier, catégorie)…" value={filtre} onChange={(e) => setFiltre(e.target.value)} />
+          {candidats === null ? (
+            <p className="flex items-center gap-2 text-xs text-muted"><Spinner className="h-3.5 w-3.5" /> Chargement des fichiers…</p>
+          ) : proposables.length === 0 ? (
+            <p className="text-xs text-muted">Aucun autre fichier disponible pour ce contact.</p>
+          ) : (
+            <div className="max-h-40 space-y-0.5 overflow-y-auto">
+              {proposables.map((c) => (
+                <button key={c.cle} type="button" onClick={() => onChange([...pieces, c])}
+                  className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs hover:bg-surface-2">
+                  <Plus className="h-3 w-3 shrink-0 text-brand-600 dark:text-brand-400" />
+                  <span className="truncate text-fg">{c.nom}</span>
+                  <span className="shrink-0 text-muted">· {c.origine}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Fiche visée par une proposition, pour l'aperçu du mode avancé. */
 export function entiteDeAction(action: AiAction): EntiteRef | null {
   const a = action.args ?? {};
@@ -113,10 +184,13 @@ type CardProps = {
   onModif: (id: string, cle: string, valeur: string) => void;
   onVoir?: (e: EntiteRef) => void;
   onDefaire: (id: string) => Promise<void>;
+  /** Pièces jointes retouchées (email), `undefined` tant que l'utilisateur n'y a pas touché. */
+  pieces: PieceJointeIA[] | undefined;
+  onPieces: (id: string, p: PieceJointeIA[]) => void;
 };
 
 /** Carte de validation d'une action proposée par l'IA. */
-function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onModif, onVoir, onDefaire }: CardProps) {
+function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onModif, onVoir, onDefaire, pieces, onPieces }: CardProps) {
   const [busy, setBusy] = useState<'execute' | 'cancel' | 'undo' | null>(null);
   const annulation = etatAnnulation(action);
   const defaire = async () => {
@@ -137,7 +211,8 @@ function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onM
   const enAttente = action.statut === 'proposee';
   const champs = argsModifiables(action);
   const entite = entiteDeAction(action);
-  const modifiee = modifs && Object.keys(modifs).length > 0;
+  const modifiee = (modifs && Object.keys(modifs).length > 0) || pieces !== undefined;
+  const estEmail = action.outil === 'proposer_envoi_email';
   return (
     <div className={`mt-2 rounded-lg border p-3 ${enAttente && !selectionnee ? 'border-line bg-surface-2/50' : 'border-brand-500/30 bg-brand-500/5'}`}>
       <div className="flex items-start gap-2">
@@ -172,6 +247,12 @@ function ActionCard({ action, onDecision, selectionnee, onSelection, modifs, onM
             <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-line bg-surface p-2 text-xs text-muted">
               {String(modifs?.corps ?? action.args.corps ?? '')}
             </pre>
+          )}
+          {estEmail && (
+            <PiecesJointesEmail
+              action={action} pieces={pieces ?? piecesDeArgs(action.args)}
+              modifiable={enAttente && busy === null} onChange={(p) => onPieces(action.id, p)}
+            />
           )}
         </div>
       </div>
@@ -243,6 +324,7 @@ export default function AssistantChat({
   // apportées aux arguments avant exécution.
   const [deselection, setDeselection] = useState<Record<string, boolean>>({});
   const [modifs, setModifs] = useState<Record<string, Record<string, string>>>({});
+  const [pjModifs, setPjModifs] = useState<Record<string, PieceJointeIA[]>>({});
   const [lotEnCours, setLotEnCours] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [actions, setActions] = useState<Record<string, AiAction>>({});
@@ -274,6 +356,7 @@ export default function AssistantChat({
     setConversationId(id);
     setDeselection({});
     setModifs({});
+    setPjModifs({});
     const [{ data: msgs }, { data: acts }] = await Promise.all([
       supabase.from('ai_messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true }).limit(100),
       supabase.from('ai_actions').select('*').eq('conversation_id', id).order('created_at', { ascending: true }),
@@ -297,11 +380,16 @@ export default function AssistantChat({
     setActions({});
     setDeselection({});
     setModifs({});
+    setPjModifs({});
     setShowHistory(false);
   };
 
   const decideAction = async (id: string, decision: 'execute' | 'cancel') => {
-    const retouches = decision === 'execute' ? modifs[id] : undefined;
+    // Pièces jointes retirées ou ajoutées : seules les clés partent, le serveur
+    // les relit avec les droits de l'utilisateur.
+    const pj = decision === 'execute' ? pjModifs[id] : undefined;
+    const textes = decision === 'execute' ? modifs[id] : undefined;
+    const retouches = textes || pj ? { ...textes, ...(pj ? { pieces_jointes: pj.map((p) => p.cle) } : {}) } : undefined;
     try {
       // `origin` : base des liens publics (émargement, évaluation) envoyés par l'agent.
       const { ok, status, data } = await appelAgent({
@@ -311,7 +399,7 @@ export default function AssistantChat({
         ...prev,
         [id]: {
           ...prev[id],
-          args: retouches ? { ...prev[id]?.args, ...retouches } : prev[id]?.args,
+          args: retouches ? { ...prev[id]?.args, ...textes, ...(pj ? { pieces_jointes: pj } : {}) } : prev[id]?.args,
           statut: ok ? (decision === 'execute' ? 'executee' : 'annulee') : 'erreur',
           resultat: ok
             ? ((data?.resultat as Record<string, unknown> | undefined) ?? prev[id]?.resultat ?? null)
@@ -535,6 +623,7 @@ export default function AssistantChat({
                   selectionnee={!deselection[id]}
                   onSelection={(aid, v) => setDeselection((prev) => ({ ...prev, [aid]: !v }))}
                   modifs={modifs[id]} onModif={modifier} onVoir={onEntite} onDefaire={defaireAction}
+                  pieces={pjModifs[id]} onPieces={(aid, p) => setPjModifs((prev) => ({ ...prev, [aid]: p }))}
                 />
               ))}
               {m.sources && m.sources.length > 0 && (
