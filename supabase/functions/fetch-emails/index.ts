@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Buffer } from "node:buffer";
 import { simpleParser } from "npm:mailparser@3.7.1";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { ajouterJours, partiesLocales } from "../_shared/heure_locale.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -187,8 +188,7 @@ function imapDate(d: Date): string {
 // Ticket Benjamin « création automatique d'actions dans contacts » : chaque mail
 // entrant rattaché à un contact produit (1) une action RÉALISÉE horodatée, dont
 // la description porte un résumé du message, et (2) une relance ASAP à traiter.
-const pad2 = (n: number) => String(n).padStart(2, "0");
-const ymdLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+// Date et heure à La Réunion : le serveur est en UTC (actions décalées de 4 h sinon).
 
 /**
  * Âge au-delà duquel un mail entrant n'engendre plus d'action ni de relance.
@@ -200,12 +200,14 @@ const ACTION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** Première heure ouvrable à venir : 9 h le prochain jour ouvré (lun-ven). */
 function prochaineHeureOuvrable(from = new Date()): { date: string; heure: string } {
-  const d = new Date(from);
-  const ouvre = (x: Date) => x.getDay() >= 1 && x.getDay() <= 5;
-  if (!ouvre(d) || d.getHours() >= 9) {
-    do { d.setDate(d.getDate() + 1); } while (!ouvre(d));
+  const local = partiesLocales(from);
+  let { date } = local;
+  let jour = local.jourSemaine;
+  const ouvre = (j: number) => j >= 1 && j <= 5;
+  if (!ouvre(jour) || local.h >= 9) {
+    do { date = ajouterJours(date, 1); jour = (jour + 1) % 7; } while (!ouvre(jour));
   }
-  return { date: ymdLocal(d), heure: "09:00" };
+  return { date, heure: "09:00" };
 }
 
 /**
@@ -486,8 +488,8 @@ Deno.serve(async (req: Request) => {
                 const suite = prochaineHeureOuvrable();
                 await sb.from("contact_actions").insert([
                   {
-                    contact_id: contact.id, date_action: ymdLocal(recu),
-                    heure_action: `${pad2(recu.getHours())}:${pad2(recu.getMinutes())}`,
+                    contact_id: contact.id, date_action: partiesLocales(recu).date,
+                    heure_action: partiesLocales(recu).heure,
                     type: "email", faite: true,
                     description: `E-mail reçu : ${sujet}${resume ? ` — ${resume}` : ""}`,
                   },
@@ -596,8 +598,8 @@ async function handleBounce(sb: any, info: BounceInfo, parsed: any, messageId: s
     const now = new Date();
     try {
       await sb.from("contact_actions").insert({
-        contact_id: origine.contact_id, date_action: ymdLocal(now),
-        heure_action: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
+        contact_id: origine.contact_id, date_action: partiesLocales(now).date,
+        heure_action: partiesLocales(now).heure,
         type: "email", faite: true,
         description: `E-mail NON DÉLIVRÉ à ${info.recipient ?? "destinataire inconnu"}${info.diagnostic ? ` — ${info.diagnostic}` : ""}`,
       });

@@ -24,6 +24,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { transcrire } from "../_shared/stt.ts";
+import { partiesLocales } from "../_shared/heure_locale.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,13 +55,10 @@ Réponds UNIQUEMENT par un objet JSON valide, sans texte autour, avec ces clés 
 
 "delai_jours" : 0 si la relance est à faire au prochain créneau ouvrable, sinon le nombre de jours convenu.`;
 
+/** Date et heure à La Réunion (le serveur est en UTC). */
 function nowParts(): { date: string; heure: string } {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return {
-    date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
-    heure: `${p(d.getHours())}:${p(d.getMinutes())}`,
-  };
+  const { date, heure } = partiesLocales();
+  return { date, heure };
 }
 
 function base64(bytes: Uint8Array): string {
