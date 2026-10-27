@@ -46,6 +46,29 @@ export default function Administration() {
     profiles.refresh();
   };
 
+  // Suppression d'un compte : passe par l'Edge Function admin-users (service role).
+  const [delUser, setDelUser] = useState<Profile | null>(null);
+  const [reassignTo, setReassignTo] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const openDelete = (p: Profile) => { setDelUser(p); setReassignTo(''); };
+  const confirmDelete = async () => {
+    if (!delUser) return;
+    setDeleting(true);
+    const { data, error } = await supabase.functions.invoke('admin-users', {
+      body: { action: 'delete', user_id: delUser.id, reassign_to: reassignTo || null },
+    });
+    setDeleting(false);
+    if (error || data?.error) {
+      // Les erreurs HTTP de la fonction arrivent dans error.context (Response).
+      let msg = data?.error ?? error?.message;
+      try { msg = (await error?.context?.json())?.error ?? msg; } catch { /* corps non JSON */ }
+      alert(msg);
+      return;
+    }
+    setDelUser(null);
+    profiles.refresh();
+  };
+
   const saveFin = async () => {
     const payload = { ...finForm, actif: finForm.actif ?? true };
     const { error } = finForm.id
@@ -124,6 +147,7 @@ export default function Administration() {
                     >
                       <UserX className="h-3.5 w-3.5" /> Refuser
                     </button>
+                    <button onClick={() => openDelete(p)} title="Supprimer le compte" className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </td>
               </tr>
@@ -140,6 +164,7 @@ export default function Administration() {
               <th className="px-4 py-3">Rôle</th>
               <th className="px-4 py-3">Statut</th>
               <th className="px-4 py-3">Inscrit le</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           }>
             {approved.map((p) => (
@@ -164,6 +189,11 @@ export default function Administration() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-muted">{formatDate(p.created_at)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end">
+                    <button onClick={() => openDelete(p)} title="Supprimer l'utilisateur" className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </td>
               </tr>
             ))}
           </Table>
@@ -222,6 +252,26 @@ export default function Administration() {
       )}
 
       {tab === 'sante' && <SanteJobs />}
+
+      <Modal open={!!delUser} onClose={() => !deleting && setDelUser(null)} title="Supprimer l'utilisateur"
+        footer={<><Button variant="secondary" onClick={() => setDelUser(null)} disabled={deleting}>Annuler</Button>
+          <Button variant="danger" onClick={confirmDelete} disabled={deleting}>{deleting ? 'Suppression…' : 'Supprimer définitivement'}</Button></>}>
+        {delUser && (
+          <div className="space-y-4 text-sm">
+            <p className="text-fg">
+              Le compte de <strong>{fullName(delUser.prenom, delUser.nom)}</strong> ({delUser.email}) sera supprimé : il ne pourra plus se connecter. Cette action est irréversible.
+            </p>
+            <Field label="Réattribuer son portefeuille à" hint="Entreprises, contacts, opportunités, dossiers, devis, factures… Sans repreneur, ces éléments restent en base mais deviennent « non attribués ».">
+              <select className="input" value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}>
+                <option value="">— Personne (laisser non attribué)</option>
+                {approved.filter((p) => p.id !== delUser.id && p.actif).map((p) => (
+                  <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)} — {ROLE_LABELS[p.role]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={finOpen} onClose={() => setFinOpen(false)} title={finForm.id ? 'Modifier le financeur' : 'Nouveau financeur'}
         footer={<><Button variant="secondary" onClick={() => setFinOpen(false)}>Annuler</Button><Button onClick={saveFin} disabled={!finForm.code || !finForm.nom}>Enregistrer</Button></>}>
