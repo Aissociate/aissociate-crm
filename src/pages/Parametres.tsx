@@ -37,7 +37,8 @@ type Blog = {
 };
 
 const KIE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
-type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string };
+type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string; org_name?: string; expires_at?: string; refresh_token?: string; refresh_expires_at?: string; connected_at?: string };
+const LINKEDIN_REDIRECT_URI = `${import.meta.env.VITE_SUPABASE_URL ?? ''}/functions/v1/linkedin-oauth`;
 type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
 type NewsletterCfg = { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
 type BrevoCfg = { api_key?: string; sender_email?: string; sender_name?: string; daily_limit?: number };
@@ -85,7 +86,7 @@ export default function Parametres() {
   const [agefice, setAgefice] = useState<AgeficeCfg>({});
   const [chatbot, setChatbot] = useState<Chatbot>({});
   const [blog, setBlog] = useState<Blog>({});
-  const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77bf2p5s6yamdv' });
+  const [linkedin, setLinkedin] = useState<LinkedinCfg>({ enabled: true, client_id: '77aw0sfxqvjnwo' });
   const [metaAds, setMetaAds] = useState<MetaAds>({ api_version: 'v21.0' });
   const [newsletter, setNewsletter] = useState<NewsletterCfg>({ rgpd_only: true, sender_name: 'Aissociate' });
   const [brevo, setBrevo] = useState<BrevoCfg>({ sender_name: 'Aissociate' });
@@ -99,6 +100,20 @@ export default function Parametres() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [linkedinMsg, setLinkedinMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [linkedinConnecting, setLinkedinConnecting] = useState(false);
+
+  // Retour de la connexion OAuth LinkedIn (?linkedin=ok|error&linkedin_msg=…).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const st = q.get('linkedin');
+    if (!st) return;
+    setLinkedinMsg(st === 'ok'
+      ? { ok: true, text: 'LinkedIn connecté ✓' }
+      : { ok: false, text: `Connexion LinkedIn échouée : ${q.get('linkedin_msg') ?? 'erreur inconnue'}` });
+    q.delete('linkedin'); q.delete('linkedin_msg');
+    window.history.replaceState(null, '', window.location.pathname + (q.toString() ? `?${q}` : ''));
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -112,7 +127,7 @@ export default function Parametres() {
         if (row.cle === 'agefice') setAgefice((row.valeur as AgeficeCfg) ?? {});
         if (row.cle === 'chatbot') setChatbot((row.valeur as Chatbot) ?? {});
         if (row.cle === 'blog') { const b = (row.valeur as Blog) ?? {}; setBlog(b); setBlogThemes((b.themes ?? []).join('\n')); setBlogRss((b.rss_feeds ?? []).join('\n')); setBlogSeo((b.seo_keywords ?? []).join('\n')); }
-        if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77bf2p5s6yamdv', ...((row.valeur as LinkedinCfg) ?? {}) });
+        if (row.cle === 'linkedin') setLinkedin({ enabled: true, client_id: '77aw0sfxqvjnwo', ...((row.valeur as LinkedinCfg) ?? {}) });
         if (row.cle === 'meta_ads') setMetaAds({ api_version: 'v21.0', ...((row.valeur as MetaAds) ?? {}) });
         if (row.cle === 'newsletter') setNewsletter({ rgpd_only: true, sender_name: 'Aissociate', ...((row.valeur as NewsletterCfg) ?? {}) });
         if (row.cle === 'brevo') setBrevo({ sender_name: 'Aissociate', ...((row.valeur as BrevoCfg) ?? {}) });
@@ -130,6 +145,26 @@ export default function Parametres() {
     if (error) { alert(error.message); return; }
     setSavedMsg(cle);
     setTimeout(() => setSavedMsg(null), 2000);
+  };
+
+  // Enregistre Client ID / Secret puis part sur la page d'autorisation LinkedIn.
+  const connectLinkedin = async () => {
+    setLinkedinConnecting(true);
+    setLinkedinMsg(null);
+    try {
+      const { error: saveErr } = await supabase.from('parametres').upsert({ cle: 'linkedin', valeur: linkedin }, { onConflict: 'cle' });
+      if (saveErr) throw new Error(saveErr.message);
+      const { data, error } = await supabase.functions.invoke('linkedin-oauth', {
+        body: { action: 'start', return_to: window.location.origin + window.location.pathname },
+      });
+      if (error) throw new Error(await functionErrorMessage(error));
+      const r = data as { url?: string; error?: string };
+      if (!r?.url) throw new Error(r?.error ?? 'Réponse invalide');
+      window.location.href = r.url;
+    } catch (err) {
+      setLinkedinConnecting(false);
+      setLinkedinMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    }
   };
 
   // ── Modèles de messages (réponses rapides) ──
@@ -170,6 +205,8 @@ export default function Parametres() {
   const imapOk = !!(imap.host && imap.user && imap.password);
   const aiOk = !!ai.openrouter_key;
   const linkedinOk = !!(linkedin.access_token && linkedin.org_urn);
+  const linkedinExpiry = linkedin.expires_at ? new Date(linkedin.expires_at) : null;
+  const linkedinExpired = !!linkedinExpiry && linkedinExpiry.getTime() < Date.now();
   const metaOk = !!(metaAds.access_token && metaAds.ad_account_id);
 
   return (
@@ -221,7 +258,31 @@ export default function Parametres() {
             <Field label="Client Secret" hint="Confidentiel — utilisé pour le renouvellement du token">
               <input className="input" type="password" value={linkedin.client_secret ?? ''} onChange={(e) => setLinkedin({ ...linkedin, client_secret: e.target.value })} placeholder="••••••••" />
             </Field>
-            <Field label="Access token" required hint="OAuth, scope w_organization_social (produit « Community Management API »)">
+            <div className="space-y-2 rounded-lg border border-line p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={connectLinkedin} disabled={linkedinConnecting || !linkedin.client_id || !linkedin.client_secret}>
+                  <Linkedin className="h-4 w-4" /> {linkedinConnecting ? 'Redirection…' : linkedin.access_token ? 'Reconnecter LinkedIn' : 'Connecter LinkedIn'}
+                </Button>
+                {linkedinMsg && <span className={`text-sm ${linkedinMsg.ok ? 'text-emerald-600' : 'text-red-600'}`}>{linkedinMsg.text}</span>}
+              </div>
+              {linkedin.access_token && (
+                <p className="text-xs text-muted">
+                  {linkedin.org_name ? <>Page : <strong>{linkedin.org_name}</strong> · </> : null}
+                  {linkedinExpiry
+                    ? <>Token {linkedinExpired ? <strong className="text-red-600">expiré</strong> : 'valide'} jusqu'au {linkedinExpiry.toLocaleDateString('fr-FR')}</>
+                    : "Token saisi manuellement (date d'expiration inconnue)"}
+                  {linkedin.refresh_token
+                    ? ` · renouvellement automatique${linkedin.refresh_expires_at ? ` jusqu'au ${new Date(linkedin.refresh_expires_at).toLocaleDateString('fr-FR')}` : ''}`
+                    : ' · pas de renouvellement automatique : reconnecter avant expiration'}
+                </p>
+              )}
+              <p className="text-xs text-muted">
+                URL de redirection à déclarer dans l'app LinkedIn (onglet Auth) :{' '}
+                <code className="select-all break-all">{LINKEDIN_REDIRECT_URI}</code>. Connectez-vous avec un compte
+                administrateur de la page entreprise.
+              </p>
+            </div>
+            <Field label="Access token" required hint="Rempli par « Connecter LinkedIn » (ou à coller à la main)">
               <input className="input" type="password" value={linkedin.access_token ?? ''} onChange={(e) => setLinkedin({ ...linkedin, access_token: e.target.value })} placeholder="Bearer token LinkedIn" />
             </Field>
             <Field label="URN de la page entreprise" required hint="ex. urn:li:organization:123456 (ou juste l'id 123456)">

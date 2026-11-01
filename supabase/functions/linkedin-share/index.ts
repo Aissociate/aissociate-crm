@@ -4,12 +4,15 @@
 //
 // Publie : texte (titre + extrait + lien + hashtags) + image du blog.
 // Config : secrets Supabase (LINKEDIN_ACCESS_TOKEN, LINKEDIN_ORG_URN) en priorité,
-//          sinon table `parametres` (cle='linkedin' : { access_token, org_urn, enabled }).
+//          sinon table `parametres` (cle='linkedin' : { access_token, org_urn, enabled }),
+//          renseignée par le bouton « Connecter LinkedIn » (linkedin-oauth) ; le token y est
+//          renouvelé automatiquement via le refresh_token quand l'expiration approche.
 //
 // ⚠️ client_id + client_secret ne suffisent pas : il faut un access_token OAuth avec le
 //    scope w_organization_social (produit « Community Management API » côté LinkedIn).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { LI_VERSION, readCfg, validAccessToken } from "../_shared/linkedin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +20,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LI_VERSION = "202405"; // Version de l'API LinkedIn (à bumper si dépréciée).
 const SITE_URL = "https://aissociate.re";
 
 function json(body: unknown, status = 200) {
@@ -76,11 +78,10 @@ Deno.serve(async (req) => {
     let accessToken = Deno.env.get("LINKEDIN_ACCESS_TOKEN") ?? "";
     let orgUrn = Deno.env.get("LINKEDIN_ORG_URN") ?? "";
     if (!accessToken || !orgUrn) {
-      const { data: cfg } = await supabase.from("parametres").select("valeur").eq("cle", "linkedin").maybeSingle();
-      const v = (cfg?.valeur ?? {}) as Record<string, string | boolean>;
+      const v = await readCfg(supabase);
       if (v.enabled === false) return json({ ok: false, skipped: "LinkedIn désactivé" });
-      accessToken = accessToken || (v.access_token as string) || "";
-      orgUrn = orgUrn || (v.org_urn as string) || "";
+      accessToken = accessToken || (await validAccessToken(supabase, v));
+      orgUrn = orgUrn || v.org_urn || "";
     }
     if (!accessToken || !orgUrn) {
       return json({ ok: false, skipped: "config LinkedIn incomplète (access_token / org_urn requis)" });
