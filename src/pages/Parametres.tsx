@@ -108,9 +108,14 @@ export default function Parametres() {
     const q = new URLSearchParams(window.location.search);
     const st = q.get('linkedin');
     if (!st) return;
+    // LinkedIn renvoie error_description avec des entités HTML (&quot;…).
+    const raw = new DOMParser().parseFromString(q.get('linkedin_msg') ?? 'erreur inconnue', 'text/html').body.textContent ?? '';
+    const scope = raw.match(/Scope "([^"]+)" is not authorized/)?.[1];
     setLinkedinMsg(st === 'ok'
       ? { ok: true, text: 'LinkedIn connecté ✓' }
-      : { ok: false, text: `Connexion LinkedIn échouée : ${q.get('linkedin_msg') ?? 'erreur inconnue'}` });
+      : { ok: false, text: scope
+          ? `Connexion LinkedIn refusée : l'app n'a pas le droit « ${scope} ». Demandez le produit « Community Management API » (onglet Products de l'app LinkedIn), attendez sa validation, puis reconnectez.`
+          : `Connexion LinkedIn échouée : ${raw}` });
     q.delete('linkedin'); q.delete('linkedin_msg');
     window.history.replaceState(null, '', window.location.pathname + (q.toString() ? `?${q}` : ''));
   }, []);
