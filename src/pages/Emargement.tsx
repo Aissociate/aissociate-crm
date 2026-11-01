@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, CalendarPlus, Link2, Check, Send, Loader as Loader2, ShieldCheck, UserCheck, UserPlus } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, Link2, Check, Send, Loader as Loader2, ShieldCheck, UserCheck, UserPlus, FileDown } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageHeader, Card, Button, Field, Modal, Spinner, Badge, EmptyState, SearchSelect, type Tone } from '@/components/ui';
 import { formatDate, fullName, ymdLocal } from '@/lib/utils';
+import { functionErrorMessage } from '@/lib/invokeError';
 import type {
   Contact, SessionFormation, SessionParticipant, EmargementCreneau, EmargementAcces, EmargementSignature,
 } from '@/lib/database.types';
@@ -36,6 +37,9 @@ const feuilleVide = (participants: SessionParticipant[]): Feuille => ({
   choisis: new Set(participants.map((p) => p.id)), envoyer: true,
 });
 
+/** Attestation de présence : période, demi-journées retenues et participants. */
+type Attestation = { du: string; au: string; creneaux: Set<string>; participants: Set<string>; lieu: string };
+
 export default function Emargement() {
   const { session: auth, profile } = useAuth();
   const contacts = useCollection<Contact>('contacts', {
@@ -61,6 +65,7 @@ export default function Emargement() {
   // Nouvelle feuille : date, demi-journées et participants choisis, puis envoi par e-mail.
   const [feuille, setFeuille] = useState<Feuille | null>(null);
   const [ajoutLibre, setAjoutLibre] = useState({ nom: '', prenom: '', email: '' });
+  const [attest, setAttest] = useState<Attestation | null>(null);
   // Adresse d'expédition réelle pour la trace en Messagerie (cf. Positionnement).
   const [smtpFrom, setSmtpFrom] = useState<string | null>(null);
   useEffect(() => {
@@ -258,6 +263,61 @@ export default function Emargement() {
     alert(bilan.join('\n'));
   };
 
+  const ouvrirAttestation = () => {
+    if (!creneaux.length) return;
+    setAttest({
+      du: creneaux[0].date, au: creneaux[creneaux.length - 1].date,
+      creneaux: new Set(creneaux.map((c) => c.id)),
+      participants: new Set(participants.map((p) => p.id)), lieu: '',
+    });
+  };
+
+  /** Changer la période recoche toutes les demi-journées qu'elle couvre. */
+  const changerPeriode = (du: string, au: string) => {
+    if (!attest) return;
+    setAttest({
+      ...attest, du, au,
+      creneaux: new Set(creneaux.filter((c) => (!du || c.date >= du) && (!au || c.date <= au)).map((c) => c.id)),
+    });
+  };
+
+  const creneauxPeriode = attest
+    ? creneaux.filter((c) => (!attest.du || c.date >= attest.du) && (!attest.au || c.date <= attest.au))
+    : [];
+  const joursPeriode = [...new Set(creneauxPeriode.map((c) => c.date))];
+
+  const basculer = (set: Set<string>, ids: string[], on: boolean) => {
+    const n = new Set(set);
+    for (const id of ids) { if (on) n.add(id); else n.delete(id); }
+    return n;
+  };
+
+  const genererAttestation = async () => {
+    if (!selected || !attest) return;
+    const creneauIds = creneauxPeriode.filter((c) => attest.creneaux.has(c.id)).map((c) => c.id);
+    if (creneauIds.length === 0) { alert('Cochez au moins une demi-journée.'); return; }
+    if (attest.participants.size === 0) { alert('Cochez au moins un participant.'); return; }
+    setBusy('attest');
+    const { data, error } = await supabase.functions.invoke('attestation-presence', {
+      body: {
+        session_id: selected.id, participant_ids: [...attest.participants], creneau_ids: creneauIds,
+        date_debut: attest.du || null, date_fin: attest.au || null, lieu_signature: attest.lieu || null,
+      },
+    });
+    setBusy(null);
+    if (error) { alert(await functionErrorMessage(error, "Génération de l'attestation impossible")); return; }
+    const url = URL.createObjectURL(new Blob([data as Blob], { type: 'application/pdf' }));
+    const seul = attest.participants.size === 1
+      ? participants.find((p) => attest.participants.has(p.id)) : null;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `attestation-presence-${seul ? `${seul.nom}-${seul.prenom ?? ''}` : selected.titre}`
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') + '.pdf';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setAttest(null);
+  };
+
   const ouvrirDeclaratif =(creneau: EmargementCreneau, participant: SessionParticipant) => {
     const existante = sigDe.get(`${creneau.id}:${participant.id}`);
     setDeclarStatut(existante?.statut ?? 'present');
@@ -310,6 +370,11 @@ export default function Emargement() {
           <Button variant="secondary" onClick={genererCreneaux} disabled={!selected || busy === 'creneaux'}>
             {busy === 'creneaux' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
             Créer les demi-journées
+          </Button>
+          <Button variant="secondary" onClick={ouvrirAttestation}
+            disabled={!selected || creneaux.length === 0 || participants.length === 0}>
+            <FileDown className="h-4 w-4" />
+            Attestation de présence
           </Button>
         </div>
         {selected && (
@@ -511,6 +576,120 @@ export default function Emargement() {
                 <span className="block text-xs text-muted">Chacun reçoit son lien de signature et valide avec un code reçu par e-mail.</span>
               </span>
             </label>
+          </div>
+        )}
+      </Modal>
+
+      {/* Attestation de présence : période, demi-journées et participants retenus */}
+      <Modal
+        open={!!attest} onClose={() => setAttest(null)} title="Attestation de présence" wide
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAttest(null)}>Annuler</Button>
+            <Button onClick={genererAttestation} disabled={busy === 'attest'}>
+              {busy === 'attest' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              Générer le PDF
+            </Button>
+          </>
+        }
+      >
+        {attest && selected && (
+          <div className="space-y-5">
+            <p className="text-sm text-muted">
+              Session : <strong className="text-fg">{selected.titre}</strong>. Une page par participant ;
+              seules les demi-journées où il est <strong>présent</strong> comptent dans le total d'heures.
+            </p>
+            <div className="flex flex-wrap items-end gap-4">
+              <Field label="Du">
+                <input type="date" className="input" value={attest.du} onChange={(e) => changerPeriode(e.target.value, attest.au)} />
+              </Field>
+              <Field label="Au">
+                <input type="date" className="input" value={attest.au} onChange={(e) => changerPeriode(attest.du, e.target.value)} />
+              </Field>
+              <Field label="Fait à" hint="Par défaut, la ville de l'organisme">
+                <input className="input" value={attest.lieu} onChange={(e) => setAttest({ ...attest, lieu: e.target.value })} />
+              </Field>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold text-fg">
+                  Demi-journées retenues ({creneauxPeriode.filter((c) => attest.creneaux.has(c.id)).length}/{creneauxPeriode.length})
+                </span>
+                {creneauxPeriode.length > 0 && (
+                  <button type="button" className="text-xs text-brand-600 hover:underline"
+                    onClick={() => {
+                      const tout = creneauxPeriode.every((c) => attest.creneaux.has(c.id));
+                      setAttest({ ...attest, creneaux: basculer(attest.creneaux, creneauxPeriode.map((c) => c.id), !tout) });
+                    }}>
+                    {creneauxPeriode.every((c) => attest.creneaux.has(c.id)) ? 'Tout décocher' : 'Tout cocher'}
+                  </button>
+                )}
+              </div>
+              {joursPeriode.length === 0 ? (
+                <p className="text-sm text-muted">Aucune demi-journée émargeable sur cette période.</p>
+              ) : (
+                <ul className="max-h-64 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+                  {joursPeriode.map((jour) => {
+                    const duJour = creneauxPeriode.filter((c) => c.date === jour);
+                    const tous = duJour.every((c) => attest.creneaux.has(c.id));
+                    return (
+                      <li key={jour} className="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-2">
+                        <label className="flex min-w-[220px] cursor-pointer items-center gap-2 text-sm font-medium text-fg">
+                          <input type="checkbox" checked={tous}
+                            onChange={() => setAttest({ ...attest, creneaux: basculer(attest.creneaux, duJour.map((c) => c.id), !tous) })} />
+                          {formatDate(jour, 'EEEE d MMMM yyyy')}
+                        </label>
+                        {duJour.map((c) => {
+                          const presents = participants.filter((p) =>
+                            attest.participants.has(p.id) && sigDe.get(`${c.id}:${p.id}`)?.statut === 'present').length;
+                          return (
+                            <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm text-fg">
+                              <input type="checkbox" checked={attest.creneaux.has(c.id)}
+                                onChange={(e) => setAttest({ ...attest, creneaux: basculer(attest.creneaux, [c.id], e.target.checked) })} />
+                              {DEMIS.find((d) => d.key === c.demi_journee)?.label}
+                              <span className="text-xs text-muted">{presents} présent(s)</span>
+                            </label>
+                          );
+                        })}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold text-fg">Participants</span>
+                <button type="button" className="text-xs text-brand-600 hover:underline"
+                  onClick={() => setAttest({
+                    ...attest,
+                    participants: attest.participants.size === participants.length ? new Set() : new Set(participants.map((p) => p.id)),
+                  })}>
+                  {attest.participants.size === participants.length ? 'Tout décocher' : 'Tout cocher'}
+                </button>
+              </div>
+              <ul className="max-h-52 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+                {participants.map((p) => {
+                  const heures = creneauxPeriode
+                    .filter((c) => attest.creneaux.has(c.id) && sigDe.get(`${c.id}:${p.id}`)?.statut === 'present')
+                    .reduce((t, c) => t + Number(c.heures || 0), 0);
+                  return (
+                    <li key={p.id}>
+                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-surface-2">
+                        <input type="checkbox" checked={attest.participants.has(p.id)}
+                          onChange={(e) => setAttest({ ...attest, participants: basculer(attest.participants, [p.id], e.target.checked) })} />
+                        <span className="flex-1 text-sm text-fg">{fullName(p.prenom, p.nom)}</span>
+                        <span className={`text-xs ${heures ? 'text-muted' : 'text-amber-600'}`}>
+                          {heures.toLocaleString('fr-FR')} h de présence
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
         )}
       </Modal>
