@@ -109,7 +109,16 @@ Deno.serve(async (req: Request) => {
     const ink = rgb(0.15, 0.15, 0.2);
     const muted = rgb(0.45, 0.45, 0.5);
     const logo = await embedImage(pdf, org.logo_url);
-    const signature = await embedImage(pdf, org.signature_url);
+    // Cachet : celui des paramètres de l'organisme, à défaut celui déposé dans
+    // la base documentaire (document intitulé « cachet + signature … »).
+    let cachetUrl = org.signature_url;
+    if (!cachetUrl) {
+      const { data: doc } = await sb.from("documents").select("fichier_url")
+        .ilike("titre", "%cachet%signature%").eq("statut", "actif")
+        .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+      cachetUrl = (doc?.fichier_url as string | undefined) ?? undefined;
+    }
+    const signature = await embedImage(pdf, cachetUrl);
 
     const W = 595, H = 842, margin = 56, width = W - margin * 2;
 
@@ -158,24 +167,33 @@ Deno.serve(async (req: Request) => {
       text(`sur la période du ${fmtJour(debut)} au ${fmtJour(fin)}, pour une durée de ${fmtHeures(totalH)} (${presents.length} demi-journée${presents.length > 1 ? "s" : ""} de présence), selon le détail ci-dessous établi à partir des feuilles d'émargement.`);
       y -= 12;
 
-      // Tableau des demi-journées retenues
-      const cols = [
-        { label: "Date", x: margin, w: 170 },
-        { label: "Demi-journée", x: margin + 170, w: 85 },
-        { label: "Durée", x: margin + 255, w: 50 },
-        { label: "Présence", x: margin + 305, w: 70 },
-        { label: "Émargement", x: margin + 375, w: width - 375 },
-      ];
-      const ligne = (cells: string[], bold = false, fond?: ReturnType<typeof rgb>) => {
-        if (y - 18 < margin + 20) { page = pdf.addPage([W, H]); y = H - margin; }
-        if (fond) page.drawRectangle({ x: margin, y: y - 5, width, height: 17, color: fond });
-        cells.forEach((v, i) => page.drawText(clean(v), {
-          x: cols[i].x + 4, y, size: 9, font: bold ? fontB : font, color: ink,
-          maxWidth: cols[i].w - 6,
-        }));
-        y -= 17;
+      // Tableau des demi-journées retenues. Chaque cellule est découpée à la
+      // largeur de sa colonne et la ligne prend la hauteur de la plus haute :
+      // rien ne déborde sur la colonne ou la ligne voisine.
+      const largeurs = [128, 68, 42, 58, width - 296];
+      const cols = ["Date", "Demi-journée", "Durée", "Présence", "Émargement"].map((label, i) => ({
+        label, x: margin + largeurs.slice(0, i).reduce((a, b) => a + b, 0), w: largeurs[i],
+      }));
+      const T = 9, PAS = T + 2.5, PAD = 4;
+      // `fusion` : la première cellule s'étend sur les n premières colonnes.
+      const ligne = (cells: string[], o: { bold?: boolean; fond?: ReturnType<typeof rgb>; fusion?: number } = {}) => {
+        const f = o.bold ? fontB : font;
+        const fusion = o.fusion ?? 1;
+        const lignes = cells.map((v, i) => {
+          if (i > 0 && i < fusion) return [];
+          const w = i === 0 ? cols[fusion - 1].x + cols[fusion - 1].w - cols[0].x : cols[i].w;
+          return wrap(v, f, T, w - PAD * 2);
+        });
+        const h = Math.max(...lignes.map((l) => l.length)) * PAS + PAD * 2 - 2.5;
+        if (y - h < margin + 20) { page = pdf.addPage([W, H]); y = H - margin; }
+        if (o.fond) page.drawRectangle({ x: margin, y: y - h, width, height: h, color: o.fond });
+        lignes.forEach((ls, i) => ls.forEach((ln, k) => page.drawText(ln, {
+          x: cols[i].x + PAD, y: y - PAD - T + 1.5 - k * PAS, size: T, font: f, color: ink,
+        })));
+        y -= h;
+        page.drawLine({ start: { x: margin, y }, end: { x: W - margin, y }, thickness: 0.4, color: rgb(0.85, 0.85, 0.88) });
       };
-      ligne(cols.map((c) => c.label), true, rgb(0.98, 0.92, 0.87));
+      ligne(cols.map((c) => c.label), { bold: true, fond: rgb(0.98, 0.92, 0.87) });
       for (const { c, s } of retenus) {
         const statut = s ? STATUT[s.statut] ?? s.statut : "Non émargé";
         const mode = !s ? "-" : s.mode === "code"
@@ -183,20 +201,18 @@ Deno.serve(async (req: Request) => {
           : "Déclaré par le formateur";
         ligne([fmtJour(c.date, { weekday: "long", day: "2-digit", month: "long", year: "numeric" }),
           DEMI[c.demi_journee] ?? c.demi_journee, fmtHeures(Number(c.heures || 0)), statut, mode]);
-        page.drawLine({ start: { x: margin, y: y + 12 }, end: { x: W - margin, y: y + 12 }, thickness: 0.4, color: rgb(0.85, 0.85, 0.88) });
       }
-      ligne(["Total des heures de présence", "", fmtHeures(totalH), "", ""], true, rgb(0.95, 0.95, 0.96));
+      ligne(["Total des heures de présence", "", fmtHeures(totalH), "", ""], { bold: true, fond: rgb(0.95, 0.95, 0.96), fusion: 2 });
       y -= 16;
 
       text("Pour servir et valoir ce que de droit.");
       y -= 6;
       text(`Fait à ${lieuSig}, le ${fmtJour(aujourdhui)}.`);
+      // Le libellé et le cachet restent ensemble sur la même page.
+      const sigW = 170; const sigH = signature ? (signature.height / signature.width) * sigW : 0;
+      if (y - 16 - sigH < margin + 20) { page = pdf.addPage([W, H]); y = H - margin; }
       text("Signature et cachet de l'organisme :");
-      if (signature) {
-        const w = 150; const h = (signature.height / signature.width) * w;
-        if (y - h < margin + 20) { page = pdf.addPage([W, H]); y = H - margin; }
-        page.drawImage(signature, { x: margin, y: y - h, width: w, height: h });
-      }
+      if (signature) page.drawImage(signature, { x: margin, y: y - sigH, width: sigW, height: sigH });
 
       const foot = clean(`${orgNom} — ${org.email ?? ""} — SIRET ${org.siret ?? ""} — NDA ${org.nda ?? ""}`);
       page.drawText(foot.slice(0, 120), { x: margin, y: margin - 20, size: 7.5, font, color: rgb(0.5, 0.5, 0.55) });

@@ -12,7 +12,7 @@ import { JetonsMcpCard } from '@/components/JetonsMcpCard';
 type Organisme = {
   nom?: string; qualiopi?: string; email?: string; telephone?: string; adresse?: string;
   code_postal?: string; ville?: string; siret?: string; nda?: string; tva_intra?: string;
-  forme_juridique?: string; capital?: string; logo_url?: string; naf?: string; pays?: string;
+  forme_juridique?: string; capital?: string; logo_url?: string; signature_url?: string; naf?: string; pays?: string;
 };
 type Smtp = { host?: string; port?: number; secure?: boolean; user?: string; from?: string; password?: string };
 type Imap = { host?: string; port?: number; user?: string; password?: string };
@@ -368,6 +368,14 @@ export default function Parametres() {
                 <div className="flex items-center gap-3">
                   <FileUpload bucket="documents" onUploaded={(v) => setOrganisme({ ...organisme, logo_url: v })} label="Téléverser un logo" />
                   {organisme.logo_url && <FileLink bucket="documents" value={organisme.logo_url} onClear={() => setOrganisme({ ...organisme, logo_url: '' })} />}
+                </div>
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Cachet + signature" hint="Incrusté sur les attestations et documents signés (PNG/JPG, fond transparent de préférence)">
+                <div className="flex items-center gap-3">
+                  <FileUpload bucket="documents" onUploaded={(v) => setOrganisme({ ...organisme, signature_url: v })} label="Téléverser le cachet" />
+                  {organisme.signature_url && <FileLink bucket="documents" value={organisme.signature_url} onClear={() => setOrganisme({ ...organisme, signature_url: '' })} />}
                 </div>
               </Field>
             </div>
