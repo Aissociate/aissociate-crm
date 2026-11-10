@@ -18,6 +18,7 @@ const ATTENDUS: Record<string, { label: string; maxHeures: number }> = {
   'notifications-cron': { label: 'Notifications quotidiennes', maxHeures: 30 },
   'rgpd-purge': { label: 'Purge RGPD (hebdomadaire)', maxHeures: 24 * 8 },
   'qonto-sync': { label: 'Rapprochement Qonto', maxHeures: 30 },
+  'qualiopi-cron': { label: 'Envoi des évaluations (Qualiopi)', maxHeures: 30 },
 };
 
 export default function SanteJobs() {

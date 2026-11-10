@@ -18,7 +18,8 @@ type Espace = {
   devis: LigneDoc[];
   factures: LigneDoc[];
   documents: LigneDoc[];
-  questionnaires: { token: string; titre: string; statut: string; sent_at: string | null }[];
+  /** `url` : chemin du questionnaire (/positionnement/… ou /evaluation/…). */
+  questionnaires: { token: string; titre: string; statut: string; sent_at: string | null; url?: string }[];
   signatures: { token: string; libelle: string; statut: string; created_at: string }[];
   emargements: { token: string; session_id: string; expire_at: string | null }[];
 };
@@ -87,7 +88,9 @@ export default function EspaceClient() {
     );
   }
 
-  const aFaire = espace.questionnaires.length + espace.signatures.length;
+  // Seuls les questionnaires portant leur adresse sont proposés (positionnement, évaluations).
+  const questionnaires = espace.questionnaires.filter((q) => q.url);
+  const aFaire = questionnaires.length + espace.signatures.length;
 
   const Section = ({ icon: Icon, titre, children, vide }: { icon: typeof FileText; titre: string; children?: React.ReactNode; vide?: boolean }) => (
     vide ? null : (
@@ -126,15 +129,15 @@ export default function EspaceClient() {
 
       <main className="mx-auto mt-6 max-w-3xl space-y-5 px-4">
         {/* Actions attendues en premier */}
-        <Section icon={ClipboardList} titre="Questionnaires à compléter" vide={espace.questionnaires.length === 0}>
+        <Section icon={ClipboardList} titre="Questionnaires à compléter" vide={questionnaires.length === 0}>
           <ul className="divide-y divide-slate-100">
-            {espace.questionnaires.map((q) => (
+            {questionnaires.map((q) => (
               <li key={q.token} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-slate-800">{q.titre}</p>
-                  <p className="text-xs text-slate-500">Envoyé le {frDate(q.sent_at)}</p>
+                  {q.sent_at && <p className="text-xs text-slate-500">Envoyé le {frDate(q.sent_at)}</p>}
                 </div>
-                <a href={`/q/${q.token}`} className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Répondre</a>
+                <a href={q.url} className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Répondre</a>
               </li>
             ))}
           </ul>

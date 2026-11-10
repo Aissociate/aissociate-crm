@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   startOfDay, startOfWeek, startOfMonth,
   subDays, subWeeks, subMonths, differenceInHours, format,
@@ -371,6 +372,8 @@ export default function Dashboard() {
         title={`Tableau de bord${profile?.prenom ? ` — ${profile.prenom}` : ''}`}
         subtitle="Pilotage de l'activité commerciale et du site web, avec comparatif de période"
         actions={
+          <>
+          <Link to="/statistiques" className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">Statistiques détaillées</Link>
           <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
             {(Object.keys(GRAN_LABEL) as Gran[]).map((g) => (
               <button
@@ -384,6 +387,7 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+          </>
         }
       />
 

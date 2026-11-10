@@ -92,9 +92,17 @@ Deno.serve(async (req: Request) => {
       .select("titre, fichier_url, created_at").eq("contact_id", contact.id).order("created_at", { ascending: false });
 
     // Questionnaires à répondre (Qualiopi) : liens tokenisés existants.
-    const { data: questionnaires } = await sb.from("questionnaire_envois")
-      .select("token, modele_code, statut, sent_at, questionnaire_modeles(titre)")
-      .eq("contact_id", contact.id).neq("statut", "repondu").order("sent_at", { ascending: false });
+    // Positionnement et évaluations : liens nominatifs déjà envoyés, pas encore complétés.
+    const [{ data: liensPos }, { data: liensEval }] = await Promise.all([
+      sb.from("positionnement_liens").select("token, libelle, statut, sent_at")
+        .eq("contact_id", contact.id).eq("multi", false).eq("actif", true).eq("statut", "envoye"),
+      sb.from("evaluation_liens").select("token, libelle, statut, sent_at")
+        .eq("contact_id", contact.id).eq("multi", false).eq("actif", true).eq("statut", "envoye"),
+    ]);
+    const questionnaires = [
+      ...(liensPos ?? []).map((l) => ({ token: l.token, statut: l.statut, sent_at: l.sent_at, titre: l.libelle, url: `/positionnement/${l.token}` })),
+      ...(liensEval ?? []).map((l) => ({ token: l.token, statut: l.statut, sent_at: l.sent_at, titre: l.libelle, url: `/evaluation/${l.token}` })),
+    ];
 
     // Demandes de signature en attente.
     const { data: signatures } = await sb.from("signatures")
@@ -118,10 +126,7 @@ Deno.serve(async (req: Request) => {
       devis: devis ?? [],
       factures: factures ?? [],
       documents: documentsContact ?? [],
-      questionnaires: (questionnaires ?? []).map((q) => ({
-        token: q.token, statut: q.statut, sent_at: q.sent_at,
-        titre: (q.questionnaire_modeles as unknown as { titre: string } | null)?.titre ?? q.modele_code,
-      })),
+      questionnaires,
       signatures: signatures ?? [],
       emargements: mesEmargements,
     });

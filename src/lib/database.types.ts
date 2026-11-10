@@ -407,6 +407,10 @@ export type QualiopiDossierDoc = Timestamps & {
   indicateur_numero: number | null; type_doc: string; libelle: string;
   statut: QualiopiDocStatut; obligatoire: boolean;
   fichier_url: string | null; genere_at: string | null;
+  /** Bucket du fichier (« qualiopi » par défaut ; « plans » ou « pieces » si coché par la synchronisation). */
+  bucket?: string | null;
+  /** « auto » : ligne cochée par qualiopi_sync_preuves(). */
+  source?: string | null;
 };
 export type QuestionnaireModele = {
   code: string; titre: string; description: string | null; moment: string;

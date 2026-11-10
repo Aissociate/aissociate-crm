@@ -284,7 +284,13 @@ export default function Calendrier() {
       <PageHeader
         title="Calendrier des sessions"
         subtitle="Planning des sessions de formation et participants — partagé par toute l'équipe"
-        actions={<Button onClick={() => openNew(new Date())}><Plus className="h-4 w-4" /> Nouvelle session</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => navigate('/emargement')}><Check className="h-4 w-4" /> Émargement</Button>
+            <Button variant="secondary" onClick={() => navigate('/formateurs')}><User className="h-4 w-4" /> Formateurs</Button>
+            <Button onClick={() => openNew(new Date())}><Plus className="h-4 w-4" /> Nouvelle session</Button>
+          </>
+        }
       />
 
       <div className="card p-4">

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, ReceiptText, FileText, Sparkles, FolderArchive, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2, FolderLock, Landmark, Mail, CalendarDays, FileSignature } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, FileText, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2, FolderLock, Landmark, Mail, FileSignature } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCollection } from '@/hooks/useCollection';
@@ -11,18 +11,17 @@ import ContactFiche from '@/components/ContactFiche';
 import SignatureButton from '@/components/SignatureButton';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
 import HistoriqueContact from '@/components/HistoriqueContact';
-import OngletDocuments from '@/components/dossier/OngletDocuments';
+import OngletParcours from '@/components/dossier/OngletParcours';
 import OngletMessagerie from '@/components/dossier/OngletMessagerie';
-import OngletCalendrier from '@/components/dossier/OngletCalendrier';
 import { cn } from '@/lib/utils';
 import {
   DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS, PIECE_STATUT_TONES, PIECE_STATUT_LABELS,
 } from '@/lib/constants';
-import { formatMoney, formatDate, fullName } from '@/lib/utils';
+import { formatDate, fullName } from '@/lib/utils';
 import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type {
   Dossier, DossierStatut, DossierPiece, PieceStatut, WorkflowEtape, Financeur, PieceVersion,
-  Devis, PlanFormation, PlanPdf, Document, ContactDocument, DossierDocument,
+  Devis, ContactDocument, DossierDocument,
   Contact, Entreprise, Profile, Signature as SignatureDemande,
 } from '@/lib/database.types';
 
@@ -35,25 +34,28 @@ const PIECE_STATUTS: PieceStatut[] = ['manquante', 'recue', 'validee', 'rejetee'
 
 /**
  * Le dossier client réunit toute la partie administrative d'un apprenant sur
- * une formation (ex-pages Plans de formation, Positionnement, dossier Qualiopi).
+ * une formation, en trois onglets : le parcours (devis, montage, formation,
+ * clôture), les documents (pièces, signatures, coffre-fort) et les échanges.
  * L'onglet ouvert est dans l'URL (?onglet=…) pour pouvoir y renvoyer.
  */
 const ONGLETS = [
-  { cle: 'documents', label: 'Documents à générer', icon: FileSignature },
-  { cle: 'financeur', label: 'Financeur', icon: Landmark },
-  { cle: 'coffre', label: 'Coffre-fort', icon: FolderLock },
-  { cle: 'historique', label: 'Historique', icon: History },
-  { cle: 'messagerie', label: 'Messagerie', icon: Mail },
-  { cle: 'calendrier', label: 'Calendrier', icon: CalendarDays },
+  { cle: 'parcours', label: 'Parcours', icon: FileSignature },
+  { cle: 'documents', label: 'Documents', icon: FolderLock },
+  { cle: 'echanges', label: 'Échanges', icon: Mail },
 ] as const;
 type Onglet = typeof ONGLETS[number]['cle'];
+// Anciens onglets (liens déjà envoyés ou mis en favori) → nouvel emplacement.
+const ANCIENS_ONGLETS: Record<string, Onglet> = {
+  financeur: 'parcours', calendrier: 'parcours', coffre: 'documents', historique: 'echanges', messagerie: 'echanges',
+};
 
 export default function DossierDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
   const [params, setParams] = useSearchParams();
-  const onglet: Onglet = (ONGLETS.find((o) => o.cle === params.get('onglet'))?.cle ?? 'documents');
+  const demande = params.get('onglet') ?? '';
+  const onglet: Onglet = ONGLETS.find((o) => o.cle === demande)?.cle ?? ANCIENS_ONGLETS[demande] ?? 'parcours';
   const choisirOnglet = (cle: Onglet) => setParams((p) => { p.set('onglet', cle); return p; }, { replace: true });
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [etapes, setEtapes] = useState<WorkflowEtape[]>([]);
@@ -66,9 +68,6 @@ export default function DossierDetail() {
   const [versions, setVersions] = useState<PieceVersion[]>([]);
   // Centralisation : production et documents rattachés au dossier client.
   const [devis, setDevis] = useState<Devis[]>([]);
-  const [plans, setPlans] = useState<PlanFormation[]>([]);
-  const [planPdfs, setPlanPdfs] = useState<PlanPdf[]>([]);
-  const [docs, setDocs] = useState<Document[]>([]);
   const [coffre, setCoffre] = useState<ContactDocument[]>([]);
   // Contact du dossier : raccourci d'ouverture de sa fiche depuis le dossier.
   const [contact, setContact] = useState<Contact | null>(null);
@@ -89,20 +88,11 @@ export default function DossierDetail() {
     const { data: d } = await supabase.from('dossiers').select('*').eq('id', id).maybeSingle();
     setDossier(d);
     // Production et documents centralisés dans le dossier client.
-    const [{ data: dv }, { data: pl }, { data: dc }] = await Promise.all([
+    const [{ data: dv }, { data: pl }] = await Promise.all([
       supabase.from('devis').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
-      supabase.from('plans_formation').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
-      supabase.from('documents').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
+      supabase.from('plans_formation').select('id').eq('dossier_id', id),
     ]);
     setDevis(dv ?? []);
-    setPlans(pl ?? []);
-    setDocs(dc ?? []);
-    const planIds = (pl ?? []).map((p) => p.id);
-    if (planIds.length) {
-      const { data: pp } = await supabase.from('plan_pdfs').select('*')
-        .in('plan_id', planIds).order('created_at', { ascending: false });
-      setPlanPdfs(pp ?? []);
-    } else setPlanPdfs([]);
     if (d?.contact_id) {
       const [{ data: cd }, { data: ct }] = await Promise.all([
         supabase.from('contact_documents').select('*')
@@ -130,6 +120,11 @@ export default function DossierDetail() {
     const { data: sg } = await supabase.from('signatures').select('*')
       .eq('dossier_id', id).order('created_at', { ascending: false });
     setSigs(sg ?? []);
+    // Statut déduit : un dossier qui contient un devis, un plan ou une pièce n'est plus un brouillon.
+    if (d?.statut === 'brouillon' && ((dv ?? []).length || (pl ?? []).length || (p ?? []).some((x) => x.fichier_url))) {
+      const { error: stErr } = await supabase.from('dossiers').update({ statut: 'montage' }).eq('id', d.id);
+      if (!stErr) setDossier({ ...d, statut: 'montage' });
+    }
     setLoading(false);
   }, [id]);
 
@@ -379,19 +374,56 @@ export default function DossierDetail() {
         ))}
       </div>
 
-      {onglet === 'documents' && (
-        <OngletDocuments dossier={dossier} contact={contact} pieces={pieces} onChanged={() => void load()} />
-      )}
-
-      {onglet === 'financeur' && (
+      {onglet === 'parcours' && (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="lg:col-span-2">
+          <OngletParcours dossier={dossier} contact={contact} pieces={pieces} devis={devis} onChanged={() => void load()} />
+        </div>
+        <div className="space-y-6">
+          <Card>
+            <h2 className="mb-2 flex items-center gap-2 font-semibold text-fg"><Landmark className="h-4 w-4 text-brand-500" /> Financeur</h2>
+            {financeur ? (
+              <div className="space-y-1 text-sm">
+                <p className="font-medium text-fg">{financeur.nom}</p>
+                {financeur.email && <p className="text-muted">{financeur.email}</p>}
+                {financeur.specificites && <p className="whitespace-pre-line text-xs text-muted">{financeur.specificites}</p>}
+              </div>
+            ) : <p className="text-sm text-muted">Aucun financeur rattaché au dossier.</p>}
+          </Card>
+          <Card>
+            <h2 className="mb-4 font-semibold text-fg">Statut & financement</h2>
+            <div className="space-y-4">
+              <Field label="Statut du dossier">
+                <select className="input" value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })}>
+                  {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
+                </select>
+              </Field>
+              <Field label="Montant demandé (€)">
+                <input className="input" type="number" value={dossier.montant_demande ?? 0}
+                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} />
+              </Field>
+              <Field label="Montant accordé (€)">
+                <input className="input" type="number" value={dossier.montant_accorde ?? 0}
+                  onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} />
+              </Field>
+              <Field label="Notes">
+                <textarea className="input" rows={4} value={dossier.notes ?? ''}
+                  onChange={(e) => setDossier({ ...dossier, notes: e.target.value })} />
+              </Field>
+              <Button onClick={saveMeta} disabled={saving} className="w-full">
+                <Save className="h-4 w-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              <button onClick={removeDossier}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10">
+                <Trash2 className="h-4 w-4" /> Supprimer le dossier
+              </button>
+            </div>
+          </Card>
           {/* Workflow */}
+          {etapes.length > 0 && (
           <Card>
             <h2 className="mb-4 font-semibold text-fg">Workflow du financeur</h2>
-            {etapes.length === 0 ? (
-              <p className="text-sm text-muted">Aucun workflow associé (sélectionnez un financeur).</p>
-            ) : (
+            {(
               <ol className="space-y-2">
                 {etapes.map((e) => {
                   const done = e.ordre < dossier.etape_courante;
@@ -420,7 +452,14 @@ export default function DossierDetail() {
               </ol>
             )}
           </Card>
+          )}
 
+        </div>
+      </div>
+      )}
+
+      {onglet === 'documents' && (
+        <div className="space-y-6">
           {/* Pieces */}
           <Card>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -537,53 +576,6 @@ export default function DossierDetail() {
             )}
           </Card>
 
-        </div>
-        <div className="space-y-6">
-          <Card>
-            <h2 className="mb-2 flex items-center gap-2 font-semibold text-fg"><Landmark className="h-4 w-4 text-brand-500" /> Financeur</h2>
-            {financeur ? (
-              <div className="space-y-1 text-sm">
-                <p className="font-medium text-fg">{financeur.nom}</p>
-                {financeur.email && <p className="text-muted">{financeur.email}</p>}
-                {financeur.specificites && <p className="whitespace-pre-line text-xs text-muted">{financeur.specificites}</p>}
-              </div>
-            ) : <p className="text-sm text-muted">Aucun financeur rattaché au dossier.</p>}
-          </Card>
-          <Card>
-            <h2 className="mb-4 font-semibold text-fg">Statut & financement</h2>
-            <div className="space-y-4">
-              <Field label="Statut du dossier">
-                <select className="input" value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })}>
-                  {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
-                </select>
-              </Field>
-              <Field label="Montant demandé (€)">
-                <input className="input" type="number" value={dossier.montant_demande ?? 0}
-                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} />
-              </Field>
-              <Field label="Montant accordé (€)">
-                <input className="input" type="number" value={dossier.montant_accorde ?? 0}
-                  onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} />
-              </Field>
-              <Field label="Notes">
-                <textarea className="input" rows={4} value={dossier.notes ?? ''}
-                  onChange={(e) => setDossier({ ...dossier, notes: e.target.value })} />
-              </Field>
-              <Button onClick={saveMeta} disabled={saving} className="w-full">
-                <Save className="h-4 w-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
-              </Button>
-              <button onClick={removeDossier}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10">
-                <Trash2 className="h-4 w-4" /> Supprimer le dossier
-              </button>
-            </div>
-          </Card>
-        </div>
-      </div>
-      )}
-
-      {onglet === 'coffre' && (
-        <div className="space-y-6">
           {/* Coffre-fort du bénéficiaire */}
           <Card>
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -673,91 +665,20 @@ export default function DossierDetail() {
               </div>
             </div>
           </Card>
-
-          {/* Centralisation client : production générée + documents téléversés */}
-          <Card>
-            <h2 className="mb-1 flex items-center gap-2 font-semibold text-fg">
-              <FolderArchive className="h-4 w-4 text-brand-500" /> Centralisation client
-            </h2>
-            <p className="mb-4 text-sm text-muted">
-              Toute la production générée et les documents téléversés pour ce prospect, regroupés ici automatiquement.
-            </p>
-            <div className="space-y-5">
-              {/* Devis */}
-              <div>
-                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><ReceiptText className="h-4 w-4 text-muted" /> Devis ({devis.length})</p>
-                {devis.length === 0 ? <p className="text-xs text-muted">Aucun devis.</p> : (
-                  <ul className="space-y-1.5">
-                    {devis.map((dv) => (
-                      <li key={dv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                        <span className="text-fg">{dv.numero}{dv.objet ? ` · ${dv.objet}` : ''}</span>
-                        <span className="flex items-center gap-3">
-                          <span className="text-muted">{formatMoney(dv.total_ht)}</span>
-                          {dv.fichier_url && <FileLink bucket="devis" value={dv.fichier_url} />}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {/* Plans de formation */}
-              <div>
-                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><FileText className="h-4 w-4 text-muted" /> Plans de formation ({plans.length})</p>
-                {plans.length === 0 ? <p className="text-xs text-muted">Aucun plan.</p> : (
-                  <ul className="space-y-1.5">
-                    {plans.map((p) => (
-                      <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                        <span className="text-fg">{p.nom} <span className="text-xs text-muted">v{p.version} · {p.duree_heures} h</span></span>
-                        <Badge tone="brand">{p.statut}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {/* PDF générés (via les plans du dossier) */}
-              <div>
-                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><Sparkles className="h-4 w-4 text-muted" /> PDF générés ({planPdfs.length})</p>
-                {planPdfs.length === 0 ? <p className="text-xs text-muted">Aucun PDF généré.</p> : (
-                  <ul className="space-y-1.5">
-                    {planPdfs.map((d) => (
-                      <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                        <span className="text-fg">{d.titre} <span className="text-xs text-muted">{formatDate(d.created_at, 'dd/MM/yyyy HH:mm')}</span></span>
-                        {d.fichier_url && <FileLink bucket="plans" value={d.fichier_url} />}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {/* Documents téléversés */}
-              <div>
-                <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><FileText className="h-4 w-4 text-muted" /> Documents ({docs.length})</p>
-                {docs.length === 0 ? <p className="text-xs text-muted">Aucun document.</p> : (
-                  <ul className="space-y-1.5">
-                    {docs.map((d) => (
-                      <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                        <span className="text-fg">{d.titre} <span className="text-xs text-muted">{d.categorie} · v{d.version}</span></span>
-                        {d.fichier_url && <FileLink bucket="documents" value={d.fichier_url} />}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </Card>
         </div>
       )}
 
-      {onglet === 'historique' && (
-        <Card>
-          {contact
-            ? <HistoriqueContact contactId={contact.id} contactCreatedAt={contact.created_at} onNavigate={() => undefined} />
-            : <p className="text-sm text-muted">Ce dossier n'a pas de bénéficiaire : pas d'historique à afficher.</p>}
-        </Card>
+      {onglet === 'echanges' && (
+        <div className="space-y-6">
+          <OngletMessagerie dossier={dossier} contact={contact} />
+          <Card>
+            <h2 className="mb-4 flex items-center gap-2 font-semibold text-fg"><History className="h-4 w-4 text-brand-500" /> Historique</h2>
+            {contact
+              ? <HistoriqueContact contactId={contact.id} contactCreatedAt={contact.created_at} onNavigate={() => undefined} />
+              : <p className="text-sm text-muted">Ce dossier n'a pas de bénéficiaire : pas d'historique à afficher.</p>}
+          </Card>
+        </div>
       )}
-
-      {onglet === 'messagerie' && <OngletMessagerie dossier={dossier} contact={contact} />}
-
-      {onglet === 'calendrier' && <OngletCalendrier contact={contact} onChanged={() => void load()} />}
 
       {/* Fiche du contact du dossier, ouverte en surcouche */}
       {ficheOpen && contact && (

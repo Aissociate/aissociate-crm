@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FileText, FolderKanban, FolderArchive, Mail, Send, UserPlus, UsersRound, ChartBar as BarChart3, LayoutGrid, CalendarDays, CalendarCheck, Presentation, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Euro, Wallet, ClipboardCheck, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FolderKanban, Mail, Send, UsersRound, CalendarDays, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Wallet, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn, isConseillerInactif } from '@/lib/utils';
@@ -27,8 +27,6 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
       { to: '/assistant', label: 'Assistant IA', icon: Bot },
       { to: '/actions', label: 'Actions à faire', icon: ListTodo },
-      { to: '/statistiques', label: 'Statistiques', icon: BarChart3 },
-      { to: '/tresorerie', label: 'Trésorerie', icon: Wallet, managerOnly: true },
     ],
   },
   {
@@ -37,6 +35,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/contacts', label: 'Contacts', icon: Users },
       { to: '/entreprises', label: 'Entreprises', icon: Building2 },
       { to: '/pipeline', label: 'Pipeline commercial', icon: TrendingUp },
+      { to: '/messagerie', label: 'Messagerie', icon: Mail },
       { to: '/mobile', label: 'Capture mobile', icon: Mic },
       { to: '/conseillers', label: 'Conseillers', icon: UsersRound, managerOnly: true },
     ],
@@ -46,27 +45,28 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/catalogue', label: 'Catalogue', icon: GraduationCap },
       { to: '/devis', label: 'Devis', icon: ReceiptText },
-      { to: '/factures', label: 'Factures', icon: Euro },
-      // Dossier client : convention, plan individuel, paperasse, financeur, coffre-fort,
-      // historique, messagerie et calendrier. Plans de formation et Positionnement
-      // n'ont plus d'entrée propre : leurs pages restent accessibles depuis le dossier.
+      // Dossier client : parcours (devis, montage, formation, clôture), documents
+      // et échanges. Plans de formation, Positionnement et Évaluations n'ont pas
+      // d'entrée propre : leurs pages s'ouvrent depuis le dossier ou Qualiopi.
       { to: '/dossiers', label: 'Dossiers clients', icon: FolderKanban },
+      // Émargement et Formateurs s'ouvrent depuis le Calendrier.
       { to: '/calendrier', label: 'Calendrier', icon: CalendarDays },
-      { to: '/emargement', label: 'Émargement', icon: CalendarCheck },
-      { to: '/formateurs', label: 'Formateurs', icon: Presentation },
+      // L'Espace documentaire est un onglet de la conformité Qualiopi.
       { to: '/qualiopi', label: 'Conformité Qualiopi', icon: BadgeCheck },
+    ],
+  },
+  {
+    title: 'Gestion',
+    items: [
+      { to: '/tresorerie', label: 'Trésorerie', icon: Wallet, managerOnly: true },
       { to: '/bpf', label: 'BPF', icon: FileSpreadsheet, managerOnly: true },
     ],
   },
   {
-    title: 'Suivi & collaboration',
+    title: 'Marketing',
     items: [
-      { to: '/documents', label: 'Espace documentaire', icon: FolderArchive },
-      { to: '/kanban', label: 'Tableau Kanban', icon: LayoutGrid },
-      { to: '/messagerie', label: 'Messagerie', icon: Mail },
       { to: '/blog-admin', label: 'Blog', icon: Newspaper, managerOnly: true },
       { to: '/newsletter', label: 'Newsletter', icon: Send, managerOnly: true },
-      { to: '/recrutement', label: 'Recrutement', icon: UserPlus, managerOnly: true },
     ],
   },
   {

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileSignature, FileText, Sparkles, Plus, Loader as Loader2, ClipboardCheck, Send, Copy, Check,
-  FolderCheck, ExternalLink, RefreshCw, MessageSquareHeart, CalendarClock, GraduationCap, PenLine, X,
+  FolderCheck, ExternalLink, RefreshCw, MessageSquareHeart, CalendarClock, GraduationCap, PenLine, X, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,30 +10,70 @@ import { useCollection } from '@/hooks/useCollection';
 import { functionErrorMessage } from '@/lib/invokeError';
 import { generatePlanPdf } from '@/lib/generatePlanPdf';
 import { GENERABLE_DOC_TYPES, DOC_STATUT_LABELS, DOC_STATUT_TONES } from '@/lib/qualiopi';
-import { Button, Card, Badge, Field, SearchSelect } from '@/components/ui';
+import { Button, Badge, Field, SearchSelect, type Tone } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
 import ConventionPositionnementModal, { type StagiaireDossier } from '@/components/ConventionPositionnementModal';
-import { formatDate, fullName } from '@/lib/utils';
+import { formatDate, formatMoney, fullName, cn } from '@/lib/utils';
+import { copyToBucket, type Bucket } from '@/lib/storage';
+import OngletCalendrier from '@/components/dossier/OngletCalendrier';
 import {
   echeanceFroid, messageInvitation, LIBELLES_DEFAUT, TYPE_LABELS, DELAI_FROID_JOURS, type EvaluationType,
 } from '@/lib/evaluation';
 import type {
   Dossier, Contact, DossierPiece, Formation, PlanFormation, PlanPdf, Positionnement as Pos,
   PositionnementLien, SessionFormation, SessionParticipant, QualiopiDossierDoc, QualiopiModeleDoc,
-  Evaluation, EvaluationLien,
+  Evaluation, EvaluationLien, Devis,
 } from '@/lib/database.types';
 
 /**
- * Onglet « Documents à générer » du dossier client : convention, plan
- * individuel de formation, et le reste de la paperasse (documents AGEFICE,
- * justificatifs Qualiopi des sessions, test de positionnement, évaluations à
- * chaud et à froid).
+ * Onglet « Parcours » du dossier client : les quatre étapes d'un dossier de
+ * formation (devis, montage, formation, clôture), chacune avec ses documents,
+ * leur état et le bouton qui les produit.
  *
- * Tout ce qui est produit ici se dépose d'un clic dans les pièces du dossier
- * (bouton dossier) et reste listé dans Plans de formation.
+ * L'état d'une étape se déduit de ce qui existe (devis accepté, convention
+ * déposée, session terminée, évaluation reçue) : rien à cocher à la main.
+ * Tout PDF produit ici est rangé automatiquement dans la pièce justificative
+ * correspondante du dossier ; le bouton dossier sert à remplacer une pièce
+ * déjà remplie par une version plus récente.
  */
+
+type Etat = 'fait' | 'en_cours' | 'a_faire';
+const ETAT_BADGE: Record<Etat, { label: string; tone: Tone }> = {
+  fait: { label: 'Fait', tone: 'success' },
+  en_cours: { label: 'En cours', tone: 'warning' },
+  a_faire: { label: 'À faire', tone: 'neutral' },
+};
+const ETAPES = ['Devis', 'Montage', 'Formation', 'Clôture'];
+
+function Pastille({ n, etat }: { n: number; etat: Etat }) {
+  return (
+    <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+      etat === 'fait' ? 'bg-emerald-500 text-white' : etat === 'en_cours' ? 'bg-brand-500 text-white' : 'bg-surface-2 text-muted')}>
+      {etat === 'fait' ? <Check className="h-4 w-4" /> : n}
+    </span>
+  );
+}
+
+function Etape({ n, titre, etat, resume, ouvert, onToggle, children }: {
+  n: number; titre: string; etat: Etat; resume: string; ouvert: boolean; onToggle: () => void; children: ReactNode;
+}) {
+  return (
+    <section className="card">
+      <button onClick={onToggle} aria-expanded={ouvert} className="flex w-full items-center gap-3 px-5 py-4 text-left">
+        <Pastille n={n} etat={etat} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-fg">{titre}</span>
+          <span className="block truncate text-xs text-muted">{resume}</span>
+        </span>
+        <Badge tone={ETAT_BADGE[etat].tone}>{ETAT_BADGE[etat].label}</Badge>
+        <ChevronDown className={cn('h-5 w-5 shrink-0 text-muted transition', ouvert && 'rotate-180')} />
+      </button>
+      {ouvert && <div className="space-y-6 border-t border-line px-5 py-5">{children}</div>}
+    </section>
+  );
+}
 
 // Documents AGEFICE produits depuis un plan, et la pièce du dossier qu'ils renseignent.
 const AGEFICE: { kind: 'demande' | 'emargement' | 'attestation'; label: string; piece: string }[] = [
@@ -58,12 +98,14 @@ const ligneModule = (m: unknown): string => {
   return String(m ?? '');
 };
 
-export default function OngletDocuments({
-  dossier, contact, pieces, onChanged,
+export default function OngletParcours({
+  dossier, contact, pieces, devis, onChanged,
 }: {
   dossier: Dossier;
   contact: Contact | null;
   pieces: DossierPiece[];
+  /** Devis rattachés au dossier (étape 1). */
+  devis: Devis[];
   /** À appeler quand une pièce du dossier a pu changer. */
   onChanged: () => void;
 }) {
@@ -93,6 +135,8 @@ export default function OngletDocuments({
   const [copie, setCopie] = useState<string | null>(null);
   // Formation sur mesure : saisie du titre et de la durée.
   const [surMesure, setSurMesure] = useState<{ intitule: string; duree: string } | null>(null);
+  // Étapes dépliées ; null = seule l'étape en cours est ouverte.
+  const [ouvertes, setOuvertes] = useState<Set<number> | null>(null);
 
   const entrepriseId = dossier.entreprise_id ?? contact?.entreprise_id ?? null;
   const formation = formations.data.find((f) => f.id === dossier.formation_id) ?? null;
@@ -147,6 +191,40 @@ export default function OngletDocuments({
   }, [dossier.id, dossier.contact_id, dossier.formation_id]);
 
   useEffect(() => { void charger(); }, [charger]);
+
+  // ── Rangement automatique des PDF produits dans les pièces du dossier ─────
+  // Le dernier PDF de chaque type va dans sa pièce justificative, si celle-ci
+  // est vide. Une pièce déjà remplie n'est jamais écrasée, et une pièce vidée
+  // à la main après la production du PDF n'est pas re-remplie.
+  const rangement = useRef(new Set<string>());
+  useEffect(() => {
+    const aRanger = Object.keys(PIECE_POUR).map((kind) => {
+      const pdf = pdfs.find((d) => d.kind === kind && d.fichier_url); // pdfs : du plus récent au plus ancien
+      if (!pdf || rangement.current.has(pdf.id)) return null;
+      const piece = pieces.find((x) => x.libelle === PIECE_POUR[kind]);
+      if (piece?.fichier_url) return null;
+      if (piece && piece.updated_at > pdf.created_at) return null;
+      return { pdf, piece, libelle: PIECE_POUR[kind] };
+    }).filter((x): x is NonNullable<typeof x> => x !== null);
+    if (!aRanger.length) return;
+    aRanger.forEach((x) => rangement.current.add(x.pdf.id));
+    void (async () => {
+      const ranges: string[] = [];
+      for (const { pdf, piece, libelle } of aRanger) {
+        const { path, error } = await copyToBucket('plans', pdf.fichier_url!, 'pieces');
+        if (error || !path) continue;
+        const { error: ecr } = piece
+          ? await supabase.from('dossier_pieces').update({ fichier_url: path, statut: 'recue' }).eq('id', piece.id)
+          : await supabase.from('dossier_pieces').insert({ dossier_id: dossier.id, libelle, obligatoire: true, statut: 'recue', fichier_url: path });
+        if (!ecr) ranges.push(libelle);
+      }
+      if (ranges.length) {
+        setInfo(`Rangé automatiquement dans les pièces du dossier : ${ranges.join(', ')}.`);
+        onChanged();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfs, pieces, dossier.id]);
 
   const appeler = async (cle: string, fn: () => Promise<void>) => {
     setBusy(cle); setErreur(null); setInfo(null);
@@ -224,7 +302,7 @@ export default function OngletDocuments({
       statut: 'brouillon', version: 1, owner_id: userId,
     });
     if (error) throw new Error(error.message);
-    setInfo('Plan créé depuis le catalogue. Mettez-le en PDF, ou ajustez-le dans Plans de formation.');
+    setInfo('Plan créé depuis le catalogue. Mettez-le en PDF : il sera rangé dans les pièces du dossier.');
   });
 
   const planParIA = () => appeler('plan-ia', async () => {
@@ -234,7 +312,7 @@ export default function OngletDocuments({
       formationId: dossier.formation_id, positionnementIds: [positionnements[0].id],
       dossierId: dossier.id, entrepriseId, userId,
     });
-    setInfo(`Plan rédigé par l'IA : ${res.nom as string}. Mettez-le en PDF pour le déposer au dossier.`);
+    setInfo(`Plan rédigé par l'IA : ${res.nom as string}. Mettez-le en PDF : il sera rangé dans les pièces du dossier.`);
   });
 
   const planEnPdf = (p: PlanFormation) => appeler(`pdf-${p.id}`, async () => {
@@ -266,7 +344,7 @@ export default function OngletDocuments({
   const genererAgefice = (kind: string) => appeler(`agefice-${kind}`, async () => {
     if (!planAgefice) throw new Error('Choisissez (ou créez) le plan de formation du dossier.');
     await invoquer('generate-agefice', { planId: planAgefice, type: kind, userId });
-    setInfo('Document produit : déposez-le dans les pièces avec le bouton dossier.');
+    setInfo('Document produit.');
   });
 
   // ── Qualiopi ───────────────────────────────────────────────────────────────
@@ -376,17 +454,99 @@ export default function OngletDocuments({
     </li>
   );
 
+  // ── Parcours : état de chaque étape, déduit des documents du dossier ──────
+  const pieceDeposee = (libelle: string) => pieces.some((x) => x.libelle === libelle && x.fichier_url);
+  const sessionsInscrit = toutesSessions.data.filter((x) => participations.some((y) => y.session_id === x.id));
+  const sessionFinie = sessionsInscrit.some((x) => new Date(x.date_fin ?? x.date_debut).getTime() < Date.now());
+  const devisAccepte = devis.some((d) => d.statut === 'accepte');
+  const etats: Etat[] = [
+    devisAccepte || pieceDeposee('Devis signé') ? 'fait' : devis.length ? 'en_cours' : 'a_faire',
+    pieceDeposee('Convention / contrat de formation') && pdfsDe('plan').length > 0 ? 'fait'
+      : (dossier.formation_id || plans.length || positionnements.length || conventions.length) ? 'en_cours' : 'a_faire',
+    sessionFinie ? 'fait' : sessionsInscrit.length ? 'en_cours' : 'a_faire',
+    evaluations.some((e) => e.type === 'chaud') && pieceDeposee("Attestation d'assiduité") ? 'fait'
+      : (liensEval.length || evaluations.length || pdfsDe('attestation').length) ? 'en_cours' : 'a_faire',
+  ];
+  const courante = etats.findIndex((e) => e !== 'fait') + 1; // 0 = tout est fait
+  const estOuverte = (n: number) => (ouvertes ? ouvertes.has(n) : n === courante);
+  const basculer = (n: number) => setOuvertes((cur) => {
+    const set = new Set(cur ?? (courante ? [courante] : []));
+    if (set.has(n)) set.delete(n); else set.add(n);
+    return set;
+  });
+  const boutonAgefice = (kind: 'demande' | 'emargement' | 'attestation') => {
+    const a = AGEFICE.find((x) => x.kind === kind)!;
+    return (
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-sm font-medium text-fg"><FolderCheck className="h-4 w-4 text-muted" /> {a.label}</p>
+          <Button variant="secondary" onClick={() => void genererAgefice(kind)} disabled={!!busy || plans.length === 0}
+            title={plans.length === 0 ? "Créez d'abord le plan individuel (étape Montage)" : undefined}>
+            {busy === `agefice-${kind}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Générer
+          </Button>
+        </div>
+        {plans.length > 1 && kind === 'demande' && (
+          <div className="mb-2 max-w-md">
+            <Field label="Plan utilisé pour les documents du financeur">
+              <SearchSelect value={planAgefice} onChange={setPlanAgefice} options={optionsPlans} placeholder="Choisir un plan…" />
+            </Field>
+          </div>
+        )}
+        {pdfsDe(kind).length > 0
+          ? <ul className="space-y-1.5">{pdfsDe(kind).map(ligneDoc)}</ul>
+          : <p className="text-xs text-muted">Pas encore produit.</p>}
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {erreur && <div className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">{erreur}</div>}
       {info && <div className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">{info}</div>}
 
-      {/* ── Formation du dossier ── */}
-      <Card>
-        <h2 className="mb-1 flex items-center gap-2 font-semibold text-fg"><GraduationCap className="h-4 w-4 text-brand-500" /> Formation du dossier</h2>
-        <p className="mb-3 text-sm text-muted">
-          Choisissez une formation du catalogue, ou donnez un titre sur mesure : elle sert à la convention, au plan et aux documents du financeur.
+      {/* Fil du parcours : où en est le dossier, d'un coup d'œil */}
+      <ol className="card flex items-center gap-1 overflow-x-auto p-3">
+        {ETAPES.map((titre, i) => (
+          <li key={titre} className="flex min-w-0 flex-1 items-center gap-1">
+            <button onClick={() => basculer(i + 1)}
+              className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-surface-2',
+                courante === i + 1 && 'bg-brand-500/10')}>
+              <Pastille n={i + 1} etat={etats[i]} />
+              <span className={cn('truncate font-medium', etats[i] === 'a_faire' ? 'text-muted' : 'text-fg')}>{titre}</span>
+            </button>
+            {i < ETAPES.length - 1 && <span className={cn('h-px w-4 shrink-0', etats[i] === 'fait' ? 'bg-emerald-500' : 'bg-line')} />}
+          </li>
+        ))}
+      </ol>
+
+      {/* ── 1. Devis ── */}
+      <Etape n={1} titre="Devis" etat={etats[0]} ouvert={estOuverte(1)} onToggle={() => basculer(1)}
+        resume={devis.length ? `${devis.length} devis${devisAccepte ? ' · accepté' : ''}` : 'Aucun devis pour ce dossier'}>
+        {devis.length === 0 ? <p className="text-sm text-muted">Aucun devis rattaché à ce dossier.</p> : (
+          <ul className="space-y-1.5">
+            {devis.map((dv) => (
+              <li key={dv.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-fg">{dv.numero}{dv.objet ? ` · ${dv.objet}` : ''}</span>
+                <span className="text-muted">{formatMoney(dv.total_ht)}</span>
+                <Badge tone={dv.statut === 'accepte' ? 'success' : dv.statut === 'refuse' || dv.statut === 'expire' ? 'danger' : 'neutral'}>{dv.statut}</Badge>
+                {dv.fichier_url && <FileLink bucket="devis" value={dv.fichier_url} />}
+                <AddToDossierButton contactId={dossier.contact_id} dossiers={[dossier]} cibles={[dossier]}
+                  fichierUrl={dv.fichier_url} sourceBucket="devis" pieceLibelle="Devis signé" documentLabel="devis" onDone={onChanged} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted">
+          Pièce « Devis signé » : {pieceDeposee('Devis signé') ? 'déposée' : 'pas encore déposée (bouton dossier sur le devis signé)'}.{' '}
+          <Link to="/devis" className="font-medium text-brand-600 hover:underline dark:text-brand-400">Créer ou modifier un devis</Link>
         </p>
+      </Etape>
+
+      {/* ── 2. Montage ── */}
+      <Etape n={2} titre="Montage du dossier" etat={etats[1]} ouvert={estOuverte(2)} onToggle={() => basculer(2)}
+        resume={`${formation?.intitule ?? 'Formation à choisir'} · convention ${pieceDeposee('Convention / contrat de formation') ? 'déposée' : 'à produire'}`}>
+        <div>
+          <p className="mb-2 flex items-center gap-2 text-sm font-medium text-fg"><GraduationCap className="h-4 w-4 text-muted" /> Formation du dossier</p>
         {surMesure ? (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[16rem] flex-1">
@@ -420,30 +580,46 @@ export default function OngletDocuments({
             {formation && !formation.actif && <Badge tone="info">Sur mesure</Badge>}
           </div>
         )}
-      </Card>
-
-      {/* ── Convention ── */}
-      <Card>
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 font-semibold text-fg"><FileSignature className="h-4 w-4 text-brand-500" /> Générer une convention</h2>
-          <Button onClick={() => setConventionOpen(true)}><FileSignature className="h-4 w-4" /> Générer la convention</Button>
         </div>
-        <p className="mb-3 text-sm text-muted">
-          Convention au modèle de l'organisme, conclue avec l'entreprise. Les autres apprenants de l'entreprise sur
-          cette formation ({Math.max(0, autresDossiers.length - 1)}) peuvent figurer dans l'effectif. Le plan, la durée,
-          le lieu et le prix se règlent dans la fenêtre ; l'IA peut rédiger le plan d'après le positionnement.
-        </p>
-        <p className="mb-2 flex items-center gap-2 text-xs text-muted">
-          <FolderCheck className="h-3.5 w-3.5" /> Pièce « Convention / contrat de formation » :{' '}
-          {pieceConvention?.fichier_url ? <FileLink bucket="pieces" value={pieceConvention.fichier_url} /> : 'pas encore déposée'}
-        </p>
-        {conventions.length > 0 && <ul className="space-y-1.5">{conventions.map(ligneDoc)}</ul>}
-      </Card>
+        <div>
+          {/* Positionnement */}
+          <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-medium text-fg"><ClipboardCheck className="h-4 w-4 text-muted" /> Test de positionnement</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" onClick={() => void envoyerTest()} disabled={!!busy || !contact}>
+                  {busy === 'pos-lien' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Envoyer le test
+                </Button>
+                <Link to="/positionnement" className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand-600">
+                  <ExternalLink className="h-3.5 w-3.5" /> Liens de groupe et toutes les réponses
+                </Link>
+              </div>
+            </div>
+            {positionnements.length === 0 ? <p className="text-xs text-muted">Aucune réponse pour l'instant.</p> : (
+              <ul className="space-y-1.5">
+                {positionnements.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-fg">{p.nom}</span>
+                    <Badge tone="info">{p.niveau ?? '—'}{p.pct != null ? ` · ${p.pct} %` : ''}</Badge>
+                    <span className="text-xs text-muted">{formatDate(p.completed_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {liens.filter((l) => l.actif).map((l) => (
+              <div key={l.id} className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span>Lien {l.multi ? 'de groupe' : 'personnel'} · {l.statut}{l.sent_at ? ` · envoyé le ${formatDate(l.sent_at)}` : ''}</span>
+                <button onClick={() => void copierLien(l.token)} className="inline-flex items-center gap-1 hover:text-brand-600">
+                  {copie === l.token ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} Copier le lien
+                </button>
+              </div>
+            ))}
+          </div>
 
-      {/* ── Plan individuel ── */}
-      <Card>
+        </div>
+        <div>
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 font-semibold text-fg"><FileText className="h-4 w-4 text-brand-500" /> Plan individuel de formation</h2>
+          <p className="flex items-center gap-2 text-sm font-medium text-fg"><FileText className="h-4 w-4 text-muted" /> Plan individuel de formation</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => void creerPlanCatalogue()} disabled={!!busy}
               title="Crée le plan à partir de la formation du catalogue">
@@ -488,44 +664,45 @@ export default function OngletDocuments({
             ))}
           </ul>
         )}
-      </Card>
+        </div>
+        <div>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-sm font-medium text-fg"><FileSignature className="h-4 w-4 text-muted" /> Convention de formation</p>
+          <Button onClick={() => setConventionOpen(true)}><FileSignature className="h-4 w-4" /> Générer la convention</Button>
+        </div>
+        <p className="mb-3 text-sm text-muted">
+          Convention au modèle de l'organisme, conclue avec l'entreprise. Les autres apprenants de l'entreprise sur
+          cette formation ({Math.max(0, autresDossiers.length - 1)}) peuvent figurer dans l'effectif. Le plan, la durée,
+          le lieu et le prix se règlent dans la fenêtre ; l'IA peut rédiger le plan d'après le positionnement.
+        </p>
+        <p className="mb-2 flex items-center gap-2 text-xs text-muted">
+          <FolderCheck className="h-3.5 w-3.5" /> Pièce « Convention / contrat de formation » :{' '}
+          {pieceConvention?.fichier_url ? <FileLink bucket="pieces" value={pieceConvention.fichier_url} /> : 'pas encore déposée'}
+        </p>
+        {conventions.length > 0 && <ul className="space-y-1.5">{conventions.map(ligneDoc)}</ul>}
+        </div>
+        {boutonAgefice('demande')}
+      </Etape>
 
-      {/* ── Reste de la paperasse ── */}
-      <Card>
-        <h2 className="mb-1 flex items-center gap-2 font-semibold text-fg"><FolderCheck className="h-4 w-4 text-brand-500" /> Générer le reste de la paperasse</h2>
-        <p className="mb-4 text-sm text-muted">Documents du financeur, justificatifs Qualiopi des sessions et test de positionnement.</p>
-
-        <div className="space-y-6">
-          {/* AGEFICE */}
-          <div>
-            <p className="mb-2 text-sm font-medium text-fg">Documents AGEFICE</p>
-            {plans.length === 0 ? (
-              <p className="text-xs text-muted">Ils se produisent depuis un plan : créez d'abord le plan individuel ci-dessus.</p>
-            ) : (
-              <>
-                <div className="mb-2 max-w-md">
-                  <Field label="Plan utilisé">
-                    <SearchSelect value={planAgefice} onChange={setPlanAgefice} options={optionsPlans} placeholder="Choisir un plan…" />
-                  </Field>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {AGEFICE.map((a) => (
-                    <Button key={a.kind} variant="secondary" onClick={() => void genererAgefice(a.kind)} disabled={!!busy}>
-                      {busy === `agefice-${a.kind}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {a.label}
-                    </Button>
-                  ))}
-                </div>
-                {AGEFICE.some((a) => pdfsDe(a.kind).length) && (
-                  <ul className="mt-2 space-y-1.5">{pdfs.filter((d) => AGEFICE.some((a) => a.kind === d.kind)).map(ligneDoc)}</ul>
-                )}
-              </>
-            )}
-          </div>
-
+      {/* ── 3. Formation ── */}
+      <Etape n={3} titre="Formation" etat={etats[2]} ouvert={estOuverte(3)} onToggle={() => basculer(3)}
+        resume={sessionsInscrit.length
+          ? sessionsInscrit.map((x) => `${x.titre} · ${formatDate(x.date_debut)}`).join(' — ')
+          : 'Aucune session réservée'}>
+        <OngletCalendrier contact={contact} onChanged={() => { void charger(); onChanged(); }} />
+        <div>
+          <p className="mb-1 flex items-center gap-2 text-sm font-medium text-fg"><ClipboardCheck className="h-4 w-4 text-muted" /> Émargement</p>
+          <p className="text-xs text-muted">
+            La présence se signe par demi-journée, par code envoyé au stagiaire.{' '}
+            <Link to="/emargement" className="font-medium text-brand-600 hover:underline dark:text-brand-400">Ouvrir l'émargement</Link>
+          </p>
+        </div>
+        {boutonAgefice('emargement')}
+        <div>
           {/* Qualiopi */}
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium text-fg">Justificatifs Qualiopi des sessions</p>
+              <p className="text-sm font-medium text-fg">Checklist Qualiopi de la session</p>
               {participations.length > 0 && (
                 <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => void preparerQualiopi()} disabled={!!busy}>
                   {busy === 'q-prep' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Re-synchroniser
@@ -533,7 +710,7 @@ export default function OngletDocuments({
               )}
             </div>
             {participations.length === 0 ? (
-              <p className="text-xs text-muted">Le bénéficiaire n'est inscrit à aucune session (onglet Calendrier).</p>
+              <p className="text-xs text-muted">Elle apparaît dès que le bénéficiaire est inscrit à une session (ci-dessus).</p>
             ) : qDocs.length === 0 ? (
               <p className="text-xs text-muted">Checklist non provisionnée : cliquez sur Re-synchroniser.</p>
             ) : (
@@ -548,7 +725,7 @@ export default function OngletDocuments({
                         <span className="text-xs text-muted"> · {d.participant_id ? 'individuel' : 'collectif'}{s ? ` · ${s.titre}` : ''}</span>
                       </span>
                       <Badge tone={DOC_STATUT_TONES[d.statut]}>{DOC_STATUT_LABELS[d.statut]}</Badge>
-                      {d.fichier_url && <FileLink bucket="qualiopi" value={d.fichier_url} />}
+                      {d.fichier_url && <FileLink bucket={(d.bucket ?? 'qualiopi') as Bucket} value={d.fichier_url} />}
                       {generable && (
                         <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => void genererQualiopi(d)} disabled={!!busy}>
                           {busy === `q-${d.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Générer
@@ -561,40 +738,14 @@ export default function OngletDocuments({
             )}
           </div>
 
-          {/* Positionnement */}
-          <div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-2 text-sm font-medium text-fg"><ClipboardCheck className="h-4 w-4 text-muted" /> Test de positionnement</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" onClick={() => void envoyerTest()} disabled={!!busy || !contact}>
-                  {busy === 'pos-lien' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Envoyer le test
-                </Button>
-                <Link to="/positionnement" className="inline-flex items-center gap-1 text-xs text-muted hover:text-brand-600">
-                  <ExternalLink className="h-3.5 w-3.5" /> Liens de groupe et toutes les réponses
-                </Link>
-              </div>
-            </div>
-            {positionnements.length === 0 ? <p className="text-xs text-muted">Aucune réponse pour l'instant.</p> : (
-              <ul className="space-y-1.5">
-                {positionnements.map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                    <span className="min-w-0 flex-1 truncate text-fg">{p.nom}</span>
-                    <Badge tone="info">{p.niveau ?? '—'}{p.pct != null ? ` · ${p.pct} %` : ''}</Badge>
-                    <span className="text-xs text-muted">{formatDate(p.completed_at)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {liens.filter((l) => l.actif).map((l) => (
-              <div key={l.id} className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span>Lien {l.multi ? 'de groupe' : 'personnel'} · {l.statut}{l.sent_at ? ` · envoyé le ${formatDate(l.sent_at)}` : ''}</span>
-                <button onClick={() => void copierLien(l.token)} className="inline-flex items-center gap-1 hover:text-brand-600">
-                  {copie === l.token ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} Copier le lien
-                </button>
-              </div>
-            ))}
-          </div>
+        </div>
+      </Etape>
 
+      {/* ── 4. Clôture ── */}
+      <Etape n={4} titre="Clôture" etat={etats[3]} ouvert={estOuverte(4)} onToggle={() => basculer(4)}
+        resume={`${evaluations.length} évaluation(s) reçue(s) · attestation ${pieceDeposee("Attestation d'assiduité") ? 'déposée' : 'à produire'}`}>
+        {boutonAgefice('attestation')}
+        <div>
           {/* Évaluations à chaud / à froid */}
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -642,7 +793,7 @@ export default function OngletDocuments({
             ))}
           </div>
         </div>
-      </Card>
+      </Etape>
 
       <ConventionPositionnementModal
         open={conventionOpen}

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users, Building2, FolderKanban, GraduationCap, FolderArchive, Mail, ReceiptText, FileText, X } from 'lucide-react';
+import { Search, Users, Building2, FolderKanban, GraduationCap, FolderArchive, Mail, ReceiptText, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn, fullName } from '@/lib/utils';
 
 /**
  * Recherche globale (Ctrl+K / ⌘K) : contacts, entreprises, dossiers,
- * formations, documents, e-mails, devis et factures — 5 résultats par type,
+ * formations, documents, e-mails et devis — 5 résultats par type,
  * requêtes ilike en parallèle avec anti-rebond. La RLS s'applique : chacun ne
  * trouve que ce qu'il a le droit de voir.
  */
@@ -23,7 +23,6 @@ const TYPE_META: Record<string, { label: string; icon: typeof Users }> = {
   document: { label: 'Documents', icon: FolderArchive },
   email: { label: 'E-mails', icon: Mail },
   devis: { label: 'Devis', icon: ReceiptText },
-  facture: { label: 'Factures', icon: FileText },
 };
 
 const esc = (s: string) => s.replace(/[%_,()]/g, ' ').trim();
@@ -32,7 +31,7 @@ async function chercher(q: string): Promise<Resultat[]> {
   const t = esc(q);
   if (t.length < 2) return [];
   const like = `%${t}%`;
-  const [contacts, entreprises, dossiers, formations, documents, emails, devis, factures] = await Promise.all([
+  const [contacts, entreprises, dossiers, formations, documents, emails, devis] = await Promise.all([
     supabase.from('contacts').select('id, nom, prenom, email, telephone, ville')
       .or(`nom.ilike.${like},prenom.ilike.${like},email.ilike.${like},telephone.ilike.${like}`).limit(5),
     supabase.from('entreprises').select('id, raison_sociale, siret, ville')
@@ -47,18 +46,15 @@ async function chercher(q: string): Promise<Resultat[]> {
       .or(`sujet.ilike.${like},expediteur.ilike.${like}`).order('created_at', { ascending: false }).limit(5),
     supabase.from('devis').select('id, numero, objet')
       .or(`numero.ilike.${like},objet.ilike.${like}`).limit(5),
-    supabase.from('factures').select('id, numero, objet')
-      .or(`numero.ilike.${like},objet.ilike.${like}`).limit(5),
   ]);
   const out: Resultat[] = [];
   for (const c of contacts.data ?? []) out.push({ type: 'contact', id: c.id, label: fullName(c.prenom, c.nom), sub: c.email ?? c.telephone ?? c.ville ?? undefined, lien: `/contacts?id=${c.id}` });
   for (const e of entreprises.data ?? []) out.push({ type: 'entreprise', id: e.id, label: e.raison_sociale, sub: e.ville ?? e.siret ?? undefined, lien: '/entreprises' });
   for (const d of dossiers.data ?? []) out.push({ type: 'dossier', id: d.id, label: d.reference, sub: d.intitule, lien: `/dossiers/${d.id}` });
   for (const f of formations.data ?? []) out.push({ type: 'formation', id: f.id, label: f.intitule, sub: f.reference ?? undefined, lien: '/catalogue' });
-  for (const d of documents.data ?? []) out.push({ type: 'document', id: d.id, label: d.titre, sub: d.categorie ?? undefined, lien: '/documents' });
+  for (const d of documents.data ?? []) out.push({ type: 'document', id: d.id, label: d.titre, sub: d.categorie ?? undefined, lien: '/qualiopi?onglet=documents' });
   for (const m of emails.data ?? []) out.push({ type: 'email', id: m.id, label: m.sujet ?? '(sans sujet)', sub: m.expediteur ?? undefined, lien: '/messagerie' });
   for (const d of devis.data ?? []) out.push({ type: 'devis', id: d.id, label: d.numero, sub: d.objet ?? undefined, lien: '/devis' });
-  for (const f of factures.data ?? []) out.push({ type: 'facture', id: f.id, label: f.numero, sub: f.objet ?? undefined, lien: '/factures' });
   return out;
 }
 

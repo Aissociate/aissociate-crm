@@ -68,7 +68,7 @@ Deno.serve(async (req: Request) => {
     const { annee } = await req.json().catch(() => ({ annee: new Date().getFullYear() }));
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const [criteresR, indicateursR, preuvesR, documentsR, sessionsR, ddocsR, envoisR, reponsesR, modelesR, orgR] =
+    const [criteresR, indicateursR, preuvesR, documentsR, sessionsR, ddocsR, participantsR, positionnementsR, evaluationsR, emCreneauxR, emSignaturesR, orgR] =
       await Promise.all([
         sb.from("qualiopi_criteres").select("*").order("numero"),
         sb.from("qualiopi_indicateurs").select("*").order("numero"),
@@ -76,9 +76,11 @@ Deno.serve(async (req: Request) => {
         sb.from("documents").select("*"),
         sb.from("sessions_formation").select("*").order("date_debut"),
         sb.from("qualiopi_dossier_docs").select("*"),
-        sb.from("questionnaire_envois").select("*"),
-        sb.from("questionnaire_reponses").select("*"),
-        sb.from("questionnaire_modeles").select("*"),
+        sb.from("session_participants").select("*"),
+        sb.from("positionnements").select("*"),
+        sb.from("evaluations").select("*"),
+        sb.from("emargement_creneaux").select("*").order("date"),
+        sb.from("emargement_signatures").select("*"),
         sb.from("parametres").select("valeur").eq("cle", "organisme").maybeSingle(),
       ]);
 
@@ -88,9 +90,11 @@ Deno.serve(async (req: Request) => {
     const documents = documentsR.data ?? [];
     const sessions = sessionsR.data ?? [];
     const ddocs = ddocsR.data ?? [];
-    const envois = envoisR.data ?? [];
-    const reponses = reponsesR.data ?? [];
-    const modeles = modelesR.data ?? [];
+    const participants = participantsR.data ?? [];
+    const positionnements = positionnementsR.data ?? [];
+    const evaluations = evaluationsR.data ?? [];
+    const emCreneaux = emCreneauxR.data ?? [];
+    const emSignatures = emSignaturesR.data ?? [];
     const org = (orgR.data?.valeur ?? {}) as Record<string, string>;
 
     const docById = new Map(documents.map((d: Record<string, unknown>) => [d.id, d]));
@@ -132,7 +136,10 @@ Deno.serve(async (req: Request) => {
     for (const crit of criteres) {
       line(`Critere ${crit.numero} - ${crit.libelle}`, 11, fontB, brand);
       for (const ind of indicateurs.filter((i: Record<string, unknown>) => i.critere === crit.numero)) {
-        const nb = preuves.filter((p: Record<string, unknown>) => p.indicateur_numero === ind.numero).length;
+        // Preuves de l'organisme + pieces de dossier faites (generees, recues, signees, validees).
+        const nb = preuves.filter((p: Record<string, unknown>) => p.indicateur_numero === ind.numero).length
+          + ddocs.filter((d: Record<string, unknown>) => d.indicateur_numero === ind.numero
+              && ["valide", "signe", "recu", "genere"].includes(d.statut as string)).length;
         line(`  #${ind.numero} ${ind.intitule}  -  ${CONF[ind.statut as string] ?? ind.statut}  (${nb} preuve(s))`, 9);
       }
       y -= 4;
@@ -157,35 +164,70 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Dossiers de formation (niveau B) ──
-    const modeleByCode = new Map(modeles.map((m: Record<string, unknown>) => [m.code, m]));
-    const envoiById = new Map(envois.map((e: Record<string, unknown>) => [e.id, e]));
+    // Chaque piece est lue dans SON bucket : « qualiopi » (generee ou televersee
+    // ici), « plans » ou « pieces » quand la synchronisation l'a cochee depuis
+    // une convention, un plan ou une piece du dossier client.
+    type Row = Record<string, unknown>;
+    const memePersonne = (x: Row, p: Row) =>
+      (!!p.contact_id && x.contact_id === p.contact_id)
+      || (!!p.email && !!x.email && String(x.email).toLowerCase() === String(p.email).toLowerCase());
+    const nomDe = (p: Row) => [p.prenom, p.nom].filter(Boolean).join(" ").trim() || String(p.nom ?? "");
+    const libres = (r: unknown) => Object.entries((r ?? {}) as Record<string, unknown>)
+      .map(([k, v]) => `- ${k} : ${typeof v === "object" ? JSON.stringify(v) : String(v)}`);
+
     for (const s of sessions) {
       const sDir = `Dossiers de formation/${safe(s.titre as string)} (${String(s.date_debut).slice(0, 10)})`;
-      for (const d of ddocs.filter((x: Record<string, unknown>) => x.session_id === s.id)) {
+      const parts = participants.filter((p: Row) => p.session_id === s.id);
+      const partById = new Map(parts.map((p: Row) => [p.id, p]));
+      const sDocs = ddocs.filter((x: Row) => x.session_id === s.id);
+
+      for (const d of sDocs) {
         if (!d.fichier_url) continue;
-        const bytes = await fetchBytes(d.fichier_url as string, "qualiopi");
+        const bytes = await fetchBytes(d.fichier_url as string, (d.bucket as string) || "qualiopi");
         if (!bytes) continue;
-        files[`${sDir}/${safe(d.libelle as string)}.${extOf(d.fichier_url as string)}`] = bytes;
+        const qui = d.participant_id ? ` - ${safe(nomDe((partById.get(d.participant_id) ?? {}) as Row))}` : "";
+        files[`${sDir}/${safe(d.libelle as string)}${qui}.${extOf(d.fichier_url as string)}`] = bytes;
       }
-      const sEnvois = envois.filter((e: Record<string, unknown>) => e.session_id === s.id);
-      for (const rep of reponses) {
-        const env = envoiById.get((rep as Record<string, unknown>).envoi_id) as Record<string, unknown> | undefined;
-        if (!env || env.session_id !== s.id) continue;
-        const m = modeleByCode.get(env.modele_code) as Record<string, unknown> | undefined;
-        const lines = [
-          `Questionnaire : ${m?.titre ?? env.modele_code}`,
-          `Destinataire : ${env.destinataire_nom ?? ""} (${env.destinataire_email ?? ""})`,
-          `Note globale : ${(rep as Record<string, unknown>).note_globale ?? "-"}/5`, "",
-          ...Object.entries(((rep as Record<string, unknown>).reponses ?? {}) as Record<string, unknown>)
-            .map(([k, v]) => `- ${k} : ${String(v)}`),
-        ];
-        files[`${sDir}/Reponses/${safe(String(m?.titre ?? env.modele_code))} - ${safe(String(env.destinataire_nom ?? env.id))}.txt`] =
-          strToU8(clean(lines.join("\n")));
+
+      // Emargement : releve des signatures (aucun fichier, la preuve est la trace).
+      const creneaux = emCreneaux.filter((c: Row) => c.session_id === s.id);
+      if (creneaux.length) {
+        const lignes = [`Emargement - ${s.titre}`, ""];
+        for (const c of creneaux) {
+          lignes.push(`${String(c.date).slice(0, 10)} ${c.demi_journee ?? ""} (${c.heures ?? "-"} h)`);
+          for (const p of parts) {
+            const sig = emSignatures.find((x: Row) => x.creneau_id === c.id && x.participant_id === p.id);
+            lignes.push(`  - ${nomDe(p)} : ${sig ? `${sig.statut} (${sig.mode ?? "-"}, ${String(sig.signe_at ?? sig.code_at ?? "").slice(0, 16)})` : "non signe"}`);
+          }
+        }
+        files[`${sDir}/Emargement - releve des signatures.txt`] = strToU8(clean(lignes.join("\n")));
       }
-      if (sEnvois.length) {
-        const synth = sEnvois.map((e: Record<string, unknown>) =>
-          `${e.modele_code} - ${e.destinataire_nom ?? ""} - ${e.statut}`).join("\n");
-        files[`${sDir}/_synthese_questionnaires.txt`] = strToU8(clean(synth));
+
+      // Positionnements et evaluations des participants (reponses completes).
+      for (const p of parts) {
+        for (const pos of positionnements.filter((x: Row) => memePersonne(x, p) || (x.session_id === s.id && String(x.nom ?? "").toLowerCase().includes(String(p.nom ?? "~").toLowerCase())))) {
+          const lignes = [
+            `Positionnement a l'entree - ${nomDe(p)}`, `Complete le : ${String(pos.completed_at ?? "").slice(0, 10)}`,
+            `Niveau : ${pos.niveau ?? "-"} (${pos.pct ?? "-"} %)`, "", String(pos.synthese ?? ""), "", ...libres(pos.reponses),
+          ];
+          files[`${sDir}/Reponses/Positionnement - ${safe(nomDe(p))}.txt`] = strToU8(clean(lignes.join("\n")));
+        }
+        for (const ev of evaluations.filter((x: Row) => memePersonne(x, p) && (!x.session_id || x.session_id === s.id))) {
+          const lignes = [
+            `Evaluation ${ev.type === "froid" ? "a froid" : "a chaud"} - ${nomDe(p)}`,
+            `Completee le : ${String(ev.completed_at ?? "").slice(0, 10)}`,
+            `Note globale : ${ev.note_globale ?? "-"}/5 - Recommandation : ${ev.nps ?? "-"}/10`, "",
+            String(ev.synthese ?? ""), "", ...libres(ev.reponses),
+          ];
+          files[`${sDir}/Reponses/Evaluation ${ev.type} - ${safe(nomDe(p))}.txt`] = strToU8(clean(lignes.join("\n")));
+        }
+      }
+
+      // Synthese de la checklist de la session.
+      if (sDocs.length) {
+        const synth = sDocs.map((d: Row) =>
+          `${d.libelle}${d.participant_id ? ` - ${nomDe((partById.get(d.participant_id) ?? {}) as Row)}` : ""} : ${d.statut}`).join("\n");
+        files[`${sDir}/_synthese_checklist.txt`] = strToU8(clean(synth));
       }
     }
 

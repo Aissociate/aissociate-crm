@@ -1,17 +1,24 @@
-// Edge Function — envoi AUTOMATIQUE des questionnaires Qualiopi (cron quotidien).
+// Edge Function — envoi AUTOMATIQUE des évaluations de formation (cron quotidien).
+//
+// Un seul système de questionnaires : les liens `evaluation_liens`
+// (/evaluation/:token). L'ancien système `questionnaire_envois` (/q/:token),
+// jamais utilisé, n'est plus servi.
 //
 // Garde-fous :
 //   - piloté par le paramètre `qualiopi_auto` : { enabled, depuis, site_url }.
 //     enabled=false => ne fait rien. depuis = date plancher : SEULES les sessions
 //     dont date_debut >= depuis sont concernées (protège les sessions passées).
-//   - fenêtres d'envoi : positionnement ~J-3 avant le début ; à chaud dès la fin ;
-//     à froid à J+90 de la fin. Relance unique 7 jours après un envoi sans réponse.
-//   - évaluations par lien (`evaluation_liens`) : envoyées à leur échéance
-//     `envoi_prevu_le` (froid = fin de formation + 30 jours).
+//   - à la fin d'une session, chaque participant ayant un e-mail reçoit un lien
+//     « à chaud » (échéance : le jour même) et un lien « à froid » (échéance :
+//     fin de formation + 30 jours). Jamais deux liens du même type pour la même
+//     personne et la même session ; rien si elle a déjà répondu.
+//   - les liens arrivés à échéance (`envoi_prevu_le`) partent par e-mail, y
+//     compris ceux programmés à la main depuis le dossier client.
 //
-// L'e-mail part via la fonction `send-email` (config SMTP existante).
+// L'e-mail part via la fonction `send-email` (config SMTP existante). Chaque
+// passage est journalisé dans `job_runs` (« Santé des jobs »).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,10 +31,26 @@ function json(body: unknown, status = 200): Response {
   });
 }
 const DAY = 86400000;
+const DELAI_FROID_JOURS = 30; // même valeur que src/lib/evaluation.ts
+const LIBELLES: Record<string, string> = {
+  chaud: "Évaluation de fin de formation",
+  froid: "Votre formation, un mois après",
+};
+const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+async function logRun(sb: SupabaseClient, startedAt: string, ok: boolean, message: string, detail?: unknown) {
+  try {
+    await sb.from("job_runs").insert({
+      fonction: "qualiopi-cron", started_at: startedAt, finished_at: new Date().toISOString(),
+      ok, message, detail: detail ?? null,
+    });
+  } catch { /* le journal ne doit jamais faire échouer le job */ }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
+  const startedAt = new Date().toISOString();
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const sb = createClient(SUPABASE_URL, SERVICE);
@@ -35,78 +58,68 @@ Deno.serve(async (req: Request) => {
   try {
     const { data: cfgRow } = await sb.from("parametres").select("valeur").eq("cle", "qualiopi_auto").maybeSingle();
     const cfg = (cfgRow?.valeur ?? {}) as { enabled?: boolean; depuis?: string; site_url?: string };
-    if (!cfg.enabled) return json({ ok: true, skipped: "desactive (parametres.qualiopi_auto.enabled=false)" });
+    if (!cfg.enabled) {
+      await logRun(sb, startedAt, true, "désactivé (parametres.qualiopi_auto.enabled=false)");
+      return json({ ok: true, skipped: "desactive (parametres.qualiopi_auto.enabled=false)" });
+    }
 
     const site = (cfg.site_url || "https://aissociate.re").replace(/\/+$/, "");
     const depuis = cfg.depuis ? new Date(cfg.depuis).getTime() : 0;
     const now = Date.now();
+    const today = ymd(now);
+    let skipped = 0;
 
-    const [envoisR, sessionsR, modelesR] = await Promise.all([
-      sb.from("questionnaire_envois").select("*").in("statut", ["a_envoyer", "envoye"]),
-      sb.from("sessions_formation").select("id, date_debut, date_fin, titre"),
-      sb.from("questionnaire_modeles").select("code, titre, moment"),
+    // ── 1. Sessions terminées : un lien à chaud et un lien à froid par participant ──
+    const [{ data: sessions }, { data: participants }, { data: liensExistants }, { data: reponses }] = await Promise.all([
+      sb.from("sessions_formation").select("id, titre, date_debut, date_fin"),
+      sb.from("session_participants").select("id, session_id, contact_id, nom, prenom, email"),
+      sb.from("evaluation_liens").select("type, contact_id, destinataire_email, session_id, date_fin_formation").eq("multi", false),
+      sb.from("evaluations").select("type, contact_id, email, session_id"),
     ]);
-    const sessions = new Map((sessionsR.data ?? []).map((s: Record<string, unknown>) => [s.id, s]));
-    const modeles = new Map((modelesR.data ?? []).map((m: Record<string, unknown>) => [m.code, m]));
+    const memePersonne = (
+      x: { contact_id?: string | null; email?: string | null },
+      p: { contact_id?: string | null; email?: string | null },
+    ) => (!!p.contact_id && x.contact_id === p.contact_id)
+      || (!!p.email && !!x.email && x.email.toLowerCase() === p.email.toLowerCase());
 
-    const startMs = (s: Record<string, unknown>) => new Date(s.date_debut as string).getTime();
-    const endMs = (s: Record<string, unknown>) => new Date((s.date_fin as string) || (s.date_debut as string)).getTime();
-
-    const sendMail = async (envoi: Record<string, unknown>, modele: Record<string, unknown>, relance: boolean) => {
-      const link = `${site}/q/${envoi.token}`;
-      const html = `
-        <p>Bonjour ${envoi.destinataire_nom ?? ""},</p>
-        <p>${relance ? "Petit rappel : merci de" : "Merci de"} prendre quelques minutes pour répondre au questionnaire
-        « <strong>${modele.titre}</strong> ».</p>
-        <p><a href="${link}" style="background:#ea6a1e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Répondre au questionnaire</a></p>
-        <p>Ou copiez ce lien : ${link}</p>
-        <p>Merci,<br/>L'équipe Aissociate</p>`;
-      const r = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SERVICE}` },
-        body: JSON.stringify({ to: envoi.destinataire_email, subject: modele.titre, html }),
-      });
-      if (!r.ok) throw new Error(`send-email ${r.status}`);
-      await sb.from("questionnaire_envois").update({
-        statut: relance ? "relance" : "envoye",
-        sent_at: new Date().toISOString(),
-        relance_at: relance ? null : new Date(now + 7 * DAY).toISOString(),
-      }).eq("id", envoi.id);
-    };
-
-    let sent = 0, relanced = 0, skipped = 0;
-
-    for (const envoi of envoisR.data ?? []) {
-      const s = envoi.session_id ? sessions.get(envoi.session_id) : null;
-      const m = modeles.get(envoi.modele_code);
-      if (!s || !m || !envoi.destinataire_email) { skipped++; continue; }
-      if (startMs(s) < depuis) { skipped++; continue; }               // garde-fou sessions passées
-
-      try {
-        if (envoi.statut === "a_envoyer") {
-          const moment = m.moment;
-          let due = false;
-          if (moment === "debut") due = startMs(s) <= now + 3 * DAY;
-          else if (moment === "fin") due = endMs(s) <= now;
-          else if (moment === "froid") due = endMs(s) + 90 * DAY <= now;
-          if (due) { await sendMail(envoi, m, false); sent++; } else skipped++;
-        } else if (envoi.statut === "envoye" && !envoi.responded_at && envoi.relance_at && new Date(envoi.relance_at).getTime() <= now) {
-          await sendMail(envoi, m, true); relanced++;
-        } else skipped++;
-      } catch (_e) { skipped++; }
+    let provisionnes = 0;
+    for (const s of sessions ?? []) {
+      const debut = new Date(s.date_debut as string).getTime();
+      const fin = new Date((s.date_fin as string) || (s.date_debut as string)).getTime();
+      if (Number.isNaN(debut) || Number.isNaN(fin)) continue;
+      if (debut < depuis || fin > now) continue;            // garde-fou + session terminée seulement
+      const finYmd = ymd(fin);
+      for (const p of (participants ?? []).filter((x) => x.session_id === s.id)) {
+        if (!p.email) { skipped++; continue; }
+        for (const type of ["chaud", "froid"]) {
+          const dejaLien = (liensExistants ?? []).some((l) => l.type === type
+            && memePersonne({ contact_id: l.contact_id, email: l.destinataire_email }, p)
+            && (l.session_id === s.id || l.date_fin_formation === finYmd));
+          const dejaRepondu = (reponses ?? []).some((e) => e.type === type
+            && memePersonne(e, p) && (!e.session_id || e.session_id === s.id));
+          if (dejaLien || dejaRepondu) continue;
+          const { error } = await sb.from("evaluation_liens").insert({
+            type, libelle: LIBELLES[type],
+            contact_id: p.contact_id, session_id: s.id,
+            destinataire_nom: [p.prenom, p.nom].filter(Boolean).join(" ").trim() || p.nom,
+            destinataire_email: p.email,
+            formation_intitule: s.titre, date_fin_formation: finYmd,
+            envoi_prevu_le: type === "chaud" ? today : ymd(fin + DELAI_FROID_JOURS * DAY),
+          });
+          if (error) skipped++; else provisionnes++;
+        }
+      }
     }
 
-    // ── Évaluations par lien (/evaluation/:token) arrivées à échéance ──────────
-    // Typiquement le froid à J+30 de la fin. Liens nominatifs seulement ; même
-    // garde-fou `depuis`, appliqué à la date de fin de formation.
-    const today = new Date(now).toISOString().slice(0, 10);
+    // ── 2. Liens arrivés à échéance : envoi par e-mail ──
     const { data: echus } = await sb.from("evaluation_liens")
       .select("id, type, token, libelle, destinataire_nom, destinataire_email, contact_id, dossier_id, date_fin_formation")
       .eq("statut", "a_envoyer").eq("actif", true).eq("multi", false)
       .not("destinataire_email", "is", null).lte("envoi_prevu_le", today);
-    let evalSent = 0;
+    let envoyes = 0;
+    const erreurs: string[] = [];
     for (const l of echus ?? []) {
-      if (depuis && (!l.date_fin_formation || new Date(l.date_fin_formation).getTime() < depuis)) { skipped++; continue; }
+      if (depuis && (!l.date_fin_formation || new Date(l.date_fin_formation).getTime() < depuis - DAY)) { skipped++; continue; }
       try {
         const link = `${site}/evaluation/${l.token}`;
         // Même texte que messageInvitation() (src/lib/evaluation.ts).
@@ -135,12 +148,20 @@ Deno.serve(async (req: Request) => {
           statut: "envoye", canal: "email", direction: "sortant",
           contact_id: l.contact_id, dossier_id: l.dossier_id, sent_at: envoyeLe, attachments: [],
         });
-        evalSent++;
-      } catch (_e) { skipped++; }
+        envoyes++;
+      } catch (e) {
+        erreurs.push(e instanceof Error ? e.message : String(e));
+      }
     }
 
-    return json({ ok: true, sent, relanced, evaluations: evalSent, skipped });
+    const bilan = { provisionnes, envoyes, skipped, erreurs: erreurs.length };
+    await logRun(sb, startedAt, erreurs.length === 0,
+      `${provisionnes} lien(s) créé(s), ${envoyes} évaluation(s) envoyée(s)${erreurs.length ? `, ${erreurs.length} échec(s)` : ""}`,
+      { ...bilan, exemples: erreurs.slice(0, 3) });
+    return json({ ok: true, ...bilan });
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : "Erreur serveur" }, 500);
+    const message = e instanceof Error ? e.message : "Erreur serveur";
+    await logRun(sb, startedAt, false, message);
+    return json({ error: message }, 500);
   }
 });

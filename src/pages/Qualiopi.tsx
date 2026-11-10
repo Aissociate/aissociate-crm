@@ -1,36 +1,46 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck, ChevronDown, FileCheck2, FolderArchive, MessageSquare, Download,
-  Sparkles, Send, Link2, Eye, Paperclip, AlertTriangle, Loader2, RefreshCw, CheckCircle2,
+  Sparkles, Paperclip, AlertTriangle, Loader2, RefreshCw, CheckCircle2,
   FileText, Check, X,
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  PageHeader, Button, Badge, Card, StatCard, EmptyState, Spinner, SearchSelect, Modal, Field,
+  PageHeader, Button, Badge, Card, StatCard, EmptyState, Spinner, SearchSelect,
 } from '@/components/ui';
 import type { SearchOption } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import { formatDate, cn } from '@/lib/utils';
 import {
   APPLICABLE_LABELS, CONFORMITE_LABELS, CONFORMITE_TONES, DOC_STATUT_LABELS, DOC_STATUT_TONES,
-  QUESTIONNAIRE_STATUT_LABELS, QUESTIONNAIRE_STATUT_TONES, MOMENT_LABELS, GENERABLE_DOC_TYPES,
+  GENERABLE_DOC_TYPES,
 } from '@/lib/qualiopi';
 import type {
   QualiopiCritere, QualiopiIndicateur, QualiopiConformite, QualiopiDossierDoc, QualiopiDocStatut,
-  QualiopiPreuveDocument, QuestionnaireEnvoi, QuestionnaireModele, QuestionnaireReponse,
+  QualiopiPreuveDocument, Positionnement, Evaluation, EvaluationLien,
   QualiopiModeleDoc, Document as DocRow, SessionFormation, SessionParticipant,
 } from '@/lib/database.types';
 
-type Tab = 'referentiel' | 'dossiers' | 'questionnaires' | 'modeles';
+import type { Bucket } from '@/lib/storage';
+
+// L'Espace documentaire (procédures, modèles, preuves de l'organisme) vit ici.
+const EspaceDocumentaire = lazy(() => import('@/pages/Documents'));
+
+const TABS = ['referentiel', 'dossiers', 'questionnaires', 'documents', 'modeles'] as const;
+type Tab = typeof TABS[number];
 
 const CONFORMITES: QualiopiConformite[] = ['conforme', 'a_completer', 'non_applicable', 'a_verifier'];
 const DOC_STATUTS: QualiopiDocStatut[] = ['a_generer', 'genere', 'envoye', 'signe', 'recu', 'valide', 'non_applicable'];
 
 export default function Qualiopi() {
   const { session } = useAuth();
-  const [tab, setTab] = useState<Tab>('referentiel');
+  // Onglet dans l'URL (?onglet=…) : la recherche globale renvoie sur « documents ».
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = TABS.find((t) => t === params.get('onglet')) ?? 'referentiel';
+  const setTab = (t: Tab) => setParams((p) => { p.set('onglet', t); return p; }, { replace: true });
   const [exporting, setExporting] = useState(false);
 
   const criteres = useCollection<QualiopiCritere>('qualiopi_criteres', { orderBy: { column: 'numero' } });
@@ -107,18 +117,19 @@ export default function Qualiopi() {
         <StatCard label="Non applicables" value={stats.na} icon={<FileCheck2 className="h-5 w-5" />} />
       </div>
 
-      <div className="mb-6 flex gap-1 border-b border-line">
+      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
         {([
           ['referentiel', 'Référentiel', ShieldCheck],
           ['dossiers', 'Dossiers de formation', FolderArchive],
-          ['questionnaires', 'Questionnaires', MessageSquare],
+          ['questionnaires', 'Positionnement & évaluations', MessageSquare],
+          ['documents', "Documents de l'organisme", FileCheck2],
           ['modeles', 'Modèles de documents', FileText],
         ] as [Tab, string, typeof ShieldCheck][]).map(([id, label, Icon]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
             className={cn(
-              'flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition',
+              'flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition',
               tab === id ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-muted hover:text-fg',
             )}
           >
@@ -141,6 +152,11 @@ export default function Qualiopi() {
       )}
       {tab === 'dossiers' && <Dossiers userId={session?.user.id ?? null} />}
       {tab === 'questionnaires' && <Questionnaires />}
+      {tab === 'documents' && (
+        <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>
+          <EspaceDocumentaire />
+        </Suspense>
+      )}
       {tab === 'modeles' && <Modeles />}
     </div>
   );
@@ -376,6 +392,8 @@ function Dossiers({ userId }: { userId: string | null }) {
   };
   const uploadDoc = async (id: string, value: string) => {
     await supabase.from('qualiopi_dossier_docs').update({ fichier_url: value, statut: 'recu' }).eq('id', id);
+    // Fichier téléversé ici = bucket « qualiopi » (colonne absente tant que la migration n'est pas passée : sans effet).
+    await supabase.from('qualiopi_dossier_docs').update({ bucket: 'qualiopi' }).eq('id', id);
     docs.refresh();
   };
   // Publipostage sur modèle .docx si dispo, sinon génération pdf-lib générique.
@@ -393,7 +411,7 @@ function Dossiers({ userId }: { userId: string | null }) {
   };
 
   if (sessions.loading) return <div className="flex justify-center py-16"><Spinner /></div>;
-  if (sessions.data.length === 0) return <EmptyState title="Aucune session de formation" message="Créez une session dans le Calendrier : son dossier Qualiopi sera provisionné automatiquement." />;
+  if (sessions.data.length === 0) return <EmptyState title="Aucune session de formation" message="Créez une session dans le Calendrier : sa checklist Qualiopi est créée et se coche seule à mesure que les documents existent." />;
 
   return (
     <div className="space-y-3">
@@ -478,7 +496,8 @@ function DocGroup({
             <span className="flex-1 text-sm text-fg">{d.libelle}</span>
             {modelTypes.has(d.type_doc) && <Badge tone="info">modèle</Badge>}
             <Badge tone={DOC_STATUT_TONES[d.statut]}>{DOC_STATUT_LABELS[d.statut]}</Badge>
-            {d.fichier_url && <FileLink bucket="qualiopi" value={d.fichier_url} />}
+            {d.source === 'auto' && <Badge tone="neutral">auto</Badge>}
+            {d.fichier_url && <FileLink bucket={(d.bucket ?? 'qualiopi') as Bucket} value={d.fichier_url} />}
             {canGenerate && (
               <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => onGenerate(d.id, d.type_doc)} disabled={busy === d.id}>
                 {busy === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Générer
@@ -497,140 +516,52 @@ function DocGroup({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 3 — QUESTIONNAIRES
+// TAB 3 — POSITIONNEMENT & ÉVALUATIONS
+// Un seul système de questionnaires : les liens /positionnement et /evaluation
+// envoyés depuis le dossier client. Cet onglet en donne la synthèse d'audit.
 // ─────────────────────────────────────────────────────────────────────────────
 function Questionnaires() {
-  const envois = useCollection<QuestionnaireEnvoi>('questionnaire_envois', { orderBy: { column: 'created_at', ascending: false } });
-  const reponses = useCollection<QuestionnaireReponse>('questionnaire_reponses');
-  const modeles = useCollection<QuestionnaireModele>('questionnaire_modeles');
-  const sessions = useCollection<SessionFormation>('sessions_formation');
-  const [view, setView] = useState<QuestionnaireReponse | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const positionnements = useCollection<Positionnement>('positionnements');
+  const evaluations = useCollection<Evaluation>('evaluations');
+  const liens = useCollection<EvaluationLien>('evaluation_liens');
 
-  const modeleByCode = new Map(modeles.data.map((m) => [m.code, m]));
-  const sessionById = new Map(sessions.data.map((s) => [s.id, s]));
-  const repByEnvoi = new Map(reponses.data.map((r) => [r.envoi_id, r]));
+  if (positionnements.loading || evaluations.loading || liens.loading) {
+    return <div className="flex justify-center py-16"><Spinner /></div>;
+  }
 
-  const notes = reponses.data.map((r) => r.note_globale).filter((n): n is number => n != null);
-  const satisfaction = notes.length ? (notes.reduce((a, b) => a + b, 0) / notes.length) : null;
-  const tauxReponse = envois.data.length ? Math.round((reponses.data.length / envois.data.length) * 100) : 0;
-
-  const link = (token: string) => `${window.location.origin}/q/${token}`;
-
-  const sendOne = async (e: QuestionnaireEnvoi, relance = false) => {
-    if (!e.destinataire_email) { alert('Aucune adresse e-mail pour ce destinataire.'); return; }
-    const m = modeleByCode.get(e.modele_code);
-    setBusy(e.id);
-    const url = link(e.token);
-    const html = `
-      <p>Bonjour ${e.destinataire_nom ?? ''},</p>
-      <p>${relance ? 'Petit rappel : merci de' : 'Merci de'} prendre quelques minutes pour répondre au questionnaire
-      « <strong>${m?.titre ?? e.modele_code}</strong> ».</p>
-      <p><a href="${url}" style="background:#ea6a1e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Répondre au questionnaire</a></p>
-      <p>Ou copiez ce lien : ${url}</p>
-      <p>Merci,<br/>L'équipe Aissociate</p>`;
-    try {
-      const { error } = await supabase.functions.invoke('send-email', {
-        body: { to: e.destinataire_email, subject: m?.titre ?? 'Questionnaire de formation', html },
-      });
-      if (error) throw error;
-      await supabase.from('questionnaire_envois').update({
-        statut: relance ? 'relance' : 'envoye', sent_at: new Date().toISOString(),
-      }).eq('id', e.id);
-      envois.refresh();
-    } catch (err) {
-      alert("Envoi impossible (SMTP non configuré ?). " + (err instanceof Error ? err.message : ''));
-    } finally { setBusy(null); }
-  };
-
-  const copyLink = (token: string) => {
-    navigator.clipboard.writeText(link(token));
-  };
-
-  if (envois.loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  const nominatifs = liens.data.filter((l) => !l.multi && l.actif);
+  const envoyes = nominatifs.filter((l) => l.statut !== 'a_envoyer');
+  const completes = nominatifs.filter((l) => l.statut === 'complete');
+  const taux = envoyes.length ? Math.round((completes.length / envoyes.length) * 100) : 0;
+  const notes = evaluations.data.map((e) => Number(e.note_globale)).filter((n) => Number.isFinite(n) && n > 0);
+  const satisfaction = notes.length ? notes.reduce((x, y) => x + y, 0) / notes.length : null;
+  const aVenir = nominatifs.filter((l) => l.statut === 'a_envoyer');
+  const parType = (t: 'chaud' | 'froid') => evaluations.data.filter((e) => e.type === t).length;
+  const lienCls = 'inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-fg transition hover:bg-surface-2';
 
   return (
-    <div>
-      <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Taux de réponse" value={`${tauxReponse}%`} icon={<MessageSquare className="h-5 w-5" />} hint={`${reponses.data.length}/${envois.data.length} envois`} />
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-4">
+        <StatCard label="Positionnements reçus" value={positionnements.data.length} icon={<FileCheck2 className="h-5 w-5" />} />
+        <StatCard label="Évaluations reçues" value={evaluations.data.length} icon={<MessageSquare className="h-5 w-5" />} hint={`${parType('chaud')} à chaud · ${parType('froid')} à froid`} />
+        <StatCard label="Taux de réponse" value={`${taux}%`} icon={<CheckCircle2 className="h-5 w-5" />} hint={`${completes.length}/${envoyes.length} liens envoyés`} />
         <StatCard label="Satisfaction moyenne" value={satisfaction != null ? `${satisfaction.toFixed(1)}/5` : '—'} icon={<Sparkles className="h-5 w-5" />} />
-        <StatCard label="En attente d'envoi" value={envois.data.filter((e) => e.statut === 'a_envoyer').length} icon={<Send className="h-5 w-5" />} />
       </div>
 
-      {envois.data.length === 0 ? (
-        <EmptyState title="Aucun questionnaire" message="Les envois sont provisionnés automatiquement à la création d'une session (positionnement, à chaud, à froid)." />
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-line bg-surface-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="px-4 py-2.5">Destinataire</th>
-                  <th className="px-4 py-2.5">Questionnaire</th>
-                  <th className="px-4 py-2.5">Session</th>
-                  <th className="px-4 py-2.5">Statut</th>
-                  <th className="px-4 py-2.5">Envoyé le</th>
-                  <th className="px-4 py-2.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {envois.data.map((e) => {
-                  const m = modeleByCode.get(e.modele_code);
-                  const rep = repByEnvoi.get(e.id);
-                  const sess = e.session_id ? sessionById.get(e.session_id) : null;
-                  return (
-                    <tr key={e.id}>
-                      <td className="px-4 py-2.5">
-                        <p className="font-medium text-fg">{e.destinataire_nom ?? '—'}</p>
-                        <p className="text-xs text-muted">{e.destinataire_email ?? ''}</p>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <p className="text-fg">{m?.titre ?? e.modele_code}</p>
-                        <p className="text-xs text-muted">{MOMENT_LABELS[m?.moment ?? 'autre']}</p>
-                      </td>
-                      <td className="px-4 py-2.5 text-muted">{sess?.titre ?? '—'}</td>
-                      <td className="px-4 py-2.5"><Badge tone={QUESTIONNAIRE_STATUT_TONES[e.statut]}>{QUESTIONNAIRE_STATUT_LABELS[e.statut]}</Badge></td>
-                      <td className="px-4 py-2.5 text-muted">{e.sent_at ? formatDate(e.sent_at) : '—'}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-1">
-                          {rep ? (
-                            <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => setView(rep)}><Eye className="h-3.5 w-3.5" /> Réponse</Button>
-                          ) : (
-                            <>
-                              <button onClick={() => copyLink(e.token)} title="Copier le lien" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-fg"><Link2 className="h-4 w-4" /></button>
-                              <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => sendOne(e, e.statut !== 'a_envoyer')} disabled={busy === e.id}>
-                                {busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                                {e.statut === 'a_envoyer' ? 'Envoyer' : 'Relancer'}
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <Modal open={!!view} onClose={() => setView(null)} title="Réponse au questionnaire" wide>
-        {view && (
-          <div className="space-y-3">
-            {view.note_globale != null && <p className="text-sm"><span className="font-semibold">Note globale :</span> {view.note_globale}/5</p>}
-            <div className="space-y-2">
-              {Object.entries((view.reponses ?? {}) as Record<string, unknown>).map(([k, val]) => (
-                <div key={k} className="rounded-lg bg-surface-2 p-3">
-                  <p className="text-xs font-semibold text-muted">{k}</p>
-                  <p className="text-sm text-fg">{String(val)}</p>
-                </div>
-              ))}
-            </div>
-            {view.commentaire && <p className="text-sm text-muted">{view.commentaire}</p>}
-          </div>
+      <Card>
+        <p className="text-sm text-fg">
+          Le test de positionnement et les évaluations à chaud et à froid s'envoient depuis le dossier client
+          (étapes « Montage » et « Clôture »). Chaque réponse coche automatiquement la pièce correspondante
+          dans « Dossiers de formation ».
+        </p>
+        {aVenir.length > 0 && (
+          <p className="mt-2 text-sm text-muted">{aVenir.length} évaluation(s) programmée(s), pas encore envoyée(s).</p>
         )}
-      </Modal>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link to="/positionnement" className={lienCls}>Positionnements : liens et réponses</Link>
+          <Link to="/evaluations" className={lienCls}>Évaluations : liens et réponses</Link>
+        </div>
+      </Card>
     </div>
   );
 }

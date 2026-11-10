@@ -89,7 +89,8 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
         supabase.from('dossiers').select('id, reference, intitule, statut, created_at').eq('contact_id', contactId),
         supabase.from('plans_formation').select('nom, statut, created_at').eq('contact_id', contactId),
         supabase.from('session_participants').select('statut, created_at, session_id').eq('contact_id', contactId),
-        supabase.from('questionnaire_envois').select('modele_code, statut, sent_at, responded_at, created_at').eq('contact_id', contactId),
+        // Positionnement et évaluations : le système unique de questionnaires.
+        supabase.from('evaluation_liens').select('type, libelle, statut, sent_at, created_at').eq('contact_id', contactId).eq('multi', false),
         supabase.from('contact_documents').select('titre, created_at').eq('contact_id', contactId),
         supabase.from('contact_requests').select('request_type, source, created_at').eq('contact_id', contactId),
       ]);
@@ -200,13 +201,13 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
       }
       for (const q of quests.data ?? []) {
         out.push({
-          date: q.responded_at ?? q.sent_at ?? q.created_at,
+          date: q.sent_at ?? q.created_at,
           famille: 'formation',
           icone: <ListChecks className="h-3.5 w-3.5" />,
-          titre: `Questionnaire ${q.modele_code}`,
-          badge: q.responded_at
+          titre: `${q.libelle} (${q.type === 'froid' ? 'à froid' : 'à chaud'})`,
+          badge: q.statut === 'complete'
             ? { text: 'Répondu', tone: 'success' }
-            : { text: q.statut, tone: q.statut === 'envoye' ? 'info' : 'neutral' },
+            : { text: q.statut === 'envoye' ? 'Envoyé' : 'À envoyer', tone: q.statut === 'envoye' ? 'info' : 'neutral' },
         });
       }
       for (const d of docs.data ?? []) {

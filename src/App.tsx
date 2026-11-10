@@ -18,7 +18,6 @@ const Pipeline = lazy(() => import('@/pages/Pipeline'));
 const Formations = lazy(() => import('@/pages/Formations'));
 const PlansFormation = lazy(() => import('@/pages/PlansFormation'));
 const Devis = lazy(() => import('@/pages/Devis'));
-const Factures = lazy(() => import('@/pages/Factures'));
 const Tresorerie = lazy(() => import('@/pages/Tresorerie'));
 const Positionnement = lazy(() => import('@/pages/Positionnement'));
 const Evaluations = lazy(() => import('@/pages/Evaluations'));
@@ -28,7 +27,6 @@ const DossierDetail = lazy(() => import('@/pages/DossierDetail'));
 const Calendrier = lazy(() => import('@/pages/Calendrier'));
 const Emargement = lazy(() => import('@/pages/Emargement'));
 const Formateurs = lazy(() => import('@/pages/Formateurs'));
-const Kanban = lazy(() => import('@/pages/Kanban'));
 const Documents = lazy(() => import('@/pages/Documents'));
 const Qualiopi = lazy(() => import('@/pages/Qualiopi'));
 const Messagerie = lazy(() => import('@/pages/Messagerie'));
@@ -36,7 +34,6 @@ const Assistant = lazy(() => import('@/pages/Assistant'));
 const Commande = lazy(() => import('@/pages/Commande'));
 const BlogAdmin = lazy(() => import('@/pages/BlogAdmin'));
 const Newsletter = lazy(() => import('@/pages/Newsletter'));
-const Recrutement = lazy(() => import('@/pages/Recrutement'));
 const Conseillers = lazy(() => import('@/pages/Conseillers'));
 const Statistiques = lazy(() => import('@/pages/Statistiques'));
 const ActionsAFaire = lazy(() => import('@/pages/ActionsAFaire'));
@@ -65,7 +62,6 @@ import SiteReclamations from '@/site/pages/Reclamations';
 import SiteNotFound from '@/site/pages/NotFound';
 
 // Pages publiques tokenisées (non indexées, usage ponctuel) : lazy également.
-const SiteQuestionnaire = lazy(() => import('@/site/pages/Questionnaire'));
 const SiteSignature = lazy(() => import('@/site/pages/Signature'));
 const SiteEmargement = lazy(() => import('@/site/pages/Emargement'));
 const SiteEspaceClient = lazy(() => import('@/site/pages/EspaceClient'));
@@ -109,7 +105,6 @@ export default function App() {
       </Route>
 
       {/* ── Pages publiques tokenisées (hors chrome du site, non indexées) ── */}
-      <Route path="/q/:token" element={<SiteQuestionnaire />} />
       <Route path="/signature/:token" element={<SiteSignature />} />
       <Route path="/emargement/:token" element={<SiteEmargement />} />
       <Route path="/espace/:token" element={<SiteEspaceClient />} />
@@ -129,7 +124,6 @@ export default function App() {
         <Route path="/catalogue" element={<Formations />} />
         <Route path="/plans" element={<PlansFormation />} />
         <Route path="/devis" element={<Devis />} />
-        <Route path="/factures" element={<Factures />} />
         <Route path="/tresorerie" element={<ProtectedRoute managerOnly><Tresorerie /></ProtectedRoute>} />
         <Route path="/bpf" element={<ProtectedRoute managerOnly><Bpf /></ProtectedRoute>} />
         <Route path="/dossiers" element={<Dossiers />} />
@@ -137,7 +131,6 @@ export default function App() {
         <Route path="/calendrier" element={<Calendrier />} />
         <Route path="/emargement" element={<Emargement />} />
         <Route path="/formateurs" element={<Formateurs />} />
-        <Route path="/kanban" element={<Kanban />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/qualiopi" element={<Qualiopi />} />
         <Route path="/positionnement" element={<Positionnement />} />
@@ -147,10 +140,6 @@ export default function App() {
         <Route path="/commande" element={<Commande />} />
         <Route path="/blog-admin" element={<ProtectedRoute managerOnly><BlogAdmin /></ProtectedRoute>} />
         <Route path="/newsletter" element={<ProtectedRoute managerOnly><Newsletter /></ProtectedRoute>} />
-        <Route
-          path="/recrutement"
-          element={<ProtectedRoute managerOnly><Recrutement /></ProtectedRoute>}
-        />
         <Route
           path="/conseillers"
           element={<ProtectedRoute managerOnly><Conseillers /></ProtectedRoute>}
