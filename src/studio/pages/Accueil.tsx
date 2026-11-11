@@ -49,7 +49,7 @@ export default function Accueil() {
               <button key={a.id} type="button" onClick={() => setAgentId(a.id)}
                 className={cx('flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
                   a.id === agentId ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50')}>
-                <Avatar prenom={a.prenom} couleur={a.couleur} taille={16} /> {a.prenom}
+                <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={16} /> {a.prenom}
               </button>
             ))}
           </div>
@@ -108,7 +108,7 @@ export default function Accueil() {
           {me.agents.map((a) => (
             <Link key={a.id} to={`/studio/assistants/${a.id}`}
               className="flex items-start gap-3 rounded-2xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-md">
-              <Avatar prenom={a.prenom} couleur={a.couleur} />
+              <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} />
               <div className="min-w-0">
                 <p className="font-medium">{a.prenom} <span className="text-sm font-normal text-neutral-500">· {a.metier}</span></p>
                 <p className="mt-0.5 line-clamp-2 text-sm text-neutral-500">{a.accroche}</p>
@@ -126,7 +126,7 @@ export default function Accueil() {
               const a = me.agents.find((x) => x.id === c.agent_id);
               return (
                 <Link key={c.id} to={`/studio/assistants/${c.agent_id}?c=${c.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50">
-                  {a && <Avatar prenom={a.prenom} couleur={a.couleur} taille={28} />}
+                  {a && <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={28} />}
                   <span className="min-w-0 flex-1 truncate text-sm">{c.titre}</span>
                   <span className="shrink-0 text-xs text-neutral-400">{new Date(c.updated_at).toLocaleDateString('fr-FR')}</span>
                 </Link>

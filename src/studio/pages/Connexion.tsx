@@ -5,8 +5,8 @@ import { Bouton } from '../composants';
 import { useStudioBrut } from '../StudioApp';
 
 const EQUIPE = [
-  { p: 'Léa', c: '#f97316' }, { p: 'Hugo', c: '#ec4899' }, { p: 'Sam', c: '#3b82f6' },
-  { p: 'Inès', c: '#10b981' }, { p: 'Maël', c: '#8b5cf6' }, { p: 'Nora', c: '#eab308' },
+  { id: 'lea', p: 'Léa', c: '#f97316' }, { id: 'hugo', p: 'Hugo', c: '#ec4899' }, { id: 'sam', p: 'Sam', c: '#3b82f6' },
+  { id: 'ines', p: 'Inès', c: '#10b981' }, { id: 'mael', p: 'Maël', c: '#8b5cf6' }, { id: 'nora', p: 'Nora', c: '#eab308' },
 ];
 
 export default function Connexion() {
@@ -39,8 +39,8 @@ export default function Connexion() {
         <div className="relative">
           <div className="mb-8 flex -space-x-3">
             {EQUIPE.map((a) => (
-              <span key={a.p} className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-neutral-950 text-lg font-semibold"
-                style={{ background: `linear-gradient(135deg, ${a.c}, ${a.c}aa)` }}>{a.p[0]}</span>
+              <img key={a.p} src={`/agents-ia/studio/${a.id}.webp`} alt={a.p} width={64} height={64}
+                className="h-16 w-16 rounded-full border-2 border-neutral-950 object-cover object-top" style={{ background: a.c }} />
             ))}
           </div>
           <h1 className="text-4xl font-semibold leading-tight">Votre équipe d'agents IA,<br />disponible 24 h/24.</h1>

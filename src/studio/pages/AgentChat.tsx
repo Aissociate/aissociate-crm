@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle } from 'lucide-react';
 import { useStudio } from '../StudioApp';
-import { appel, discuter, extraireRelais, type Conversation, type Message, type SuperPouvoir } from '../api';
+import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type SuperPouvoir } from '../api';
+import MediaVue from '../MediaVue';
 import { Avatar, Markdown, cx } from '../composants';
 
 export default function AgentChat() {
@@ -62,6 +63,17 @@ export default function AgentChat() {
     const ctrl = new AbortController();
     stop.current = ctrl;
     try {
+      // Super-pouvoir média : réponse JSON immédiate, le média se suit ensuite (MediaVue).
+      if (sp?.pouvoir.media) {
+        const r = await appel<{ conversation_id: string; message_id: string | null; content: string; media: Media }>('chat', {
+          agent_id: agent.id, conversation_id: convId, pouvoir: { id: sp.pouvoir.id, valeurs: sp.valeurs },
+        });
+        setMessages((m) => [...m.slice(0, -1), { role: 'assistant', id: r.message_id ?? undefined, content: r.content, media: r.media }]);
+        setParams({ c: r.conversation_id }, { replace: true });
+        chargerListe();
+        rafraichir();
+        return;
+      }
       const fin = await discuter(
         sp
           ? { agent_id: agent.id, conversation_id: convId, pouvoir: { id: sp.pouvoir.id, valeurs: sp.valeurs } }
@@ -164,7 +176,7 @@ export default function AgentChat() {
 
       <section className="flex min-h-[calc(100vh-8rem)] flex-col">
         <header className="mb-4 flex items-center gap-3 border-b border-neutral-200 pb-4">
-          <Avatar prenom={agent.prenom} couleur={agent.couleur} taille={44} />
+          <Avatar prenom={agent.prenom} couleur={agent.couleur} photo={agent.photo} taille={44} />
           <div className="min-w-0">
             <p className="font-semibold">{agent.prenom}</p>
             <p className="text-sm text-neutral-500">{agent.metier}</p>
@@ -203,9 +215,10 @@ export default function AgentChat() {
             </div>
           ) : (
             <div key={i} className="flex gap-3">
-              <Avatar prenom={agent.prenom} couleur={agent.couleur} taille={30} />
+              <Avatar prenom={agent.prenom} couleur={agent.couleur} photo={agent.photo} taille={30} />
               <div className="min-w-0 flex-1">
                 <div className="rounded-2xl rounded-tl-md border border-neutral-200 bg-white px-4 py-3">
+                  {m.media && <div className="mb-2"><MediaVue media={m.media} /></div>}
                   {m.content ? <Markdown texte={extraireRelais(m.content).texte} /> : (
                     <span className="flex gap-1 py-1" aria-label={`${agent.prenom} rédige`}>
                       {[0, 1, 2].map((d) => <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-neutral-300" style={{ animationDelay: `${d * 120}ms` }} />)}
@@ -274,7 +287,7 @@ function Relais({ contenu, termine, demande, agentId }: { contenu: string; termi
   return (
     <Link to={`/studio/assistants/${collegue.id}`} state={{ message: demande?.replace(/\*\*/g, '') }}
       className="mt-2 inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm hover:border-neutral-900">
-      <Avatar prenom={collegue.prenom} couleur={collegue.couleur} taille={22} />
+      <Avatar prenom={collegue.prenom} couleur={collegue.couleur} photo={collegue.photo} taille={22} />
       Confier à {collegue.prenom} <span className="text-neutral-400">· {collegue.metier}</span> <ArrowRight className="h-4 w-4" />
     </Link>
   );

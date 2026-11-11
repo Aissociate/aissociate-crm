@@ -46,11 +46,24 @@ Le premier niveau renseigné l'emporte :
 1. `studio_workspace_agents.modele` : cet agent, pour ce client ;
 2. `studio_workspaces.modele` : tous les agents de ce client ;
 3. `studio_agents.modele` : cet agent, par défaut ;
-4. `parametres.ai.model_studio`, sinon `model_agent`, sinon `anthropic/claude-sonnet-4.5`.
+4. `parametres.ai.model_studio` (s'il est autorisé), sinon `deepseek/deepseek-v4.1-flash-1017`.
+
+Seuls les modèles de `MODELES_STUDIO` (dans `supabase/functions/studio/index.ts`) sont acceptés : DeepSeek V4.1 Flash, Mistral Large 4 et Claude Haiku 5.5. Tout autre réglage enregistré en base est ignoré.
 
 La clé reste celle du CRM : le secret `OPENROUTER_API_KEY`, sinon `parametres.ai.openrouter_key`.
 Les réponses arrivent en flux SSE (`meta`, `delta`, `done`, `error`) et le raisonnement
 éventuel du modèle n'est jamais relayé.
+
+## Images et vidéos
+Un super-pouvoir porteur de `"media": "image"` ou `"media": "video"` ne passe pas par le chat :
+la fonction lance une génération (`medias.ts`) et crée une ligne `studio_medias`.
+- Images : `meta/muse-image` (environ 0,01 $), générée en tâche de fond, puis la page vérifie
+  l'avancement via `media_statut`.
+- Vidéos : `minimax/hailuo-3-max` en 768p (0,08 $ la seconde). Le job OpenRouter est vérifié
+  à chaque `media_statut` et, une fois terminé, le fichier est rapatrié.
+- Fichiers dans le bucket privé `studio-medias`, servis par des URL signées valables 1 h.
+- Quotas mensuels `quota_images_mois` et `quota_videos_mois` par espace (0 = désactivé).
+- Les champs nommés `format` et `duree` du formulaire deviennent `aspect_ratio` et `duration`.
 
 ## Suite envisagée
 Plusieurs espaces par entreprise (pôles), invitations par les propriétaires, connecteurs

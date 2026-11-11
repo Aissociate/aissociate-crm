@@ -1,4 +1,5 @@
-// Sélecteur de modèle OpenRouter groupé par constructeur, avec filtre et prix.
+// Sélecteur de modèle OpenRouter groupé par constructeur, avec prix. La liste vient
+// de la fonction `studio` (liste blanche MODELES_STUDIO) ; le filtre n'apparaît qu'au-delà de 10.
 // Valeur vide = « hérité » (le niveau supérieur décide, voir migration studio_modeles).
 import { useMemo, useState } from 'react';
 
@@ -32,11 +33,13 @@ export function ModeleSelect({
   return (
     <div className="space-y-1.5">
       <div className="flex gap-2">
-        <input className="input w-40 shrink-0" placeholder="Filtrer…" value={filtre} onChange={(e) => setFiltre(e.target.value)} />
+        {modeles.length > 10 && (
+          <input className="input w-40 shrink-0" placeholder="Filtrer…" value={filtre} onChange={(e) => setFiltre(e.target.value)} />
+        )}
         <select className="input min-w-0 flex-1" value={value ?? ''} disabled={chargement}
           onChange={(e) => onChange(e.target.value || null)}>
           <option value="">{chargement ? 'Chargement des modèles…' : `Hérité — ${herite}`}</option>
-          {inconnu && <option value={value}>{value} (absent du catalogue OpenRouter)</option>}
+          {inconnu && <option value={value}>{value} (non autorisé : ignoré, le niveau au-dessus s'applique)</option>}
           {groupes.map(([c, liste]) => (
             <optgroup key={c} label={`${c} (${liste.length})`}>
               {liste.map((m) => <option key={m.id} value={m.id}>{m.nom}{prix(m)}</option>)}

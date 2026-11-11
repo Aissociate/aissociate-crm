@@ -10,9 +10,16 @@ export default function Assistants() {
       <Titre sous="Chaque agent est spécialisé et connaît votre entreprise. Cliquez pour lui confier une mission.">Mes assistants</Titre>
       <div className="grid gap-4 md:grid-cols-2">
         {me.agents.map((a) => (
-          <div key={a.id} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-5">
+          <div key={a.id} className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+            {a.photo && (
+              <div className="relative h-44 overflow-hidden" style={{ background: a.couleur }}>
+                <img src={a.photo} alt={`${a.prenom}, ${a.metier}`} loading="lazy"
+                  className="absolute bottom-0 left-1/2 h-[115%] -translate-x-1/2 object-cover object-top" />
+              </div>
+            )}
+            <div className="flex flex-1 flex-col p-5">
             <div className="flex items-center gap-3">
-              <Avatar prenom={a.prenom} couleur={a.couleur} taille={52} />
+              <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={52} />
               <div>
                 <p className="text-lg font-semibold">{a.prenom}</p>
                 <p className="text-sm text-neutral-500">{a.metier}</p>
@@ -36,6 +43,7 @@ export default function Assistants() {
               <Link to={`/studio/assistants/${a.id}`} className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">
                 Discuter avec {a.prenom}
               </Link>
+            </div>
             </div>
           </div>
         ))}

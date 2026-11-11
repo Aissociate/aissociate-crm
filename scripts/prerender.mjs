@@ -133,21 +133,20 @@ const routes = [
   {
     // Page « Agents IA » (employés virtuels) : aligné sur le <SEO> de src/site/pages/AgentsIA.tsx.
     path: '/agents-ia',
-    title: 'Employés virtuels IA pour PME à La Réunion — dès 99 €/mois | Aissociate',
-    description: "Des agents IA qui traitent vos messages clients en moins de 30 secondes, 24h/24 : secrétariat, relance commerciale, marketing. Installés et surveillés à La Réunion, en production en 15 jours ouvrés. Dès 99 €/mois.",
-    keywords: 'employé virtuel, agent IA PME, agent IA La Réunion, secrétaire virtuelle IA, automatisation relance devis, assistant IA entreprise 974',
+    title: "Studio IA : votre équipe d'agents IA en 15 jours — dès 99 €/mois | Aissociate",
+    description: "Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Mise en place en 15 jours à La Réunion, éligible Kap Numérik 2026. Dès 99 € HT/mois.",
+    keywords: 'agent IA PME, agents IA La Réunion, Kap Numérik 2026, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
     schemas: [
       {
         '@context': 'https://schema.org', '@type': 'Service',
-        name: 'Employés virtuels IA pour PME',
-        serviceType: 'Agents IA installés et maintenus (secrétariat, relance commerciale, marketing)',
+        name: "Studio IA — équipe d'agents IA pour TPE et PME",
+        serviceType: 'Agents IA spécialisés installés et accompagnés (assistante, marketing, commercial, SEO, juridique, RH)',
         provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate' },
         areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
         url: `${SITE}/agents-ia/`, inLanguage: 'fr-FR',
         offers: [
-          { '@type': 'Offer', name: 'SOLO', price: '99', priceCurrency: 'EUR', description: 'Secrétaire administrative virtuelle, par mois' },
-          { '@type': 'Offer', name: 'DUO', price: '170', priceCurrency: 'EUR', description: 'Secrétaire et responsable commercial virtuels, par mois' },
-          { '@type': 'Offer', name: 'TRIO', price: '249', priceCurrency: 'EUR', description: 'Secrétaire, commercial et marketing virtuels, par mois' },
+          { '@type': 'Offer', name: 'Initialisation du Studio IA', price: '499', priceCurrency: 'EUR', description: "Mise en place de l'espace, HT, une fois (plus 199 € HT par agent)" },
+          { '@type': 'Offer', name: 'Abonnement — premier agent', price: '99', priceCurrency: 'EUR', description: "Par mois, HT ; dégressif jusqu'à -50 % pour le cinquième agent" },
         ],
       },
       breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Agents IA', url: `${SITE}/agents-ia` }]),

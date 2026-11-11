@@ -1,0 +1,96 @@
+{
+  "_lisezmoi": "Espace de démonstration FICTIF du Studio IA : un mois de fonctionnement d'une boulangerie réunionnaise. Source unique du test supabase/functions/studio/contexte.test.ts et du script SQL généré par scripts/studio-demo-sql.mjs. Les 'jours' sont comptés avant la date d'insertion.",
+  "workspace": {
+    "id": "5d1e0000-0000-4000-8000-000000000001",
+    "nom": "Démo — Les Délices de Saint-Pierre",
+    "offre": "pro",
+    "secteur": "Boulangerie-pâtisserie",
+    "taille": "5-9",
+    "contexte_entreprise": "Activité : boulangerie-pâtisserie artisanale à Saint-Pierre (La Réunion), rue des Bons-Enfants.\nFondée en 2019 par Marie-Ange Hoarau. 6 salariés.\nClients cibles : habitants du centre-ville, actifs pressés le matin, familles pour les gâteaux de fête, comités d'entreprise pour les commandes groupées.\nOffres principales : pains au levain, viennoiseries, gâteaux d'anniversaire sur commande, formule petit-déjeuner, bûches de Noël.\nCe qui nous différencie : farines et fruits locaux (letchi, passion, vanille Bourbon), label « Fait maison ».\nTon : vouvoiement, chaleureux.\nRéseaux : Facebook (principal), Instagram.\nSite web : delices-saint-pierre.re (fictif)."
+  },
+  "utilisateur": {
+    "id": "5d1e0000-0000-4000-8000-000000000002",
+    "email": "demo.delices@exemple.re",
+    "prenom": "Marie-Ange",
+    "nom": "Hoarau",
+    "role": "proprietaire"
+  },
+  "documents": [
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000101", "jours": 29, "type": "note", "actif": true,
+      "titre": "Tarifs 2026",
+      "contenu": "Baguette tradition : 1,30 €.\nFormule petit-déjeuner (café + viennoiserie + jus de fruits pays) : 6,50 €, servie de 6 h à 10 h.\nGâteau d'anniversaire : 6 parts 24 €, 8 parts 32 €, 12 parts 45 €. Commande au moins 48 h à l'avance.\nTarif étudiant : -10 % le mardi sur présentation de la carte.\nComités d'entreprise : -15 % à partir de 50 viennoiseries."
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000102", "jours": 27, "type": "note", "actif": true,
+      "titre": "Charte de ton",
+      "contenu": "Toujours vouvoyer. Ton chaleureux et simple. Une touche de créole est bienvenue (« Zot lé invité ! »). Deux émojis maximum par publication. Signature des posts : L'équipe des Délices 🥐. Ne jamais dénigrer la concurrence."
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000103", "jours": 10, "type": "note", "actif": true,
+      "titre": "Horaires et événements de décembre",
+      "contenu": "Horaires : du mardi au dimanche, 6 h - 19 h. Fermé le lundi.\nMarché de Noël de Saint-Pierre les 13 et 14 décembre : stand n° 12, dégustation de bûches.\nBûches de Noël en précommande jusqu'au 20 décembre. Bûche letchi-passion 8 parts : 38 €. Bûche vanille Bourbon-chocolat 8 parts : 36 €.\nOuverture exceptionnelle le lundi 22 décembre."
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000104", "jours": 28, "type": "fichier", "format": "pdf", "taille": 184320, "actif": true,
+      "titre": "Plaquette commerciale.pdf",
+      "contenu": "Les Délices de Saint-Pierre — l'artisanat réunionnais depuis 2019. Pétrissage lent, levain naturel, farine de nos partenaires. Nos fruits viennent des producteurs du Sud sauvage. Commandes pour entreprises : plateaux petit-déjeuner, buffets, cadeaux de fin d'année. Contact pro : commandes@delices-saint-pierre.re (fictif)."
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000105", "jours": 30, "type": "note", "actif": false,
+      "titre": "Ancienne carte 2025 (archivée)",
+      "contenu": "Baguette tradition : 1,10 €. Formule petit-déjeuner : 5,90 €. NE PLUS UTILISER."
+    }
+  ],
+  "conversations": [
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000201", "agent_id": "hugo", "jours": 25,
+      "titre": "Générer un post — lancement de la formule petit-déjeuner",
+      "messages": [
+        { "role": "user", "content": "**Générer un post**\n- De quoi parle votre post ? : lancement de notre formule petit-déjeuner\n- Réseau : Facebook" },
+        { "id": "5d1e0000-0000-4000-8000-000000000301", "role": "assistant", "retour": 1, "epingle": true,
+          "content": "☕ Nouveau aux Délices de Saint-Pierre : la formule petit-déjeuner !\nCafé, viennoiserie maison et jus de fruits pays pour 6,50 €, de 6 h à 10 h. De quoi bien commencer la journée avant le travail.\nZot lé invité ! Passez nous voir rue des Bons-Enfants.\nL'équipe des Délices 🥐\n#SaintPierre #LaReunion #FaitMaison" }
+      ]
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000202", "agent_id": "lea", "jours": 20,
+      "titre": "Rédiger un e-mail — fournisseur de farine",
+      "messages": [
+        { "role": "user", "content": "Écris un e-mail à notre minoterie pour décaler la livraison de jeudi à vendredi." },
+        { "id": "5d1e0000-0000-4000-8000-000000000302", "role": "assistant", "retour": 1,
+          "content": "Objet : Décalage de la livraison de jeudi\n\nBonjour,\nPourriez-vous décaler notre livraison de farine de jeudi à vendredi matin ? Merci d'avance pour votre souplesse.\nBien cordialement,\nMarie-Ange Hoarau — Les Délices de Saint-Pierre" }
+      ]
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000203", "agent_id": "sam", "jours": 12,
+      "titre": "Séquence de prospection — comités d'entreprise",
+      "messages": [
+        { "role": "user", "content": "**Séquence de prospection**\n- Cible : comités d'entreprise du Sud\n- Canal : E-mail\n- Offre : plateaux petit-déjeuner" },
+        { "id": "5d1e0000-0000-4000-8000-000000000303", "role": "assistant", "retour": 1, "epingle": true,
+          "content": "J0 — Objet : Des petits-déjeuners maison pour vos équipes\nBonjour [Prénom], les Délices de Saint-Pierre livrent des plateaux petit-déjeuner faits maison pour vos réunions. -15 % dès 50 viennoiseries. Un essai pour votre prochain séminaire ?\n\nJ+4 — Relance courte avec photo d'un plateau.\n\nJ+10 — Dernier message : proposition de dégustation gratuite au bureau." }
+      ]
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000204", "agent_id": "hugo", "jours": 5,
+      "titre": "Calendrier éditorial — décembre",
+      "messages": [
+        { "role": "user", "content": "**Calendrier éditorial**\n- Mois concerné : décembre\n- Rythme : 3 posts / semaine" },
+        { "id": "5d1e0000-0000-4000-8000-000000000304", "role": "assistant", "retour": 1, "epingle": true,
+          "content": "| Date | Réseau | Thème |\n|---|---|---|\n| 2 déc. | Facebook | Ouverture des précommandes de bûches |\n| 9 déc. | Instagram | Coulisses : la bûche letchi-passion |\n| 12 déc. | Facebook | Rendez-vous au Marché de Noël (stand 12) |\n| 18 déc. | Facebook | Dernier rappel précommandes (jusqu'au 20) |" }
+      ]
+    },
+    {
+      "id": "5d1e0000-0000-4000-8000-000000000205", "agent_id": "mael", "jours": 3,
+      "titre": "Relance d'impayé — CE Sucrerie du Gol",
+      "messages": [
+        { "role": "user", "content": "**Relance d'impayé**\n- Client : CE Sucrerie du Gol\n- Facture : F-2026-118, 420 €, échue le 31/10\n- Niveau : 1re relance amiable" },
+        { "id": "5d1e0000-0000-4000-8000-000000000305", "role": "assistant", "retour": -1,
+          "content": "Objet : Facture F-2026-118 — rappel\nBonjour, sauf erreur de notre part, la facture F-2026-118 de 420 € échue le 31/10 reste impayée…" }
+      ]
+    }
+  ],
+  "connecteurs": [
+    { "type": "facebook", "statut": "connecte", "infos": { "page": "https://facebook.com/delicessaintpierre" }, "notes_admin": "Page reliée le 20/10 (démo)." },
+    { "type": "instagram", "statut": "demande", "infos": { "compte": "@delices.saintpierre" }, "notes_admin": "" }
+  ]
+}

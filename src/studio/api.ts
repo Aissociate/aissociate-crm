@@ -5,15 +5,21 @@ const ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '
 const CLE_JETON = 'studio.jeton';
 
 export type Champ = { nom: string; label: string; type: 'texte' | 'long' | 'choix'; options?: string[]; requis?: boolean; aide?: string };
-export type SuperPouvoir = { id: string; titre: string; description?: string; champs: Champ[] };
+export type SuperPouvoir = { id: string; titre: string; description?: string; champs: Champ[]; media?: 'image' | 'video' };
+export type Media = {
+  id: string; type: 'image' | 'video'; statut: 'en_cours' | 'pret' | 'echec';
+  url?: string | null; erreur?: string | null; mime?: string | null;
+};
 export type Agent = {
   super_pouvoirs: SuperPouvoir[];
+  photo?: string | null;
   id: string; prenom: string; metier: string; accroche: string; description: string;
   demandes: { titre: string; prompt: string }[]; minutes_par_tache: number; couleur: string; ordre: number;
 };
 export type Conversation = { id: string; agent_id: string; titre: string; updated_at: string };
 export type Message = {
   id?: string; role: 'user' | 'assistant'; content: string; retour?: number | null; epingle?: boolean; created_at?: string;
+  media?: Media | null;
 };
 export type Ressource = {
   id: string; titre: string; type: 'fichier' | 'note'; format: string | null; taille: number | null;

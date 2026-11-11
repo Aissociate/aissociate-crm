@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, PinOff } from 'lucide-react';
+import { Check, Copy, Download, PinOff } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Avatar, Chargement, Markdown, Titre } from '../composants';
 
 type Creation = { id: string; agent_id: string; content: string; created_at: string; conversation_id: string; titre: string };
+type MediaGalerie = { id: string; type: 'image' | 'video'; agent_id: string | null; prompt: string; url: string | null; created_at: string; conversation_id: string | null };
 
 export default function Creations() {
   const { me, gerer } = useStudio();
@@ -14,8 +15,11 @@ export default function Creations() {
   const [copie, setCopie] = useState<string | null>(null);
   const [erreur, setErreur] = useState('');
 
+  const [medias, setMedias] = useState<MediaGalerie[]>([]);
+
   useEffect(() => {
     appel<{ creations: Creation[] }>('creations').then((r) => setListe(r.creations)).catch((e) => setErreur(gerer(e)));
+    appel<{ medias: MediaGalerie[] }>('medias').then((r) => setMedias(r.medias)).catch(() => { /* galerie facultative */ });
   }, [gerer]);
 
   const retirer = async (id: string) => {
@@ -36,6 +40,26 @@ export default function Creations() {
         ))}
       </div>
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
+      {medias.filter((m) => !filtre || m.agent_id === filtre).length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 font-semibold">Visuels et vidéos</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {medias.filter((m) => !filtre || m.agent_id === filtre).map((m) => m.url && (
+              <figure key={m.id} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+                {m.type === 'image'
+                  ? <img src={m.url} alt={m.prompt.slice(0, 120)} className="aspect-square w-full object-cover" loading="lazy" />
+                  : <video src={m.url} controls playsInline preload="metadata" className="aspect-square w-full bg-black object-cover" />}
+                <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-neutral-500">
+                  <span>{new Date(m.created_at).toLocaleDateString('fr-FR')}</span>
+                  <a href={m.url} download target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-neutral-900">
+                    <Download className="h-3.5 w-3.5" /> Télécharger
+                  </a>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
       {liste === null ? <Chargement /> : visibles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-300 py-14 text-center text-sm text-neutral-500">
           Aucun contenu gardé pour l'instant.
@@ -47,7 +71,7 @@ export default function Creations() {
             return (
               <article key={c.id} className="flex max-h-[28rem] flex-col rounded-2xl border border-neutral-200 bg-white">
                 <header className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
-                  {a && <Avatar prenom={a.prenom} couleur={a.couleur} taille={26} />}
+                  {a && <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={26} />}
                   <Link to={`/studio/assistants/${c.agent_id}?c=${c.conversation_id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{c.titre}</Link>
                   <span className="text-xs text-neutral-400">{new Date(c.created_at).toLocaleDateString('fr-FR')}</span>
                 </header>

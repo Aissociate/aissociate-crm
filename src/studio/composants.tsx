@@ -3,7 +3,15 @@ import { type ReactNode, Fragment } from 'react';
 
 export function cx(...c: (string | false | null | undefined)[]) { return c.filter(Boolean).join(' '); }
 
-export function Avatar({ prenom, couleur, taille = 40 }: { prenom: string; couleur: string; taille?: number }) {
+export function Avatar({ prenom, couleur, photo, taille = 40 }: { prenom: string; couleur: string; photo?: string | null; taille?: number }) {
+  // Portrait (Nano Banana) si l'agent en a un, sinon pastille avec l'initiale.
+  if (photo) {
+    return (
+      <img src={photo} alt="" aria-hidden width={taille} height={taille} loading="lazy"
+        className="inline-block shrink-0 rounded-full object-cover object-top shadow-sm"
+        style={{ width: taille, height: taille, background: couleur }} />
+    );
+  }
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white shadow-sm"

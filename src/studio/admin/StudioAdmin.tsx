@@ -3,11 +3,13 @@
 // l'Edge Function `studio` (hash côté serveur, jamais lisible depuis le CRM).
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Bot, Building2, Copy, ExternalLink, KeyRound, Plus, UserPlus } from 'lucide-react';
+import { Bot, Building2, ShieldCheck, Copy, ExternalLink, KeyRound, Plus, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
 import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Spinner } from '@/components/ui';
 import { ModeleSelect, type ModeleOR } from './ModeleSelect';
+import HarnessPanel from './HarnessPanel';
+import ConnecteursEspace from './ConnecteursEspace';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -15,12 +17,13 @@ const db = supabase as unknown as SupabaseClient;
 type Workspace = {
   id: string; nom: string; entreprise_id: string | null; offre: string; secteur: string | null; taille: string | null;
   max_utilisateurs: number; actif: boolean; quota_messages_mois: number | null; contexte_entreprise: string;
+  quota_images_mois: number | null; quota_videos_mois: number | null;
   expire_le: string | null; created_at: string; modele: string | null;
 };
 type StudioUser = { id: string; workspace_id: string; email: string; prenom: string | null; nom: string | null; role: string; actif: boolean; last_login_at: string | null };
 type AgentCat = {
   id: string; prenom: string; metier: string; accroche: string; description: string; prompt_systeme: string;
-  demandes: { titre: string; prompt: string }[]; super_pouvoirs: unknown[]; minutes_par_tache: number; couleur: string; offres: string[]; ordre: number; actif: boolean; modele: string | null;
+  demandes: { titre: string; prompt: string }[]; super_pouvoirs: unknown[]; minutes_par_tache: number; couleur: string; offres: string[]; ordre: number; actif: boolean; modele: string | null; photo: string | null;
 };
 /** Catalogue OpenRouter + modèle par défaut global (parametres.ai). */
 type Catalogue = { modeles: ModeleOR[]; defaut: string; chargement: boolean };
@@ -44,7 +47,7 @@ async function adminStudio<T = unknown>(body: Record<string, unknown>): Promise<
 }
 
 export default function StudioAdmin() {
-  const [onglet, setOnglet] = useState<'espaces' | 'agents'>('espaces');
+  const [onglet, setOnglet] = useState<'espaces' | 'agents' | 'harness'>('espaces');
   const [espaces, setEspaces] = useState<Workspace[] | null>(null);
   const [users, setUsers] = useState<StudioUser[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -93,6 +96,7 @@ export default function StudioAdmin() {
       <div className="mb-5 flex gap-2">
         <button onClick={() => setOnglet('espaces')} className={onglet === 'espaces' ? 'btn-primary' : 'btn-secondary'}><Building2 className="mr-1 inline h-4 w-4" />Espaces clients</button>
         <button onClick={() => setOnglet('agents')} className={onglet === 'agents' ? 'btn-primary' : 'btn-secondary'}><Bot className="mr-1 inline h-4 w-4" />Catalogue d'agents</button>
+        <button onClick={() => setOnglet('harness')} className={onglet === 'harness' ? 'btn-primary' : 'btn-secondary'}><ShieldCheck className="mr-1 inline h-4 w-4" />Harness général</button>
       </div>
       {erreur && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{erreur}</p>}
 
@@ -125,13 +129,17 @@ export default function StudioAdmin() {
         </div>
       ))}
 
+      {onglet === 'harness' && <HarnessPanel />}
+
       {onglet === 'agents' && (
         <div className="grid gap-3 md:grid-cols-2">
           {agents.map((a) => (
             <Card key={a.id} className="cursor-pointer hover:shadow-md">
               <div onClick={() => setAgentEdite(a)}>
                 <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full font-semibold text-white" style={{ background: a.couleur }}>{a.prenom[0]}</span>
+                  {a.photo
+                    ? <img src={a.photo} alt="" className="h-10 w-10 rounded-full object-cover object-top" style={{ background: a.couleur }} />
+                    : <span className="flex h-10 w-10 items-center justify-center rounded-full font-semibold text-white" style={{ background: a.couleur }}>{a.prenom[0]}</span>}
                   <div><p className="font-semibold text-fg">{a.prenom} <span className="font-normal text-muted">· {a.metier}</span></p>
                     <p className="text-xs text-muted">Offres : {a.offres.join(', ')} · ≈ {a.minutes_par_tache} min / mission</p>
                     <p className="text-xs text-muted">Modèle : <code>{a.modele || `${catalogue.defaut || '…'} (défaut)`}</code></p></div>
@@ -165,7 +173,7 @@ function EspaceModal({
   espace: Workspace | null; users: StudioUser[]; agents: AgentCat[]; entreprises: { id: string; raison_sociale: string }[];
   lienStudio: string; catalogue: Catalogue; onClose: () => void; onSaved: () => Promise<void>;
 }) {
-  const [f, setF] = useState<Partial<Workspace>>(espace ?? { nom: '', offre: 'essentiel', max_utilisateurs: 5, quota_messages_mois: 300, actif: true, contexte_entreprise: '' });
+  const [f, setF] = useState<Partial<Workspace>>(espace ?? { nom: '', offre: 'essentiel', max_utilisateurs: 5, quota_messages_mois: 300, quota_images_mois: 30, quota_videos_mois: 5, actif: true, contexte_entreprise: '' });
   const [reglages, setReglages] = useState<Record<string, { actif: boolean; consignes: string; modele: string | null }>>({});
   const [nouvelAcces, setNouvelAcces] = useState({ email: '', prenom: '', nom: '', role: 'proprietaire' });
   const [identifiants, setIdentifiants] = useState<string | null>(null);
@@ -184,6 +192,8 @@ function EspaceModal({
     const ligne = {
       nom: f.nom?.trim(), entreprise_id: f.entreprise_id || null, offre: f.offre, secteur: f.secteur || null, taille: f.taille || null,
       max_utilisateurs: Number(f.max_utilisateurs) || 5, quota_messages_mois: f.quota_messages_mois ? Number(f.quota_messages_mois) : null,
+      quota_images_mois: f.quota_images_mois != null ? Number(f.quota_images_mois) : null,
+      quota_videos_mois: f.quota_videos_mois != null ? Number(f.quota_videos_mois) : null,
       actif: f.actif !== false, contexte_entreprise: f.contexte_entreprise ?? '', expire_le: f.expire_le || null,
       modele: f.modele || null,
     };
@@ -261,6 +271,8 @@ function EspaceModal({
           </Field>
           <Field label="Utilisateurs inclus"><input type="number" min={1} className="input" value={f.max_utilisateurs ?? 5} onChange={(e) => set('max_utilisateurs', Number(e.target.value))} /></Field>
           <Field label="Quota de missions / mois" hint="Vide = illimité"><input type="number" min={0} className="input" value={f.quota_messages_mois ?? ''} onChange={(e) => set('quota_messages_mois', e.target.value ? Number(e.target.value) : null)} /></Field>
+          <Field label="Visuels IA / mois" hint="Vide = illimité · 0 = désactivé"><input type="number" min={0} className="input" value={f.quota_images_mois ?? ''} onChange={(e) => set('quota_images_mois', e.target.value === '' ? null : Number(e.target.value))} /></Field>
+          <Field label="Vidéos IA / mois" hint="≈ 0,50 $ la vidéo de 6 s · 0 = désactivé"><input type="number" min={0} className="input" value={f.quota_videos_mois ?? ''} onChange={(e) => set('quota_videos_mois', e.target.value === '' ? null : Number(e.target.value))} /></Field>
           <Field label="Échéance (fin d'essai ou d'abonnement)"><input type="date" className="input" value={f.expire_le ?? ''} onChange={(e) => set('expire_le', e.target.value || null)} /></Field>
         </div>
         <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={f.actif !== false} onChange={(e) => set('actif', e.target.checked)} /> Espace actif</label>
@@ -307,6 +319,8 @@ function EspaceModal({
               </div>
               <p className="mt-1 text-xs text-muted">Un mot de passe provisoire est généré ; le client le change à sa première connexion.</p>
             </section>
+
+            <ConnecteursEspace workspaceId={espace.id} />
 
             <section>
               <h3 className="mb-2 font-semibold text-fg">Agents de l'espace</h3>
@@ -389,6 +403,12 @@ function AgentModal({ agent, catalogue, onClose, onSaved }: { agent: AgentCat; c
             </div>
           </Field>
         </div>
+        <Field label="Portrait (URL)" hint="Ex. /agents-ia/studio/lea.webp. Vide = pastille avec l'initiale.">
+          <div className="flex items-center gap-3">
+            {a.photo && <img src={a.photo} alt="" className="h-12 w-12 rounded-full object-cover object-top" style={{ background: a.couleur }} />}
+            <input className="input" value={a.photo ?? ''} onChange={(e) => setA({ ...a, photo: e.target.value || null })} />
+          </div>
+        </Field>
         <Field label="Modèle IA de l'agent" hint="Par défaut pour tous les clients ; un client peut avoir son propre réglage (fiche de l'espace).">
           <ModeleSelect value={a.modele} onChange={(v) => setA({ ...a, modele: v })} modeles={catalogue.modeles} chargement={catalogue.chargement}
             herite={`${catalogue.defaut || '…'} (Paramètres › IA)`} />
