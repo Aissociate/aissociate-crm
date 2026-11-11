@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import demo from '../../seed/studio_demo.json';
 import {
-  construirePrompt, selectionnerRessources, HARNESS_REGLES_DEFAUT,
+  construirePrompt, selectionnerRessources, BUDGET_SAVOIRS, HARNESS_REGLES_DEFAUT,
   type AgentPrompt, type ConnecteurActif, type Creation, type Ressource,
 } from './contexte';
 
@@ -119,11 +119,42 @@ describe('contexte des agents après un mois de fonctionnement', () => {
     expect(sel.reduce((n, r) => n + r.extrait.length, 0)).toBeLessThanOrEqual(14000);
   });
 
+  it("injecte la base de connaissances de l'agent avec la consigne de citation", () => {
+    const savoirs = selectionnerRessources(
+      [{ titre: 'Relance des impayés entre professionnels', source: 'Code de commerce, art. L441-10', extrait: 'Indemnité forfaitaire pour frais de recouvrement : 40 €.' }],
+      [
+        { titre: 'Relance des impayés entre professionnels', source: 'Code de commerce, art. L441-10', extrait: 'doublon' },
+        { titre: 'Mise en demeure', source: null, extrait: 'Envoi recommandé avec accusé de réception conseillé.' },
+      ],
+      BUDGET_SAVOIRS,
+    );
+    expect(savoirs.map((s) => s.titre)).toEqual(['Relance des impayés entre professionnels', 'Mise en demeure']);
+    expect(savoirs[0].source).toBe('Code de commerce, art. L441-10'); // la référence survit à la sélection
+    const pm = construirePrompt({
+      agent: equipe.find((a) => a.id === 'mael')!, equipe, ws: demo.workspace, ressources: [], savoirs,
+    });
+    expect(pm).toContain('## Ta base de connaissances (référence Aissociate)');
+    expect(pm).toContain('### [S1] Relance des impayés entre professionnels — référence : Code de commerce, art. L441-10');
+    expect(pm).toContain('### [S2] Mise en demeure\n');
+    expect(pm).toContain('« Sources : »');
+    // La base passe avant la fiche entreprise.
+    expect(pm.indexOf('## Ta base de connaissances')).toBeLessThan(pm.indexOf('## Entreprise cliente'));
+    // Sans savoirs, pas de bloc (ni de consigne de citation orpheline).
+    expect(p).not.toContain('## Ta base de connaissances');
+  });
+
   it('écrit les prompts pour un test contre un vrai modèle (STUDIO_DUMP)', () => {
     const dossier = process.env.STUDIO_DUMP;
     if (!dossier) return;
     mkdirSync(dossier, { recursive: true });
     writeFileSync(join(dossier, 'hugo.txt'), p);
     writeFileSync(join(dossier, 'lea.txt'), prompt('lea', 'Un client demande le prix d\'un gâteau pour 8 personnes, que je lui réponds ?'));
+    writeFileSync(join(dossier, 'mael.txt'), construirePrompt({
+      agent: equipe.find((a) => a.id === 'mael')!, equipe, ws: demo.workspace, ressources: recentes,
+      savoirs: [{
+        titre: 'Relance des impayés entre professionnels', source: 'Code de commerce, art. L441-10',
+        extrait: 'Entre professionnels, tout retard de paiement entraîne de plein droit des pénalités de retard et une indemnité forfaitaire pour frais de recouvrement de 40 €. Les pénalités sont exigibles sans qu\'un rappel soit nécessaire. Le taux appliqué est celui prévu aux CGV ou, à défaut, le taux de la BCE majoré de 10 points.',
+      }],
+    }));
   });
 });

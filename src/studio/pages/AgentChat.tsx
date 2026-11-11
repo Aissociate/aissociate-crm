@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle } from 'lucide-react';
+import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type SuperPouvoir } from '../api';
 import MediaVue from '../MediaVue';
@@ -21,6 +21,7 @@ export default function AgentChat() {
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
   const [ressources, setRessources] = useState<string[]>([]);
+  const [savoirs, setSavoirs] = useState<{ titre: string; source: string | null }[]>([]);
   const [copie, setCopie] = useState<string | null>(null);
   const stop = useRef<AbortController | null>(null);
   const bas = useRef<HTMLDivElement>(null);
@@ -41,9 +42,10 @@ export default function AgentChat() {
     const c = params.get('c');
     // Une réponse en cours d'arrivée ne doit pas être effacée (mission transmise
     // au montage, double effet du StrictMode, navigation pendant le flux).
-    if (!c) { if (!envoi.current) { setConvId(null); setRessources([]); setMessages([]); } return; }
+    if (!c) { if (!envoi.current) { setConvId(null); setRessources([]); setSavoirs([]); setMessages([]); } return; }
     setConvId(c);
     setRessources([]);
+    setSavoirs([]);
     appel<{ messages: Message[] }>('messages', { conversation_id: c })
       .then((r) => setMessages(r.messages)).catch((e) => setErreur(gerer(e)));
   }, [params, gerer]);
@@ -79,7 +81,7 @@ export default function AgentChat() {
           ? { agent_id: agent.id, conversation_id: convId, pouvoir: { id: sp.pouvoir.id, valeurs: sp.valeurs } }
           : { agent_id: agent.id, message: texte, conversation_id: convId },
         {
-          onMeta: (m) => setRessources(m.ressources ?? []),
+          onMeta: (m) => { setRessources(m.ressources ?? []); setSavoirs(m.savoirs ?? []); },
           onDelta: (t) => setMessages((m) => {
             const der = m[m.length - 1];
             if (der?.role !== 'assistant') return [...m, { role: 'assistant', content: t }];
@@ -228,7 +230,13 @@ export default function AgentChat() {
                 <Relais contenu={m.content} termine={Boolean(m.id)} demande={messages[i - 1]?.content} agentId={agent.id} />
                 {i === messages.length - 1 && ressources.length > 0 && (
                   <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-neutral-400">
-                    <FileText className="h-3 w-3" /> S'appuie sur : {ressources.join(' · ')}
+                    <FileText className="h-3 w-3" /> Vos ressources consultées : {ressources.join(' · ')}
+                  </p>
+                )}
+                {i === messages.length - 1 && savoirs.length > 0 && (
+                  <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-neutral-400">
+                    <BookOpen className="h-3 w-3" /> Base de {agent.prenom} consultée :{' '}
+                    {savoirs.map((s) => (s.source ? `${s.titre} (${s.source})` : s.titre)).join(' · ')}
                   </p>
                 )}
                 {m.id && (

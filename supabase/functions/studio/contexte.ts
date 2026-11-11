@@ -6,10 +6,11 @@
 //   1. identité de l'agent (prompt_systeme)
 //   2. harness « périmètre » (spécialiste + relais) — éditable dans le CRM
 //   3. harness « règles communes » — éditable dans le CRM
-//   4. fiche entreprise, consignes du client pour cet agent
-//   5. outils connectés (connecteurs au statut « connecte »)
-//   6. ressources (notes et fichiers) pertinentes
-//   7. contenus déjà validés (réponses « gardées » par l'équipe)
+//   4. base de connaissances de l'agent (référence Aissociate, à citer) — CRM
+//   5. fiche entreprise, consignes du client pour cet agent
+//   6. outils connectés (connecteurs au statut « connecte »)
+//   7. ressources (notes et fichiers) pertinentes
+//   8. contenus déjà validés (réponses « gardées » par l'équipe)
 
 export type Champ = { nom: string; label: string; type: "texte" | "long" | "choix"; options?: string[]; requis?: boolean; aide?: string };
 export type SuperPouvoir = {
@@ -22,6 +23,8 @@ export type AgentPrompt = {
   super_pouvoirs: SuperPouvoir[]; modele_effectif: string | null;
 };
 export type Ressource = { titre: string; extrait: string };
+/** Document de la base de connaissances d'un agent (commune à tous les clients). */
+export type Savoir = Ressource & { source?: string | null };
 export type Creation = { titre: string; contenu: string; date: string; agent?: string };
 export type ConnecteurActif = { type: string; libelle: string; detail?: string };
 export type Harness = { regles?: string | null; perimetre?: string | null };
@@ -52,6 +55,7 @@ Tes collègues dans cet espace :
 
 const BUDGET_RESSOURCES = 14_000;
 const BUDGET_CREATIONS = 5_000;
+export const BUDGET_SAVOIRS = 8_000;
 
 /** Remplace {{variable}} ; une variable inconnue est laissée telle quelle (visible au test). */
 export function remplir(modele: string, vars: Record<string, string>): string {
@@ -73,15 +77,15 @@ export function reglePerimetre(agent: AgentPrompt, equipe: AgentPrompt[], modele
  * ce complément, une note courte (ex. « Tarifs 2026 ») dont aucun mot ne figure
  * dans la question n'arrivait jamais au modèle.
  */
-export function selectionnerRessources(trouvees: Ressource[], recentes: Ressource[], budget = BUDGET_RESSOURCES): Ressource[] {
+export function selectionnerRessources<T extends Ressource>(trouvees: T[], recentes: T[], budget = BUDGET_RESSOURCES): T[] {
   const vus = new Set<string>();
-  const out: Ressource[] = [];
+  const out: T[] = [];
   let reste = budget;
   for (const r of [...trouvees, ...recentes]) {
     if (vus.has(r.titre) || reste <= 200) continue;
     vus.add(r.titre);
     const extrait = r.extrait.slice(0, reste);
-    out.push({ titre: r.titre, extrait });
+    out.push({ ...r, extrait });
     reste -= extrait.length;
   }
   return out;
@@ -90,7 +94,7 @@ export function selectionnerRessources(trouvees: Ressource[], recentes: Ressourc
 export function construirePrompt(p: {
   agent: AgentPrompt; equipe: AgentPrompt[];
   ws: { nom: string; contexte_entreprise: string };
-  ressources: Ressource[]; creations?: Creation[]; connecteurs?: ConnecteurActif[];
+  ressources: Ressource[]; creations?: Creation[]; connecteurs?: ConnecteurActif[]; savoirs?: Savoir[];
   harness?: Harness; aujourdhui?: string;
 }): string {
   const { agent, ws } = p;
@@ -99,6 +103,14 @@ export function construirePrompt(p: {
     reglePerimetre(agent, p.equipe, p.harness?.perimetre),
     p.harness?.regles?.trim() || HARNESS_REGLES_DEFAUT,
   ];
+  const savoirs = p.savoirs ?? [];
+  if (savoirs.length) {
+    parts.push(`## Ta base de connaissances (référence Aissociate)
+Documents de référence de ton métier, communs à tous les clients. Appuie-toi dessus pour les règles, méthodes et dispositifs ; pour les faits propres à l'entreprise (prix, horaires, offres), la fiche entreprise et ses ressources priment.
+Quand ta réponse s'appuie sur l'un de ces documents, termine-la par une ligne « Sources : » listant leurs titres (et leur référence entre parenthèses). Ne cite jamais un document absent de cette liste et n'invente aucune référence.
+
+${savoirs.map((s, i) => `### [S${i + 1}] ${s.titre}${s.source ? ` — référence : ${s.source}` : ""}\n${s.extrait}`).join("\n\n")}`);
+  }
   if (p.aujourdhui) parts.push(`Date du jour : ${p.aujourdhui}.`);
   parts.push(`## Entreprise cliente : ${ws.nom}\n${ws.contexte_entreprise.trim()
     || "(Fiche entreprise non encore renseignée : invite l'utilisateur à la compléter dans « Mon entreprise » pour des réponses plus personnalisées.)"}`);

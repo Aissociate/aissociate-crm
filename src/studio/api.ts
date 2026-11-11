@@ -64,7 +64,10 @@ export async function appel<T = Record<string, unknown>>(action: string, donnees
 /** Chat en flux SSE : `onDelta` reçoit le texte au fil de l'eau. */
 export async function discuter(
   params: { agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> } },
-  cb: { onMeta?: (m: { conversation_id: string; ressources: string[] }) => void; onDelta: (t: string) => void },
+  cb: {
+    onMeta?: (m: { conversation_id: string; ressources: string[]; savoirs?: { titre: string; source: string | null }[] }) => void;
+    onDelta: (t: string) => void;
+  },
   signal?: AbortSignal,
 ): Promise<{ message_id: string | null; conversation_id: string }> {
   const r = await fetch(URL_FN, {

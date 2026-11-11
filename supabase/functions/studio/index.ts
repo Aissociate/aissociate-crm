@@ -33,9 +33,27 @@ import {
 import { lancerMedia, quotaMediaAtteint, statutMedia, urlSignee } from "./medias.ts";
 import {
   construirePrompt, selectionnerRessources, HARNESS_PERIMETRE_DEFAUT, HARNESS_REGLES_DEFAUT,
-  type AgentPrompt, type Champ, type Creation, type Harness, type SuperPouvoir,
+  BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
+
+/**
+ * Base de connaissances de l'agent (studio_agent_savoirs, éditée dans le CRM) :
+ * passages trouvés par la recherche plein texte, complétés par les plus récents.
+ * Table absente (migration non appliquée) → aucune base, sans erreur.
+ */
+async function chargerSavoirs(sb: SupabaseClient, agentId: string, question: string): Promise<Savoir[]> {
+  const [{ data: trouves }, { data: recents }] = await Promise.all([
+    sb.rpc("studio_recherche_savoirs", { p_agent: agentId, p_question: question.slice(0, 500), p_limite: 3 }),
+    sb.from("studio_agent_savoirs").select("titre, source, contenu")
+      .eq("agent_id", agentId).eq("actif", true).order("updated_at", { ascending: false }).limit(6),
+  ]);
+  return selectionnerRessources<Savoir>(
+    ((trouves ?? []) as Savoir[]).map((t) => ({ titre: t.titre, source: t.source, extrait: t.extrait })),
+    (recents ?? []).map((d) => ({ titre: String(d.titre), source: d.source as string | null, extrait: String(d.contenu).slice(0, 3000) })),
+    BUDGET_SAVOIRS,
+  );
+}
 
 /** Harness général édité dans le CRM (studio_config) ; vide = texte par défaut de contexte.ts. */
 async function chargerHarness(sb: SupabaseClient): Promise<Harness> {
@@ -290,6 +308,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     (trouves ?? []) as { titre: string; extrait: string }[],
     (recents ?? []).map((d) => ({ titre: d.titre, extrait: String(d.contenu).slice(0, 4000) })),
   );
+  const savoirs = await chargerSavoirs(sb, agent.id, question);
   const prenoms = new Map(agents.map((a) => [a.id, a.prenom]));
   const creations: Creation[] = (gardes ?? []).map((m) => ({
     titre: (m.studio_conversations as unknown as { titre: string }).titre,
@@ -302,7 +321,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   });
 
   const systeme = construirePrompt({
-    agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness,
+    agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs,
     aujourdhui: new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" }),
   });
   const messages = [
@@ -321,7 +340,12 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
       };
       let answer = "";
       try {
-        emit("meta", { conversation_id: conversationId, ressources: ressources.map((r) => r.titre) });
+        emit("meta", {
+          conversation_id: conversationId,
+          ressources: ressources.map((r) => r.titre),
+          // Base de l'agent : titres et références seulement, le contenu reste côté serveur.
+          savoirs: savoirs.map((x) => ({ titre: x.titre, source: x.source ?? null })),
+        });
         const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST", signal: stop.signal,
           headers: {

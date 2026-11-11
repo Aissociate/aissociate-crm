@@ -10,6 +10,7 @@ import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Spinner } fr
 import { ModeleSelect, type ModeleOR } from './ModeleSelect';
 import HarnessPanel from './HarnessPanel';
 import ConnecteursEspace from './ConnecteursEspace';
+import SavoirsAgent from './SavoirsAgent';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -416,6 +417,8 @@ function AgentModal({ agent, catalogue, onClose, onSaved }: { agent: AgentCat; c
         <Field label="Accroche (1re personne)"><input className="input" value={a.accroche} onChange={(e) => setA({ ...a, accroche: e.target.value })} /></Field>
         <Field label="Description"><input className="input" value={a.description} onChange={(e) => setA({ ...a, description: e.target.value })} /></Field>
         <Field label="Prompt système"><textarea className="input min-h-[140px] font-mono text-xs" value={a.prompt_systeme} onChange={(e) => setA({ ...a, prompt_systeme: e.target.value })} /></Field>
+        {/* Enregistrée immédiatement (indépendante du bouton « Enregistrer » de l'agent). */}
+        <SavoirsAgent agentId={agent.id} prenom={agent.prenom} />
         <Field label="Super-pouvoirs (JSON)" hint="Missions cadrées : champs du formulaire (texte, long, choix) et gabarit de consigne avec {{nom_du_champ}}. Le gabarit n'est jamais envoyé au navigateur du client.">
           <textarea className="input min-h-[220px] font-mono text-xs" value={pouvoirs} onChange={(e) => setPouvoirs(e.target.value)} />
         </Field>

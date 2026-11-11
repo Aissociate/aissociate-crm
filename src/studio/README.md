@@ -54,6 +54,16 @@ La clé reste celle du CRM : le secret `OPENROUTER_API_KEY`, sinon `parametres.a
 Les réponses arrivent en flux SSE (`meta`, `delta`, `done`, `error`) et le raisonnement
 éventuel du modèle n'est jamais relayé.
 
+## Base de connaissances par agent
+`studio_agent_savoirs` contient le savoir-faire d'Aissociate, commun à tous les clients (dispositifs, règles, méthodes).
+Elle s'édite dans CRM › Studio IA clients › Catalogue d'agents › un agent. On peut saisir du texte ou importer
+un fichier PDF, TXT, MD ou CSV.
+- Avant chaque demande, l'agent reçoit les documents pertinents (`studio_recherche_savoirs`), complétés par les plus
+  récents dans un budget de 8 000 caractères.
+- Il doit terminer sa réponse par « Sources : titre (référence) » et ne jamais citer un document absent de la liste.
+- Le client voit seulement les titres et références consultés, jamais le contenu brut.
+- Si la migration `20261112100000_studio_savoirs.sql` n'est pas appliquée, la fonction continue de tourner, sans base.
+
 ## Images et vidéos
 Un super-pouvoir porteur de `"media": "image"` ou `"media": "video"` ne passe pas par le chat :
 la fonction lance une génération (`medias.ts`) et crée une ligne `studio_medias`.
