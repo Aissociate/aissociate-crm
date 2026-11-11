@@ -67,6 +67,8 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/blog-admin', label: 'Blog', icon: Newspaper, managerOnly: true },
       { to: '/newsletter', label: 'Newsletter', icon: Send, managerOnly: true },
+      // Studio IA : espaces agentiques des entreprises clientes (module src/studio).
+      { to: '/studio-admin', label: 'Studio IA clients', icon: Sparkles, managerOnly: true },
     ],
   },
   {

@@ -47,6 +47,8 @@ Disallow: /parametres
 Disallow: /tickets
 Disallow: /recrutement
 Disallow: /blog-admin
+Disallow: /studio
+Disallow: /studio-admin
 
 # Ressources statiques autorisées
 Allow: /*.css$

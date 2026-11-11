@@ -42,6 +42,11 @@ const Parametres = lazy(() => import('@/pages/Parametres'));
 const Tickets = lazy(() => import('@/pages/Tickets'));
 const CaptureMobile = lazy(() => import('@/pages/CaptureMobile'));
 
+// ── Studio IA (module isolé, cf. src/studio/README.md) ──
+// Espace client agentique (auth propre, hors Supabase Auth) + sa page d'admin CRM.
+const StudioApp = lazy(() => import('@/studio/StudioApp'));
+const StudioAdmin = lazy(() => import('@/studio/admin/StudioAdmin'));
+
 // ── Site vitrine public (vendorisé depuis Aissociate_OF, sous src/site) ──
 import OrganismHome from '@/site/pages/OrganismHome';
 import SiteFormationsList from '@/site/pages/FormationsList';
@@ -111,6 +116,9 @@ export default function App() {
       <Route path="/positionnement/:token" element={<SitePositionnement />} />
       <Route path="/evaluation/:token" element={<SiteEvaluation />} />
 
+      {/* ── Studio IA : espace des entreprises clientes (login propre) ── */}
+      <Route path="/studio/*" element={configured ? <StudioApp /> : <SupabaseNotice />} />
+
       {/* ── CRM Aissociate (accès Admin) ── */}
       <Route path="/login" element={configured ? <Login /> : <SupabaseNotice />} />
       <Route path="/reset-password" element={configured ? <ResetPassword /> : <SupabaseNotice />} />
@@ -155,6 +163,7 @@ export default function App() {
           element={<ProtectedRoute adminOnly><Parametres /></ProtectedRoute>}
         />
         <Route path="/tickets" element={<Tickets />} />
+        <Route path="/studio-admin" element={<ProtectedRoute managerOnly><StudioAdmin /></ProtectedRoute>} />
       </Route>
 
       {/* ── Capture mobile (plein écran, hors Layout : usage sur téléphone) ── */}
