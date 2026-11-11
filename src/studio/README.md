@@ -40,7 +40,15 @@ réservée au `service_role`.
 4. Le CRM suit l'usage via la vue `studio_usage_mois` (missions du mois, dernière activité).
 
 ## Modèle IA
-`parametres.ai.model_studio`, sinon `model_agent`, sinon `anthropic/claude-sonnet-4.5`.
+Le modèle se règle dans CRM › Studio IA clients, avec un sélecteur qui charge le catalogue
+OpenRouter via l'action `admin_modeles` (clé du CRM) et le classe par constructeur, avec les prix.
+Le premier niveau renseigné l'emporte :
+1. `studio_workspace_agents.modele` : cet agent, pour ce client ;
+2. `studio_workspaces.modele` : tous les agents de ce client ;
+3. `studio_agents.modele` : cet agent, par défaut ;
+4. `parametres.ai.model_studio`, sinon `model_agent`, sinon `anthropic/claude-sonnet-4.5`.
+
+La clé reste celle du CRM : le secret `OPENROUTER_API_KEY`, sinon `parametres.ai.openrouter_key`.
 Les réponses arrivent en flux SSE (`meta`, `delta`, `done`, `error`) et le raisonnement
 éventuel du modèle n'est jamais relayé.
 

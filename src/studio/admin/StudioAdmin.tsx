@@ -7,6 +7,7 @@ import { Bot, Building2, Copy, ExternalLink, KeyRound, Plus, UserPlus } from 'lu
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
 import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Spinner } from '@/components/ui';
+import { ModeleSelect, type ModeleOR } from './ModeleSelect';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -14,13 +15,15 @@ const db = supabase as unknown as SupabaseClient;
 type Workspace = {
   id: string; nom: string; entreprise_id: string | null; offre: string; secteur: string | null; taille: string | null;
   max_utilisateurs: number; actif: boolean; quota_messages_mois: number | null; contexte_entreprise: string;
-  expire_le: string | null; created_at: string;
+  expire_le: string | null; created_at: string; modele: string | null;
 };
 type StudioUser = { id: string; workspace_id: string; email: string; prenom: string | null; nom: string | null; role: string; actif: boolean; last_login_at: string | null };
 type AgentCat = {
   id: string; prenom: string; metier: string; accroche: string; description: string; prompt_systeme: string;
-  demandes: { titre: string; prompt: string }[]; super_pouvoirs: unknown[]; minutes_par_tache: number; couleur: string; offres: string[]; ordre: number; actif: boolean;
+  demandes: { titre: string; prompt: string }[]; super_pouvoirs: unknown[]; minutes_par_tache: number; couleur: string; offres: string[]; ordre: number; actif: boolean; modele: string | null;
 };
+/** Catalogue OpenRouter + modèle par défaut global (parametres.ai). */
+type Catalogue = { modeles: ModeleOR[]; defaut: string; chargement: boolean };
 type Usage = { workspace_id: string; demandes: number; reponses: number; derniere_activite: string };
 
 const OFFRES = [['essentiel', 'Essentiel'], ['pro', 'Pro'], ['sur_mesure', 'Sur mesure']] as const;
@@ -34,9 +37,10 @@ function motDePasseProvisoire(): string {
   return base;
 }
 
-async function adminStudio(body: Record<string, unknown>) {
-  const { error } = await supabase.functions.invoke('studio', { body });
+async function adminStudio<T = unknown>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('studio', { body });
   if (error) throw new Error(await functionErrorMessage(error));
+  return data as T;
 }
 
 export default function StudioAdmin() {
@@ -49,6 +53,14 @@ export default function StudioAdmin() {
   const [ouvert, setOuvert] = useState<Workspace | 'nouveau' | null>(null);
   const [agentEdite, setAgentEdite] = useState<AgentCat | null>(null);
   const [erreur, setErreur] = useState('');
+  const [catalogue, setCatalogue] = useState<Catalogue>({ modeles: [], defaut: '', chargement: true });
+
+  // Catalogue OpenRouter chargé une fois (via la fonction `studio`, avec la clé du CRM).
+  useEffect(() => {
+    adminStudio<{ modeles: ModeleOR[]; defaut: string }>({ action: 'admin_modeles' })
+      .then((r) => setCatalogue({ modeles: r.modeles, defaut: r.defaut, chargement: false }))
+      .catch((e) => { setCatalogue((c) => ({ ...c, chargement: false })); setErreur(`Modèles OpenRouter : ${e.message}`); });
+  }, []);
 
   const charger = useCallback(async () => {
     const [w, u, us, ag, en] = await Promise.all([
@@ -121,7 +133,8 @@ export default function StudioAdmin() {
                 <div className="flex items-center gap-3">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full font-semibold text-white" style={{ background: a.couleur }}>{a.prenom[0]}</span>
                   <div><p className="font-semibold text-fg">{a.prenom} <span className="font-normal text-muted">· {a.metier}</span></p>
-                    <p className="text-xs text-muted">Offres : {a.offres.join(', ')} · ≈ {a.minutes_par_tache} min / mission</p></div>
+                    <p className="text-xs text-muted">Offres : {a.offres.join(', ')} · ≈ {a.minutes_par_tache} min / mission</p>
+                    <p className="text-xs text-muted">Modèle : <code>{a.modele || `${catalogue.defaut || '…'} (défaut)`}</code></p></div>
                   {!a.actif && <Badge tone="danger" className="ml-auto">masqué</Badge>}
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm text-muted">{a.accroche}</p>
@@ -135,11 +148,11 @@ export default function StudioAdmin() {
         <EspaceModal
           espace={ouvert === 'nouveau' ? null : ouvert}
           users={ouvert === 'nouveau' ? [] : users.filter((u) => u.workspace_id === ouvert.id)}
-          agents={agents} entreprises={entreprises} lienStudio={lienStudio}
+          agents={agents} entreprises={entreprises} lienStudio={lienStudio} catalogue={catalogue}
           onClose={() => setOuvert(null)} onSaved={charger}
         />
       )}
-      {agentEdite && <AgentModal agent={agentEdite} onClose={() => setAgentEdite(null)} onSaved={charger} />}
+      {agentEdite && <AgentModal agent={agentEdite} catalogue={catalogue} onClose={() => setAgentEdite(null)} onSaved={charger} />}
     </div>
   );
 }
@@ -147,13 +160,13 @@ export default function StudioAdmin() {
 // ─── Espace : fiche, accès, agents ──────────────────────────────────────────
 
 function EspaceModal({
-  espace, users, agents, entreprises, lienStudio, onClose, onSaved,
+  espace, users, agents, entreprises, lienStudio, catalogue, onClose, onSaved,
 }: {
   espace: Workspace | null; users: StudioUser[]; agents: AgentCat[]; entreprises: { id: string; raison_sociale: string }[];
-  lienStudio: string; onClose: () => void; onSaved: () => Promise<void>;
+  lienStudio: string; catalogue: Catalogue; onClose: () => void; onSaved: () => Promise<void>;
 }) {
   const [f, setF] = useState<Partial<Workspace>>(espace ?? { nom: '', offre: 'essentiel', max_utilisateurs: 5, quota_messages_mois: 300, actif: true, contexte_entreprise: '' });
-  const [reglages, setReglages] = useState<Record<string, { actif: boolean; consignes: string }>>({});
+  const [reglages, setReglages] = useState<Record<string, { actif: boolean; consignes: string; modele: string | null }>>({});
   const [nouvelAcces, setNouvelAcces] = useState({ email: '', prenom: '', nom: '', role: 'proprietaire' });
   const [identifiants, setIdentifiants] = useState<string | null>(null);
   const [erreur, setErreur] = useState('');
@@ -161,8 +174,8 @@ function EspaceModal({
 
   useEffect(() => {
     if (!espace) return;
-    db.from('studio_workspace_agents').select('agent_id, actif, consignes').eq('workspace_id', espace.id).then(({ data }) => {
-      setReglages(Object.fromEntries((data ?? []).map((r) => [r.agent_id, { actif: r.actif, consignes: r.consignes }])));
+    db.from('studio_workspace_agents').select('agent_id, actif, consignes, modele').eq('workspace_id', espace.id).then(({ data }) => {
+      setReglages(Object.fromEntries((data ?? []).map((r) => [r.agent_id, { actif: r.actif, consignes: r.consignes, modele: r.modele ?? null }])));
     });
   }, [espace]);
 
@@ -172,6 +185,7 @@ function EspaceModal({
       nom: f.nom?.trim(), entreprise_id: f.entreprise_id || null, offre: f.offre, secteur: f.secteur || null, taille: f.taille || null,
       max_utilisateurs: Number(f.max_utilisateurs) || 5, quota_messages_mois: f.quota_messages_mois ? Number(f.quota_messages_mois) : null,
       actif: f.actif !== false, contexte_entreprise: f.contexte_entreprise ?? '', expire_le: f.expire_le || null,
+      modele: f.modele || null,
     };
     try {
       if (!ligne.nom) throw new Error("Nom de l'espace requis");
@@ -250,6 +264,10 @@ function EspaceModal({
           <Field label="Échéance (fin d'essai ou d'abonnement)"><input type="date" className="input" value={f.expire_le ?? ''} onChange={(e) => set('expire_le', e.target.value || null)} /></Field>
         </div>
         <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={f.actif !== false} onChange={(e) => set('actif', e.target.checked)} /> Espace actif</label>
+        <Field label="Modèle IA pour ce client (tous ses agents)" hint="Laisser « hérité » : chaque agent garde son propre modèle. Un réglage par agent, plus bas, l'emporte sur celui-ci.">
+          <ModeleSelect value={f.modele ?? null} onChange={(v) => set('modele', v)} modeles={catalogue.modeles} chargement={catalogue.chargement}
+            herite="le modèle de chaque agent" />
+        </Field>
         <Field label="Fiche entreprise (lue par tous les agents)" hint="Le propriétaire de l'espace peut aussi la compléter depuis le Studio.">
           <textarea className="input min-h-[120px]" value={f.contexte_entreprise ?? ''} onChange={(e) => set('contexte_entreprise', e.target.value)} />
         </Field>
@@ -295,7 +313,7 @@ function EspaceModal({
               <div className="space-y-2">
                 {agents.filter((a) => a.actif).map((a) => {
                   const inclus = a.offres.includes(f.offre ?? 'essentiel');
-                  const r = reglages[a.id] ?? { actif: true, consignes: '' };
+                  const r = reglages[a.id] ?? { actif: true, consignes: '', modele: null };
                   return (
                     <div key={a.id} className="rounded-lg border border-line p-3">
                       <label className="flex items-center gap-2 text-sm text-fg">
@@ -304,6 +322,13 @@ function EspaceModal({
                         <span className="font-medium">{a.prenom}</span> <span className="text-muted">· {a.metier}</span>
                         {!inclus && <span className="text-xs text-muted">(non inclus dans l'offre)</span>}
                       </label>
+                      {inclus && r.actif && (
+                        <div className="mt-2">
+                          <ModeleSelect value={r.modele} onChange={(v) => setReglages((x) => ({ ...x, [a.id]: { ...r, modele: v } }))}
+                            modeles={catalogue.modeles} chargement={catalogue.chargement}
+                            herite={f.modele || a.modele || `${catalogue.defaut} (défaut)`} />
+                        </div>
+                      )}
                       {inclus && r.actif && (
                         <textarea className="input mt-2 min-h-[60px] text-xs" placeholder={`Consignes propres à ce client pour ${a.prenom} (facultatif)`}
                           value={r.consignes} onChange={(e) => setReglages((x) => ({ ...x, [a.id]: { ...r, consignes: e.target.value } }))} />
@@ -323,7 +348,7 @@ function EspaceModal({
 
 // ─── Catalogue : édition d'un agent ─────────────────────────────────────────
 
-function AgentModal({ agent, onClose, onSaved }: { agent: AgentCat; onClose: () => void; onSaved: () => Promise<void> }) {
+function AgentModal({ agent, catalogue, onClose, onSaved }: { agent: AgentCat; catalogue: Catalogue; onClose: () => void; onSaved: () => Promise<void> }) {
   const [a, setA] = useState(agent);
   const [demandes, setDemandes] = useState(JSON.stringify(agent.demandes, null, 2));
   const [pouvoirs, setPouvoirs] = useState(JSON.stringify(agent.super_pouvoirs ?? [], null, 2));
@@ -364,6 +389,10 @@ function AgentModal({ agent, onClose, onSaved }: { agent: AgentCat; onClose: () 
             </div>
           </Field>
         </div>
+        <Field label="Modèle IA de l'agent" hint="Par défaut pour tous les clients ; un client peut avoir son propre réglage (fiche de l'espace).">
+          <ModeleSelect value={a.modele} onChange={(v) => setA({ ...a, modele: v })} modeles={catalogue.modeles} chargement={catalogue.chargement}
+            herite={`${catalogue.defaut || '…'} (Paramètres › IA)`} />
+        </Field>
         <Field label="Accroche (1re personne)"><input className="input" value={a.accroche} onChange={(e) => setA({ ...a, accroche: e.target.value })} /></Field>
         <Field label="Description"><input className="input" value={a.description} onChange={(e) => setA({ ...a, description: e.target.value })} /></Field>
         <Field label="Prompt système"><textarea className="input min-h-[140px] font-mono text-xs" value={a.prompt_systeme} onChange={(e) => setA({ ...a, prompt_systeme: e.target.value })} /></Field>

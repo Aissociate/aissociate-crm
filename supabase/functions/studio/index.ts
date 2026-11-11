@@ -19,6 +19,7 @@
 // Administration (JWT CRM d'un manager dans Authorization) :
 //   admin_create_user {workspace_id, email, prenom?, nom?, role?, password}
 //   admin_set_password {user_id, password}
+//   admin_modeles                                   → catalogue OpenRouter trié par constructeur
 //
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString), cf. Edge Function agent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -48,6 +49,8 @@ type Session = {
   ws: {
     id: string; nom: string; offre: string; quota_messages_mois: number | null;
     contexte_entreprise: string; expire_le: string | null;
+    /** Modèle imposé à tous les agents de ce client (null = hérité). */
+    modele: string | null;
   };
 };
 
@@ -58,7 +61,7 @@ type Session = {
 async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Session | null> {
   if (typeof token !== "string" || token.length !== 64) return null;
   const { data: s } = await sb.from("studio_sessions")
-    .select("id, expires_at, studio_users!inner(id, email, prenom, nom, role, actif, studio_workspaces!inner(id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif))")
+    .select("id, expires_at, studio_users!inner(id, email, prenom, nom, role, actif, studio_workspaces!inner(id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele))")
     .eq("token_hash", await sha256(token)).maybeSingle();
   if (!s || new Date(s.expires_at) < new Date()) return null;
   const u = s.studio_users as unknown as Record<string, unknown> & { studio_workspaces: Record<string, unknown> };
@@ -74,6 +77,7 @@ async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Sessi
       id: String(w.id), nom: String(w.nom), offre: String(w.offre),
       quota_messages_mois: w.quota_messages_mois as number | null,
       contexte_entreprise: String(w.contexte_entreprise ?? ""), expire_le: w.expire_le as string | null,
+      modele: (w.modele as string | null) || null,
     },
   };
 }
@@ -81,14 +85,19 @@ async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Sessi
 /** Agents accessibles à l'espace : actifs au catalogue, inclus dans l'offre, non désactivés pour l'espace. */
 async function agentsDuWorkspace(sb: SupabaseClient, ws: Session["ws"]) {
   const [{ data: agents }, { data: reglages }] = await Promise.all([
-    sb.from("studio_agents").select("id, prenom, metier, accroche, description, prompt_systeme, demandes, super_pouvoirs, minutes_par_tache, couleur, offres, ordre")
+    sb.from("studio_agents").select("id, prenom, metier, accroche, description, prompt_systeme, demandes, super_pouvoirs, minutes_par_tache, couleur, offres, ordre, modele")
       .eq("actif", true).order("ordre"),
-    sb.from("studio_workspace_agents").select("agent_id, actif, consignes").eq("workspace_id", ws.id),
+    sb.from("studio_workspace_agents").select("agent_id, actif, consignes, modele").eq("workspace_id", ws.id),
   ]);
   const parAgent = new Map((reglages ?? []).map((r) => [r.agent_id, r]));
   return (agents ?? [])
     .filter((a) => (a.offres as string[]).includes(ws.offre) && parAgent.get(a.id)?.actif !== false)
-    .map((a) => ({ ...a, consignes: parAgent.get(a.id)?.consignes ?? "" }));
+    .map((a) => ({
+      ...a,
+      consignes: parAgent.get(a.id)?.consignes ?? "",
+      // Priorité : cet agent pour ce client > ce client > cet agent (le défaut global vient de `parametres`).
+      modele_effectif: (parAgent.get(a.id)?.modele || ws.modele || a.modele || null) as string | null,
+    }));
 }
 
 function debutMois(): string {
@@ -128,7 +137,7 @@ async function construireMe(sb: SupabaseClient, s: Session) {
     user: { ...s.user, doit_changer: credentials?.doit_changer ?? false },
     workspace: s.ws,
     // Le gabarit (consigne détaillée) des super-pouvoirs reste côté serveur.
-    agents: agents.map(({ prompt_systeme: _p, offres: _o, consignes: _c, super_pouvoirs, ...a }) => ({
+    agents: agents.map(({ prompt_systeme: _p, offres: _o, consignes: _c, modele: _m, modele_effectif: _me, super_pouvoirs, ...a }) => ({
       ...a,
       super_pouvoirs: ((super_pouvoirs ?? []) as SuperPouvoir[]).map(({ gabarit: _g, ...sp }) => sp),
     })),
@@ -159,7 +168,7 @@ type Champ = { nom: string; label: string; type: "texte" | "long" | "choix"; opt
 type SuperPouvoir = { id: string; titre: string; description?: string; champs: Champ[]; gabarit: string };
 type AgentPrompt = {
   id: string; prenom: string; metier: string; description: string; prompt_systeme: string; consignes: string;
-  super_pouvoirs: SuperPouvoir[];
+  super_pouvoirs: SuperPouvoir[]; modele_effectif: string | null;
 };
 
 /** Périmètre : l'agent est un spécialiste. Hors cadre, il ne bricole pas : il passe la main au bon collègue. */
@@ -256,8 +265,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
   const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
   if (!apiKey) return json({ error: "Service IA non configuré. Contactez Aissociate." }, 503);
-  // Modèle dédié possible ; à défaut celui de l'agent du CRM (fiable, non « raisonnement pur »).
-  const model = ai.model_studio || ai.model_agent || "anthropic/claude-sonnet-4.5";
+  // Modèle : réglage agent/client (studio_*), puis défaut global du Studio, puis celui de l'agent du CRM.
+  const model = agent.modele_effectif || ai.model_studio || ai.model_agent || "anthropic/claude-sonnet-4.5";
 
   // Conversation : reprise (appartenance vérifiée) ou création.
   let conversationId = typeof body.conversation_id === "string" ? body.conversation_id : null;
@@ -386,7 +395,49 @@ async function estManager(req: Request): Promise<boolean> {
   return data === true;
 }
 
+/** Catalogue OpenRouter (modèles qui produisent du texte), avec la clé du CRM, pour les sélecteurs de l'admin. */
+async function listerModeles(sb: SupabaseClient): Promise<Response> {
+  const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
+  const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
+  const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
+  const resp = await fetch("https://openrouter.ai/api/v1/models", {
+    headers: apiKey ? { "Authorization": `Bearer ${apiKey}` } : {},
+  });
+  if (!resp.ok) return json({ error: `OpenRouter ${resp.status}` }, 502);
+  const { data } = await resp.json() as { data: Record<string, unknown>[] };
+  const parMillion = (x: unknown) => {
+    const n = Number(x);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 1_000_000 * 100) / 100 : null;
+  };
+  const modeles = (data ?? [])
+    .filter((m) => {
+      const arch = (m.architecture ?? {}) as { output_modalities?: string[]; modality?: string };
+      return arch.output_modalities ? arch.output_modalities.includes("text") : String(arch.modality ?? "").endsWith("->text");
+    })
+    .map((m) => {
+      const id = String(m.id);
+      const nom = String(m.name ?? id);
+      const prix = (m.pricing ?? {}) as { prompt?: string; completion?: string };
+      return {
+        id,
+        // « Anthropic: Claude Sonnet 4.5 » → constructeur « Anthropic », nom « Claude Sonnet 4.5 ».
+        constructeur: nom.includes(":") ? nom.split(":")[0].trim() : id.split("/")[0],
+        nom: nom.includes(":") ? nom.split(":").slice(1).join(":").trim() : nom,
+        contexte: Number(m.context_length) || null,
+        prix_entree: parMillion(prix.prompt),
+        prix_sortie: parMillion(prix.completion),
+      };
+    })
+    .sort((a, b) => a.constructeur.localeCompare(b.constructeur, "fr") || a.nom.localeCompare(b.nom, "fr"));
+  return json({
+    defaut: ai.model_studio || ai.model_agent || "anthropic/claude-sonnet-4.5",
+    source_defaut: ai.model_studio ? "model_studio" : ai.model_agent ? "model_agent" : "intégré",
+    modeles,
+  });
+}
+
 async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>): Promise<Response> {
+  if (action === "admin_modeles") return await listerModeles(sb);
   const password = String(body.password ?? "");
   const invalide = motDePasseValide(password);
   if (invalide) return json({ error: invalide }, 400);
@@ -434,7 +485,7 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Administration CRM ──
-    if (action === "admin_create_user" || action === "admin_set_password") {
+    if (action === "admin_create_user" || action === "admin_set_password" || action === "admin_modeles") {
       if (!(await estManager(req))) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body);
     }
