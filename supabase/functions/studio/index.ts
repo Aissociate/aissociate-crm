@@ -15,6 +15,7 @@
 //   retour {message_id, valeur: 1|-1|0} | epingler {message_id, epingle} | creations
 //   chat avec un super-pouvoir « media » → JSON {media:{id,…}} (image ou vidéo, voir medias.ts)
 //   media_statut {id} | medias (galerie des visuels et vidéos prêts)
+//   entete | entete_update {entete} | entete_logo {fichier base64, type} ou {supprimer:true}   (papier à en-tête)
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
 //   ressource_toggle {id, actif} | ressource_delete {id}
@@ -706,6 +707,57 @@ Deno.serve(async (req: Request) => {
       case "ressource_delete": {
         await sb.from("studio_documents").delete().eq("id", String(body.id)).eq("workspace_id", s.ws.id);
         return json({ ok: true });
+      }
+
+      // ── Papier à en-tête (exports Word / PDF) ──
+      case "entete": {
+        const { data, error } = await sb.from("studio_workspaces").select("entete, logo_chemin").eq("id", s.ws.id).single();
+        // Migration non appliquée : exports sans en-tête plutôt qu'une erreur.
+        if (error) return json({ entete: {}, logo_url: null, disponible: false });
+        return json({
+          entete: data.entete ?? {}, disponible: true,
+          logo_url: data.logo_chemin ? await urlSignee(sb, data.logo_chemin) : null,
+        });
+      }
+
+      case "entete_update": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const brut = (body.entete ?? {}) as Record<string, unknown>;
+        const entete: Record<string, string> = {};
+        for (const [k, max] of [["raison_sociale", 200], ["adresse", 300], ["code_postal", 20], ["ville", 120], ["telephone", 40],
+          ["email", 200], ["site", 200], ["siret", 40], ["mentions", 600]] as const) {
+          const v = String(brut[k] ?? "").trim().slice(0, max);
+          if (v) entete[k] = v;
+        }
+        const { error } = await sb.from("studio_workspaces").update({ entete }).eq("id", s.ws.id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true, entete });
+      }
+
+      case "entete_logo": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const { data: w } = await sb.from("studio_workspaces").select("logo_chemin").eq("id", s.ws.id).single();
+        const ancien = w?.logo_chemin as string | null | undefined;
+        if (body.supprimer === true) {
+          if (ancien) await sb.storage.from("studio-medias").remove([ancien]);
+          await sb.from("studio_workspaces").update({ logo_chemin: null }).eq("id", s.ws.id);
+          return json({ ok: true, logo_url: null });
+        }
+        // PNG, JPEG ou WebP uniquement (pas de SVG : il peut embarquer du script).
+        const types: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+        const ext = types[String(body.type ?? "")];
+        if (!ext) return json({ error: "Logo au format PNG, JPEG ou WebP uniquement." }, 400);
+        let octets: Uint8Array;
+        try { octets = Uint8Array.from(atob(String(body.fichier ?? "")), (c) => c.charCodeAt(0)); }
+        catch { return json({ error: "Fichier illisible." }, 400); }
+        if (!octets.length || octets.length > 500_000) return json({ error: "Logo de 500 Ko maximum." }, 400);
+        const chemin = `${s.ws.id}/logo-${Date.now()}.${ext}`;
+        const { error } = await sb.storage.from("studio-medias").upload(chemin, octets, { contentType: String(body.type), upsert: true });
+        if (error) return json({ error: `Stockage : ${error.message}` }, 500);
+        await sb.from("studio_workspaces").update({ logo_chemin: chemin }).eq("id", s.ws.id);
+        // L'ancien logo n'est retiré qu'une fois le nouveau en place.
+        if (ancien) await sb.storage.from("studio-medias").remove([ancien]);
+        return json({ ok: true, logo_url: await urlSignee(sb, chemin) });
       }
 
       case "contexte_update": {

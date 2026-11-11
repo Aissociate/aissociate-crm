@@ -38,6 +38,13 @@ export type Me = {
 
 export class SessionExpiree extends Error {}
 
+/** Papier à en-tête du client (exports Word / PDF). */
+export type Entete = {
+  raison_sociale?: string; adresse?: string; code_postal?: string; ville?: string;
+  telephone?: string; email?: string; site?: string; siret?: string; mentions?: string;
+};
+export type EnteteComplete = { entete: Entete; logo_url: string | null; disponible: boolean };
+
 export const jeton = {
   lire(): string | null { try { return localStorage.getItem(CLE_JETON); } catch { return null; } },
   ecrire(t: string | null) {

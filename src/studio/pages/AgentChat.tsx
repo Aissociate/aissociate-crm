@@ -4,6 +4,7 @@ import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown
 import { useStudio } from '../StudioApp';
 import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type SuperPouvoir } from '../api';
 import MediaVue from '../MediaVue';
+import BoutonsExport from '../BoutonsExport';
 import { Avatar, Markdown, cx } from '../composants';
 
 export default function AgentChat() {
@@ -252,6 +253,13 @@ export default function AgentChat() {
                       className={cx('flex items-center gap-1 rounded-lg p-1.5 text-xs hover:bg-neutral-100', m.epingle && 'text-orange-600')}>
                       {m.epingle ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />} {m.epingle ? 'Gardé' : 'Garder'}
                     </button>
+                    {/* Pas d'export pour un média ni pour un simple relais vers un collègue. */}
+                    {!m.media && !extraireRelais(m.content).relais && (
+                      <BoutonsExport source={{
+                        titre: conversations.find((c) => c.id === convId)?.titre ?? `${agent.metier} — ${agent.prenom}`,
+                        contenu: m.content, agent: agent.prenom, date: m.created_at, nomEspace: me.workspace.nom,
+                      }} />
+                    )}
                   </div>
                 )}
               </div>

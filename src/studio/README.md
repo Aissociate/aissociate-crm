@@ -64,6 +64,18 @@ un fichier PDF, TXT, MD ou CSV.
 - Le client voit seulement les titres et références consultés, jamais le contenu brut.
 - Si la migration `20261112100000_studio_savoirs.sql` n'est pas appliquée, la fonction continue de tourner, sans base.
 
+## Exports Word / PDF et papier à en-tête
+Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux boutons : **Word** et **PDF**.
+- `exportDoc.ts` (module pur, testé) convertit le Markdown en blocs. Il produit le HTML imprimable du PDF et le `.docx`.
+- `exports.ts` fait le lien avec le navigateur :
+  - la bibliothèque `docx@9.5.1` est chargée au premier clic depuis esm.sh, sans toucher au bundle ni au lockfile ;
+  - le logo est converti en PNG (Word ne lit pas le WebP) ;
+  - le PDF est produit par l'impression d'un cadre caché (« Enregistrer au format PDF »).
+- Papier à en-tête : « Mon entreprise » › Papier à en-tête (coordonnées et logo). Les données sont en base dans
+  `studio_workspaces.entete` et `logo_chemin` (migration `20261112120000`). Le logo est rangé dans le bucket
+  `studio-medias`, en PNG, JPEG ou WebP (pas de SVG), 500 Ko au maximum.
+- Si la migration n'est pas appliquée, le bloc d'en-tête est masqué et les exports partent sans en-tête.
+
 ## Images et vidéos
 Un super-pouvoir porteur de `"media": "image"` ou `"media": "video"` ne passe pas par le chat :
 la fonction lance une génération (`medias.ts`) et crée une ligne `studio_medias`.

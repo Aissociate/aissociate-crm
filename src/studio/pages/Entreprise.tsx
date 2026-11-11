@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Bouton, Carte, Titre } from '../composants';
+import PapierEntete from './PapierEntete';
 
 const MODELE = `Activité :
 Ville / zone :
@@ -46,6 +47,7 @@ export default function Entreprise() {
           </div>
         ) : <p className="text-sm text-neutral-500">Seul le propriétaire de l'espace peut modifier cette fiche.</p>}
       </Carte>
+      <div className="mt-6"><PapierEntete /></div>
     </>
   );
 }

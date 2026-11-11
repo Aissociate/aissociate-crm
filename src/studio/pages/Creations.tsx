@@ -4,6 +4,7 @@ import { Check, Copy, Download, PinOff } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Avatar, Chargement, Markdown, Titre } from '../composants';
+import BoutonsExport from '../BoutonsExport';
 
 type Creation = { id: string; agent_id: string; content: string; created_at: string; conversation_id: string; titre: string };
 type MediaGalerie = { id: string; type: 'image' | 'video'; agent_id: string | null; prompt: string; url: string | null; created_at: string; conversation_id: string | null };
@@ -84,6 +85,9 @@ export default function Creations() {
                   <button className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-neutral-100" onClick={() => retirer(c.id)}>
                     <PinOff className="h-3.5 w-3.5" /> Retirer
                   </button>
+                  <BoutonsExport className="ml-auto" source={{
+                    titre: c.titre, contenu: c.content, agent: a?.prenom ?? 'votre agent', date: c.created_at, nomEspace: me.workspace.nom,
+                  }} />
                 </footer>
               </article>
             );
