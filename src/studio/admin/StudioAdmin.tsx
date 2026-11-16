@@ -11,6 +11,7 @@ import { ModeleSelect, type ModeleOR } from './ModeleSelect';
 import HarnessPanel from './HarnessPanel';
 import RentabilitePanel from './RentabilitePanel';
 import ConnecteursEspace from './ConnecteursEspace';
+import NangoEspace from './NangoEspace';
 import SavoirsAgent from './SavoirsAgent';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
@@ -328,6 +329,8 @@ function EspaceModal({
               </div>
               <p className="mt-1 text-xs text-muted">Un mot de passe provisoire est généré ; le client le change à sa première connexion.</p>
             </section>
+
+            <NangoEspace workspaceId={espace.id} nomEspace={espace.nom} emailDefaut={users.find((u) => u.role === 'proprietaire')?.email ?? ''} />
 
             <ConnecteursEspace workspaceId={espace.id} />
 

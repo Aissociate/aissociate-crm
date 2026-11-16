@@ -76,6 +76,31 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `studio-medias`, en PNG, JPEG ou WebP (pas de SVG), 500 Ko au maximum.
 - Si la migration n'est pas appliquée, le bloc d'en-tête est masqué et les exports partent sans en-tête.
 
+## Connexions en un clic (Nango)
+Le client connecte lui-même ses applications : bouton « Connecter » dans Studio › Connecteurs, ou lien reçu
+par e-mail (`/studio/connecter/<jeton>`, valable 7 jours). Toute intégration activée dans le compte Nango
+apparaît automatiquement.
+
+**Cloisonnement par client (tenant = `studio_workspaces.id`) :**
+1. Seule l'Edge Function `studio` crée les sessions Nango, avec le tag `organization_id` égal à l'espace de
+   la session Studio, ou de l'invitation, ou d'un appel manager vérifié. Ce n'est jamais une valeur envoyée
+   par le navigateur.
+2. Le webhook `nango-webhook` vérifie d'abord la signature HMAC-SHA256 du corps brut. Il rattache ensuite
+   la connexion à l'espace lu dans les tags, refuse un espace inexistant et ne déplace jamais une connexion
+   d'un espace à un autre.
+3. La synchronisation de secours ne liste chez Nango que `tags[organization_id]=<espace>`, puis revérifie le tag.
+4. `studio_nango_connexions` et `studio_connexion_invitations` n'ont aucune politique côté client : seul le
+   service role y écrit, et les managers les lisent. Pour les invitations, seul le SHA-256 du jeton est stocké.
+
+**Pour la prochaine étape**, quand les agents utiliseront les outils Nango : créer une session d'agent
+(`POST /sessions`) avec `tenant.connections.pinned` contenant uniquement les connexions de l'espace, garder
+`nango_proxy` désactivé et `expires_in` court.
+
+**Configuration :**
+- secrets Supabase `NANGO_SECRET_KEY` et `NANGO_WEBHOOK_SIGNING_KEY` ;
+- dans Nango › Environment settings › Webhooks, l'URL `https://<projet>.supabase.co/functions/v1/nango-webhook` ;
+- migration `20261116100000_studio_nango.sql`.
+
 ## Coûts, rentabilité et rapport mensuel
 - **Coût réel** : chaque réponse enregistre `cout` (USD), les tokens et le modèle, lus dans le dernier fragment du
   flux OpenRouter (`usage`). Les médias gardent leur coût ; une vidéo sans coût renvoyé est estimée à 0,08 $/s.

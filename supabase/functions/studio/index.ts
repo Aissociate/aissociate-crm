@@ -16,6 +16,9 @@
 //   chat avec un super-pouvoir « media » → JSON {media:{id,…}} (image ou vidéo, voir medias.ts)
 //   media_statut {id} | medias (galerie des visuels et vidéos prêts)
 //   entete | entete_update {entete} | entete_logo {fichier base64, type} ou {supprimer:true}   (papier à en-tête)
+//   nango_etat | nango_connecter {integration_id?} | nango_synchroniser | nango_deconnecter {integration_id}
+//   nango_invitation {integration_id?, email?}      (connexions en un clic, cloisonnées par espace)
+// Public : invitation_ouvrir {jeton}                → lien Nango pour l'espace de l'invitation
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
 //   ressource_toggle {id, actif} | ressource_delete {id}
@@ -39,6 +42,23 @@ import {
   BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
+import {
+  connexionsEspace, creerInvitation, deconnecter, lienConnexion, listerIntegrations, nangoConfigure,
+  ouvrirInvitation, synchroniser,
+} from "./nango.ts";
+
+/** Origine des liens d'invitation : seulement nos domaines (l'en-tête Origin est contrôlé par le client). */
+function origineSure(req: Request | string): string {
+  const o = typeof req === "string" ? req : (req.headers.get("origin") ?? "");
+  return /^https:\/\/(www\.)?aissociate\.re$/.test(o) || /^http:\/\/localhost:\d+$/.test(o) ? o : "https://aissociate.re";
+}
+
+/** État des connexions en un clic d'un espace (intégrations proposées + connexions de CET espace). */
+async function etatNango(sb: SupabaseClient, wsId: string) {
+  if (!nangoConfigure()) return { configure: false, integrations: [], connexions: [] };
+  const [integrations, connexions] = await Promise.all([listerIntegrations(), connexionsEspace(sb, wsId)]);
+  return { configure: true, integrations, connexions };
+}
 import {
   bornesMois, calculerRapport, moisValide,
   type AgentRapport, type ConversationRapport, type MediaRapport, type MessageRapport, type Rapport,
@@ -514,6 +534,19 @@ async function listerModeles(sb: SupabaseClient): Promise<Response> {
 
 async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>): Promise<Response> {
   if (action === "admin_modeles") return await listerModeles(sb);
+  if (action === "admin_nango_etat") {
+    return json(await etatNango(sb, String(body.workspace_id ?? "")));
+  }
+  if (action === "admin_nango_invitation") {
+    const wsId = String(body.workspace_id ?? "");
+    const { data: w } = await sb.from("studio_workspaces").select("id").eq("id", wsId).maybeSingle();
+    if (!w) return json({ error: "Espace introuvable" }, 404);
+    const inv = await creerInvitation(sb, {
+      wsId, integrationId: body.integration_id ? String(body.integration_id) : null,
+      email: body.email ? String(body.email) : null, creePar: "crm", origine: origineSure(String(body.origine ?? "")),
+    });
+    return json(inv);
+  }
   if (action === "admin_rapport") {
     const wsId = String(body.workspace_id ?? "");
     const { data: w } = await sb.from("studio_workspaces").select("*").eq("id", wsId).maybeSingle();
@@ -573,12 +606,19 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Administration CRM ──
-    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport"].includes(action)) {
+    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_nango_etat", "admin_nango_invitation"].includes(action)) {
       if (!(await estManager(req))) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body);
     }
 
     // ── Connexion ──
+    // ── Invitation publique « connectez votre application » (sans session : l'espace vient de l'invitation) ──
+    if (action === "invitation_ouvrir") {
+      const r = await ouvrirInvitation(sb, body.jeton);
+      if (!r) return json({ error: "Ce lien a expiré ou n'est plus valide. Demandez-en un nouveau." }, 404);
+      return json(r);
+    }
+
     if (action === "login") {
       const email = String(body.email ?? "").trim().toLowerCase();
       const password = String(body.password ?? "");
@@ -660,6 +700,38 @@ Deno.serve(async (req: Request) => {
           ...m, media: media_id ? await statutMedia(sb, cle, s.ws.id, media_id) : null,
         })));
         return json({ conversation: c, messages });
+      }
+
+      // ── Connexions en un clic (Nango) : toujours l'espace de la session ──
+      case "nango_etat":
+        return json(await etatNango(sb, s.ws.id));
+
+      case "nango_connecter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const r = await lienConnexion({
+          wsId: s.ws.id, wsNom: s.ws.nom, email: s.user.email, utilisateurId: s.user.id,
+          integrationId: body.integration_id ? String(body.integration_id) : null,
+        });
+        return json(r);
+      }
+
+      case "nango_synchroniser": {
+        await synchroniser(sb, s.ws.id);
+        return json(await etatNango(sb, s.ws.id));
+      }
+
+      case "nango_deconnecter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        await deconnecter(sb, s.ws.id, String(body.integration_id ?? ""));
+        return json(await etatNango(sb, s.ws.id));
+      }
+
+      case "nango_invitation": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        return json(await creerInvitation(sb, {
+          wsId: s.ws.id, integrationId: body.integration_id ? String(body.integration_id) : null,
+          email: body.email ? String(body.email) : null, creePar: `studio:${s.user.id}`, origine: origineSure(req),
+        }));
       }
 
       case "connecteurs":

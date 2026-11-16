@@ -18,6 +18,7 @@ const Entreprise = lazy(() => import('./pages/Entreprise'));
 const Compte = lazy(() => import('./pages/Compte'));
 const Connecteurs = lazy(() => import('./pages/Connecteurs'));
 const Rapport = lazy(() => import('./pages/Rapport'));
+const ConnecterInvitation = lazy(() => import('./pages/ConnecterInvitation'));
 
 type Ctx = {
   me: Me | null;
@@ -157,6 +158,8 @@ export default function StudioApp() {
       <Suspense fallback={<div className="min-h-screen bg-[#f6f6f4]"><Chargement /></div>}>
         <Routes>
           <Route path="connexion" element={<Connexion />} />
+          {/* Lien public d'invitation à connecter une application (sans session) */}
+          <Route path="connecter/:jeton" element={<ConnecterInvitation />} />
           <Route element={<Garde />}>
             <Route index element={<Accueil />} />
             <Route path="assistants" element={<Assistants />} />

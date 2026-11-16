@@ -51,11 +51,18 @@ export const CONNECTEURS: Record<string, Def> = {
 
 /** Connecteurs au statut « connecte », pour le prompt des agents. */
 export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promise<ConnecteurActif[]> {
-  const { data } = await sb.from("studio_connecteurs").select("type, infos").eq("workspace_id", wsId).eq("statut", "connecte");
-  return (data ?? []).filter((c) => CONNECTEURS[c.type]).map((c) => ({
+  const [{ data }, { data: nango }] = await Promise.all([
+    sb.from("studio_connecteurs").select("type, infos").eq("workspace_id", wsId).eq("statut", "connecte"),
+    // Connexions en un clic (Nango) de CET espace ; table absente → aucune.
+    sb.from("studio_nango_connexions").select("integration_id, provider").eq("workspace_id", wsId).eq("statut", "connecte"),
+  ]);
+  const enUnClic: ConnecteurActif[] = (nango ?? []).map((c) => ({
+    type: `nango:${c.integration_id}`, libelle: String(c.integration_id).replace(/-/g, " "), detail: "connecté par le client",
+  }));
+  return [...enUnClic, ...(data ?? []).filter((c) => CONNECTEURS[c.type]).map((c) => ({
     type: c.type, libelle: CONNECTEURS[c.type].libelle,
     detail: CONNECTEURS[c.type].detail?.((c.infos ?? {}) as Record<string, string>),
-  }));
+  }))];
 }
 
 /** Liste pour le client : jamais le secret, seulement s'il est renseigné. */

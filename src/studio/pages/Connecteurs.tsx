@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, Mail, Plug, Server, Trash2, X, AlertTriangle } fro
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
+import ConnexionsUnClic from '../ConnexionsUnClic';
 
 type Statut = 'demande' | 'en_cours' | 'connecte' | 'erreur' | 'desactive';
 type Connecteur = { id: string; type: string; statut: Statut; infos: Record<string, string>; secret_renseigne: boolean; notes_admin: string; updated_at: string };
@@ -114,6 +115,8 @@ export default function Connecteurs() {
         </p>
       </div>
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
+      <ConnexionsUnClic />
+      <h2 className="mb-3 text-lg font-semibold">Connexions assistées par Aissociate</h2>
       {liste === null ? <Chargement /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CATALOGUE.map((d) => {
