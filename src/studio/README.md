@@ -92,9 +92,33 @@ apparaît automatiquement.
 4. `studio_nango_connexions` et `studio_connexion_invitations` n'ont aucune politique côté client : seul le
    service role y écrit, et les managers les lisent. Pour les invitations, seul le SHA-256 du jeton est stocké.
 
-**Pour la prochaine étape**, quand les agents utiliseront les outils Nango : créer une session d'agent
-(`POST /sessions`) avec `tenant.connections.pinned` contenant uniquement les connexions de l'espace, garder
-`nango_proxy` désactivé et `expires_in` court.
+**Page Connecteurs :**
+- les cartes Google Workspace, Outlook / Microsoft 365, Facebook, Instagram, LinkedIn et TikTok affichent un
+  bouton « Connecter » par service dès que l'intégration correspondante est activée dans Nango (rapprochement
+  par fournisseur : `google-mail`, `google-calendar`, `google-drive`, `outlook`, `microsoft`, `facebook`,
+  `instagram`, `linkedin`, `tiktok-accounts`…). Sans intégration activée, la carte garde la demande assistée ;
+- SMTP et serveur MCP restent des connexions directes ;
+- « Sur demande, en contactant Aissociate » liste tout le catalogue Nango (`GET /providers`, cache 24 h). Une
+  demande crée une ligne `studio_connecteurs` de type `app:<fournisseur>`, suivie dans le CRM. Pour la
+  servir : activer l'intégration dans Nango, elle apparaît alors en un clic chez le client.
+
+**Outils des agents (Google Drive) :** `outils.ts` + `drive.ts`. Si l'espace a une connexion `google-drive`,
+le chat passe en appel de fonctions : `drive_rechercher`, `drive_lister`, `drive_lire` (exécutés tout de suite,
+tracés au journal) et `drive_creer_document`, qui ne crée rien mais enregistre un livrable « à valider »
+portant l'action (`studio_livrables.action`). Le « VALIDÉ » du propriétaire exécute l'action, puis passe le
+livrable en « publié » avec le lien (`resultat`). En cas d'échec, l'erreur est notée et le dépôt peut être
+relancé. Le jeton Google est demandé à Nango pour la connexion de l'espace de la session uniquement.
+Migration `20261117120000_studio_outils.sql`.
+
+**Compétences, ressources et pièces jointes :** tous les agents ont toujours deux outils, `ressource_lire`
+(relit en entier une note, une compétence ou un fichier de l'index des ressources actives) et
+`competence_enregistrer` (crée ou met à jour une note « Compétence — … » dans Mes ressources, signée par
+l'agent, tracée au journal). La boucle du chat reste en flux : les appels d'outils arrivent par fragments
+(`flux.ts`). Si le modèle ne sait pas appeler d'outils, la requête est relancée sans outils. Le chat accepte
+jusqu'à 5 pièces jointes : PDF, Word, Excel, PowerPoint, OpenDocument, CSV et texte. Le texte est extrait
+dans le navigateur (`src/studio/extraction.ts`, bibliothèques chargées depuis esm.sh), puis stocké dans
+`studio_messages.pieces` et relu aux tours suivants. Un rappel en fin de prompt impose d'utiliser la fiche
+entreprise et les ressources plutôt que des champs « à compléter ».
 
 **Configuration :**
 - secrets Supabase `NANGO_SECRET_KEY` et `NANGO_WEBHOOK_SIGNING_KEY` ;

@@ -3,20 +3,8 @@ import { FileText, Plus, Search, StickyNote, Trash2, Upload, X } from 'lucide-re
 import { useStudio } from '../StudioApp';
 import { appel, type Ressource } from '../api';
 import { Bouton, Chargement, Interrupteur, Titre, cx } from '../composants';
+import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 
-// Extraction PDF chargée à la demande depuis un CDN ESM (même approche que le CRM,
-// recopiée ici pour garder le module autonome).
-const UNPDF_CDN = 'https://esm.sh/unpdf@1.6.2';
-async function textePdf(buf: ArrayBuffer): Promise<string> {
-  const m = await import(/* @vite-ignore */ UNPDF_CDN) as {
-    getDocumentProxy: (d: Uint8Array) => Promise<unknown>;
-    extractText: (p: unknown, o: { mergePages: boolean }) => Promise<{ text: string | string[] }>;
-  };
-  const { text } = await m.extractText(await m.getDocumentProxy(new Uint8Array(buf)), { mergePages: true });
-  return (Array.isArray(text) ? text.join('\n') : text).replace(/[ \t]+\n/g, '\n').trim();
-}
-
-const FORMATS = '.pdf,.txt,.md,.csv';
 const taille = (o: number | null) => (o == null ? '' : o > 1e6 ? `${(o / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(o / 1e3))} Ko`);
 
 export default function Ressources() {
@@ -38,16 +26,18 @@ export default function Ressources() {
   const visibles = useMemo(() => (liste ?? []).filter((r) => r.type === onglet
     && r.titre.toLowerCase().includes(recherche.toLowerCase())), [liste, onglet, recherche]);
 
-  const importer = async (f: File) => {
+  const importer = async (fichiers: File[]) => {
     setErreur(''); setImport(true);
-    try {
-      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-      if (f.size > 15e6) throw new Error('Fichier trop volumineux (15 Mo max).');
-      const contenu = ext === 'pdf' ? await textePdf(await f.arrayBuffer()) : await f.text();
-      if (!contenu.trim()) throw new Error("Aucun texte lisible dans ce fichier (PDF scanné ?).");
-      await appel('ressource_add', { titre: f.name, contenu, type: 'fichier', format: ext, taille: f.size });
-      await charger(); rafraichir();
-    } catch (e) { setErreur(gerer(e)); } finally { setImport(false); if (fichier.current) fichier.current.value = ''; }
+    const echecs: string[] = [];
+    for (const f of fichiers) {
+      try {
+        const contenu = await extraireTexte(f);
+        await appel('ressource_add', { titre: f.name, contenu, type: 'fichier', format: extension(f.name), taille: f.size });
+      } catch (e) { echecs.push(gerer(e)); }
+    }
+    if (echecs.length) setErreur(echecs.join(' · '));
+    await charger(); rafraichir();
+    setImport(false); if (fichier.current) fichier.current.value = '';
   };
 
   const enregistrerNote = async () => {
@@ -89,14 +79,14 @@ export default function Ressources() {
         </label>
         {onglet === 'fichier' ? (
           <>
-            <input ref={fichier} type="file" accept={FORMATS} className="hidden" onChange={(e) => e.target.files?.[0] && importer(e.target.files[0])} />
+            <input ref={fichier} type="file" multiple accept={FORMATS_DOCUMENTS} className="hidden" onChange={(e) => e.target.files?.length && importer([...e.target.files])} />
             <Bouton onClick={() => fichier.current?.click()} disabled={import_}><Upload className="h-4 w-4" /> {import_ ? 'Lecture…' : 'Importer'}</Bouton>
           </>
         ) : (
           <Bouton onClick={() => setNote({ titre: '', contenu: '' })}><Plus className="h-4 w-4" /> Nouvelle note</Bouton>
         )}
       </div>
-      {onglet === 'fichier' && <p className="mb-4 text-xs text-neutral-500">Formats acceptés : PDF (texte), TXT, Markdown, CSV. Le texte est extrait dans votre navigateur.</p>}
+      {onglet === 'fichier' && <p className="mb-4 text-xs text-neutral-500">Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument, CSV, texte (15 Mo max). Le texte est extrait dans votre navigateur.</p>}
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
 
       {note && (

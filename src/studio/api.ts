@@ -20,7 +20,12 @@ export type Conversation = { id: string; agent_id: string; titre: string; update
 export type Message = {
   id?: string; role: 'user' | 'assistant'; content: string; retour?: number | null; epingle?: boolean; created_at?: string;
   media?: Media | null;
+  /** Actions d'outils (Drive…) menées pendant la réponse — affichage seulement. */
+  outils?: string[];
+  /** Pièces jointes du message (noms seulement ; le texte reste côté serveur). */
+  pieces?: { nom: string; format: string | null; taille: number | null }[];
 };
+export type PieceJointe = { nom: string; format: string; taille: number; contenu: string };
 export type Ressource = {
   id: string; titre: string; type: 'fichier' | 'note'; format: string | null; taille: number | null;
   actif: boolean; created_at: string; studio_users: { prenom: string | null; nom: string | null } | null;
@@ -70,10 +75,11 @@ export async function appel<T = Record<string, unknown>>(action: string, donnees
 
 /** Chat en flux SSE : `onDelta` reçoit le texte au fil de l'eau. */
 export async function discuter(
-  params: { agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> } },
+  params: { agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> }; pieces?: PieceJointe[] },
   cb: {
     onMeta?: (m: { conversation_id: string; ressources: string[]; savoirs?: { titre: string; source: string | null }[] }) => void;
     onDelta: (t: string) => void;
+    onOutil?: (libelle: string) => void;
   },
   signal?: AbortSignal,
 ): Promise<{ message_id: string | null; conversation_id: string }> {
@@ -106,6 +112,7 @@ export async function discuter(
       if (ev === 'error') throw new Error(String(data.message ?? 'Erreur du service IA'));
       if (ev === 'meta') cb.onMeta?.(data as never);
       if (ev === 'delta') cb.onDelta(String(data.text ?? ''));
+      if (ev === 'outil') cb.onOutil?.(String(data.libelle ?? ''));
       if (ev === 'done') fin = data as never;
     }
   }

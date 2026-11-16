@@ -32,6 +32,23 @@ async function nango(chemin: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
+/**
+ * Jeton d'accès du fournisseur (ex. Google) pour la connexion de CET espace.
+ * La connexion est retrouvée côté serveur par workspace_id : un agent ne peut
+ * jamais utiliser la connexion d'un autre client. Nango renouvelle le jeton.
+ */
+export async function jetonAcces(sb: SupabaseClient, wsId: string, integrationId: string): Promise<string> {
+  const { data: c } = await sb.from("studio_nango_connexions").select("connection_id")
+    .eq("workspace_id", wsId).eq("integration_id", integrationId).eq("statut", "connecte").maybeSingle();
+  if (!c) throw new Error(`Aucune connexion « ${integrationId} » active pour cet espace.`);
+  const r = await nango(`/connections/${encodeURIComponent(c.connection_id)}?provider_config_key=${encodeURIComponent(integrationId)}`);
+  if (!r.ok) throw new Error(`Connexion ${integrationId} indisponible (${r.status}). Reconnectez l'application depuis « Connecteurs ».`);
+  const j = await r.json() as { credentials?: { access_token?: string } };
+  const jeton = j.credentials?.access_token;
+  if (!jeton) throw new Error(`Connexion ${integrationId} sans jeton d'accès. Reconnectez l'application.`);
+  return jeton;
+}
+
 export function nangoConfigure(): boolean {
   return Boolean(Deno.env.get("NANGO_SECRET_KEY")?.trim());
 }
@@ -47,6 +64,21 @@ export async function listerIntegrations(): Promise<IntegrationNango[]> {
     id: i.unique_key, provider: i.provider, nom: i.display_name || i.unique_key, logo: i.logo ?? null,
   }));
   cache = { quand: Date.now(), liste };
+  return liste;
+}
+
+// Catalogue complet des fournisseurs Nango (≈ 700) : affiché « sur demande » au client.
+export type Fournisseur = { nom: string; libelle: string; categories: string[]; logo: string | null };
+let cacheFournisseurs: { quand: number; liste: Fournisseur[] } | null = null;
+export async function listerFournisseurs(): Promise<Fournisseur[]> {
+  if (cacheFournisseurs && Date.now() - cacheFournisseurs.quand < 86_400_000) return cacheFournisseurs.liste;
+  const r = await nango("/providers");
+  if (!r.ok) throw new Error(`Nango ${r.status} (catalogue)`);
+  const j = await r.json() as { data?: { name: string; display_name?: string; categories?: string[]; logo_url?: string }[] };
+  const liste = (j.data ?? []).map((f) => ({
+    nom: f.name, libelle: f.display_name || f.name, categories: f.categories ?? [], logo: f.logo_url ?? null,
+  })).sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"));
+  cacheFournisseurs = { quand: Date.now(), liste };
   return liste;
 }
 

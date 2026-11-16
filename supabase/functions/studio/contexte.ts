@@ -137,5 +137,10 @@ ${savoirs.map((s, i) => `### [S${i + 1}] ${s.titre}${s.source ? ` — référenc
     }
     parts.push(`## Contenus déjà validés par l'entreprise (les plus récents)\n${blocs.join("\n\n")}`);
   }
+  // Rappel en fin de prompt (là où le modèle y prête le plus attention) : le contexte
+  // était parfois ignoré au profit de modèles génériques « [à compléter] ».
+  parts.push(`## Rappel avant de répondre
+Tu travailles pour ${ws.nom}. Personnalise chaque réponse avec la fiche entreprise${p.ressources.length ? ", les ressources" : ""} et les contenus fournis ci-dessus : noms, offres, prix, lieu, clients, ton.
+Ne redemande jamais une information qui s'y trouve déjà. Si une information indispensable manque vraiment, dis précisément laquelle, au lieu de laisser des champs génériques à compléter.`);
   return parts.join("\n\n");
 }

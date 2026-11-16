@@ -46,7 +46,7 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
           {lignes.map((c) => (
             <div key={c.id} className="rounded-lg border border-line p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-fg">{LIBELLES[c.type] ?? c.type}</span>
+                <span className="font-medium text-fg">{LIBELLES[c.type] ?? (c.type.startsWith('app:') ? `Sur demande : ${c.infos?.libelle ?? c.type.slice(4)}` : c.type)}</span>
                 <Badge tone={TON[c.statut] ?? 'neutral'}>{STATUTS.find(([k]) => k === c.statut)?.[1] ?? c.statut}</Badge>
                 {c.secret_chiffre && <Badge tone="neutral">secret chiffré enregistré</Badge>}
                 <span className="ml-auto text-xs text-muted">maj {new Date(c.updated_at).toLocaleDateString('fr-FR')}</span>

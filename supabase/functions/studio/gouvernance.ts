@@ -7,6 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { hasherMotDePasse } from "./securite.ts";
 import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Reponses } from "./questionnaire.ts";
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
+import { executerAction, type ActionLivrable } from "./outils.ts";
 
 export { journaliser };
 
@@ -240,7 +241,7 @@ const TRANSITIONS: Record<string, string[]> = { a_valider: ["valide", "refuse"],
 
 export async function deciderLivrable(sb: SupabaseClient, wsId: string, acteur: string, body: Record<string, unknown>) {
   const statut = String(body.statut ?? "");
-  const { data: l } = await sb.from("studio_livrables").select("id, statut, titre, agent_id")
+  const { data: l } = await sb.from("studio_livrables").select("id, statut, titre, agent_id, action")
     .eq("id", String(body.id ?? "")).eq("workspace_id", wsId).maybeSingle();
   if (!l) return { erreur: "Livrable introuvable", statut: 404 };
   if (!TRANSITIONS[l.statut]?.includes(statut)) return { erreur: `Passage « ${l.statut} » → « ${statut} » impossible.`, statut: 400 };
@@ -250,12 +251,26 @@ export async function deciderLivrable(sb: SupabaseClient, wsId: string, acteur: 
   }).eq("id", l.id);
   if (error) return { erreur: error.message, statut: 400 };
   await journaliser(sb, { wsId, acteur, agentId: l.agent_id, action: `livrable_${statut}`, detail: { livrable: l.id, titre: l.titre, commentaire } });
+
+  // Livrable porteur d'une action (ex. créer un document dans le Drive) : le « VALIDÉ »
+  // déclenche l'exécution. Réussite → publié avec le lien ; échec → reste validé, erreur notée.
+  if (statut === "valide" && l.action) {
+    const r = await executerAction(sb, wsId, l.action as ActionLivrable);
+    if (r.ok) {
+      await sb.from("studio_livrables").update({ statut: "publie", resultat: { id: r.id, lien: r.lien } }).eq("id", l.id);
+      await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_executee", detail: { livrable: l.id, titre: l.titre, lien: r.lien } });
+      return { ok: true, execute: true, lien: r.lien };
+    }
+    await sb.from("studio_livrables").update({ resultat: { erreur: r.erreur } }).eq("id", l.id);
+    await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_echec", detail: { livrable: l.id, titre: l.titre, erreur: r.erreur } });
+    return { ok: true, execute: false, erreur_action: r.erreur };
+  }
   return { ok: true };
 }
 
 export async function listerLivrables(sb: SupabaseClient, wsId: string) {
   const { data } = await sb.from("studio_livrables")
-    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at")
+    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, resultat")
     .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
   return data ?? [];
 }

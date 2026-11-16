@@ -49,6 +49,8 @@ export const CONNECTEURS: Record<string, Def> = {
   },
 };
 
+const DEMANDE_APP: Def = { libelle: "Application sur demande", champs: [{ nom: "libelle", max: 120 }, { nom: "besoin", max: 1000 }] };
+
 /** Connecteurs au statut « connecte », pour le prompt des agents. */
 export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promise<ConnecteurActif[]> {
   const [{ data }, { data: nango }] = await Promise.all([
@@ -76,7 +78,8 @@ export async function enregistrerConnecteur(
   sb: SupabaseClient, wsId: string, userId: string, body: Record<string, unknown>,
 ): Promise<{ ok: true } | { erreur: string }> {
   const type = String(body.type ?? "");
-  const def = CONNECTEURS[type];
+  // Application du catalogue Nango demandée à Aissociate : « app:<fournisseur> ».
+  const def = /^app:[a-z0-9][a-z0-9._-]{0,79}$/.test(type) ? DEMANDE_APP : CONNECTEURS[type];
   if (!def) return { erreur: "Connecteur inconnu" };
   if (body.accord !== true) return { erreur: "Merci de cocher votre accord pour la mise en place de la connexion." };
   const brut = (body.infos ?? {}) as Record<string, unknown>;

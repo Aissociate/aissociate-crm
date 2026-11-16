@@ -12,7 +12,12 @@ type Livrable = {
   id: string; titre: string; contenu: string; statut: 'a_valider' | 'valide' | 'refuse' | 'publie';
   agent_id: string | null; conversation_id: string | null; soumis_par: string | null;
   decide_par: string | null; decide_le: string | null; commentaire: string | null; created_at: string;
+  /** Action exécutée au « VALIDÉ » (ex. dépôt d'un document dans le Drive). */
+  type_action?: string | null;
+  resultat?: { lien?: string | null; erreur?: string } | null;
 };
+
+const ACTIONS: Record<string, string> = { drive_creer_document: 'Création dans le Google Drive au « VALIDÉ »' };
 
 const STATUTS: Record<Livrable['statut'], { label: string; style: string }> = {
   a_valider: { label: 'À valider', style: 'bg-amber-50 text-amber-800' },
@@ -29,6 +34,7 @@ export default function PageLivrables() {
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [commentaire, setCommentaire] = useState('');
   const [erreur, setErreur] = useState('');
+  const [info, setInfo] = useState('');
   const proprietaire = me.user.role === 'proprietaire';
   const agents = new Map(me.agents.map((a) => [a.id, a]));
 
@@ -38,8 +44,11 @@ export default function PageLivrables() {
   const decider = async (id: string, statut: Livrable['statut']) => {
     if (statut === 'refuse' && !commentaire.trim() && !confirm('Refuser sans dire pourquoi ? Un mot aide l\'agent à mieux faire la prochaine fois.')) return;
     try {
-      const r = await appel<{ livrables: Livrable[] }>('livrable_decider', { id, statut, commentaire });
+      const r = await appel<{ livrables: Livrable[]; execute?: boolean; lien?: string | null; erreur_action?: string }>('livrable_decider', { id, statut, commentaire });
       setLivrables(r.livrables); setCommentaire(''); setErreur(''); rafraichir();
+      if (r.execute) setInfo('Document créé dans le Google Drive.');
+      else if (r.erreur_action) setErreur(`Validé, mais le dépôt a échoué : ${r.erreur_action}`);
+      else setInfo('');
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -64,6 +73,7 @@ export default function PageLivrables() {
           className={cx('rounded-full border px-3 py-1 text-sm', filtre === 'tous' ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-white')}>Tous</button>
       </div>
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
+      {info && <p className="mb-4 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{info}</p>}
 
       {visibles.length === 0 ? (
         <Carte><p className="text-sm text-neutral-500">
@@ -89,6 +99,13 @@ export default function PageLivrables() {
                 </button>
                 {deplie && (
                   <div className="border-t border-neutral-100 p-4">
+                    {l.type_action && (
+                      <div className="mb-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                        <p className="font-medium">{ACTIONS[l.type_action] ?? l.type_action}</p>
+                        {l.resultat?.lien && <a href={l.resultat.lien} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 underline"><ExternalLink className="h-3.5 w-3.5" /> Ouvrir le document</a>}
+                        {l.resultat?.erreur && <p className="mt-1 text-red-700">Dépôt échoué : {l.resultat.erreur}</p>}
+                      </div>
+                    )}
                     <div className="max-h-[28rem] overflow-y-auto rounded-xl bg-neutral-50 p-4"><Markdown texte={l.contenu} /></div>
                     {l.commentaire && <p className="mt-3 text-sm text-neutral-600"><span className="font-medium">Commentaire :</span> {l.commentaire}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -111,7 +128,9 @@ export default function PageLivrables() {
                             <Bouton variante="clair" onClick={() => decider(l.id, 'refuse')}><X className="h-4 w-4" /> Refuser</Bouton>
                           </>}
                           {l.statut === 'valide' && <>
-                            <Bouton onClick={() => decider(l.id, 'publie')}><Send className="h-4 w-4" /> Marquer comme publié</Bouton>
+                            {l.type_action
+                              ? <Bouton onClick={async () => { await decider(l.id, 'a_valider'); await decider(l.id, 'valide'); }}><RotateCcw className="h-4 w-4" /> Réessayer le dépôt</Bouton>
+                              : <Bouton onClick={() => decider(l.id, 'publie')}><Send className="h-4 w-4" /> Marquer comme publié</Bouton>}
                             <Bouton variante="fantome" onClick={() => decider(l.id, 'a_valider')}><RotateCcw className="h-4 w-4" /> Revoir</Bouton>
                           </>}
                           {l.statut === 'refuse' && <Bouton variante="clair" onClick={() => decider(l.id, 'a_valider')}><RotateCcw className="h-4 w-4" /> Remettre à valider</Bouton>}

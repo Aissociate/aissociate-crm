@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen, ShieldCheck } from 'lucide-react';
+import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen, ShieldCheck, Paperclip, X, Loader2 } from 'lucide-react';
+import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 import { useStudio } from '../StudioApp';
-import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type SuperPouvoir } from '../api';
+import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type PieceJointe, type SuperPouvoir } from '../api';
 import MediaVue from '../MediaVue';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, Markdown, cx } from '../composants';
@@ -25,6 +26,9 @@ export default function AgentChat() {
   const [savoirs, setSavoirs] = useState<{ titre: string; source: string | null }[]>([]);
   const [copie, setCopie] = useState<string | null>(null);
   const [soumis, setSoumis] = useState<Record<string, boolean>>({});
+  const [pieces, setPieces] = useState<PieceJointe[]>([]);
+  const [lecture, setLecture] = useState(false);
+  const champFichier = useRef<HTMLInputElement>(null);
   const stop = useRef<AbortController | null>(null);
   const bas = useRef<HTMLDivElement>(null);
   const initial = useRef(false);
@@ -55,7 +59,8 @@ export default function AgentChat() {
   useEffect(() => { bas.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages]);
 
   const envoyer = useCallback(async (texte: string, sp?: { pouvoir: SuperPouvoir; valeurs: Record<string, string> }) => {
-    if (!agent || (!texte.trim() && !sp) || enCours) return;
+    if (!agent || (!texte.trim() && !sp && !pieces.length) || enCours || lecture) return;
+    const jointes = sp ? [] : pieces;
     setErreur(''); setSaisie(''); setEnCours(true);
     envoi.current = true;
     // Même rendu que l'historique serveur pour un super-pouvoir.
@@ -63,7 +68,8 @@ export default function AgentChat() {
       ? `**${sp.pouvoir.titre}**\n` + sp.pouvoir.champs.filter((c) => sp.valeurs[c.nom]?.trim())
         .map((c) => `- ${c.label} : ${sp.valeurs[c.nom].length > 300 ? sp.valeurs[c.nom].slice(0, 300) + '…' : sp.valeurs[c.nom]}`).join('\n')
       : texte;
-    setMessages((m) => [...m, { role: 'user', content: affiche }, { role: 'assistant', content: '' }]);
+    setMessages((m) => [...m, { role: 'user', content: affiche, pieces: jointes.map((x) => ({ nom: x.nom, format: x.format, taille: x.taille })) }, { role: 'assistant', content: '' }]);
+    if (jointes.length) setPieces([]);
     const ctrl = new AbortController();
     stop.current = ctrl;
     try {
@@ -81,13 +87,18 @@ export default function AgentChat() {
       const fin = await discuter(
         sp
           ? { agent_id: agent.id, conversation_id: convId, pouvoir: { id: sp.pouvoir.id, valeurs: sp.valeurs } }
-          : { agent_id: agent.id, message: texte, conversation_id: convId },
+          : { agent_id: agent.id, message: texte, conversation_id: convId, pieces: jointes.length ? jointes : undefined },
         {
           onMeta: (m) => { setRessources(m.ressources ?? []); setSavoirs(m.savoirs ?? []); },
           onDelta: (t) => setMessages((m) => {
             const der = m[m.length - 1];
             if (der?.role !== 'assistant') return [...m, { role: 'assistant', content: t }];
             return [...m.slice(0, -1), { ...der, content: der.content + t }];
+          }),
+          onOutil: (l) => setMessages((m) => {
+            const der = m[m.length - 1];
+            if (der?.role !== 'assistant') return m;
+            return [...m.slice(0, -1), { ...der, outils: [...(der.outils ?? []), l] }];
           }),
         },
         ctrl.signal,
@@ -108,7 +119,20 @@ export default function AgentChat() {
       setErreur(gerer(e));
       setMessages((m) => (m[m.length - 1]?.content ? m : m.slice(0, -1)));
     } finally { setEnCours(false); stop.current = null; envoi.current = false; }
-  }, [agent, convId, enCours, chargerListe, rafraichir, gerer, setParams]);
+  }, [agent, convId, enCours, lecture, pieces, chargerListe, rafraichir, gerer, setParams]);
+
+  // Pièces jointes : texte extrait dans le navigateur, envoyé avec le prochain message.
+  const joindre = async (fichiers: File[]) => {
+    setErreur(''); setLecture(true);
+    const lus: PieceJointe[] = []; const echecs: string[] = [];
+    for (const f of fichiers.slice(0, 5 - pieces.length)) {
+      try { lus.push({ nom: f.name, format: extension(f.name), taille: f.size, contenu: await extraireTexte(f) }); }
+      catch (e) { echecs.push(e instanceof Error ? e.message : String(e)); }
+    }
+    if (fichiers.length > 5 - pieces.length) echecs.push('5 pièces jointes au plus par message.');
+    setPieces((p) => [...p, ...lus]); if (echecs.length) setErreur(echecs.join(' · '));
+    setLecture(false); if (champFichier.current) champFichier.current.value = '';
+  };
 
   // Mission transmise depuis l'accueil ou une suggestion.
   useEffect(() => {
@@ -224,6 +248,11 @@ export default function AgentChat() {
             <div key={i} className="flex justify-end">
               <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-neutral-900 px-4 py-2.5 text-sm text-white">
                 {m.content.startsWith('**') ? m.content.replace(/\*\*/g, '') : m.content}
+                {m.pieces?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {m.pieces.map((x, k) => <span key={k} className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-0.5 text-xs"><Paperclip className="h-3 w-3" />{x.nom}</span>)}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (
@@ -232,6 +261,11 @@ export default function AgentChat() {
               <div className="min-w-0 flex-1">
                 <div className="rounded-2xl rounded-tl-md border border-neutral-200 bg-white px-4 py-3">
                   {m.media && <div className="mb-2"><MediaVue media={m.media} /></div>}
+                  {m.outils?.length ? (
+                    <ul className="mb-2 space-y-0.5 border-b border-neutral-100 pb-2 text-xs text-neutral-500">
+                      {m.outils.map((o, k) => <li key={k} className="flex items-center gap-1.5"><span aria-hidden>↳</span>{o}</li>)}
+                    </ul>
+                  ) : null}
                   {m.content ? <Markdown texte={extraireRelais(m.content).texte} /> : (
                     <span className="flex gap-1 py-1" aria-label={`${agent.prenom} rédige`}>
                       {[0, 1, 2].map((d) => <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-neutral-300" style={{ animationDelay: `${d * 120}ms` }} />)}
@@ -287,7 +321,23 @@ export default function AgentChat() {
         </div>
 
         <form onSubmit={soumettre} className="sticky bottom-4 mt-6 rounded-2xl border border-neutral-200 bg-white p-2 shadow-sm">
+          {(pieces.length > 0 || lecture) && (
+            <div className="mb-2 flex flex-wrap gap-1.5 px-1">
+              {pieces.map((x, k) => (
+                <span key={k} className="inline-flex items-center gap-1 rounded-lg bg-neutral-100 px-2 py-1 text-xs">
+                  <Paperclip className="h-3 w-3" /> {x.nom}
+                  <button type="button" onClick={() => setPieces((p) => p.filter((_, j) => j !== k))} aria-label={`Retirer ${x.nom}`}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+              {lecture && <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" /> Lecture du document…</span>}
+            </div>
+          )}
           <div className="flex items-end gap-2">
+            <input ref={champFichier} type="file" multiple accept={FORMATS_DOCUMENTS} className="hidden"
+              onChange={(e) => e.target.files?.length && joindre([...e.target.files])} />
+            <button type="button" onClick={() => champFichier.current?.click()} disabled={lecture || enCours || pieces.length >= 5}
+              aria-label="Joindre un document (PDF, Word, Excel, PowerPoint…)" title="Joindre un document (PDF, Word, Excel, PowerPoint, CSV, texte)"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 disabled:opacity-40"><Paperclip className="h-4 w-4" /></button>
             <textarea
               value={saisie} onChange={(e) => setSaisie(e.target.value)} rows={2}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(saisie); } }}
@@ -298,7 +348,7 @@ export default function AgentChat() {
               <button type="button" onClick={() => stop.current?.abort()} aria-label="Arrêter"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white"><Square className="h-3.5 w-3.5" /></button>
             ) : (
-              <button type="submit" disabled={!saisie.trim()} aria-label="Envoyer"
+              <button type="submit" disabled={(!saisie.trim() && !pieces.length) || lecture} aria-label="Envoyer"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>
             )}
           </div>
