@@ -160,7 +160,12 @@ Deno.serve(async (req) => {
     if ((count ?? 0) >= MAX_APPELS_HEURE_IP) {
       return json({ reponse: "La démo est très sollicitée depuis votre connexion. Laissez vos coordonnées dans le formulaire ci-dessous : un conseiller vous rappelle sous 24 h ouvrées.", prospect_enregistre: false });
     }
-    await sb.from("studio_demo_appels").insert({ ip_hash: ipHash, conversation });
+    const { data: appelRow } = await sb.from("studio_demo_appels").insert({ ip_hash: ipHash, conversation }).select("id").single();
+    let coutTotal = 0;
+    // Coût de la démo (prospection) : journalisé pour l'onglet Rentabilité du CRM.
+    const noterCout = () => appelRow?.id && coutTotal > 0
+      ? sb.from("studio_demo_appels").update({ cout: coutTotal }).eq("id", appelRow.id).then(() => {})
+      : Promise.resolve();
 
     const apiKey = await cle(sb);
     if (!apiKey) return json({ error: "Démo indisponible" }, 503);
@@ -180,10 +185,13 @@ Deno.serve(async (req) => {
         }),
       });
       if (!r.ok) throw new Error(`OpenRouter ${r.status}`);
-      const msg = (await r.json())?.choices?.[0]?.message;
+      const corps = await r.json();
+      if (typeof corps?.usage?.cost === "number") coutTotal += corps.usage.cost;
+      const msg = corps?.choices?.[0]?.message;
       if (!msg) throw new Error("Réponse vide");
       const appels = (msg.tool_calls ?? []) as { id: string; function: { name: string; arguments: string } }[];
       if (!appels.length) {
+        await noterCout();
         return json({ reponse: String(msg.content ?? "").trim() || "Pouvez-vous reformuler ?", prospect_enregistre: enregistre });
       }
       messages.push(msg);
@@ -197,6 +205,7 @@ Deno.serve(async (req) => {
         messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(res) });
       }
     }
+    await noterCout();
     return json({ reponse: "C'est noté. Un conseiller Aissociate vous rappelle sous 24 h ouvrées.", prospect_enregistre: enregistre });
   } catch (e) {
     console.error("[studio-demo]", e instanceof Error ? e.message : String(e));

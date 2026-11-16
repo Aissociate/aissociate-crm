@@ -4,7 +4,7 @@ import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug } from 'lucide-react';
+import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3 } from 'lucide-react';
 import { appel, jeton, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 
@@ -17,6 +17,7 @@ const Creations = lazy(() => import('./pages/Creations'));
 const Entreprise = lazy(() => import('./pages/Entreprise'));
 const Compte = lazy(() => import('./pages/Compte'));
 const Connecteurs = lazy(() => import('./pages/Connecteurs'));
+const Rapport = lazy(() => import('./pages/Rapport'));
 
 type Ctx = {
   me: Me | null;
@@ -60,6 +61,7 @@ const MENU_CREATIONS = [
   { to: '/studio/creations', label: 'Contenus', icon: Sparkles },
 ];
 const MENU_ESPACE = [
+  { to: '/studio/rapport', label: 'Rapport mensuel', icon: BarChart3 },
   { to: '/studio/entreprise', label: 'Mon entreprise', icon: Building2 },
   { to: '/studio/compte', label: 'Mon compte', icon: KeyRound },
 ];
@@ -161,6 +163,7 @@ export default function StudioApp() {
             <Route path="assistants/:agentId" element={<AgentChatParAgent />} />
             <Route path="ressources" element={<Ressources />} />
             <Route path="connecteurs" element={<Connecteurs />} />
+            <Route path="rapport" element={<Rapport />} />
             <Route path="creations" element={<Creations />} />
             <Route path="entreprise" element={<Entreprise />} />
             <Route path="compte" element={<Compte />} />

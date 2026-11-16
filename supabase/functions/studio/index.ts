@@ -24,6 +24,8 @@
 //   admin_create_user {workspace_id, email, prenom?, nom?, role?, password}
 //   admin_set_password {user_id, password}
 //   admin_modeles                                   → catalogue OpenRouter trié par constructeur
+//   admin_rapport {workspace_id, mois}              → rapport mensuel de valeur + en-tête du client
+// Client : rapport {mois?: "AAAA-MM"}               → rapport mensuel de valeur (sans aucun coût)
 //
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString), cf. Edge Function agent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -37,6 +39,10 @@ import {
   BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
+import {
+  bornesMois, calculerRapport, moisValide,
+  type AgentRapport, type ConversationRapport, type MediaRapport, type MessageRapport, type Rapport,
+} from "./rapport.ts";
 
 /**
  * Base de connaissances de l'agent (studio_agent_savoirs, éditée dans le CRM) :
@@ -54,6 +60,43 @@ async function chargerSavoirs(sb: SupabaseClient, agentId: string, question: str
     (recents ?? []).map((d) => ({ titre: String(d.titre), source: d.source as string | null, extrait: String(d.contenu).slice(0, 3000) })),
     BUDGET_SAVOIRS,
   );
+}
+
+type Usage = { cost?: number; prompt_tokens?: number; completion_tokens?: number };
+
+/** Données du rapport mensuel d'un espace (mois demandé + mois précédent pour la comparaison). */
+async function rapportEspace(sb: SupabaseClient, wsId: string, moisDemande: unknown): Promise<Rapport> {
+  const mois = moisValide(moisDemande);
+  const { debut, fin, debutPrecedent } = bornesMois(mois);
+  const [{ data: messages }, { data: conversations }, { data: medias }, { data: agents }] = await Promise.all([
+    sb.from("studio_messages").select("role, agent_id, retour, content, epingle, created_at, media_id")
+      .eq("workspace_id", wsId).gte("created_at", debutPrecedent).lt("created_at", fin).limit(20000),
+    sb.from("studio_conversations").select("titre, agent_id, updated_at")
+      .eq("workspace_id", wsId).gte("updated_at", debut).lt("updated_at", fin).order("updated_at", { ascending: false }).limit(50),
+    sb.from("studio_medias").select("type, statut, created_at").eq("workspace_id", wsId).gte("created_at", debut).lt("created_at", fin),
+    sb.from("studio_agents").select("id, prenom, metier, minutes_par_tache"),
+  ]);
+  return calculerRapport({
+    mois, messages: (messages ?? []) as MessageRapport[], conversations: (conversations ?? []) as ConversationRapport[],
+    medias: (medias ?? []) as MediaRapport[], agents: (agents ?? []) as AgentRapport[],
+  });
+}
+
+/**
+ * Enregistre une réponse d'agent avec son coût OpenRouter (USD) et ses tokens.
+ * Colonnes absentes (migration studio_couts non appliquée) : réponse enregistrée sans le coût.
+ */
+async function insererReponse(
+  sb: SupabaseClient, ligne: Record<string, unknown>, usage: Usage | null, modele: string,
+): Promise<{ id: string } | null> {
+  const couts = {
+    cout: typeof usage?.cost === "number" ? usage.cost : null,
+    tokens_entree: usage?.prompt_tokens ?? null, tokens_sortie: usage?.completion_tokens ?? null, modele,
+  };
+  const { data, error } = await sb.from("studio_messages").insert({ ...ligne, ...couts }).select("id").single();
+  if (!error) return data;
+  const { data: d2 } = await sb.from("studio_messages").insert(ligne).select("id").single();
+  return d2;
 }
 
 /** Harness général édité dans le CRM (studio_config) ; vide = texte par défaut de contexte.ts. */
@@ -340,6 +383,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)); } catch { /* fermé */ }
       };
       let answer = "";
+      let usage: Usage | null = null;
       try {
         emit("meta", {
           conversation_id: conversationId,
@@ -376,6 +420,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               // Seul `content` est relayé : le raisonnement éventuel (delta.reasoning) reste interne.
               const delta = j.choices?.[0]?.delta?.content;
               if (typeof delta === "string" && delta) { answer += delta; emit("delta", { text: delta }); }
+              // Dernier fragment avant [DONE] : coût réel et tokens (comptabilité OpenRouter).
+              if (j.usage) usage = j.usage;
             } catch (e) {
               if (e instanceof SyntaxError) continue;
               throw e;
@@ -383,17 +429,18 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           }
         }
         if (!answer.trim()) answer = "Je n'ai pas pu produire de réponse. Pouvez-vous reformuler ?";
-        const { data: row } = await sb.from("studio_messages").insert({
+        const row = await insererReponse(sb, {
           conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", content: answer,
-        }).select("id").single();
+        }, usage, model);
         emit("done", { message_id: row?.id ?? null, conversation_id: conversationId });
       } catch (err) {
         if (stop.signal.aborted) {
           if (answer.trim()) {
-            await sb.from("studio_messages").insert({
+            // Coût inconnu (flux coupé avant le fragment « usage ») : ces réponses comptent dans « sans coût ».
+            await insererReponse(sb, {
               conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant",
               content: `${answer}\n\n_(réponse interrompue)_`,
-            });
+            }, null, model);
           }
         } else {
           console.error("[studio] chat:", err instanceof Error ? err.message : String(err));
@@ -467,6 +514,15 @@ async function listerModeles(sb: SupabaseClient): Promise<Response> {
 
 async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>): Promise<Response> {
   if (action === "admin_modeles") return await listerModeles(sb);
+  if (action === "admin_rapport") {
+    const wsId = String(body.workspace_id ?? "");
+    const { data: w } = await sb.from("studio_workspaces").select("*").eq("id", wsId).maybeSingle();
+    if (!w) return json({ error: "Espace introuvable" }, 404);
+    return json({
+      rapport: await rapportEspace(sb, wsId, body.mois), nom: w.nom, entete: w.entete ?? {},
+      logo_url: w.logo_chemin ? await urlSignee(sb, String(w.logo_chemin)) : null,
+    });
+  }
   if (action === "admin_harness_defaut") {
     return json({ regles: HARNESS_REGLES_DEFAUT, perimetre: HARNESS_PERIMETRE_DEFAUT });
   }
@@ -517,7 +573,7 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Administration CRM ──
-    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut"].includes(action)) {
+    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport"].includes(action)) {
       if (!(await estManager(req))) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body);
     }
@@ -708,6 +764,9 @@ Deno.serve(async (req: Request) => {
         await sb.from("studio_documents").delete().eq("id", String(body.id)).eq("workspace_id", s.ws.id);
         return json({ ok: true });
       }
+
+      case "rapport":
+        return json({ rapport: await rapportEspace(sb, s.ws.id, body.mois) });
 
       // ── Papier à en-tête (exports Word / PDF) ──
       case "entete": {

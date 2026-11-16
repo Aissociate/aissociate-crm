@@ -57,9 +57,11 @@ export async function exporterWord(s: Source): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
-/** PDF : le document est rendu dans un cadre invisible puis imprimé (« Enregistrer au format PDF »). */
-export async function exporterPdf(s: Source): Promise<void> {
-  const { doc, logoUrl } = await preparer(s);
+/**
+ * Imprime un document HTML depuis un cadre invisible (« Enregistrer au format PDF »).
+ * Utilisé par le Studio et par le CRM (rapport d'un client).
+ */
+export async function imprimerDocument(doc: DocExport, logoUrl: string | null): Promise<void> {
   const cadre = document.createElement('iframe');
   cadre.setAttribute('aria-hidden', 'true');
   Object.assign(cadre.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
@@ -71,4 +73,10 @@ export async function exporterPdf(s: Source): Promise<void> {
   await Promise.all([...w.document.images].map((i) => (i.complete ? null : i.decode().catch(() => null))));
   w.focus(); w.print();
   setTimeout(() => cadre.remove(), 60_000);
+}
+
+/** PDF d'une réponse ou d'un rapport, avec le papier à en-tête du client. */
+export async function exporterPdf(s: Source): Promise<void> {
+  const { doc, logoUrl } = await preparer(s);
+  await imprimerDocument(doc, logoUrl);
 }

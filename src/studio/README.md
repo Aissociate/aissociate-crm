@@ -76,6 +76,21 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `studio-medias`, en PNG, JPEG ou WebP (pas de SVG), 500 Ko au maximum.
 - Si la migration n'est pas appliquée, le bloc d'en-tête est masqué et les exports partent sans en-tête.
 
+## Coûts, rentabilité et rapport mensuel
+- **Coût réel** : chaque réponse enregistre `cout` (USD), les tokens et le modèle, lus dans le dernier fragment du
+  flux OpenRouter (`usage`). Les médias gardent leur coût ; une vidéo sans coût renvoyé est estimée à 0,08 $/s.
+  La démo Sam journalise le sien dans `studio_demo_appels.cout`.
+- **CRM › Rentabilité** :
+  - par client et par mois : abonnement HT (saisi dans la fiche de l'espace), missions, part de réponses
+    « à revoir », coût IA en € (taux USD → EUR réglable), marge ;
+  - le coût de la démo Sam est affiché à part ;
+  - les données viennent de la vue `studio_rentabilite_mois`.
+- **Rapport mensuel de valeur** (`rapport.ts`, pur et testé) : missions, temps gagné estimé, contenus gardés,
+  visuels, détail par agent et comparaison avec le mois précédent, **sans aucun coût**. Le client le voit dans
+  Studio › Rapport mensuel et peut l'exporter en PDF ou Word. Le CRM l'imprime aux couleurs du client (bouton « Rapport »).
+- Si la migration `20261112140000_studio_couts.sql` n'est pas appliquée : les réponses sont enregistrées sans coût
+  et l'onglet Rentabilité indique la migration manquante.
+
 ## Images et vidéos
 Un super-pouvoir porteur de `"media": "image"` ou `"media": "video"` ne passe pas par le chat :
 la fonction lance une génération (`medias.ts`) et crée une ligne `studio_medias`.

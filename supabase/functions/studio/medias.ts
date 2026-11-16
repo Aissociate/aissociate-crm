@@ -135,7 +135,7 @@ async function genererImage(
 /** Fait avancer un média (vidéo) puis renvoie son état, avec une URL signée s'il est prêt. */
 export async function statutMedia(sb: SupabaseClient, apiKey: string, wsId: string, id: string): Promise<Media | null> {
   const { data: m } = await sb.from("studio_medias")
-    .select("id, type, statut, job_id, chemin, mime, erreur, created_at").eq("id", id).eq("workspace_id", wsId).maybeSingle();
+    .select("id, type, statut, job_id, chemin, mime, erreur, created_at, parametres").eq("id", id).eq("workspace_id", wsId).maybeSingle();
   if (!m) return null;
 
   if (m.statut === "en_cours") {
@@ -156,7 +156,9 @@ export async function statutMedia(sb: SupabaseClient, apiKey: string, wsId: stri
           const chemin = `${wsId}/${m.id}.mp4`;
           const { error } = await sb.storage.from(BUCKET).upload(chemin, octets, { contentType: "video/mp4", upsert: true });
           if (error) throw new Error(`Stockage : ${error.message}`);
-          await finir(sb, m.id, { statut: "pret", chemin, mime: "video/mp4", cout: j.usage?.cost ?? null });
+          // Coût non renvoyé : estimation au tarif Hailuo 768p (0,08 $/s).
+          const duree = Number((m.parametres as { duration?: number } | null)?.duration) || 6;
+          await finir(sb, m.id, { statut: "pret", chemin, mime: "video/mp4", cout: j.usage?.cost ?? Math.round(duree * 0.08 * 100) / 100 });
           Object.assign(m, { statut: "pret", chemin, mime: "video/mp4" });
         } else if (["failed", "cancelled", "expired"].includes(j.status) || age > VIDEO_DELAI_MAX_MS) {
           const erreur = String(j.error ?? (age > VIDEO_DELAI_MAX_MS ? "Délai dépassé" : j.status));
