@@ -145,7 +145,24 @@ Migration `20261116120000_studio_gouvernance.sql`, logique serveur dans
 - **Livrables** : « Soumettre à validation » sous une réponse → `studio_livrables`
   (`a_valider` → `valide` / `refuse` → `publie`). Seul le propriétaire décide.
 
+## Canal e-mail de liaison (vague 2 du paquet)
+Migration `20261117100000_studio_liaison.sql`. Une boîte AgentMail par espace, créée
+depuis la fiche espace du CRM (`admin_liaison`). Les e-mails arrivent par webhook
+AgentMail signé Svix sur l'URL de la fonction `studio` (en-têtes `svix-*`), traités en
+arrière-plan (`EdgeRuntime.waitUntil`) par `liaison_traitement.ts`.
+- Écoutés : les utilisateurs actifs de l'espace, depuis leur adresse de connexion, avec
+  SPF/DKIM/DMARC corrects. Le reste part en quarantaine, sans réponse.
+- Fraude au président (IBAN, virement, cartes prépayées) : jamais exécuté, même par un
+  utilisateur autorisé ; une suspension demandée dans le même message s'applique.
+- `[Hugo] objet` désigne l'agent (sinon l'agent par défaut de l'espace). La mission passe
+  par le même chemin que le chat (garde, quotas, coût, journal) ; la réponse revient dans
+  le fil et devient un livrable « à valider » (référence `L-xxxxxxxx`).
+- Propriétaire : `VALIDÉ L-…` / `REFUSÉ L-…`, `SUSPENDRE`, `REPRENDRE`.
+- Registre `studio_instructions` (référence `INSTR-AAAA-NNNN`, dédoublonné par `event_id`),
+  30 messages / heure / espace au plus, réponses marquées `Auto-Submitted` (pas de boucle).
+- Secrets : `AGENTMAIL_API_KEY`, `AGENTMAIL_WEBHOOK_SECRET` (+ `_PRECEDENT` en rotation).
+
 ## Suite envisagée
-Canal e-mail de liaison par client (vague 2 du paquet), publication réseaux sociaux,
+Publication réseaux sociaux,
 outils Nango utilisés par les agents (sessions d'agent avec connexions épinglées),
 plusieurs espaces par entreprise (pôles), missions récurrentes planifiées.

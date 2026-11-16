@@ -17,6 +17,7 @@ import SavoirsAgent from './SavoirsAgent';
 import OnboardingPanel from './OnboardingPanel';
 import ParametresPanel from './ParametresPanel';
 import GouvernanceEspace from './GouvernanceEspace';
+import LiaisonEspace from './LiaisonEspace';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -350,6 +351,8 @@ function EspaceModal({
             {espace.suspendu !== undefined && (
               <GouvernanceEspace workspaceId={espace.id} suspendu={espace.suspendu} budget={espace.budget_ia_jour_eur ?? null} />
             )}
+
+            <LiaisonEspace workspaceId={espace.id} nomEspace={espace.nom} agents={agents.filter((a) => a.actif)} />
 
             <NangoEspace workspaceId={espace.id} nomEspace={espace.nom} emailDefaut={users.find((u) => u.role === 'proprietaire')?.email ?? ''} />
 

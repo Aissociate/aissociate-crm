@@ -36,6 +36,10 @@
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
 //   Toute mission (chat, média) est refusée si l'espace est suspendu ou a atteint son plafond IA du jour.
+// Canal e-mail de liaison (liaison.ts, liaison_traitement.ts, agentmail.ts) :
+//   webhook AgentMail signé Svix (en-têtes svix-*) sur cette même URL → traitement en arrière-plan
+//   client  liaison                                → adresse, agent par défaut, derniers e-mails reçus
+//   admin   admin_liaison {workspace_id, activer, username?, agent?} → crée / active / coupe la boîte
 //
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString), cf. Edge Function agent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -70,6 +74,9 @@ import {
   deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, provisionner,
   soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
 } from "./gouvernance.ts";
+import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
+import { verifierSvix } from "./liaison.ts";
+import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
 import {
   bornesMois, calculerRapport, moisValide,
   type AgentRapport, type ConversationRapport, type MediaRapport, type MessageRapport, type Rapport,
@@ -179,6 +186,32 @@ type Session = {
 // Session
 // ─────────────────────────────────────────────────────────────────────────────
 
+const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele";
+
+function versSession(sessionId: string, u: Record<string, unknown>, w: Record<string, unknown>): Session {
+  return {
+    sessionId,
+    user: { id: String(u.id), email: String(u.email), prenom: u.prenom as string | null, nom: u.nom as string | null, role: String(u.role) },
+    ws: {
+      id: String(w.id), nom: String(w.nom), offre: String(w.offre),
+      quota_messages_mois: w.quota_messages_mois as number | null,
+      contexte_entreprise: String(w.contexte_entreprise ?? ""), expire_le: w.expire_le as string | null,
+      modele: (w.modele as string | null) || null,
+    },
+  };
+}
+
+/** Session « par e-mail » : l'utilisateur identifié par la boîte de liaison (sans jeton). */
+async function sessionUtilisateur(sb: SupabaseClient, userId: string): Promise<Session | null> {
+  const { data: u } = await sb.from("studio_users")
+    .select(`id, email, prenom, nom, role, actif, studio_workspaces!inner(${SELECT_WS})`).eq("id", userId).maybeSingle();
+  if (!u) return null;
+  const w = u.studio_workspaces as unknown as Record<string, unknown>;
+  if (!u.actif || !w.actif) return null;
+  if (w.expire_le && String(w.expire_le) < new Date().toISOString().slice(0, 10)) return null;
+  return versSession("mail", u as unknown as Record<string, unknown>, w);
+}
+
 async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Session | null> {
   if (typeof token !== "string" || token.length !== 64) return null;
   const { data: s } = await sb.from("studio_sessions")
@@ -191,15 +224,53 @@ async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Sessi
   if (w.expire_le && String(w.expire_le) < new Date().toISOString().slice(0, 10)) return null;
   // Trace d'activité, sans bloquer la réponse.
   sb.from("studio_sessions").update({ last_seen_at: new Date().toISOString() }).eq("id", s.id).then(() => {});
+  return versSession(s.id, u, w);
+}
+
+/**
+ * Mission demandée par e-mail : même chemin que le chat du Studio (garde, quotas,
+ * contexte, coût, journal), flux SSE lu jusqu'au bout côté serveur.
+ */
+function executeurMail(sb: SupabaseClient): Executeur {
+  return async (userId, body) => {
+    const s = await sessionUtilisateur(sb, userId);
+    if (!s) return { ok: false, erreur: "Accès désactivé ou espace expiré." };
+    const rep = await chat(sb, s, body);
+    if (!(rep.headers.get("Content-Type") ?? "").includes("text/event-stream")) {
+      const j = await rep.json().catch(() => ({})) as Record<string, unknown>;
+      return { ok: false, erreur: String(j.error ?? `Erreur ${rep.status}`) };
+    }
+    const brut = await rep.text();
+    let texte = "", fin: Record<string, unknown> | null = null, erreur: string | null = null;
+    for (const bloc of brut.split("\n\n")) {
+      const ev = /^event: (.+)$/m.exec(bloc)?.[1];
+      const data = /^data: (.+)$/m.exec(bloc)?.[1];
+      if (!ev || !data) continue;
+      let j: Record<string, unknown>;
+      try { j = JSON.parse(data); } catch { continue; }
+      if (ev === "delta") texte += String(j.text ?? "");
+      if (ev === "done") fin = j;
+      if (ev === "error") erreur = String(j.message ?? "Erreur du service IA");
+    }
+    if (erreur || !fin) return { ok: false, erreur: erreur ?? "Réponse interrompue." };
+    return {
+      ok: true, texte: texte.trim() || "Je n'ai pas pu produire de réponse. Pouvez-vous reformuler ?",
+      message_id: (fin.message_id as string | null) ?? null, conversation_id: (fin.conversation_id as string | null) ?? null,
+    };
+  };
+}
+
+/** État du canal e-mail d'un espace (+ derniers e-mails reçus). Colonnes absentes → non disponible. */
+async function etatLiaison(sb: SupabaseClient, wsId: string, avecExpediteurs: boolean) {
+  const { data: w, error } = await sb.from("studio_workspaces")
+    .select("liaison_email, liaison_actif, liaison_agent").eq("id", wsId).maybeSingle();
+  if (error || !w) return { disponible: false, configure: agentmailConfigure(), email: null, actif: false, agent: null, instructions: [] };
+  const { data: instr } = await sb.from("studio_instructions")
+    .select(`reference, sujet, type, statut, motif, agent_id, livrable_id, created_at${avecExpediteurs ? ", expediteur, extrait" : ""}`)
+    .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(50);
   return {
-    sessionId: s.id,
-    user: { id: String(u.id), email: String(u.email), prenom: u.prenom as string | null, nom: u.nom as string | null, role: String(u.role) },
-    ws: {
-      id: String(w.id), nom: String(w.nom), offre: String(w.offre),
-      quota_messages_mois: w.quota_messages_mois as number | null,
-      contexte_entreprise: String(w.contexte_entreprise ?? ""), expire_le: w.expire_le as string | null,
-      modele: (w.modele as string | null) || null,
-    },
+    disponible: true, configure: agentmailConfigure(), email: w.liaison_email, actif: w.liaison_actif === true,
+    agent: w.liaison_agent, instructions: instr ?? [],
   };
 }
 
@@ -561,6 +632,31 @@ async function listerModeles(sb: SupabaseClient): Promise<Response> {
 
 async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>, managerId: string): Promise<Response> {
   if (action === "admin_modeles") return await listerModeles(sb);
+  if (action === "admin_liaison") {
+    const wsId = String(body.workspace_id ?? "");
+    const { data: w } = await sb.from("studio_workspaces").select("id, nom, liaison_inbox_id").eq("id", wsId).maybeSingle();
+    if (!w) return json({ error: "Espace introuvable" }, 404);
+    if (body.activer === true && !w.liaison_inbox_id) {
+      try {
+        const b = await creerBoite({ wsId, nom: w.nom, username: body.username ? String(body.username) : undefined });
+        const { error } = await sb.from("studio_workspaces").update({ liaison_inbox_id: b.inbox_id, liaison_email: b.email.toLowerCase() }).eq("id", wsId);
+        if (error) return json({ error: error.message }, 400);
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 502);
+      }
+    }
+    const maj: Record<string, unknown> = {};
+    if (typeof body.activer === "boolean") maj.liaison_actif = body.activer;
+    if (body.agent !== undefined) maj.liaison_agent = body.agent ? String(body.agent) : null;
+    if (Object.keys(maj).length) {
+      const { error } = await sb.from("studio_workspaces").update(maj).eq("id", wsId);
+      if (error) return json({ error: error.message }, 400);
+      if (typeof body.activer === "boolean") {
+        await journaliser(sb, { wsId, acteur: "crm", action: body.activer ? "liaison_activee" : "liaison_coupee" });
+      }
+    }
+    return json(await etatLiaison(sb, wsId, true));
+  }
   if (action === "admin_provisionner") {
     const r = await provisionner(sb, body, managerId);
     return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
@@ -644,12 +740,35 @@ Deno.serve(async (req: Request) => {
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
-    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const brut = await req.text();
+
+    // ── Webhook AgentMail (canal e-mail de liaison), signé Svix ──
+    if (req.headers.get("svix-id")) {
+      const ok = await verifierSvix(secretsWebhook(), {
+        id: req.headers.get("svix-id"), horodatage: req.headers.get("svix-timestamp"), signature: req.headers.get("svix-signature"),
+      }, brut);
+      if (!secretsWebhook().length) return json({ error: "Webhook non configuré" }, 503);
+      if (!ok) return json({ error: "Signature invalide" }, 401);
+      const evt = JSON.parse(brut) as { event_type?: string; event_id?: string; message?: MessageRecu };
+      if (evt.event_type === "message.received" && evt.message?.inbox_id && evt.message.message_id) {
+        // Réponse immédiate (AgentMail réessaie sinon) ; la mission continue en arrière-plan.
+        const travail = traiterMail(sb, String(evt.event_id ?? evt.message.message_id), evt.message, executeurMail(sb), async (wsId) => {
+          const { data: w } = await sb.from("studio_workspaces").select(SELECT_WS).eq("id", wsId).single();
+          return (await agentsDuWorkspace(sb, versSession("mail", {}, w as Record<string, unknown>).ws)).map((a) => ({ id: String(a.id), prenom: String(a.prenom) }));
+        })
+          .catch((e) => console.error("[studio] liaison:", e instanceof Error ? e.message : String(e)));
+        (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+      }
+      return json({ ok: true });
+    }
+
+    let body: Record<string, unknown>;
+    try { body = JSON.parse(brut || "{}") as Record<string, unknown>; } catch { body = {}; }
     const action = String(body.action ?? "");
 
     // ── Administration CRM ──
     if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_nango_etat",
-      "admin_nango_invitation", "admin_provisionner", "admin_suspendre", "admin_journal"].includes(action)) {
+      "admin_nango_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison"].includes(action)) {
       const managerId = await estManager(req);
       if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body, managerId);
@@ -926,6 +1045,9 @@ Deno.serve(async (req: Request) => {
 
       case "journal":
         return json({ lignes: await lireJournal(sb, s.ws.id) });
+
+      case "liaison":
+        return json(await etatLiaison(sb, s.ws.id, s.user.role === "proprietaire"));
 
       case "livrables":
         return json({ livrables: await listerLivrables(sb, s.ws.id) });

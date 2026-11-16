@@ -4,7 +4,7 @@ import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle } from 'lucide-react';
+import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail } from 'lucide-react';
 import { appel, jeton, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 
@@ -23,6 +23,7 @@ const Questionnaire = lazy(() => import('./pages/Questionnaire'));
 const Perimetre = lazy(() => import('./pages/Perimetre'));
 const Journal = lazy(() => import('./pages/Journal'));
 const Livrables = lazy(() => import('./pages/Livrables'));
+const ParEmail = lazy(() => import('./pages/ParEmail'));
 
 type Ctx = {
   me: Me | null;
@@ -61,6 +62,7 @@ const MENU = [
   { to: '/studio/assistants', label: 'Assistants', icon: Users },
   { to: '/studio/ressources', label: 'Ressources', icon: FolderOpen },
   { to: '/studio/connecteurs', label: 'Connecteurs', icon: Plug },
+  { to: '/studio/par-email', label: 'Par e-mail', icon: Mail },
 ];
 const MENU_CREATIONS = [
   { to: '/studio/creations', label: 'Contenus', icon: Sparkles },
@@ -186,6 +188,7 @@ export default function StudioApp() {
             <Route path="perimetre" element={<Perimetre />} />
             <Route path="journal" element={<Journal />} />
             <Route path="livrables" element={<Livrables />} />
+            <Route path="par-email" element={<ParEmail />} />
             <Route path="creations" element={<Creations />} />
             <Route path="entreprise" element={<Entreprise />} />
             <Route path="compte" element={<Compte />} />

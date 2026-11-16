@@ -19,6 +19,12 @@ const LIBELLES: Record<string, string> = {
   connecteur_supprime: 'Connecteur retiré',
   connexion_retiree: 'Application déconnectée',
   fiche_entreprise_modifiee: 'Fiche entreprise modifiée',
+  mail_traitee: 'E-mail traité',
+  mail_quarantaine: 'E-mail bloqué (quarantaine)',
+  mail_ignoree: 'E-mail ignoré',
+  mail_erreur: 'E-mail en erreur',
+  liaison_activee: 'Canal e-mail activé',
+  liaison_coupee: 'Canal e-mail coupé',
 };
 
 export const libelleAction = (a: string) => LIBELLES[a] ?? a.replace(/_/g, ' ');
