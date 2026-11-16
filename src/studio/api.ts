@@ -27,11 +27,11 @@ export type Ressource = {
 };
 export type Me = {
   user: { id: string; email: string; prenom: string | null; nom: string | null; role: 'proprietaire' | 'membre'; doit_changer: boolean };
-  workspace: { id: string; nom: string; offre: string; quota_messages_mois: number | null; contexte_entreprise: string; expire_le: string | null };
+  workspace: { id: string; nom: string; offre: string; quota_messages_mois: number | null; contexte_entreprise: string; expire_le: string | null; suspendu?: boolean };
   agents: Agent[];
   stats: {
     demandes_mois: number; quota_mois: number | null; reponses_mois: number;
-    minutes_gagnees_mois: number; minutes_gagnees_total: number; ressources_actives: number;
+    minutes_gagnees_mois: number; minutes_gagnees_total: number; ressources_actives: number; livrables_a_valider?: number;
   };
   conversations: Conversation[];
 };

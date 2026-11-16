@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen } from 'lucide-react';
+import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen, ShieldCheck } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type SuperPouvoir } from '../api';
 import MediaVue from '../MediaVue';
@@ -24,6 +24,7 @@ export default function AgentChat() {
   const [ressources, setRessources] = useState<string[]>([]);
   const [savoirs, setSavoirs] = useState<{ titre: string; source: string | null }[]>([]);
   const [copie, setCopie] = useState<string | null>(null);
+  const [soumis, setSoumis] = useState<Record<string, boolean>>({});
   const stop = useRef<AbortController | null>(null);
   const bas = useRef<HTMLDivElement>(null);
   const initial = useRef(false);
@@ -132,6 +133,15 @@ export default function AgentChat() {
     try {
       await appel(action, action === 'retour' ? { message_id: m.id, valeur } : { message_id: m.id, epingle: valeur });
       if (action === 'retour') rafraichir();
+    } catch (e) { setErreur(gerer(e)); }
+  };
+
+  // Livrable : la réponse part dans « Livrables » ; seul le propriétaire la valide.
+  const soumettreValidation = async (messageId: string) => {
+    try {
+      await appel('livrable_soumettre', { message_id: messageId });
+      setSoumis((s) => ({ ...s, [messageId]: true }));
+      rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -255,10 +265,17 @@ export default function AgentChat() {
                     </button>
                     {/* Pas d'export pour un média ni pour un simple relais vers un collègue. */}
                     {!m.media && !extraireRelais(m.content).relais && (
-                      <BoutonsExport source={{
-                        titre: conversations.find((c) => c.id === convId)?.titre ?? `${agent.metier} — ${agent.prenom}`,
-                        contenu: m.content, agent: agent.prenom, date: m.created_at, nomEspace: me.workspace.nom,
-                      }} />
+                      <>
+                        <BoutonsExport source={{
+                          titre: conversations.find((c) => c.id === convId)?.titre ?? `${agent.metier} — ${agent.prenom}`,
+                          contenu: m.content, agent: agent.prenom, date: m.created_at, nomEspace: me.workspace.nom,
+                        }} />
+                        <button onClick={() => soumettreValidation(m.id!)} disabled={Boolean(soumis[m.id])}
+                          aria-label="Soumettre à validation"
+                          className={cx('flex items-center gap-1 rounded-lg p-1.5 text-xs hover:bg-neutral-100', soumis[m.id] && 'text-emerald-700')}>
+                          <ShieldCheck className="h-3.5 w-3.5" /> {soumis[m.id] ? 'À valider' : 'Soumettre à validation'}
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

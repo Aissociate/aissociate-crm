@@ -127,7 +127,25 @@ la fonction lance une génération (`medias.ts`) et crée une ligne `studio_medi
 - Quotas mensuels `quota_images_mois` et `quota_videos_mois` par espace (0 = désactivé).
 - Les champs nommés `format` et `duree` du formulaire deviennent `aspect_ratio` et `duration`.
 
+## Gouvernance (reprise du paquet « plateforme multi-tenant », vague 1)
+Migration `20261116120000_studio_gouvernance.sql`, logique serveur dans
+`supabase/functions/studio/gouvernance.ts`.
+- **Onboarding** : questionnaire public `/studio/demarrer` (définition unique
+  `supabase/functions/studio/questionnaire.ts`, partagée par le front et la fonction, testée).
+  La demande arrive dans `studio_onboarding` avec un score de maturité /100, des points
+  d'attention RGPD et un lead `contact_requests`. CRM › Studio IA › Demandes → « Créer
+  l'espace » (`admin_provisionner`) : espace, agents choisis ouverts, quotas et plafond par
+  défaut (onglet Paramètres), fiche entreprise pré-remplie, propriétaire avec mot de passe provisoire.
+- **Mon périmètre** : formule, agents inclus / hors formule, consommation du mois,
+  plafond IA du jour, arrêt d'urgence (`suspendre`, propriétaire ; `admin_suspendre`, CRM).
+- **Plafond de dépense** : `budget_ia_jour_eur` par espace ; au plafond, chat et médias
+  sont refusés jusqu'au lendemain (jour de La Réunion). Coût réel OpenRouter × `taux_usd_eur`.
+- **Journal** : `studio_journal`, chaîné par SHA-256 (`journal.ts`, testé) ; missions,
+  médias, livrables, connecteurs, suspension. Vérification de la chaîne dans la fiche espace (CRM).
+- **Livrables** : « Soumettre à validation » sous une réponse → `studio_livrables`
+  (`a_valider` → `valide` / `refuse` → `publie`). Seul le propriétaire décide.
+
 ## Suite envisagée
-Plusieurs espaces par entreprise (pôles), invitations par les propriétaires, connecteurs
-(Gmail, Google Agenda, LinkedIn) avec actions validées par l'utilisateur, missions
-récurrentes planifiées, WhatsApp.
+Canal e-mail de liaison par client (vague 2 du paquet), publication réseaux sociaux,
+outils Nango utilisés par les agents (sessions d'agent avec connexions épinglées),
+plusieurs espaces par entreprise (pôles), missions récurrentes planifiées.

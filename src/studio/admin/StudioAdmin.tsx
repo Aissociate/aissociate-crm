@@ -1,9 +1,10 @@
-// Page CRM « Studio IA » (managers) : espaces clients, accès, catalogue d'agents.
+// Page CRM « Studio IA » (managers) : demandes d'onboarding, espaces clients, accès,
+// catalogue d'agents, harness, rentabilité et paramètres globaux du Studio.
 // Lectures/écritures via la RLS is_manager() ; les mots de passe passent par
 // l'Edge Function `studio` (hash côté serveur, jamais lisible depuis le CRM).
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Bot, Building2, ShieldCheck, TrendingUp, Copy, ExternalLink, KeyRound, Plus, UserPlus } from 'lucide-react';
+import { Bot, Building2, ShieldCheck, TrendingUp, Copy, ExternalLink, KeyRound, Plus, UserPlus, Inbox, Settings } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
 import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Spinner } from '@/components/ui';
@@ -13,6 +14,9 @@ import RentabilitePanel from './RentabilitePanel';
 import ConnecteursEspace from './ConnecteursEspace';
 import NangoEspace from './NangoEspace';
 import SavoirsAgent from './SavoirsAgent';
+import OnboardingPanel from './OnboardingPanel';
+import ParametresPanel from './ParametresPanel';
+import GouvernanceEspace from './GouvernanceEspace';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -22,6 +26,7 @@ type Workspace = {
   max_utilisateurs: number; actif: boolean; quota_messages_mois: number | null; contexte_entreprise: string;
   quota_images_mois: number | null; quota_videos_mois: number | null; abonnement_mensuel?: number | null;
   expire_le: string | null; created_at: string; modele: string | null;
+  suspendu?: boolean; budget_ia_jour_eur?: number | null;
 };
 type StudioUser = { id: string; workspace_id: string; email: string; prenom: string | null; nom: string | null; role: string; actif: boolean; last_login_at: string | null };
 type AgentCat = {
@@ -50,7 +55,7 @@ async function adminStudio<T = unknown>(body: Record<string, unknown>): Promise<
 }
 
 export default function StudioAdmin() {
-  const [onglet, setOnglet] = useState<'espaces' | 'agents' | 'harness' | 'rentabilite'>('espaces');
+  const [onglet, setOnglet] = useState<'demandes' | 'espaces' | 'agents' | 'harness' | 'rentabilite' | 'parametres'>('espaces');
   const [espaces, setEspaces] = useState<Workspace[] | null>(null);
   const [users, setUsers] = useState<StudioUser[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -96,11 +101,13 @@ export default function StudioAdmin() {
           {onglet === 'espaces' && <Button onClick={() => setOuvert('nouveau')}><Plus className="mr-1 inline h-4 w-4" />Nouvel espace</Button>}
         </>}
       />
-      <div className="mb-5 flex gap-2">
+      <div className="mb-5 flex flex-wrap gap-2">
+        <button onClick={() => setOnglet('demandes')} className={onglet === 'demandes' ? 'btn-primary' : 'btn-secondary'}><Inbox className="mr-1 inline h-4 w-4" />Demandes</button>
         <button onClick={() => setOnglet('espaces')} className={onglet === 'espaces' ? 'btn-primary' : 'btn-secondary'}><Building2 className="mr-1 inline h-4 w-4" />Espaces clients</button>
         <button onClick={() => setOnglet('agents')} className={onglet === 'agents' ? 'btn-primary' : 'btn-secondary'}><Bot className="mr-1 inline h-4 w-4" />Catalogue d'agents</button>
         <button onClick={() => setOnglet('harness')} className={onglet === 'harness' ? 'btn-primary' : 'btn-secondary'}><ShieldCheck className="mr-1 inline h-4 w-4" />Harness général</button>
         <button onClick={() => setOnglet('rentabilite')} className={onglet === 'rentabilite' ? 'btn-primary' : 'btn-secondary'}><TrendingUp className="mr-1 inline h-4 w-4" />Rentabilité</button>
+        <button onClick={() => setOnglet('parametres')} className={onglet === 'parametres' ? 'btn-primary' : 'btn-secondary'}><Settings className="mr-1 inline h-4 w-4" />Paramètres</button>
       </div>
       {erreur && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{erreur}</p>}
 
@@ -118,7 +125,7 @@ export default function StudioAdmin() {
                 const nb = users.filter((x) => x.workspace_id === w.id).length;
                 return (
                   <tr key={w.id} className="cursor-pointer border-b border-line/60 hover:bg-surface-2" onClick={() => setOuvert(w)}>
-                    <td className="px-4 py-3 font-medium text-fg">{w.nom}{!w.actif && <Badge tone="danger" className="ml-2">inactif</Badge>}</td>
+                    <td className="px-4 py-3 font-medium text-fg">{w.nom}{!w.actif && <Badge tone="danger" className="ml-2">inactif</Badge>}{w.suspendu && <Badge tone="danger" className="ml-2">suspendu</Badge>}</td>
                     <td>{OFFRES.find(([k]) => k === w.offre)?.[1]}</td>
                     <td>{nb} / {w.max_utilisateurs}</td>
                     <td>{u?.demandes ?? 0}{w.quota_messages_mois ? ` / ${w.quota_messages_mois}` : ''}</td>
@@ -133,6 +140,8 @@ export default function StudioAdmin() {
         </div>
       ))}
 
+      {onglet === 'demandes' && <OnboardingPanel onProvisionne={charger} />}
+      {onglet === 'parametres' && <ParametresPanel />}
       {onglet === 'harness' && <HarnessPanel />}
       {onglet === 'rentabilite' && <RentabilitePanel />}
 
@@ -200,6 +209,8 @@ function EspaceModal({
       quota_images_mois: f.quota_images_mois != null ? Number(f.quota_images_mois) : null,
       quota_videos_mois: f.quota_videos_mois != null ? Number(f.quota_videos_mois) : null,
       ...(f.abonnement_mensuel !== undefined ? { abonnement_mensuel: f.abonnement_mensuel != null ? Number(f.abonnement_mensuel) : null } : {}),
+      // Colonne absente tant que la migration studio_gouvernance n'est pas appliquée : envoyée seulement si connue.
+      ...(f.budget_ia_jour_eur !== undefined ? { budget_ia_jour_eur: f.budget_ia_jour_eur != null ? Number(f.budget_ia_jour_eur) : null } : {}),
       actif: f.actif !== false, contexte_entreprise: f.contexte_entreprise ?? '', expire_le: f.expire_le || null,
       modele: f.modele || null,
     };
@@ -283,6 +294,12 @@ function EspaceModal({
               onChange={(e) => setF((x) => ({ ...x, abonnement_mensuel: e.target.value === '' ? null : Number(e.target.value) }))} />
           </Field>
           <Field label="Vidéos IA / mois" hint="≈ 0,50 $ la vidéo de 6 s · 0 = désactivé"><input type="number" min={0} className="input" value={f.quota_videos_mois ?? ''} onChange={(e) => set('quota_videos_mois', e.target.value === '' ? null : Number(e.target.value))} /></Field>
+          {(espace ? espace.budget_ia_jour_eur !== undefined : true) && (
+            <Field label="Plafond IA par jour (€)" hint="Au plafond, les agents s'arrêtent jusqu'au lendemain. Vide = sans plafond.">
+              <input type="number" min={0} step="0.5" className="input" value={f.budget_ia_jour_eur ?? ''}
+                onChange={(e) => setF((x) => ({ ...x, budget_ia_jour_eur: e.target.value === '' ? null : Number(e.target.value) }))} />
+            </Field>
+          )}
           <Field label="Échéance (fin d'essai ou d'abonnement)"><input type="date" className="input" value={f.expire_le ?? ''} onChange={(e) => set('expire_le', e.target.value || null)} /></Field>
         </div>
         <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={f.actif !== false} onChange={(e) => set('actif', e.target.checked)} /> Espace actif</label>
@@ -329,6 +346,10 @@ function EspaceModal({
               </div>
               <p className="mt-1 text-xs text-muted">Un mot de passe provisoire est généré ; le client le change à sa première connexion.</p>
             </section>
+
+            {espace.suspendu !== undefined && (
+              <GouvernanceEspace workspaceId={espace.id} suspendu={espace.suspendu} budget={espace.budget_ia_jour_eur ?? null} />
+            )}
 
             <NangoEspace workspaceId={espace.id} nomEspace={espace.nom} emailDefaut={users.find((u) => u.role === 'proprietaire')?.email ?? ''} />
 

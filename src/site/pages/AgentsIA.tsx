@@ -538,6 +538,9 @@ export default function AgentsIA() {
                   </button>
                   {etat === 'erreur' && <p className="text-sm text-red-600" role="alert">Une erreur est survenue{erreur ? ` (${erreur})` : ''}. Réessayez, ou appelez-nous au 06 92 24 68 60.</p>}
                   <p className="text-center text-xs text-neutral-500">Sans engagement · données hébergées en Union européenne · RGPD</p>
+                  <p className="border-t border-neutral-200 pt-3 text-center text-sm text-neutral-600">
+                    Prêt à démarrer ? <a href="/studio/demarrer?depuis=agents-ia" className="font-semibold text-orange-600 underline">Décrivez votre entreprise en 10 minutes</a> : nous préparons votre espace sur vos réponses.
+                  </p>
                 </form>
               )}
             </div>

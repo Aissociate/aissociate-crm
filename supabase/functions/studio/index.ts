@@ -29,6 +29,13 @@
 //   admin_modeles                                   → catalogue OpenRouter trié par constructeur
 //   admin_rapport {workspace_id, mois}              → rapport mensuel de valeur + en-tête du client
 // Client : rapport {mois?: "AAAA-MM"}               → rapport mensuel de valeur (sans aucun coût)
+// Gouvernance (gouvernance.ts) :
+//   public  onboarding_soumettre {contact_nom, email, telephone?, accord, reponses}
+//   client  perimetre | suspendre {suspendu} (propriétaire) | journal
+//           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?} (propriétaire)
+//   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
+//           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
+//   Toute mission (chat, média) est refusée si l'espace est suspendu ou a atteint son plafond IA du jour.
 //
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString), cf. Edge Function agent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -59,6 +66,10 @@ async function etatNango(sb: SupabaseClient, wsId: string) {
   const [integrations, connexions] = await Promise.all([listerIntegrations(), connexionsEspace(sb, wsId)]);
   return { configure: true, integrations, connexions };
 }
+import {
+  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, provisionner,
+  soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
+} from "./gouvernance.ts";
 import {
   bornesMois, calculerRapport, moisValide,
   type AgentRapport, type ConversationRapport, type MediaRapport, type MessageRapport, type Rapport,
@@ -224,7 +235,7 @@ async function compterDemandesMois(sb: SupabaseClient, wsId: string): Promise<nu
 async function construireMe(sb: SupabaseClient, s: Session) {
   const agents = await agentsDuWorkspace(sb, s.ws);
   const minutesParAgent = new Map(agents.map((a) => [a.id, a.minutes_par_tache as number]));
-  const [demandesMois, { data: reponses }, { data: credentials }, { data: conversations }, { count: nbRessources }] = await Promise.all([
+  const [demandesMois, { data: reponses }, { data: credentials }, { data: conversations }, { count: nbRessources }, etat, { count: aValider }] = await Promise.all([
     compterDemandesMois(sb, s.ws.id),
     // Réponses utiles (non notées « à revoir ») : base du temps gagné affiché.
     sb.from("studio_messages").select("agent_id, created_at, retour")
@@ -235,6 +246,8 @@ async function construireMe(sb: SupabaseClient, s: Session) {
     sb.from("studio_conversations").select("id, agent_id, titre, updated_at")
       .eq("workspace_id", s.ws.id).eq("user_id", s.user.id).order("updated_at", { ascending: false }).limit(8),
     sb.from("studio_documents").select("id", { count: "exact", head: true }).eq("workspace_id", s.ws.id).eq("actif", true),
+    etatEspace(sb, s.ws.id),
+    sb.from("studio_livrables").select("id", { count: "exact", head: true }).eq("workspace_id", s.ws.id).eq("statut", "a_valider"),
   ]);
   const mois = debutMois();
   let minutesTotal = 0, minutesMois = 0, reponsesMois = 0;
@@ -245,7 +258,7 @@ async function construireMe(sb: SupabaseClient, s: Session) {
   }
   return {
     user: { ...s.user, doit_changer: credentials?.doit_changer ?? false },
-    workspace: s.ws,
+    workspace: { ...s.ws, suspendu: etat.suspendu },
     // Le gabarit (consigne détaillée) des super-pouvoirs reste côté serveur.
     agents: agents.map(({ prompt_systeme: _p, offres: _o, consignes: _c, modele: _m, modele_effectif: _me, super_pouvoirs, ...a }) => ({
       ...a,
@@ -254,7 +267,7 @@ async function construireMe(sb: SupabaseClient, s: Session) {
     stats: {
       demandes_mois: demandesMois, quota_mois: s.ws.quota_messages_mois,
       reponses_mois: reponsesMois, minutes_gagnees_mois: minutesMois, minutes_gagnees_total: minutesTotal,
-      ressources_actives: nbRessources ?? 0,
+      ressources_actives: nbRessources ?? 0, livrables_a_valider: aValider ?? 0,
     },
     conversations: conversations ?? [],
   };
@@ -308,6 +321,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   if (quota != null && (await compterDemandesMois(sb, s.ws.id)) >= quota) {
     return json({ error: `Quota mensuel atteint (${quota} demandes). Contactez Aissociate pour l'augmenter.` }, 429);
   }
+  const refus = await garde(sb, s.ws.id);
+  if (refus) return json({ error: refus.message, gouvernance: true }, refus.statut);
 
   const { data: aiRow } = await sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle();
   const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
@@ -349,6 +364,10 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
       conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", media_id: lance.id,
       content: media.type === "image" ? "Voici votre visuel." : "Voici votre vidéo.",
     }).select("id, content").single();
+    await journaliser(sb, {
+      wsId: s.ws.id, acteur: `client:${s.user.email}`, agentId: agent.id, action: "media",
+      detail: { type: media.type, media: lance.id, conversation: conversationId, titre: titreConv },
+    });
     return json({
       conversation_id: conversationId, message_id: rep?.id ?? null, content: rep?.content ?? "",
       media: { id: lance.id, type: media.type, statut: "en_cours" },
@@ -453,6 +472,13 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", content: answer,
         }, usage, model);
         emit("done", { message_id: row?.id ?? null, conversation_id: conversationId });
+        await journaliser(sb, {
+          wsId: s.ws.id, acteur: `client:${s.user.email}`, agentId: agent.id, action: "mission",
+          detail: {
+            conversation: conversationId, message: row?.id ?? null, titre: titreConv, pouvoir: pouvoir?.id ?? null,
+            relais: answer.includes("[[RELAIS:"), cout_usd: typeof usage?.cost === "number" ? usage.cost : null,
+          },
+        });
       } catch (err) {
         if (stop.signal.aborted) {
           if (answer.trim()) {
@@ -478,16 +504,17 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
 // Administration (depuis le CRM, manager connecté)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function estManager(req: Request): Promise<boolean> {
+/** Identifiant du manager CRM appelant, ou null. */
+async function estManager(req: Request): Promise<string | null> {
   const auth = req.headers.get("Authorization") ?? "";
-  if (!auth.startsWith("Bearer ")) return false;
+  if (!auth.startsWith("Bearer ")) return null;
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: auth } },
   });
   const { data: u } = await db.auth.getUser();
-  if (!u?.user) return false;
+  if (!u?.user) return null;
   const { data } = await db.rpc("is_manager");
-  return data === true;
+  return data === true ? u.user.id : null;
 }
 
 /** Clé OpenRouter du CRM : secret de la fonction, sinon Paramètres › IA. */
@@ -532,8 +559,23 @@ async function listerModeles(sb: SupabaseClient): Promise<Response> {
   return json({ defaut: autorise(ai.model_studio) ?? MODELE_DEFAUT, modeles });
 }
 
-async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>): Promise<Response> {
+async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>, managerId: string): Promise<Response> {
   if (action === "admin_modeles") return await listerModeles(sb);
+  if (action === "admin_provisionner") {
+    const r = await provisionner(sb, body, managerId);
+    return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
+  }
+  if (action === "admin_suspendre" || action === "admin_journal") {
+    const wsId = String(body.workspace_id ?? "");
+    const { data: w } = await sb.from("studio_workspaces").select("id").eq("id", wsId).maybeSingle();
+    if (!w) return json({ error: "Espace introuvable" }, 404);
+    if (action === "admin_suspendre") {
+      const r = await suspendre(sb, wsId, body.suspendu === true, "crm");
+      return "erreur" in r ? json({ error: r.erreur }, 400) : json({ ok: true, ...(await etatEspace(sb, wsId)) });
+    }
+    const [lignes, verification, depense] = await Promise.all([lireJournal(sb, wsId, 500), verifierJournal(sb, wsId), depenseJour(sb, wsId)]);
+    return json({ lignes, verification, depense_jour_eur: depense });
+  }
   if (action === "admin_nango_etat") {
     return json(await etatNango(sb, String(body.workspace_id ?? "")));
   }
@@ -606,9 +648,18 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Administration CRM ──
-    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_nango_etat", "admin_nango_invitation"].includes(action)) {
-      if (!(await estManager(req))) return json({ error: "Réservé aux managers du CRM" }, 403);
-      return await admin(sb, action, body);
+    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_nango_etat",
+      "admin_nango_invitation", "admin_provisionner", "admin_suspendre", "admin_journal"].includes(action)) {
+      const managerId = await estManager(req);
+      if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
+      return await admin(sb, action, body, managerId);
+    }
+
+    // ── Questionnaire d'onboarding public (/studio/demarrer) ──
+    if (action === "onboarding_soumettre") {
+      const depuis = body.depuis ? ` (depuis ${String(body.depuis).slice(0, 60)})` : "";
+      const r = await soumettreOnboarding(sb, body, `/studio/demarrer${depuis}`);
+      return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
     }
 
     // ── Connexion ──
@@ -723,6 +774,7 @@ Deno.serve(async (req: Request) => {
       case "nango_deconnecter": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         await deconnecter(sb, s.ws.id, String(body.integration_id ?? ""));
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: String(body.integration_id ?? "") } });
         return json(await etatNango(sb, s.ws.id));
       }
 
@@ -741,12 +793,14 @@ Deno.serve(async (req: Request) => {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         const r = await enregistrerConnecteur(sb, s.ws.id, s.user.id, body);
         if ("erreur" in r) return json({ error: r.erreur }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connecteur_enregistre", detail: { type: String(body.type ?? "") } });
         return json({ ok: true, connecteurs: await listerConnecteurs(sb, s.ws.id) });
       }
 
       case "connecteur_supprimer": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         await sb.from("studio_connecteurs").delete().eq("workspace_id", s.ws.id).eq("type", String(body.type ?? ""));
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connecteur_supprime", detail: { type: String(body.type ?? "") } });
         return json({ ok: true, connecteurs: await listerConnecteurs(sb, s.ws.id) });
       }
 
@@ -840,6 +894,53 @@ Deno.serve(async (req: Request) => {
       case "rapport":
         return json({ rapport: await rapportEspace(sb, s.ws.id, body.mois) });
 
+      // ── Gouvernance : périmètre, suspension, journal, livrables ──
+      case "perimetre": {
+        const [etat, depense, agents, { data: catalogue }, { data: w }, demandes, { data: medias }] = await Promise.all([
+          etatEspace(sb, s.ws.id), depenseJour(sb, s.ws.id), agentsDuWorkspace(sb, s.ws),
+          sb.from("studio_agents").select("id, prenom, metier, photo, couleur").eq("actif", true).order("ordre"),
+          sb.from("studio_workspaces").select("quota_images_mois, quota_videos_mois, max_utilisateurs").eq("id", s.ws.id).maybeSingle(),
+          compterDemandesMois(sb, s.ws.id),
+          sb.from("studio_medias").select("type").eq("workspace_id", s.ws.id).gte("created_at", debutMois()),
+        ]);
+        const ouverts = new Set(agents.map((a) => a.id));
+        return json({
+          ...etat, offre: s.ws.offre, expire_le: s.ws.expire_le,
+          budget_utilise_pct: etat.budget_ia_jour_eur ? Math.min(100, Math.round((depense / etat.budget_ia_jour_eur) * 100)) : null,
+          agents: (catalogue ?? []).map((a) => ({ ...a, ouvert: ouverts.has(a.id) })),
+          quotas: {
+            demandes: { utilise: demandes, max: s.ws.quota_messages_mois },
+            images: { utilise: (medias ?? []).filter((m) => m.type === "image").length, max: w?.quota_images_mois ?? null },
+            videos: { utilise: (medias ?? []).filter((m) => m.type === "video").length, max: w?.quota_videos_mois ?? null },
+            utilisateurs: { max: w?.max_utilisateurs ?? null },
+          },
+        });
+      }
+
+      case "suspendre": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const r = await suspendre(sb, s.ws.id, body.suspendu === true, `client:${s.user.email}`);
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        return json({ ok: true, ...(await etatEspace(sb, s.ws.id)) });
+      }
+
+      case "journal":
+        return json({ lignes: await lireJournal(sb, s.ws.id) });
+
+      case "livrables":
+        return json({ livrables: await listerLivrables(sb, s.ws.id) });
+
+      case "livrable_soumettre": {
+        const r = await soumettreLivrable(sb, s.ws.id, `client:${s.user.email}`, String(body.message_id ?? ""));
+        return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
+      }
+
+      case "livrable_decider": {
+        if (s.user.role !== "proprietaire") return json({ error: "Seul le propriétaire de l'espace valide les livrables." }, 403);
+        const r = await deciderLivrable(sb, s.ws.id, `client:${s.user.email}`, body);
+        return "erreur" in r ? json({ error: r.erreur }, r.statut) : json({ ok: true, livrables: await listerLivrables(sb, s.ws.id) });
+      }
+
       // ── Papier à en-tête (exports Word / PDF) ──
       case "entete": {
         const { data, error } = await sb.from("studio_workspaces").select("entete, logo_chemin").eq("id", s.ws.id).single();
@@ -895,6 +996,7 @@ Deno.serve(async (req: Request) => {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         await sb.from("studio_workspaces").update({ contexte_entreprise: String(body.contexte_entreprise ?? "").slice(0, 20000) })
           .eq("id", s.ws.id);
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "fiche_entreprise_modifiee" });
         return json({ ok: true });
       }
 

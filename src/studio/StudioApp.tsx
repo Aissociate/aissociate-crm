@@ -4,7 +4,7 @@ import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3 } from 'lucide-react';
+import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle } from 'lucide-react';
 import { appel, jeton, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 
@@ -19,6 +19,10 @@ const Compte = lazy(() => import('./pages/Compte'));
 const Connecteurs = lazy(() => import('./pages/Connecteurs'));
 const Rapport = lazy(() => import('./pages/Rapport'));
 const ConnecterInvitation = lazy(() => import('./pages/ConnecterInvitation'));
+const Questionnaire = lazy(() => import('./pages/Questionnaire'));
+const Perimetre = lazy(() => import('./pages/Perimetre'));
+const Journal = lazy(() => import('./pages/Journal'));
+const Livrables = lazy(() => import('./pages/Livrables'));
 
 type Ctx = {
   me: Me | null;
@@ -60,14 +64,17 @@ const MENU = [
 ];
 const MENU_CREATIONS = [
   { to: '/studio/creations', label: 'Contenus', icon: Sparkles },
+  { to: '/studio/livrables', label: 'Livrables', icon: ShieldCheck },
 ];
 const MENU_ESPACE = [
+  { to: '/studio/perimetre', label: 'Mon périmètre', icon: Gauge },
+  { to: '/studio/journal', label: 'Journal', icon: ScrollText },
   { to: '/studio/rapport', label: 'Rapport mensuel', icon: BarChart3 },
   { to: '/studio/entreprise', label: 'Mon entreprise', icon: Building2 },
   { to: '/studio/compte', label: 'Mon compte', icon: KeyRound },
 ];
 
-function Lien({ to, label, icon: Icon, end }: { to: string; label: string; icon: typeof Home; end?: boolean }) {
+function Lien({ to, label, icon: Icon, end, pastille }: { to: string; label: string; icon: typeof Home; end?: boolean; pastille?: number }) {
   return (
     <NavLink
       to={to} end={end}
@@ -77,6 +84,7 @@ function Lien({ to, label, icon: Icon, end }: { to: string; label: string; icon:
       )}
     >
       <Icon className="h-4 w-4" /> {label}
+      {pastille ? <span className="ml-auto rounded-full bg-orange-500 px-1.5 text-xs font-medium text-white">{pastille}</span> : null}
     </NavLink>
   );
 }
@@ -92,7 +100,7 @@ function Coquille() {
       </div>
       {MENU.map((m) => <Lien key={m.to} {...m} />)}
       <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mes créations</p>
-      {MENU_CREATIONS.map((m) => <Lien key={m.to} {...m} />)}
+      {MENU_CREATIONS.map((m) => <Lien key={m.to} {...m} pastille={m.to === '/studio/livrables' ? me.stats.livrables_a_valider : undefined} />)}
       <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mon espace</p>
       {MENU_ESPACE.map((m) => <Lien key={m.to} {...m} />)}
       <div className="mt-auto border-t border-neutral-200 pt-4">
@@ -121,6 +129,12 @@ function Coquille() {
       )}
       <main className="lg:pl-60">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+          {me.workspace.suspendu && (
+            <NavLink to="/studio/perimetre" className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <PauseCircle className="h-5 w-5 shrink-0" />
+              <span>Vos agents sont suspendus : aucune mission n'est traitée. <span className="underline">Voir mon périmètre</span></span>
+            </NavLink>
+          )}
           <Suspense fallback={<Chargement />}><Outlet /></Suspense>
         </div>
       </main>
@@ -160,6 +174,8 @@ export default function StudioApp() {
           <Route path="connexion" element={<Connexion />} />
           {/* Lien public d'invitation à connecter une application (sans session) */}
           <Route path="connecter/:jeton" element={<ConnecterInvitation />} />
+          {/* Questionnaire d'onboarding public (nouveaux clients) */}
+          <Route path="demarrer" element={<Questionnaire />} />
           <Route element={<Garde />}>
             <Route index element={<Accueil />} />
             <Route path="assistants" element={<Assistants />} />
@@ -167,6 +183,9 @@ export default function StudioApp() {
             <Route path="ressources" element={<Ressources />} />
             <Route path="connecteurs" element={<Connecteurs />} />
             <Route path="rapport" element={<Rapport />} />
+            <Route path="perimetre" element={<Perimetre />} />
+            <Route path="journal" element={<Journal />} />
+            <Route path="livrables" element={<Livrables />} />
             <Route path="creations" element={<Creations />} />
             <Route path="entreprise" element={<Entreprise />} />
             <Route path="compte" element={<Compte />} />
