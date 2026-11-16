@@ -17,7 +17,11 @@ type Livrable = {
   resultat?: { lien?: string | null; erreur?: string } | null;
 };
 
-const ACTIONS: Record<string, string> = { drive_creer_document: 'Création dans le Google Drive au « VALIDÉ »' };
+const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
+  drive_creer_document: { avant: 'Création dans le Google Drive au « VALIDÉ »', fait: 'Document créé dans le Google Drive.', lien: 'Ouvrir le document' },
+  gmail_envoyer: { avant: 'Envoi depuis votre Gmail au « VALIDÉ »', fait: 'E-mail envoyé depuis votre Gmail.', lien: 'Voir dans Gmail' },
+  agenda_creer: { avant: 'Création dans votre agenda Google (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
+};
 
 const STATUTS: Record<Livrable['statut'], { label: string; style: string }> = {
   a_valider: { label: 'À valider', style: 'bg-amber-50 text-amber-800' },
@@ -46,7 +50,8 @@ export default function PageLivrables() {
     try {
       const r = await appel<{ livrables: Livrable[]; execute?: boolean; lien?: string | null; erreur_action?: string }>('livrable_decider', { id, statut, commentaire });
       setLivrables(r.livrables); setCommentaire(''); setErreur(''); rafraichir();
-      if (r.execute) setInfo('Document créé dans le Google Drive.');
+      const type = r.livrables.find((x) => x.id === id)?.type_action;
+      if (r.execute) setInfo((type && ACTIONS[type]?.fait) || 'Action exécutée.');
       else if (r.erreur_action) setErreur(`Validé, mais le dépôt a échoué : ${r.erreur_action}`);
       else setInfo('');
     } catch (e) { setErreur(gerer(e)); }
@@ -101,8 +106,8 @@ export default function PageLivrables() {
                   <div className="border-t border-neutral-100 p-4">
                     {l.type_action && (
                       <div className="mb-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-                        <p className="font-medium">{ACTIONS[l.type_action] ?? l.type_action}</p>
-                        {l.resultat?.lien && <a href={l.resultat.lien} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 underline"><ExternalLink className="h-3.5 w-3.5" /> Ouvrir le document</a>}
+                        <p className="font-medium">{ACTIONS[l.type_action]?.avant ?? l.type_action}</p>
+                        {l.resultat?.lien && <a href={l.resultat.lien} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 underline"><ExternalLink className="h-3.5 w-3.5" /> {ACTIONS[l.type_action]?.lien ?? 'Ouvrir'}</a>}
                         {l.resultat?.erreur && <p className="mt-1 text-red-700">Dépôt échoué : {l.resultat.erreur}</p>}
                       </div>
                     )}
