@@ -42,11 +42,56 @@ export async function jetonAcces(sb: SupabaseClient, wsId: string, integrationId
     .eq("workspace_id", wsId).eq("integration_id", integrationId).eq("statut", "connecte").maybeSingle();
   if (!c) throw new Error(`Aucune connexion « ${integrationId} » active pour cet espace.`);
   const r = await nango(`/connections/${encodeURIComponent(c.connection_id)}?provider_config_key=${encodeURIComponent(integrationId)}`);
-  if (!r.ok) throw new Error(`Connexion ${integrationId} indisponible (${r.status}). Reconnectez l'application depuis « Connecteurs ».`);
+  if (!r.ok) {
+    // Autorisation expirée ou révoquée (Nango n'a pas pu renouveler le jeton) : la carte passe « À reconnecter ».
+    if (r.status >= 400 && r.status < 500) await marquerErreur(sb, wsId, integrationId, "Autorisation expirée ou retirée : reconnectez le compte.");
+    throw new Error(`Connexion ${integrationId} indisponible (${r.status}). Reconnectez l'application depuis « Connecteurs ».`);
+  }
   const j = await r.json() as { credentials?: { access_token?: string } };
   const jeton = j.credentials?.access_token;
-  if (!jeton) throw new Error(`Connexion ${integrationId} sans jeton d'accès. Reconnectez l'application.`);
+  if (!jeton) {
+    await marquerErreur(sb, wsId, integrationId, "Jeton d'accès absent : reconnectez le compte.");
+    throw new Error(`Connexion ${integrationId} sans jeton d'accès. Reconnectez l'application.`);
+  }
   return jeton;
+}
+
+/** Signale une connexion à reconnecter (affichée « À reconnecter » sur sa carte). */
+export async function marquerErreur(sb: SupabaseClient, wsId: string, integrationId: string, erreur: string): Promise<void> {
+  await sb.from("studio_nango_connexions").update({ statut: "erreur", erreur: erreur.slice(0, 300) })
+    .eq("workspace_id", wsId).eq("integration_id", integrationId);
+}
+
+/** Étiquettes Nango d'une session : l'espace (cloisonnement) et la personne qui connecte. */
+function etiquettes(p: { wsId: string; wsNom: string; email?: string | null; utilisateurId?: string | null }): Record<string, string> {
+  const tags: Record<string, string> = {
+    organization_id: p.wsId,                                 // ← clé du cloisonnement
+    end_user_id: p.utilisateurId ? `studio-${p.utilisateurId}` : `espace-${p.wsId}`,
+    end_user_display_name: p.wsNom.slice(0, 255),
+  };
+  if (p.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) tags.end_user_email = p.email.toLowerCase();
+  return tags;
+}
+
+/**
+ * Reconnexion d'une application déjà connectée à CET espace : l'utilisateur ressaisit
+ * son compte (mot de passe changé, accès retiré, droits à étendre) et la connexion
+ * garde son identifiant. Si Nango refuse (connexion créée autrement), nouvelle session.
+ */
+export async function lienReconnexion(sb: SupabaseClient, p: {
+  wsId: string; wsNom: string; email?: string | null; utilisateurId?: string | null; integrationId: string;
+}): Promise<{ lien: string; expire: string }> {
+  const { data: c } = await sb.from("studio_nango_connexions").select("connection_id")
+    .eq("workspace_id", p.wsId).eq("integration_id", p.integrationId).maybeSingle();
+  if (c) {
+    const r = await nango("/connect/sessions/reconnect", {
+      method: "POST",
+      body: JSON.stringify({ connection_id: c.connection_id, integration_id: p.integrationId, tags: etiquettes(p) }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j?.data?.connect_link) return { lien: j.data.connect_link, expire: j.data.expires_at };
+  }
+  return await lienConnexion(p);
 }
 
 export function nangoConfigure(): boolean {
@@ -88,12 +133,7 @@ export async function lienConnexion(p: {
 }): Promise<{ lien: string; expire: string }> {
   const integrations = await listerIntegrations();
   if (p.integrationId && !integrations.some((i) => i.id === p.integrationId)) throw new Error("Application inconnue.");
-  const tags: Record<string, string> = {
-    organization_id: p.wsId,                                 // ← clé du cloisonnement
-    end_user_id: p.utilisateurId ? `studio-${p.utilisateurId}` : `espace-${p.wsId}`,
-    end_user_display_name: p.wsNom.slice(0, 255),
-  };
-  if (p.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) tags.end_user_email = p.email.toLowerCase();
+  const tags = etiquettes(p);
   const r = await nango("/connect/sessions", {
     method: "POST",
     body: JSON.stringify({

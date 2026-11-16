@@ -2,7 +2,7 @@
 // Le client autorise lui-même ses applications ; chaque connexion est rattachée
 // à SON espace par le serveur (jamais par le navigateur).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Copy, Link2, Loader2, Unplug, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Copy, Link2, Loader2, Unplug, AlertTriangle, RefreshCw, UserRoundCog } from 'lucide-react';
 import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { Bouton, cx } from './composants';
@@ -26,12 +26,14 @@ export function useNango() {
   }, [gerer]);
   useEffect(() => { charger(); return () => { if (sonde.current) window.clearInterval(sonde.current); }; }, [charger]);
 
-  const connecter = async (id: string) => {
+  /** mode : « reconnecter » (ressaisir le même compte) ou « changer » (retirer puis connecter un autre compte). */
+  const connecter = async (id: string, mode?: 'reconnecter' | 'changer') => {
+    if (mode === 'changer' && !confirm("Changer de compte ? Le compte actuel sera retiré de l'espace, puis vous connecterez le nouveau.")) return;
     setErreur(''); setEnCours(id);
     // Fenêtre ouverte tout de suite (sinon bloquée comme pop-up), puis dirigée vers Nango.
     const fenetre = window.open('', 'nango-connexion', 'width=520,height=720');
     try {
-      const { lien } = await appel<{ lien: string }>('nango_connecter', { integration_id: id });
+      const { lien } = await appel<{ lien: string }>('nango_connecter', { integration_id: id, mode });
       if (fenetre) fenetre.location.href = lien; else window.location.href = lien;
       // À la fermeture de la fenêtre, on relit l'état chez Nango (filet de sécurité du webhook).
       if (sonde.current) window.clearInterval(sonde.current);
@@ -88,18 +90,27 @@ export function LigneIntegration({ nango, integration: i, libelle, compacte }: {
         </div>
         {proprietaire && (
           <div className="flex shrink-0 items-center gap-0.5">
+            {c && <button onClick={() => nango.connecter(i.id, 'changer')} disabled={Boolean(nango.enCours)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+              aria-label={`Changer de compte pour ${nom}`} title="Changer de compte"><UserRoundCog className="h-4 w-4" /></button>}
             {c && <button onClick={() => nango.deconnecter(i.id, nom)} className="rounded-lg p-1.5 text-neutral-400 hover:text-red-600" aria-label={`Déconnecter ${nom}`}><Unplug className="h-4 w-4" /></button>}
             <button onClick={() => nango.inviter(i.id)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
               aria-label={`Inviter quelqu'un à connecter ${nom}`} title="Lien à envoyer à la personne qui gère ce compte (valable 7 jours)">
               <Copy className="h-4 w-4" />
             </button>
-            <Bouton variante={ok ? 'clair' : 'noir'} className="px-3 py-1" disabled={Boolean(nango.enCours)} onClick={() => nango.connecter(i.id)}>
-              {nango.enCours === i.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            <Bouton variante={ok ? 'clair' : 'noir'} className="px-3 py-1" disabled={Boolean(nango.enCours)}
+              onClick={() => nango.connecter(i.id, c ? 'reconnecter' : undefined)}
+              title={c ? 'Ressaisir le compte (mot de passe changé, accès retiré, droits à étendre)' : undefined}>
+              {nango.enCours === i.id ? <Loader2 className="h-4 w-4 animate-spin" /> : c ? <RefreshCw className="h-3.5 w-3.5" /> : null}
               {c ? 'Reconnecter' : 'Connecter'}
             </Bouton>
           </div>
         )}
       </div>
+      {c && !ok && proprietaire && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+          Vos agents n'ont plus accès à ce compte. Cliquez sur « Reconnecter » et ressaisissez vos identifiants, ou changez de compte.
+        </p>
+      )}
       {nango.invitation?.id === i.id && (
         <p className="mt-2 break-all rounded-lg bg-white p-2 text-xs text-neutral-600">
           Lien copié, valable 7 jours, à envoyer à la personne qui gère ce compte :<br /><span className="select-all">{nango.invitation.url}</span>

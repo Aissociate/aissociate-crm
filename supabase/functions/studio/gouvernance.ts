@@ -7,7 +7,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { hasherMotDePasse } from "./securite.ts";
 import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Reponses } from "./questionnaire.ts";
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
-import { executerAction, type ActionLivrable } from "./outils.ts";
+import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 
 export { journaliser };
 
@@ -268,9 +268,49 @@ export async function deciderLivrable(sb: SupabaseClient, wsId: string, acteur: 
   return { ok: true };
 }
 
+const VERSIONS_MAX = 20;
+
+/**
+ * Modification d'un livrable par un utilisateur de l'espace, avant publication.
+ * La version précédente est conservée (20 dernières) ; toute modification repasse
+ * le livrable « à valider » : ce qui part est toujours la version validée.
+ * Livrable porteur d'une action : les champs (destinataires, horaires…) sont revalidés.
+ */
+export async function modifierLivrable(sb: SupabaseClient, wsId: string, acteur: string, body: Record<string, unknown>) {
+  const { data: l } = await sb.from("studio_livrables").select("id, statut, titre, contenu, agent_id, action, versions")
+    .eq("id", String(body.id ?? "")).eq("workspace_id", wsId).maybeSingle();
+  if (!l) return { erreur: "Livrable introuvable", statut: 404 };
+  if (l.statut === "publie") return { erreur: "Un livrable publié ne se modifie plus.", statut: 400 };
+
+  const champs = (body.champs ?? {}) as Record<string, unknown>;
+  const maj: Record<string, unknown> = {};
+  if (l.action) {
+    const action = modifierAction(l.action as ActionLivrable, champs);
+    if ("erreur" in action) return { erreur: action.erreur, statut: 400 };
+    Object.assign(maj, { action, titre: titreAction(action), contenu: apercuAction(action), resultat: null });
+  } else {
+    const contenu = String(champs.contenu ?? "").slice(0, 200_000);
+    if (!contenu.trim()) return { erreur: "Le contenu ne peut pas être vide.", statut: 400 };
+    maj.contenu = contenu;
+    maj.titre = String(champs.titre ?? "").trim().slice(0, 200) || l.titre;
+  }
+  if (maj.contenu === l.contenu && maj.titre === l.titre) return { ok: true, inchange: true };
+
+  const versions = [
+    { titre: l.titre, contenu: l.contenu, action: l.action ?? null, par: acteur, le: new Date().toISOString() },
+    ...((l.versions ?? []) as unknown[]),
+  ].slice(0, VERSIONS_MAX);
+  const { error } = await sb.from("studio_livrables").update({
+    ...maj, versions, statut: "a_valider", decide_par: null, decide_le: null,
+  }).eq("id", l.id);
+  if (error) return { erreur: error.message, statut: 400 };
+  await journaliser(sb, { wsId, acteur, agentId: l.agent_id, action: "livrable_modifie", detail: { livrable: l.id, titre: maj.titre ?? l.titre, version: versions.length + 1 } });
+  return { ok: true };
+}
+
 export async function listerLivrables(sb: SupabaseClient, wsId: string) {
   const { data } = await sb.from("studio_livrables")
-    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, resultat")
+    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions")
     .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
   return data ?? [];
 }

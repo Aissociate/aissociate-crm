@@ -2,11 +2,12 @@
 // « VALIDÉ » du propriétaire de l'espace (a_valider → validé / refusé → publié).
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ExternalLink, RotateCcw, Send, X } from 'lucide-react';
+import { Check, ExternalLink, History, Pencil, RotateCcw, Send, X } from 'lucide-react';
 import { appel } from '../api';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, Bouton, Carte, Chargement, Markdown, Titre, cx } from '../composants';
 import { useStudio } from '../StudioApp';
+import EditeurLivrable, { champsDepuis, type ActionLivrable } from '../EditeurLivrable';
 
 type Livrable = {
   id: string; titre: string; contenu: string; statut: 'a_valider' | 'valide' | 'refuse' | 'publie';
@@ -15,6 +16,9 @@ type Livrable = {
   /** Action exécutée au « VALIDÉ » (ex. dépôt d'un document dans le Drive). */
   type_action?: string | null;
   resultat?: { lien?: string | null; erreur?: string } | null;
+  action?: ActionLivrable | null;
+  /** Versions précédentes, la plus récente d'abord. */
+  versions?: { titre: string; contenu: string; action: ActionLivrable | null; par: string; le: string }[];
 };
 
 const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
@@ -39,6 +43,8 @@ export default function PageLivrables() {
   const [commentaire, setCommentaire] = useState('');
   const [erreur, setErreur] = useState('');
   const [info, setInfo] = useState('');
+  const [edition, setEdition] = useState<string | null>(null);
+  const [historique, setHistorique] = useState<string | null>(null);
   const proprietaire = me.user.role === 'proprietaire';
   const agents = new Map(me.agents.map((a) => [a.id, a]));
 
@@ -54,6 +60,16 @@ export default function PageLivrables() {
       if (r.execute) setInfo((type && ACTIONS[type]?.fait) || 'Action exécutée.');
       else if (r.erreur_action) setErreur(`Validé, mais le dépôt a échoué : ${r.erreur_action}`);
       else setInfo('');
+    } catch (e) { setErreur(gerer(e)); }
+  };
+
+  /** Restaurer une ancienne version : elle devient la version actuelle (l'actuelle est conservée). */
+  const restaurer = async (l: Livrable, k: number) => {
+    const v = l.versions?.[k];
+    if (!v || !confirm(`Revenir à la version du ${new Date(v.le).toLocaleString('fr-FR')} ? La version actuelle reste dans l'historique.`)) return;
+    try {
+      const r = await appel<{ livrables: Livrable[] }>('livrable_modifier', { id: l.id, champs: champsDepuis(v.titre, v.contenu, v.action) });
+      setLivrables(r.livrables); setInfo('Version restaurée : le livrable repasse « à valider ».'); setErreur(''); rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -91,7 +107,7 @@ export default function PageLivrables() {
             const deplie = ouvert === l.id;
             return (
               <Carte key={l.id} className="p-0">
-                <button onClick={() => { setOuvert(deplie ? null : l.id); setCommentaire(''); }} className="flex w-full items-center gap-3 p-4 text-left">
+                <button onClick={() => { setOuvert(deplie ? null : l.id); setCommentaire(''); setEdition(null); setHistorique(null); }} className="flex w-full items-center gap-3 p-4 text-left">
                   {a && <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={32} />}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{l.titre}</p>
@@ -111,9 +127,41 @@ export default function PageLivrables() {
                         {l.resultat?.erreur && <p className="mt-1 text-red-700">Dépôt échoué : {l.resultat.erreur}</p>}
                       </div>
                     )}
-                    <div className="max-h-[28rem] overflow-y-auto rounded-xl bg-neutral-50 p-4"><Markdown texte={l.contenu} /></div>
+                    {edition === l.id ? (
+                      <EditeurLivrable<Livrable> id={l.id} titre={l.titre} contenu={l.contenu} action={l.action} gerer={gerer}
+                        onCancel={() => setEdition(null)}
+                        onSaved={(liste) => { setLivrables(liste); setEdition(null); setErreur(''); setInfo('Version enregistrée : le livrable est « à valider ».'); setFiltre('a_valider'); rafraichir(); }} />
+                    ) : (
+                      <div className="max-h-[28rem] overflow-y-auto rounded-xl bg-neutral-50 p-4"><Markdown texte={l.contenu} /></div>
+                    )}
+                    {historique === l.id && l.versions?.length ? (
+                      <div className="mt-3 rounded-xl border border-neutral-200 p-3">
+                        <p className="mb-2 text-sm font-medium">Versions précédentes</p>
+                        <ul className="space-y-2">
+                          {l.versions.map((v, k) => (
+                            <li key={k} className="rounded-lg bg-neutral-50 p-2 text-sm">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs text-neutral-500">{new Date(v.le).toLocaleString('fr-FR')} · remplacée par {v.par.replace(/^client:/, '')}</span>
+                                {l.statut !== 'publie' && <button onClick={() => restaurer(l, k)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs text-orange-600 hover:bg-orange-50"><RotateCcw className="h-3 w-3" /> Restaurer</button>}
+                              </div>
+                              <details className="mt-1"><summary className="cursor-pointer text-xs text-neutral-600">{v.titre}</summary>
+                                <div className="mt-2 max-h-64 overflow-y-auto"><Markdown texte={v.contenu} /></div>
+                              </details>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     {l.commentaire && <p className="mt-3 text-sm text-neutral-600"><span className="font-medium">Commentaire :</span> {l.commentaire}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {l.statut !== 'publie' && edition !== l.id && (
+                        <Bouton variante="clair" className="px-3 py-1.5" onClick={() => { setEdition(l.id); setHistorique(null); }}><Pencil className="h-4 w-4" /> Modifier</Bouton>
+                      )}
+                      {l.versions?.length ? (
+                        <button onClick={() => setHistorique(historique === l.id ? null : l.id)} className="flex items-center gap-1 rounded-lg p-1.5 text-xs text-neutral-500 hover:bg-neutral-100">
+                          <History className="h-3.5 w-3.5" /> {l.versions.length} version{l.versions.length > 1 ? 's' : ''} précédente{l.versions.length > 1 ? 's' : ''}
+                        </button>
+                      ) : null}
                       <BoutonsExport source={{ titre: l.titre, contenu: l.contenu, agent: a?.prenom ?? 'Agent', date: l.created_at, nomEspace: me.workspace.nom }} />
                       {l.conversation_id && a && (
                         <Link to={`/studio/assistants/${a.id}?c=${l.conversation_id}`} className="flex items-center gap-1 rounded-lg p-1.5 text-xs text-neutral-500 hover:bg-neutral-100">
@@ -121,7 +169,7 @@ export default function PageLivrables() {
                         </Link>
                       )}
                     </div>
-                    {proprietaire && l.statut !== 'publie' && (
+                    {proprietaire && l.statut !== 'publie' && edition !== l.id && (
                       <div className="mt-4 space-y-3 border-t border-neutral-100 pt-4">
                         {l.statut === 'a_valider' && (
                           <textarea rows={2} value={commentaire} onChange={(e) => setCommentaire(e.target.value)} placeholder="Commentaire (facultatif)"

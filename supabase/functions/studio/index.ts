@@ -33,6 +33,7 @@
 //   public  onboarding_soumettre {contact_nom, email, telephone?, accord, reponses}
 //   client  perimetre | suspendre {suspendu} (propriétaire) | journal
 //           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?} (propriétaire)
+//           livrable_modifier {id, champs} (version précédente gardée, repasse à valider)
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
 //   Toute mission (chat, média) est refusée si l'espace est suspendu ou a atteint son plafond IA du jour.
@@ -54,7 +55,7 @@ import {
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
 import {
-  connexionsEspace, creerInvitation, deconnecter, lienConnexion, listerFournisseurs, listerIntegrations, nangoConfigure,
+  connexionsEspace, creerInvitation, deconnecter, lienConnexion, lienReconnexion, listerFournisseurs, listerIntegrations, nangoConfigure,
   ouvrirInvitation, synchroniser,
 } from "./nango.ts";
 
@@ -71,7 +72,7 @@ async function etatNango(sb: SupabaseClient, wsId: string) {
   return { configure: true, integrations, connexions };
 }
 import {
-  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, provisionner,
+  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner,
   soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
 } from "./gouvernance.ts";
 import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
@@ -532,12 +533,24 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
 
   const encoder = new TextEncoder();
   const stop = new AbortController();
+  // Quitter la page ne coupe plus la réponse : la génération continue côté serveur
+  // et s'enregistre ; seul le bouton « Arrêter » (action chat_arreter) l'interrompt.
+  let clientParti = false;
+  const debutGeneration = new Date().toISOString();
+  await sb.from("studio_conversations").update({ generation_depuis: debutGeneration, arret_demande: null }).eq("id", conversationId);
   const stream = new ReadableStream({
-    cancel() { stop.abort(); },
-    async start(controller) {
+    cancel() { clientParti = true; },
+    start(controller) {
       const emit = (event: string, payload: unknown) => {
-        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)); } catch { /* fermé */ }
+        if (clientParti) return;
+        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)); } catch { clientParti = true; }
       };
+      // Arrêt demandé (éventuellement depuis une autre instance) : vérifié toutes les 2 s.
+      const veille = setInterval(async () => {
+        const { data } = await sb.from("studio_conversations").select("arret_demande").eq("id", conversationId).maybeSingle();
+        if (data?.arret_demande && data.arret_demande >= debutGeneration) stop.abort();
+      }, 2000);
+      const travail = (async () => {
       let answer = "";
       let usage: Usage | null = null;
       try {
@@ -633,12 +646,26 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             }, null, model);
           }
         } else {
-          console.error("[studio] chat:", err instanceof Error ? err.message : String(err));
-          emit("error", { message: err instanceof Error ? err.message : String(err) });
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("[studio] chat:", message);
+          emit("error", { message });
+          // Personne ne voit l'erreur en direct : on la laisse dans la conversation.
+          if (clientParti) {
+            await insererReponse(sb, {
+              conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant",
+              content: `${answer ? `${answer}\n\n` : ""}_(La réponse n'a pas pu aboutir : ${message}. Relancez la demande.)_`,
+            }, null, model);
+          }
         }
       } finally {
+        clearInterval(veille);
+        await sb.from("studio_conversations").update({ generation_depuis: null }).eq("id", conversationId).eq("generation_depuis", debutGeneration);
         try { controller.close(); } catch { /* déjà fermé */ }
       }
+      })();
+      // Garde l'instance en vie jusqu'à la fin, même si le navigateur s'est déconnecté.
+      (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+      return travail;
     },
   });
   return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
@@ -931,9 +958,11 @@ Deno.serve(async (req: Request) => {
       }
 
       case "messages": {
-        const { data: c } = await sb.from("studio_conversations").select("id, agent_id, titre")
+        const { data: conv } = await sb.from("studio_conversations").select("id, agent_id, titre, generation_depuis")
           .eq("id", String(body.conversation_id)).eq("workspace_id", s.ws.id).eq("user_id", s.user.id).maybeSingle();
-        if (!c) return json({ error: "Conversation introuvable" }, 404);
+        if (!conv) return json({ error: "Conversation introuvable" }, 404);
+        const { generation_depuis, ...c } = conv;
+        const en_cours = Boolean(generation_depuis && Date.now() - Date.parse(generation_depuis) < 180_000);
         const { data } = await sb.from("studio_messages").select("id, role, content, retour, epingle, created_at, media_id, pieces")
           .eq("conversation_id", c.id).order("created_at");
         // Médias : état à jour (une vidéo en cours avance à chaque consultation) + URL signée.
@@ -943,7 +972,7 @@ Deno.serve(async (req: Request) => {
           ...m, media: media_id ? await statutMedia(sb, cle, s.ws.id, media_id) : null,
           pieces: ((pieces ?? []) as Piece[]).map((x) => ({ nom: x.nom, format: x.format, taille: x.taille })),
         })));
-        return json({ conversation: c, messages });
+        return json({ conversation: c, messages, en_cours });
       }
 
       // ── Connexions en un clic (Nango) : toujours l'espace de la session ──
@@ -952,10 +981,17 @@ Deno.serve(async (req: Request) => {
 
       case "nango_connecter": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
-        const r = await lienConnexion({
-          wsId: s.ws.id, wsNom: s.ws.nom, email: s.user.email, utilisateurId: s.user.id,
-          integrationId: body.integration_id ? String(body.integration_id) : null,
-        });
+        const integrationId = body.integration_id ? String(body.integration_id) : null;
+        const qui = { wsId: s.ws.id, wsNom: s.ws.nom, email: s.user.email, utilisateurId: s.user.id };
+        // « reconnecter » : ressaisir le même compte (la connexion garde son identifiant).
+        // « changer » : retirer le compte actuel puis en connecter un autre.
+        if (integrationId && body.mode === "changer") {
+          await deconnecter(sb, s.ws.id, integrationId);
+          await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: integrationId, motif: "changement de compte" } });
+        }
+        const r = integrationId && body.mode === "reconnecter"
+          ? await lienReconnexion(sb, { ...qui, integrationId })
+          : await lienConnexion({ ...qui, integrationId });
         return json(r);
       }
 
@@ -1025,6 +1061,12 @@ Deno.serve(async (req: Request) => {
 
       case "chat":
         return await chat(sb, s, body);
+
+      case "chat_arreter": {
+        await sb.from("studio_conversations").update({ arret_demande: new Date().toISOString() })
+          .eq("id", String(body.conversation_id ?? "")).eq("workspace_id", s.ws.id).eq("user_id", s.user.id);
+        return json({ ok: true });
+      }
 
       case "retour":
       case "epingler": {
@@ -1138,6 +1180,12 @@ Deno.serve(async (req: Request) => {
       case "livrable_decider": {
         if (s.user.role !== "proprietaire") return json({ error: "Seul le propriétaire de l'espace valide les livrables." }, 403);
         const r = await deciderLivrable(sb, s.ws.id, `client:${s.user.email}`, body);
+        return "erreur" in r ? json({ error: r.erreur }, r.statut) : json({ ...r, ok: true, livrables: await listerLivrables(sb, s.ws.id) });
+      }
+
+      case "livrable_modifier": {
+        // Tout membre de l'espace peut corriger ; le livrable repasse « à valider » par le propriétaire.
+        const r = await modifierLivrable(sb, s.ws.id, `client:${s.user.email}`, body);
         return "erreur" in r ? json({ error: r.erreur }, r.statut) : json({ ...r, ok: true, livrables: await listerLivrables(sb, s.ws.id) });
       }
 

@@ -30,6 +30,9 @@ export default function AgentChat() {
   const [lecture, setLecture] = useState(false);
   const champFichier = useRef<HTMLInputElement>(null);
   const stop = useRef<AbortController | null>(null);
+  // Conversation de la réponse en cours (pour « Arrêter ») ; réponse rédigée côté serveur pendant une absence.
+  const convEnCours = useRef<string | null>(null);
+  const [attente, setAttente] = useState(false);
   const bas = useRef<HTMLDivElement>(null);
   const initial = useRef(false);
   const envoi = useRef(false);
@@ -52,14 +55,30 @@ export default function AgentChat() {
     setConvId(c);
     setRessources([]);
     setSavoirs([]);
-    appel<{ messages: Message[] }>('messages', { conversation_id: c })
-      .then((r) => setMessages(r.messages)).catch((e) => setErreur(gerer(e)));
+    // Réponse encore en rédaction (page quittée pendant la génération) : on l'attend.
+    let actif = true;
+    let minuteur: number | undefined;
+    const charger = () => appel<{ messages: Message[]; en_cours?: boolean }>('messages', { conversation_id: c })
+      .then((r) => {
+        if (!actif || envoi.current) return;
+        const attendre = Boolean(r.en_cours) && r.messages[r.messages.length - 1]?.role === 'user';
+        setMessages(attendre ? [...r.messages, { role: 'assistant', content: '' }] : r.messages);
+        setAttente(attendre);
+        if (attendre) minuteur = window.setTimeout(charger, 3000);
+      }).catch((e) => { if (actif) { setAttente(false); setErreur(gerer(e)); } });
+    charger();
+    return () => { actif = false; window.clearTimeout(minuteur); setAttente(false); };
   }, [params, gerer]);
+
+  const arreter = () => {
+    if (convEnCours.current) appel('chat_arreter', { conversation_id: convEnCours.current }).catch(() => undefined);
+    stop.current?.abort();
+  };
 
   useEffect(() => { bas.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages]);
 
   const envoyer = useCallback(async (texte: string, sp?: { pouvoir: SuperPouvoir; valeurs: Record<string, string> }) => {
-    if (!agent || (!texte.trim() && !sp && !pieces.length) || enCours || lecture) return;
+    if (!agent || (!texte.trim() && !sp && !pieces.length) || enCours || lecture || attente) return;
     const jointes = sp ? [] : pieces;
     setErreur(''); setSaisie(''); setEnCours(true);
     envoi.current = true;
@@ -89,7 +108,7 @@ export default function AgentChat() {
           ? { agent_id: agent.id, conversation_id: convId, pouvoir: { id: sp.pouvoir.id, valeurs: sp.valeurs } }
           : { agent_id: agent.id, message: texte, conversation_id: convId, pieces: jointes.length ? jointes : undefined },
         {
-          onMeta: (m) => { setRessources(m.ressources ?? []); setSavoirs(m.savoirs ?? []); },
+          onMeta: (m) => { convEnCours.current = m.conversation_id; setRessources(m.ressources ?? []); setSavoirs(m.savoirs ?? []); },
           onDelta: (t) => setMessages((m) => {
             const der = m[m.length - 1];
             if (der?.role !== 'assistant') return [...m, { role: 'assistant', content: t }];
@@ -119,7 +138,7 @@ export default function AgentChat() {
       setErreur(gerer(e));
       setMessages((m) => (m[m.length - 1]?.content ? m : m.slice(0, -1)));
     } finally { setEnCours(false); stop.current = null; envoi.current = false; }
-  }, [agent, convId, enCours, lecture, pieces, chargerListe, rafraichir, gerer, setParams]);
+  }, [agent, convId, enCours, lecture, attente, pieces, chargerListe, rafraichir, gerer, setParams]);
 
   // Pièces jointes : texte extrait dans le navigateur, envoyé avec le prochain message.
   const joindre = async (fichiers: File[]) => {
@@ -345,10 +364,10 @@ export default function AgentChat() {
               className="max-h-48 flex-1 resize-y bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-neutral-400"
             />
             {enCours ? (
-              <button type="button" onClick={() => stop.current?.abort()} aria-label="Arrêter"
+              <button type="button" onClick={arreter} aria-label="Arrêter"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white"><Square className="h-3.5 w-3.5" /></button>
             ) : (
-              <button type="submit" disabled={(!saisie.trim() && !pieces.length) || lecture} aria-label="Envoyer"
+              <button type="submit" disabled={(!saisie.trim() && !pieces.length) || lecture || attente} aria-label="Envoyer"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>
             )}
           </div>

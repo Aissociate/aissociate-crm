@@ -10,7 +10,7 @@
 //   portant l'action à exécuter. Le dépôt a lieu au « VALIDÉ » du propriétaire.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { creerDocument, lire, lister, rechercher, type FichierDrive } from "./drive.ts";
-import { jetonAcces } from "./nango.ts";
+import { jetonAcces, marquerErreur } from "./nango.ts";
 import { journaliser } from "./journal.ts";
 import { refLivrable } from "./liaison.ts";
 import * as gmail from "./gmail.ts";
@@ -29,6 +29,55 @@ export type ActionLivrable =
 const DRIVE = "google-drive";
 const GMAIL = "google-mail";
 const AGENDA = "google-calendar";
+
+/** Titre affiché d'un livrable porteur d'une action. */
+export function titreAction(a: ActionLivrable): string {
+  if (a.type === "gmail_envoyer") return `E-mail — ${a.objet}`;
+  if (a.type === "agenda_creer") return `Rendez-vous — ${a.titre}`;
+  return `Drive — ${a.titre}`;
+}
+
+/** Contenu affiché d'un livrable porteur d'une action (régénéré après chaque modification). */
+export function apercuAction(a: ActionLivrable): string {
+  if (a.type === "gmail_envoyer") {
+    return `**À :** ${a.a.join(", ")}${a.cc?.length ? `  \n**Cc :** ${a.cc.join(", ")}` : ""}  \n**Objet :** ${a.objet}\n\n---\n\n${a.corps}`;
+  }
+  if (a.type === "agenda_creer") {
+    const lisible = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
+    return [
+      `**Quand :** le ${lisible(a.debut)} → ${a.fin.slice(0, 10) === a.debut.slice(0, 10) ? a.fin.slice(11, 16) : lisible(a.fin)} (heure de La Réunion)`,
+      a.lieu ? `**Lieu :** ${a.lieu}` : "", a.participants?.length ? `**Invités :** ${a.participants.join(", ")}` : "",
+      a.description ? `\n${a.description}` : "",
+    ].filter(Boolean).join("  \n");
+  }
+  return a.contenu;
+}
+
+/**
+ * Applique une modification de l'utilisateur à l'action d'un livrable (les champs
+ * sont revalidés comme à la proposition de l'agent). Renvoie l'action mise à jour ou une erreur.
+ */
+export function modifierAction(a: ActionLivrable, champs: Record<string, unknown>): ActionLivrable | { erreur: string } {
+  const txt = (k: string, max: number) => String(champs[k] ?? "").trim().slice(0, max);
+  if (a.type === "gmail_envoyer") {
+    const dest = adressesValides(String(champs.a ?? "")), cc = champs.cc ? adressesValides(String(champs.cc)) : [];
+    const objet = txt("objet", 250), corps = txt("corps", 50_000);
+    if (!dest?.length || cc === null) return { erreur: "Adresse e-mail invalide." };
+    if (!objet || !corps) return { erreur: "Objet et texte de l'e-mail requis." };
+    return { ...a, a: dest, cc, objet, corps };
+  }
+  if (a.type === "agenda_creer") {
+    const debut = agenda.dateHeure(champs.debut), fin = agenda.dateHeure(champs.fin);
+    const titre = txt("titre", 200);
+    const participants = champs.participants ? adressesValides(String(champs.participants)) : [];
+    if (!titre || !debut || !fin || fin <= debut) return { erreur: "Titre, début et fin requis (la fin après le début)." };
+    if (participants === null) return { erreur: "Adresse e-mail d'un invité invalide." };
+    return { ...a, titre, debut, fin, lieu: txt("lieu", 300) || null, description: txt("description", 8000) || null, participants };
+  }
+  const titre = txt("titre", 200) || a.titre, contenu = txt("contenu", 100_000);
+  if (!contenu) return { erreur: "Le document ne peut pas être vide." };
+  return { ...a, titre, contenu };
+}
 
 const DEFINITIONS_GMAIL: DefinitionOutil[] = [
   {
@@ -296,8 +345,8 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
             try { const o = await gmail.lire(await jetonDe(GMAIL), String(a.reponse_a_id)); fil = o.fil; enReponseA = o.messageId || null; }
             catch { /* e-mail d'origine introuvable : envoi hors fil */ }
           }
-          const apercu = `**À :** ${dest.join(", ")}${cc?.length ? `  \n**Cc :** ${cc.join(", ")}` : ""}  \n**Objet :** ${objet}\n\n---\n\n${corps}`;
-          return await proposer(`E-mail — ${objet}`, apercu, { type: "gmail_envoyer", a: dest, cc: cc ?? [], objet, corps, fil, en_reponse_a: enReponseA }, `L'envoi de l'e-mail « ${objet} »`);
+          const action: ActionLivrable = { type: "gmail_envoyer", a: dest, cc: cc ?? [], objet, corps, fil, en_reponse_a: enReponseA };
+          return await proposer(titreAction(action), apercuAction(action), action, `L'envoi de l'e-mail « ${objet} »`);
         }
         if (nom === "agenda_lister") {
           const r = await agenda.lister(await jetonDe(AGENDA), a.du, a.au);
@@ -309,15 +358,8 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const participants = a.participants ? adressesValides(a.participants) : [];
           if (!titre || !debut || !fin || fin <= debut) return { resultat: "Titre, début et fin (AAAA-MM-JJTHH:MM, fin après le début) requis.", libelle: "Rendez-vous non préparé" };
           if (participants === null) return { resultat: "Adresse e-mail d'un participant invalide.", libelle: "Rendez-vous non préparé" };
-          const lisible = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
-          const apercu = [
-            `**Quand :** le ${lisible(debut)} → ${fin.slice(0, 10) === debut.slice(0, 10) ? fin.slice(11, 16) : lisible(fin)} (heure de La Réunion)`,
-            a.lieu ? `**Lieu :** ${a.lieu}` : "", participants.length ? `**Invités :** ${participants.join(", ")}` : "",
-            a.description ? `\n${a.description}` : "",
-          ].filter(Boolean).join("  \n");
-          return await proposer(`Rendez-vous — ${titre}`, apercu, {
-            type: "agenda_creer", titre, debut, fin, lieu: a.lieu || null, description: a.description || null, participants,
-          }, `La création du rendez-vous « ${titre} »`);
+          const action: ActionLivrable = { type: "agenda_creer", titre, debut, fin, lieu: a.lieu || null, description: a.description || null, participants };
+          return await proposer(titreAction(action), apercuAction(action), action, `La création du rendez-vous « ${titre} »`);
         }
         if (nom === "drive_rechercher") {
           const f = await rechercher(await acces(), String(a.requete ?? ""));
@@ -353,7 +395,11 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
         }
         return { resultat: `Outil inconnu : ${nom}`, libelle: nom };
       } catch (e) {
-        return { resultat: `Erreur : ${e instanceof Error ? e.message : String(e)}`, libelle: nom.startsWith("drive_") ? "Drive indisponible" : "Outil indisponible" };
+        const message = e instanceof Error ? e.message : String(e);
+        // Accès refusé par Google (compte révoqué, droits insuffisants) : la carte passe « À reconnecter ».
+        const integ = nom.startsWith("drive_") ? DRIVE : nom.startsWith("gmail_") ? GMAIL : nom.startsWith("agenda_") ? AGENDA : null;
+        if (integ && /refusé \(401\)|droits insuffisants/i.test(message)) await marquerErreur(ctx.sb, ctx.wsId, integ, message).catch(() => undefined);
+        return { resultat: `Erreur : ${message}`, libelle: integ ? `${integ === DRIVE ? "Drive" : integ === GMAIL ? "Gmail" : "Agenda"} indisponible` : "Outil indisponible" };
       }
     },
   };

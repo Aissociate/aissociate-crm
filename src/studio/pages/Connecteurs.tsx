@@ -151,8 +151,8 @@ export default function Connecteurs() {
               {proprietaire && (
                 <div className="flex items-center gap-1">
                   {c && <button onClick={() => supprimer(d.type)} aria-label="Retirer" className="p-1.5 text-neutral-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
-                  <Bouton variante={c ? 'clair' : 'noir'} className="px-3 py-1.5" onClick={() => setOuvert(d)}>
-                    {c ? 'Modifier' : d.mode === 'direct' ? 'Connecter' : 'Demander'}
+                  <Bouton variante={c && c.statut !== 'erreur' ? 'clair' : 'noir'} className="px-3 py-1.5" onClick={() => setOuvert(d)}>
+                    {c?.statut === 'erreur' ? 'Ressaisir' : c ? 'Modifier' : d.mode === 'direct' ? 'Connecter' : 'Demander'}
                   </Bouton>
                 </div>
               )}
