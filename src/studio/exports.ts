@@ -1,7 +1,8 @@
 // Exports Word et PDF des réponses d'agents, avec le papier à en-tête du client.
 // Liaison navigateur de exportDoc.ts (pur) : lecture de l'en-tête, logo, téléchargement.
 import { appel, extraireRelais, type EnteteComplete } from './api';
-import { construireDocx, documentHtml, nomFichier, type DocExport, type Logo } from './exportDoc';
+import { construireDocx, documentHtml, documentWordHtml, nomFichier, type DocExport, type Logo } from './exportDoc';
+import { htmlSur } from './htmlSur';
 
 // Même approche que l'extraction PDF du CRM : bibliothèque chargée au premier clic
 // depuis un CDN ESM, sans alourdir le bundle ni toucher au lockfile.
@@ -79,4 +80,17 @@ export async function imprimerDocument(doc: DocExport, logoUrl: string | null): 
 export async function exporterPdf(s: Source): Promise<void> {
   const { doc, logoUrl } = await preparer(s);
   await imprimerDocument(doc, logoUrl);
+}
+
+/** Document HTML d'un agent : PDF (impression) ou Word (.doc), avec le papier à en-tête. */
+export async function exporterDocumentHtml(format: 'pdf' | 'word', s: { titre: string; html: string; agent: string; nomEspace: string }): Promise<void> {
+  const { doc, logoUrl } = await preparer({ titre: s.titre, contenu: '', agent: s.agent, nomEspace: s.nomEspace });
+  const html = htmlSur(s.html);
+  if (format === 'pdf') { await imprimerDocument({ ...doc, html }, logoUrl); return; }
+  const blob = new Blob(['\ufeff', documentWordHtml({ ...doc, html }, logoUrl)], { type: 'application/msword' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nomFichier(s.titre, 'doc');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }

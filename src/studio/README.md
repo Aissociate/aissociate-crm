@@ -131,6 +131,22 @@ livrables et visuels (`dossier_id` sur `studio_documents`, `studio_livrables`, `
   la consigne. Rangements tracés au journal.
 - Supprimer un dossier ne supprime rien d'autre : contenu et sous-dossiers remontent d'un niveau.
 
+## Images et documents mis en forme (`vision.ts`, `html.ts`, `EditeurDocument.tsx`)
+
+- **Images jointes au chat** (bouton trombone ou coller une capture) : le navigateur les réduit à
+  1 600 px en JPEG. Le serveur les fait ensuite décrire et retranscrire par un modèle de vision
+  (`parametres.ai.model_vision`, par défaut `anthropic/claude-haiku-5.5`).
+  - La description rejoint les pièces jointes du message : tout agent en profite, quel que soit son
+    modèle, ainsi que la suite de la conversation.
+  - L'image elle-même n'est pas conservée, et le coût de lecture s'ajoute à celui de la demande.
+- **Documents HTML** : outils `document_rediger`, `document_lire` et `document_modifier`. Le document
+  est un livrable `format = 'html'` (à valider, avec versions).
+  - Il s'ouvre dans un panneau à droite du chat, et depuis Livrables.
+  - Il est modifiable en WYSIWYG dans un cadre `sandbox="allow-same-origin"` sans `allow-scripts`
+    (`designMode`), puis exporté en PDF (impression) ou Word (.doc HTML) avec le papier à en-tête.
+  - Nettoyage à deux niveaux : `nettoyerHtml` côté serveur (création et chaque enregistrement) et
+    `htmlSur` dans le navigateur (affichage, impression, export).
+
 ## Missions d'équipe (`equipe.ts`)
 
 - L'agent qui reçoit la demande peut consulter un collègue ouvert dans l'espace avec l'outil

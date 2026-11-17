@@ -2,7 +2,7 @@
 // « VALIDÉ » du propriétaire de l'espace (a_valider → validé / refusé → publié).
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ExternalLink, History, Pencil, RotateCcw, Send, X } from 'lucide-react';
+import { Check, ExternalLink, FileType, History, Pencil, RotateCcw, Send, X } from 'lucide-react';
 import { appel } from '../api';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, Bouton, Carte, Chargement, Markdown, Titre, cx } from '../composants';
@@ -10,6 +10,7 @@ import EtatVide from '../composants/EtatVide';
 import Confirmation from '../composants/Confirmation';
 import { useStudio } from '../StudioApp';
 import EditeurLivrable, { champsDepuis, type ActionLivrable } from '../EditeurLivrable';
+import EditeurDocument from '../EditeurDocument';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 
 type Livrable = {
@@ -20,6 +21,8 @@ type Livrable = {
   type_action?: string | null;
   resultat?: { lien?: string | null; erreur?: string } | null;
   action?: ActionLivrable | null;
+  /** 'html' : document mis en forme par un agent, ouvert dans l'éditeur de droite. */
+  format?: string;
   /** Versions précédentes, la plus récente d'abord. */
   versions?: { titre: string; contenu: string; action: ActionLivrable | null; par: string; le: string }[];
   dossier_id?: string | null;
@@ -54,6 +57,7 @@ export default function PageLivrables() {
   const [erreur, setErreur] = useState('');
   const [info, setInfo] = useState('');
   const [edition, setEdition] = useState<string | null>(null);
+  const [docOuvert, setDocOuvert] = useState<string | null>(null);
   const [historique, setHistorique] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{ action: 'refuser'; id: string } | null>(null);
   const [envoiConfirm, setEnvoiConfirm] = useState(false);
@@ -159,7 +163,12 @@ export default function PageLivrables() {
                         {l.resultat?.erreur && <p className="mt-1 text-red-700">Dépôt échoué : {l.resultat.erreur}</p>}
                       </div>
                     )}
-                    {edition === l.id ? (
+                    {l.format === 'html' ? (
+                      <div className="rounded-xl bg-neutral-50 p-4">
+                        <p className="line-clamp-4 text-sm text-neutral-600">{texteDuHtml(l.contenu).slice(0, 600)}</p>
+                        <Bouton variante="noir" className="mt-3 px-3 py-1.5" onClick={() => setDocOuvert(l.id)}><FileType className="h-4 w-4" /> Ouvrir le document</Bouton>
+                      </div>
+                    ) : edition === l.id ? (
                       <EditeurLivrable<Livrable> id={l.id} titre={l.titre} contenu={l.contenu} action={l.action} gerer={gerer}
                         onCancel={() => setEdition(null)}
                         onSaved={(liste) => { setLivrables(liste); setEdition(null); setErreur(''); setInfo('Version enregistrée : le livrable est « à valider ».'); setFiltre('a_valider'); rafraichir(); }} />
@@ -177,7 +186,7 @@ export default function PageLivrables() {
                                 {l.statut !== 'publie' && <button onClick={() => restaurer(l, k)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs text-orange-600 hover:bg-orange-50"><RotateCcw className="h-3 w-3" /> Restaurer</button>}
                               </div>
                               <details className="mt-1"><summary className="cursor-pointer text-xs text-neutral-600">{v.titre}</summary>
-                                <div className="mt-2 max-h-64 overflow-y-auto"><Markdown texte={v.contenu} /></div>
+                                <div className="mt-2 max-h-64 overflow-y-auto">{l.format === 'html' ? <p className="text-xs text-neutral-600">{texteDuHtml(v.contenu).slice(0, 1500)}</p> : <Markdown texte={v.contenu} />}</div>
                               </details>
                             </li>
                           ))}
@@ -186,7 +195,7 @@ export default function PageLivrables() {
                     ) : null}
                     {l.commentaire && <p className="mt-3 text-sm text-neutral-600"><span className="font-medium">Commentaire :</span> {l.commentaire}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {l.statut !== 'publie' && edition !== l.id && (
+                      {l.statut !== 'publie' && edition !== l.id && l.format !== 'html' && (
                         <Bouton variante="clair" className="px-3 py-1.5" onClick={() => { setEdition(l.id); setHistorique(null); }}><Pencil className="h-4 w-4" /> Modifier</Bouton>
                       )}
                       {l.versions?.length ? (
@@ -194,7 +203,7 @@ export default function PageLivrables() {
                           <History className="h-3.5 w-3.5" /> {l.versions.length} version{l.versions.length > 1 ? 's' : ''} précédente{l.versions.length > 1 ? 's' : ''}
                         </button>
                       ) : null}
-                      <BoutonsExport source={{ titre: l.titre, contenu: l.contenu, agent: a?.prenom ?? 'Agent', date: l.created_at, nomEspace: me.workspace.nom }} />
+                      {l.format !== 'html' && <BoutonsExport source={{ titre: l.titre, contenu: l.contenu, agent: a?.prenom ?? 'Agent', date: l.created_at, nomEspace: me.workspace.nom }} />}
                       {l.conversation_id && a && (
                         <Link to={`/studio/assistants/${a.id}?c=${l.conversation_id}`} className="flex items-center gap-1 rounded-lg p-1.5 text-xs text-neutral-500 hover:bg-neutral-100">
                           <ExternalLink className="h-3.5 w-3.5" /> Conversation
@@ -245,6 +254,20 @@ export default function PageLivrables() {
         annuler={{ onClick: () => setConfirmation(null) }}
         enCours={envoiConfirm}
       />
+      {(() => {
+        const d = livrables?.find((x) => x.id === docOuvert);
+        return d ? (
+          <EditeurDocument doc={d} agent={(d.agent_id && agents.get(d.agent_id)?.prenom) || 'Agent'} nomEspace={me.workspace.nom} gerer={gerer}
+            onClose={() => setDocOuvert(null)} onSaved={() => { charger(); rafraichir(); }} />
+        ) : null;
+      })()}
     </div>
   );
+}
+
+/** Aperçu texte d'un document HTML (liste des livrables). */
+function texteDuHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('style, script').forEach((n) => n.remove());
+  return doc.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 }

@@ -19,6 +19,7 @@ import * as zernio from "./zernio.ts";
 import * as veille from "./veille.ts";
 import * as mailing from "./mailing.ts";
 import * as dossiers from "./dossiers.ts";
+import { CONSIGNE_DOCUMENT, nettoyerHtml, titreDuHtml } from "./html.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -427,6 +428,42 @@ export const consigneFichiers = (b: bureau.Boite) => `## Outils : ${b.fournisseu
 - fichiers_creer_document : pour déposer un document. Il n'est créé qu'après validation du propriétaire : dis-le clairement dans ta réponse, avec la référence renvoyée par l'outil.
 ${b.fournisseur === "google" ? "- Sur Google Drive, tu ne vois que les fichiers créés par tes soins ou choisis par l'entreprise (Connecteurs › Google › « Choisir des fichiers Drive ») : si un document manque, dis-le simplement.\n" : ""}Tu ne peux ni modifier, ni déplacer, ni supprimer, ni partager un fichier existant. Cite le nom des fichiers consultés.`;
 
+const DEFINITIONS_DOCUMENT: DefinitionOutil[] = [
+  {
+    type: "function", function: {
+      name: "document_rediger",
+      description: "Crée un document mis en forme en HTML (devis, proposition, compte rendu, fiche, courrier, rapport…). Il s'affiche à droite de la conversation, modifiable par le client, exportable en PDF ou Word, et rejoint les Livrables (à valider). Renvoie sa référence L-….",
+      parameters: {
+        type: "object",
+        properties: {
+          titre: { type: "string" },
+          html: { type: "string", description: "Document HTML complet : un bloc <style> facultatif puis le contenu (titres, paragraphes, listes, tableaux). Pas de script." },
+          dossier: { type: "string", description: "Facultatif : chemin du dossier où le ranger (ex. « Clients/Dupont »)" },
+        },
+        required: ["titre", "html"],
+      },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "document_lire",
+      description: "Lit la version actuelle (HTML) d'un document, éventuellement modifiée par le client, à partir de sa référence L-….",
+      parameters: { type: "object", properties: { reference: { type: "string" } }, required: ["reference"] },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "document_modifier",
+      description: "Remplace le contenu d'un document existant par une version corrigée (l'ancienne reste dans l'historique des versions).",
+      parameters: {
+        type: "object",
+        properties: { reference: { type: "string" }, html: { type: "string", description: "HTML complet de la nouvelle version" }, titre: { type: "string", description: "Facultatif" } },
+        required: ["reference", "html"],
+      },
+    },
+  },
+];
+
 const DEFINITION_ARTICLE: DefinitionOutil = {
   type: "function", function: {
     name: "blog_proposer_article",
@@ -522,7 +559,7 @@ type Ctx = {
 export type Outils = {
   definitions: DefinitionOutil[];
   consigne: string;
-  executer: (nom: string, argsJson: string) => Promise<{ resultat: string; libelle: string; fichiers?: string[] }>;
+  executer: (nom: string, argsJson: string) => Promise<{ resultat: string; libelle: string; fichiers?: string[]; document?: { id: string; titre: string } }>;
 };
 
 /** Outils de l'espace : compétences et ressources toujours, messagerie, agenda, fichiers et réseaux s'ils sont connectés. */
@@ -581,11 +618,11 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
 
   return {
     definitions: [
-      ...DEFINITIONS_BASE, DEFINITION_ARTICLE, DEFINITION_AJOUT_FLUX, ...(aVeille ? DEFINITIONS_VEILLE : []), ...(fichiers ? DEFINITIONS_FICHIERS : []),
+      ...DEFINITIONS_BASE, ...DEFINITIONS_DOCUMENT, DEFINITION_ARTICLE, DEFINITION_AJOUT_FLUX, ...(aVeille ? DEFINITIONS_VEILLE : []), ...(fichiers ? DEFINITIONS_FICHIERS : []),
       ...(mail ? [...DEFINITIONS_MAIL, ...DEFINITIONS_MAILING] : []), ...(cal ? DEFINITIONS_AGENDA : []), ...(reseaux ? DEFINITIONS_RESEAUX : []),
     ],
     consigne: [
-      consigneBase(index, arbre), CONSIGNE_ARTICLE, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
+      consigneBase(index, arbre), CONSIGNE_DOCUMENT, CONSIGNE_ARTICLE, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
       cal && CONSIGNE_AGENDA, reseaux && consigneReseaux(comptesReseaux),
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
@@ -682,6 +719,39 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           if ("erreur" in r) return { resultat: `Rangement impossible : ${r.erreur}`, libelle: "Rangement impossible" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "element_range", detail: { quoi, titre: nomCible, dossier: d.chemin } });
           return { resultat: `« ${nomCible} » rangé ${d.chemin ? `dans « ${d.chemin} »` : "à la racine"}.`, libelle: `Rangé : « ${nomCible.slice(0, 50)} » → ${d.chemin || "racine"}` };
+        }
+        if (nom === "document_rediger") {
+          const html = nettoyerHtml(String(a.html ?? ""));
+          const titre = String(a.titre ?? "").trim().slice(0, 200) || titreDuHtml(html) || "Document";
+          if (html.replace(/<[^>]+>/g, "").trim().length < 20) return { resultat: "Document vide : fournis le HTML complet.", libelle: "Document non créé" };
+          const d = await dossierPour(a.dossier);
+          const { data: l, error } = await ctx.sb.from("studio_livrables").insert({
+            workspace_id: ctx.wsId, conversation_id: ctx.conversationId, agent_id: ctx.agentId,
+            titre, contenu: html, format: "html", soumis_par: ctx.acteur, dossier_id: d.id,
+          }).select("id").single();
+          if (error) return { resultat: `Document non créé : ${error.message}`, libelle: "Document non créé" };
+          await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre, format: "html" } });
+          return {
+            resultat: `Document créé, référence ${refLivrable(l.id)}. Il s'affiche à droite de la conversation ; le client peut le modifier et l'exporter en PDF ou Word.`,
+            libelle: `Document « ${titre.slice(0, 60)} »`, document: { id: l.id, titre },
+          };
+        }
+        if (nom === "document_lire" || nom === "document_modifier") {
+          const ref = String(a.reference ?? "").trim().toUpperCase().replace(/^L-?/, "L-");
+          const { data } = await ctx.sb.from("studio_livrables").select("id, titre, contenu, format, statut, versions")
+            .eq("workspace_id", ctx.wsId).eq("format", "html").order("created_at", { ascending: false }).limit(200);
+          const l = (data ?? []).find((x) => refLivrable(x.id).toUpperCase() === ref);
+          if (!l) return { resultat: `Aucun document ${ref}.`, libelle: "Document introuvable" };
+          if (nom === "document_lire") return { resultat: `# ${l.titre} (${ref})\n${String(l.contenu).slice(0, 60_000)}`, libelle: `Lecture du document « ${l.titre.slice(0, 50)} »` };
+          if (l.statut === "publie") return { resultat: "Ce document est publié : il ne se modifie plus.", libelle: "Document publié" };
+          const html = nettoyerHtml(String(a.html ?? ""));
+          if (html.replace(/<[^>]+>/g, "").trim().length < 20) return { resultat: "Nouvelle version vide : fournis le HTML complet.", libelle: "Document non modifié" };
+          const titre = String(a.titre ?? "").trim().slice(0, 200) || l.titre;
+          const versions = [{ titre: l.titre, contenu: l.contenu, action: null, par: ctx.acteur, le: new Date().toISOString() }, ...((l.versions ?? []) as unknown[])].slice(0, 20);
+          const { error } = await ctx.sb.from("studio_livrables").update({ titre, contenu: html, versions, statut: "a_valider", decide_par: null, decide_le: null }).eq("id", l.id);
+          if (error) return { resultat: `Modification impossible : ${error.message}`, libelle: "Document non modifié" };
+          await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_modifie", detail: { livrable: l.id, titre, version: versions.length + 1 } });
+          return { resultat: `Document ${ref} mis à jour.`, libelle: `Document « ${titre.slice(0, 60)} » mis à jour`, document: { id: l.id, titre } };
         }
         if (nom === "blog_proposer_article") {
           const titre = String(a.titre ?? "").trim().slice(0, 200), corps = String(a.contenu ?? "").trim().slice(0, 60_000);

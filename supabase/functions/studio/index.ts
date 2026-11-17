@@ -95,6 +95,7 @@ import { facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as dossiers from "./dossiers.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
+import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
   bornesMois, calculerRapport, moisValide,
@@ -191,14 +192,23 @@ const autorise = (m: string | null | undefined): string | null => (m && MODELES_
 const DOC_MAX = 200_000;
 
 // Pièces jointes du chat : 5 au plus, 60 000 caractères chacune, 120 000 au total.
-type Piece = { nom: string; format: string | null; taille: number | null; contenu: string };
+type Piece = { nom: string; format: string | null; taille: number | null; contenu: string; image?: string };
 const PIECES_TOTAL = 120_000;
 function lirePieces(v: unknown): Piece[] {
   if (!Array.isArray(v)) return [];
   let reste = PIECES_TOTAL;
   const out: Piece[] = [];
+  let images = 0;
   for (const x of v.slice(0, 5)) {
     const o = (x ?? {}) as Record<string, unknown>;
+    // Image : décrite par le modèle de vision avant la réponse (contenu rempli alors).
+    const image = images < vision.IMAGES_MAX ? vision.imageValide(o.image) : null;
+    if (image) {
+      images++;
+      out.push({ nom: String(o.nom ?? "image").slice(0, 200), format: o.format ? String(o.format).slice(0, 10) : null,
+        taille: Number.isFinite(Number(o.taille)) ? Number(o.taille) : null, contenu: "", image });
+      continue;
+    }
     const contenu = String(o.contenu ?? "").slice(0, Math.min(60_000, reste));
     if (!contenu.trim()) continue;
     reste -= contenu.length;
@@ -619,6 +629,16 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
   if (!apiKey) return json({ error: "Service IA non configuré. Contactez Aissociate." }, 503);
   if (demandeSurCredits) await recharges.puiser(sb, s.ws.id, "demande", `client:${s.user.email}`);
+  // Images jointes : décrites et retranscrites une fois, la description rejoint les pièces.
+  let usageVision: Usage | null = null;
+  const modeleVision = String(ai.model_vision || "").trim() || vision.MODELE_VISION;
+  for (const p of pieces) {
+    if (!p.image) continue;
+    const d = await vision.decrireImage(apiKey, modeleVision, p.image, question);
+    p.contenu = "erreur" in d ? `(Image non lue : ${d.erreur}.)` : `Description de l'image (lue automatiquement) :\n${d.texte}`;
+    if (!("erreur" in d) && d.usage) usageVision = cumulerUsage(usageVision ?? {}, d.usage);
+    delete p.image; // l'image elle-même n'est pas conservée
+  }
   // Modèle : réglage agent/client (studio_*), puis parametres.ai.model_studio s'il est autorisé, puis DeepSeek.
   const model = agent.modele_effectif ?? autorise(ai.model_studio) ?? MODELE_DEFAUT;
 
@@ -766,8 +786,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         // Boucle en flux : chaque tour diffuse le texte au fil de l'eau ; s'il se
         // termine par des appels d'outils, on les exécute et on relance (7 tours max).
         let avecOutils = Boolean(outils);
-        let total: Usage = {};
-        let usageVu = false;
+        let total: Usage = usageVision ?? {};
+        let usageVu = Boolean(usageVision);
         let nbConsultations = 0;
         /** consulter_collegue : le collègue répond sans outils (il ne peut pas consulter à son tour). */
         const consulter = async (argsJson: string): Promise<{ resultat: string; libelle: string }> => {
@@ -857,6 +877,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               ? await consulter(a.function.arguments)
               : await outils.executer(a.function.name, a.function.arguments);
             emit("outil", { libelle: res.libelle });
+            if ("document" in res && res.document) emit("document", res.document);
             messages.push({ role: "tool", tool_call_id: a.id, content: res.resultat.slice(0, 40_000) });
           }
           // Séparation lisible entre un éventuel texte d'annonce et la suite.

@@ -87,6 +87,8 @@ export type DocExport = {
   titre: string;            // titre de la mission
   meta: string;             // « Préparé avec Hugo · 12 novembre 2026 »
   contenu: string;          // Markdown de la réponse (balise de relais déjà retirée)
+  /** Document HTML déjà nettoyé : remplace le rendu du Markdown (documents des agents). */
+  html?: string;
   entete: Entete;
   nomEspace: string;        // repli si la raison sociale n'est pas renseignée
 };
@@ -99,7 +101,7 @@ export function lignesEntete(e: Entete, nomEspace: string) {
   return { nom, adresse, contacts, pied };
 }
 
-export function nomFichier(titre: string, ext: 'docx' | 'pdf'): string {
+export function nomFichier(titre: string, ext: 'docx' | 'pdf' | 'doc'): string {
   const base = titre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'document';
   return `${base}-${new Date().toISOString().slice(0, 10)}.${ext}`;
@@ -115,7 +117,7 @@ const segHtml = (segs: Segment[]) => segs.map((s) => {
 
 export function documentHtml(d: DocExport, logoUrl: string | null): string {
   const e = lignesEntete(d.entete, d.nomEspace);
-  const corps = analyserMarkdown(d.contenu).map((b) => {
+  const corps = d.html !== undefined ? d.html : analyserMarkdown(d.contenu).map((b) => {
     switch (b.type) {
       case 'titre': return `<h${b.niveau + 1}>${segHtml(b.segments)}</h${b.niveau + 1}>`;
       case 'paragraphe': return `<p>${b.lignes.map(segHtml).join('<br>')}</p>`;
@@ -154,6 +156,31 @@ hr { border: 0; border-top: 1px solid #d1d5db; margin: 12px 0; }
 <div class="meta">${echapper(d.meta)}</div>
 ${corps}
 <div class="pied">${echapper(e.pied)}</div>
+</body></html>`;
+}
+
+/**
+ * Word à partir d'un document HTML : fichier .doc au format HTML, que Word et LibreOffice
+ * ouvrent avec sa mise en forme. En-tête en tableau (Word ignore flexbox).
+ */
+export function documentWordHtml(d: DocExport & { html: string }, logoUrl: string | null): string {
+  const e = lignesEntete(d.entete, d.nomEspace);
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${echapper(d.titre)}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+@page { size: 21cm 29.7cm; margin: 1.8cm 1.6cm 2cm; }
+body { font-family: Calibri, Arial, sans-serif; font-size: 10.5pt; color: #1f2937; }
+table { border-collapse: collapse; } th, td { vertical-align: top; }
+.coord { text-align: right; font-size: 8.5pt; color: #4b5563; }
+.pied { font-size: 7.5pt; color: #9ca3af; text-align: center; margin-top: 24pt; }
+</style></head><body>
+<table style="width:100%;border-bottom:2px solid #111827;margin-bottom:14pt"><tr>
+<td>${logoUrl ? `<img src="${echapper(logoUrl)}" height="56" alt="">` : ''}</td>
+<td class="coord"><b style="font-size:11pt;color:#111827">${echapper(e.nom)}</b>${e.adresse ? `<br>${echapper(e.adresse)}` : ''}${e.contacts ? `<br>${echapper(e.contacts)}` : ''}</td>
+</tr></table>
+${d.html}
+<p class="pied">${echapper(e.pied)}</p>
 </body></html>`;
 }
 

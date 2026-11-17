@@ -25,7 +25,8 @@ export type Message = {
   /** Pièces jointes du message (noms seulement ; le texte reste côté serveur). */
   pieces?: { nom: string; format: string | null; taille: number | null }[];
 };
-export type PieceJointe = { nom: string; format: string; taille: number; contenu: string };
+/** Pièce jointe : texte extrait, ou image (URL data) décrite par le serveur. */
+export type PieceJointe = { nom: string; format: string; taille: number; contenu: string; image?: string };
 export type Ressource = {
   id: string; titre: string; type: 'fichier' | 'note'; format: string | null; taille: number | null;
   actif: boolean; created_at: string; studio_users: { prenom: string | null; nom: string | null } | null;
@@ -81,6 +82,8 @@ export async function discuter(
     onMeta?: (m: { conversation_id: string; ressources: string[]; savoirs?: { titre: string; source: string | null }[] }) => void;
     onDelta: (t: string) => void;
     onOutil?: (libelle: string) => void;
+    /** Document HTML créé ou modifié par l'agent : à ouvrir dans le panneau de droite. */
+    onDocument?: (d: { id: string; titre: string }) => void;
   },
   signal?: AbortSignal,
 ): Promise<{ message_id: string | null; conversation_id: string }> {
@@ -114,6 +117,7 @@ export async function discuter(
       if (ev === 'meta') cb.onMeta?.(data as never);
       if (ev === 'delta') cb.onDelta(String(data.text ?? ''));
       if (ev === 'outil') cb.onOutil?.(String(data.libelle ?? ''));
+      if (ev === 'document') cb.onDocument?.(data as never);
       if (ev === 'done') fin = data as never;
     }
   }

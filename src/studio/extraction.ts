@@ -84,3 +84,25 @@ export async function extraireTexte(f: File): Promise<string> {
   if (!texte) throw new Error(`Aucun texte lisible dans « ${f.name} » (document scanné ou image ?).`);
   return texte;
 }
+
+// ── Images : réduites dans le navigateur, puis lues par le modèle de vision côté serveur ──
+export const FORMATS_IMAGES = ['.png', '.jpg', '.jpeg', '.webp', '.gif'].join(',');
+export const estImage = (f: File) => /^image\/(png|jpeg|webp|gif)$/.test(f.type) || ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension(f.name));
+
+/** Image en JPEG de 1 600 px au plus (URL data) : assez nette pour lire un texte, légère à envoyer. */
+export async function imageReduite(f: File, cote = 1600): Promise<string> {
+  const url = URL.createObjectURL(f);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const r = Math.min(1, cote / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * r)); c.height = Math.max(1, Math.round(img.naturalHeight * r));
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); // transparence → fond blanc
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.85);
+  } catch { throw new Error(`Image illisible : « ${f.name} »`); }
+  finally { URL.revokeObjectURL(url); }
+}
