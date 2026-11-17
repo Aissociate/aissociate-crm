@@ -91,7 +91,8 @@ import { verifierSvix } from "./liaison.ts";
 import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
 import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
-import { facturationEspaces, tarifConnecteurs } from "./facturation.ts";
+import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
+import * as stripe from "./stripe.ts";
 import * as dossiers from "./dossiers.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
@@ -496,6 +497,21 @@ async function etatLiaison(sb: SupabaseClient, wsId: string, avecExpediteurs: bo
 }
 
 /** Agents accessibles à l'espace : actifs au catalogue, inclus dans l'offre, non désactivés pour l'espace. */
+/** Abonnement en ligne de l'espace (Mon périmètre) : ce qui est facturé et ce que l'équipe compte aujourd'hui. */
+async function etatAbonnement(sb: SupabaseClient, wsId: string, nbAgents: number) {
+  const [{ data: w }, conn] = await Promise.all([
+    sb.from("studio_workspaces").select("abonnement_statut, abonnement_fin, abonnement_agents, abonnement_connecteurs, abonnement_mensuel").eq("id", wsId).maybeSingle(),
+    facturationEspace(sb, wsId),
+  ]);
+  return {
+    statut: w?.abonnement_statut ?? null, fin: w?.abonnement_fin ?? null, mensuel_ht: w?.abonnement_mensuel ?? null,
+    factures: { agents: w?.abonnement_agents ?? null, connecteurs: w?.abonnement_connecteurs ?? null },
+    actuels: { agents: nbAgents, connecteurs: conn.erreur ? null : conn.nb_factures },
+    prix_connecteur: conn.tarif.prix, tva_pourcent: stripe.TVA_POURCENT, test: stripe.modeTest(),
+    estimation_ht: Math.round((stripe.montantAgents(nbAgents) + (conn.erreur ? 0 : conn.nb_factures * conn.tarif.prix)) * 100) / 100,
+  };
+}
+
 async function agentsDuWorkspace(sb: SupabaseClient, ws: Session["ws"]) {
   const [{ data: agents }, { data: reglages }] = await Promise.all([
     sb.from("studio_agents").select("id, prenom, metier, accroche, description, prompt_systeme, demandes, super_pouvoirs, minutes_par_tache, couleur, offres, ordre, modele, photo")
@@ -1127,6 +1143,22 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
+    // ── Webhook Stripe (paiements du Studio), signé Stripe-Signature ──
+    if (req.headers.get("stripe-signature")) {
+      const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
+      if (!secret) return json({ error: "Webhook non configuré" }, 503);
+      if (!(await stripe.verifierSignature(secret, req.headers.get("stripe-signature"), brut))) return json({ error: "Signature invalide" }, 401);
+      const evt = JSON.parse(brut);
+      try {
+        console.log(`[studio] stripe ${evt.type} ${evt.id} : ${await stripe.traiterEvenement(sb, evt)}`);
+        return json({ ok: true });
+      } catch (e) {
+        // 500 : Stripe renverra l'événement plus tard.
+        console.error("[studio] stripe:", e instanceof Error ? e.message : String(e));
+        return json({ error: "Traitement impossible" }, 500);
+      }
+    }
+
     // ── Webhook AgentMail (canal e-mail de liaison), signé Svix ──
     if (req.headers.get("svix-id")) {
       const ok = await verifierSvix(secretsWebhook(), {
@@ -1541,12 +1573,21 @@ Deno.serve(async (req: Request) => {
             videos: { utilise: (medias ?? []).filter((m) => m.type === "video").length, max: w?.quota_videos_mois ?? null },
             utilisateurs: { max: w?.max_utilisateurs ?? null },
           },
-          recharges: credits,
+          recharges: { ...credits, paiement_en_ligne: stripe.stripeConfigure() },
+          abonnement: stripe.stripeConfigure() ? await etatAbonnement(sb, s.ws.id, agents.length) : null,
         });
       }
 
       case "recharge_acheter": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (stripe.stripeConfigure()) {
+          // Paiement en ligne : les crédits arrivent avec la confirmation de Stripe (webhook).
+          const e = await recharges.etat(sb, s.ws.id);
+          if (!e.achat_libre) return json({ error: "L'achat de recharges en ligne n'est pas ouvert pour cet espace. Contactez Aissociate." }, 403);
+          const pack = e.packs[Number(body.pack)];
+          if (!pack) return json({ error: "Recharge inconnue" }, 400);
+          return json({ url: await stripe.sessionRecharge(sb, { wsId: s.ws.id, email: s.user.email, origine: origineSure(req), pack }) });
+        }
         const r = await recharges.acheter(sb, s.ws.id, Number(body.pack), `client:${s.user.email}`);
         if ("erreur" in r) return json({ error: r.erreur }, r.statut);
         await journaliser(sb, {
@@ -1554,6 +1595,28 @@ Deno.serve(async (req: Request) => {
           detail: { credits: r.pack.credits, prix_ht: r.pack.prix },
         });
         return json({ ok: true, solde: await recharges.solde(sb, s.ws.id) });
+      }
+
+      case "abonnement_souscrire":
+      case "abonnement_gerer":
+      case "abonnement_synchroniser": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (!stripe.stripeConfigure()) return json({ error: "Le paiement en ligne n'est pas encore ouvert. Contactez Aissociate." }, 503);
+        const origine = origineSure(req);
+        if (action === "abonnement_gerer") return json({ url: await stripe.sessionPortail(sb, { wsId: s.ws.id, email: s.user.email, origine }) });
+        const [agents, conn] = await Promise.all([agentsDuWorkspace(sb, s.ws), facturationEspace(sb, s.ws.id)]);
+        if (conn.erreur) return json({ error: "Vos connecteurs n'ont pas pu être vérifiés : réessayez dans un instant." }, 503);
+        if (!agents.length) return json({ error: "Aucun agent n'est ouvert pour cet espace." }, 400);
+        if (action === "abonnement_synchroniser") {
+          const a = await stripe.synchroniser(sb, s.ws.id, agents.length, conn.nb_factures, conn.tarif.prix);
+          await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "abonnement_mis_a_jour", detail: { agents: a.agents, connecteurs: a.connecteurs, montant_ht: a.montant_ht } });
+          return json({ ok: true });
+        }
+        const { data: w } = await sb.from("studio_workspaces").select("abonnement_statut").eq("id", s.ws.id).single();
+        if (w?.abonnement_statut && stripe.STATUTS_EN_COURS.includes(String(w.abonnement_statut)) && w.abonnement_statut !== "incomplete") {
+          return json({ error: "Un abonnement est déjà en place : gérez-le depuis « Gérer mon abonnement »." }, 409);
+        }
+        return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: agents.length, connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix }) });
       }
 
       case "suspendre": {

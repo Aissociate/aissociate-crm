@@ -86,6 +86,20 @@ export async function tarifConnecteurs(sb: SupabaseClient): Promise<Tarif> {
   return lireTarif(data ?? []);
 }
 
+/** Connecteurs facturés d'un espace (abonnement Stripe) ; erreur si Zernio n'a pas répondu. */
+export async function facturationEspace(sb: SupabaseClient, wsId: string) {
+  const [tarif, { data: manuels }] = await Promise.all([
+    tarifConnecteurs(sb),
+    sb.from("studio_connecteurs").select("type, infos").eq("statut", "connecte").eq("workspace_id", wsId),
+  ]);
+  let comptes: Record<string, unknown>[] = [];
+  let erreur: string | null = null;
+  if (zernio.zernioConfigure()) {
+    try { comptes = await zernio.comptesBruts(wsId); } catch (e) { erreur = bureau.messageErreur(e); }
+  }
+  return { tarif, ...facturer(actifsDepuis(comptes, manuels ?? []), tarif), erreur };
+}
+
 /** État actuel de la facturation des connecteurs, pour chaque espace actif (CRM). */
 export async function facturationEspaces(sb: SupabaseClient) {
   const [tarif, { data: espaces }, { data: manuels }] = await Promise.all([

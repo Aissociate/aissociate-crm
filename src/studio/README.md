@@ -78,6 +78,21 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
 - Les agents reçoivent ces coordonnées dans leur contexte (`blocCoordonnees`, `contexte.ts`) et ne recréent pas
   l'en-tête dans un document HTML : l'aperçu (`EditeurDocument`) et les exports l'ajoutent autour du contenu.
 
+## Paiement en ligne Stripe (`stripe.ts`)
+- Recharges : « Mon périmètre » ouvre une page Stripe Checkout (paiement unique, facture Stripe). Les crédits
+  ne sont ajoutés qu'à la confirmation (webhook), une seule fois par session (`studio_recharges.stripe_ref` unique).
+- Abonnement mensuel : agents ouverts au tarif dégressif (prix `studio_agents_v1`, paliers 99 → 49,50 € HT)
+  + connecteurs facturés (`studio_connecteur_<centimes>`), TVA fixe 8,5 % (La Réunion). Portail client Stripe
+  (carte, factures, résiliation en fin de période) ; « Mettre à jour mon abonnement » aligne les quantités au prorata.
+- Le compte Stripe est partagé avec d'autres produits : tout porte `metadata.app = "studio"`, le portail a sa propre
+  configuration, et le webhook du Studio (événements `checkout.session.*`, `customer.subscription.*`) pointe vers
+  cette fonction (en-tête `Stripe-Signature`).
+- Secrets : `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (migration `20261118200000`). Sans clé, l'ancien
+  fonctionnement reste : la recharge est créditée tout de suite et facturée à part.
+- Passage du bac à sable au réel : changer les deux secrets, recréer le webhook côté réel, puis
+  `update studio_workspaces set stripe_client = null, stripe_abonnement = null, abonnement_statut = null;`.
+  Produits, prix, taux de TVA et configuration du portail sont recréés automatiquement.
+
 ## Lecture de pages web (`web_lire_page`)
 Outil disponible pour tous les agents : lit une page publique dont l'agent connaît l'adresse, et renvoie son texte
 avec les liens internes du site (`liensPage`) pour naviguer. Il réutilise `lireAdresse` de `veille.ts` : pas d'IP

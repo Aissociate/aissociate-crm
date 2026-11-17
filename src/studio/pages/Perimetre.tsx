@@ -1,7 +1,7 @@
 // « Mon périmètre » : ce que couvre la formule, consommation du mois, plafond
 // IA du jour et interrupteur d'urgence (suspendre / relancer les agents).
 import { useCallback, useEffect, useState } from 'react';
-import { BatteryCharging, Lock, PauseCircle, PlayCircle } from 'lucide-react';
+import { BatteryCharging, CreditCard, Lock, PauseCircle, PlayCircle } from 'lucide-react';
 import { appel } from '../api';
 import { Avatar, Bouton, Carte, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
@@ -15,9 +15,21 @@ type Perimetre = {
   agents: { id: string; prenom: string; metier: string; photo: string | null; couleur: string; ouvert: boolean }[];
   quotas: { demandes: Quota; images: Quota; videos: Quota; utilisateurs: Quota };
   recharges?: Recharges;
+  abonnement?: Abonnement | null;
 };
+type Abonnement = {
+  statut: string | null; fin: string | null; mensuel_ht: number | null;
+  factures: { agents: number | null; connecteurs: number | null };
+  actuels: { agents: number; connecteurs: number | null };
+  prix_connecteur: number; tva_pourcent: number; test: boolean; estimation_ht: number;
+};
+const STATUTS: Record<string, string> = {
+  active: 'Actif', trialing: 'Essai', past_due: 'Paiement en retard', unpaid: 'Impayé', incomplete: 'Paiement à finaliser',
+  paused: 'En pause', canceled: 'Résilié', incomplete_expired: 'Non finalisé',
+};
+const EN_COURS = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
 type Recharges = {
-  solde: number; consommes_mois: number; achat_libre: boolean;
+  solde: number; consommes_mois: number; achat_libre: boolean; paiement_en_ligne?: boolean;
   packs: { prix: number; credits: number }[];
   couts: { demande: number; image: number; video: number };
   historique: { nature: string; credits: number; prix_ht: number | null; note: string | null; created_at: string }[];
@@ -47,7 +59,33 @@ export default function PagePerimetre() {
   const [demandeSuspension, setDemandeSuspension] = useState(false);
   const [achat, setAchat] = useState<number | null>(null);
   const [merci, setMerci] = useState('');
+  const [majAbo, setMajAbo] = useState(false);
   const proprietaire = me.user.role === 'proprietaire';
+
+  // Retour de la page de paiement Stripe.
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const r = u.searchParams.get('paiement');
+    if (!r) return;
+    setMerci(r === 'recharge' ? 'Paiement reçu : vos crédits apparaissent dans quelques secondes (actualisez la page si besoin).'
+      : r === 'abonnement' ? 'Abonnement activé : merci ! Votre facture est disponible dans « Gérer mon abonnement ».'
+      : 'Paiement annulé : rien n\'a été débité.');
+    u.searchParams.delete('paiement');
+    window.history.replaceState(null, '', u.pathname + u.search);
+  }, []);
+
+  /** Actions qui renvoient vers une page Stripe (paiement, portail). */
+  const versStripe = async (action: string) => {
+    setEnvoi(true); setErreur('');
+    try {
+      const r = await appel<{ url?: string; ok?: boolean }>(action);
+      if (r.url) { window.location.href = r.url; return; }
+      await charger();
+      setEnvoi(false);
+      setMerci('Abonnement mis à jour : la différence est calculée au prorata sur votre prochaine facture.');
+    } catch (e) { setErreur(gerer(e)); setEnvoi(false); }
+    setMajAbo(false);
+  };
 
   const charger = useCallback(() => appel<Perimetre>('perimetre').then(setP).catch((e) => setErreur(gerer(e))), [gerer]);
   useEffect(() => { charger(); }, [charger]);
@@ -64,7 +102,8 @@ export default function PagePerimetre() {
     const pack = p.recharges.packs[achat];
     setEnvoi(true); setErreur('');
     try {
-      await appel('recharge_acheter', { pack: achat });
+      const r = await appel<{ url?: string }>('recharge_acheter', { pack: achat });
+      if (r.url) { window.location.href = r.url; return; }
       setMerci(`${pack.credits} crédits ajoutés. ${eur(pack.prix)} HT figureront sur votre prochaine facture.`);
       await charger();
     } catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); setAchat(null); }
@@ -144,6 +183,54 @@ export default function PagePerimetre() {
           </p>
         </Carte>
       </div>
+      {p.abonnement && (() => {
+        const a = p.abonnement;
+        const enCours = a.statut != null && EN_COURS.includes(a.statut);
+        const ecart = enCours && a.actuels.connecteurs != null
+          && (a.factures.agents !== a.actuels.agents || a.factures.connecteurs !== a.actuels.connecteurs);
+        return (
+          <Carte>
+            <div className="flex flex-wrap items-start gap-6">
+              <div className="min-w-[12rem]">
+                <p className="flex items-center gap-2 font-semibold"><CreditCard className="h-5 w-5 text-neutral-500" />Abonnement mensuel
+                  {a.test && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700">mode test</span>}</p>
+                <p className="mt-2 text-3xl font-semibold">{eur(enCours && a.mensuel_ht != null ? Number(a.mensuel_ht) : a.estimation_ht)}<span className="text-base font-normal text-neutral-400"> HT / mois</span></p>
+                <p className="mt-1 text-xs text-neutral-500">
+                  {a.statut ? STATUTS[a.statut] ?? a.statut : 'Pas encore de prélèvement en ligne'}
+                  {enCours && a.fin ? ` · prochaine échéance le ${new Date(a.fin).toLocaleDateString('fr-FR')}` : ''}
+                </p>
+              </div>
+              <div className="min-w-0 flex-1 text-sm text-neutral-600">
+                <p>
+                  {enCours ? `Facturé : ${a.factures.agents ?? 0} agent${(a.factures.agents ?? 0) > 1 ? 's' : ''}` : `${a.actuels.agents} agent${a.actuels.agents > 1 ? 's' : ''}`}
+                  {(enCours ? a.factures.connecteurs : a.actuels.connecteurs) ? ` + ${enCours ? a.factures.connecteurs : a.actuels.connecteurs} connecteur(s) supplémentaire(s) à ${eur(a.prix_connecteur)}` : ''}
+                  {` · TVA ${String(a.tva_pourcent).replace('.', ',')} % en sus.`}
+                </p>
+                <p className="mt-1 text-neutral-500">99 € HT le premier agent, puis dégressif jusqu'à 49,50 € à partir du cinquième. Prélèvement automatique, factures et résiliation depuis votre espace de paiement.</p>
+                {ecart && (
+                  <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
+                    Votre équipe a changé : {a.actuels.agents} agent{a.actuels.agents > 1 ? 's' : ''}{a.actuels.connecteurs ? ` et ${a.actuels.connecteurs} connecteur(s) supplémentaire(s)` : ''} aujourd'hui.
+                  </p>
+                )}
+                {proprietaire ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {enCours ? (
+                      <>
+                        {ecart && <Bouton variante="noir" disabled={envoi} onClick={() => setMajAbo(true)}>Mettre à jour mon abonnement</Bouton>}
+                        <Bouton variante="clair" disabled={envoi} onClick={() => versStripe('abonnement_gerer')}>Gérer mon abonnement</Bouton>
+                      </>
+                    ) : (
+                      <Bouton variante="noir" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire')}>
+                        Activer le prélèvement · {eur(a.estimation_ht)} HT / mois
+                      </Bouton>
+                    )}
+                  </div>
+                ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace gère l'abonnement.</p>}
+              </div>
+            </div>
+          </Carte>
+        );
+      })()}
       {p.recharges && (() => {
         const r = p.recharges;
         return (
@@ -190,9 +277,19 @@ export default function PagePerimetre() {
       <Confirmation
         ouvert={achat !== null}
         titre={achat !== null && p.recharges ? `Ajouter ${p.recharges.packs[achat].credits} crédits ?` : ''}
-        message={achat !== null && p.recharges ? `${eur(p.recharges.packs[achat].prix)} HT, ajoutés à votre prochaine facture. Les crédits sont disponibles tout de suite et se reportent de mois en mois.` : ''}
-        confirmer={{ label: 'Ajouter les crédits', onClick: acheter }}
+        message={achat !== null && p.recharges ? (p.recharges.paiement_en_ligne
+          ? `${eur(p.recharges.packs[achat].prix)} HT (TVA ${String(p.abonnement?.tva_pourcent ?? 8.5).replace('.', ',')} % en sus), réglés sur la page de paiement sécurisée de Stripe. Les crédits sont ajoutés dès le paiement confirmé et se reportent de mois en mois.`
+          : `${eur(p.recharges.packs[achat].prix)} HT, ajoutés à votre prochaine facture. Les crédits sont disponibles tout de suite et se reportent de mois en mois.`) : ''}
+        confirmer={{ label: p.recharges?.paiement_en_ligne ? 'Payer' : 'Ajouter les crédits', onClick: acheter }}
         annuler={{ onClick: () => setAchat(null) }}
+        enCours={envoi}
+      />
+      <Confirmation
+        ouvert={majAbo}
+        titre="Mettre à jour votre abonnement ?"
+        message={p.abonnement ? `Nouveau montant : ${eur(p.abonnement.estimation_ht)} HT par mois. La différence pour le mois en cours est calculée au prorata sur votre prochaine facture.` : ''}
+        confirmer={{ label: 'Mettre à jour', onClick: () => versStripe('abonnement_synchroniser') }}
+        annuler={{ onClick: () => setMajAbo(false) }}
         enCours={envoi}
       />
       <Confirmation
