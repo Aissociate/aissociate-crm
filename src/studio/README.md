@@ -93,6 +93,20 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `update studio_workspaces set stripe_client = null, stripe_abonnement = null, abonnement_statut = null;`.
   Produits, prix, taux de TVA et configuration du portail sont recréés automatiquement.
 
+- TVA : code postal 974… dans « Mon entreprise » → taux fixe 8,5 % (Stripe Tax ne gère pas La Réunion) ;
+  sinon `automatic_tax` (20 % en métropole), adresse et n° de TVA demandés sur la page Stripe. Stripe Tax exige
+  une adresse de siège et un enregistrement TVA France sur le compte (fait dans le bac à sable, à faire en réel).
+
+## Essai gratuit, identifiants et CGV (`essai.ts`, `courriel.ts`, `cgv.ts`)
+- Fin du questionnaire (`essai_auto` = true) : espace `offre = 'essai'` créé avec les agents demandés,
+  `essai_fin` = +7 jours (`essai_jours`), mot de passe provisoire envoyé par e-mail (SMTP du CRM : secrets
+  `SMTP_*` ou `parametres.smtp`). Échec d'envoi : espace créé, `studio_onboarding.identifiants_envoyes_le` vide.
+- Pendant l'essai : quotas habituels, un seul connecteur (Zernio ou manuel). Après : seules les actions de
+  `ACTIONS_APRES_ESSAI` répondent (Mon périmètre, abonnement, mot de passe, CGV, en-tête) ; missions par e-mail
+  et tâches planifiées s'arrêtent. Un abonnement payé lève le blocage et passe l'offre en « essentiel ».
+- CGV : livrables désignés par `studio_config.cgv_livrables` (ids, dans l'ordre). Version = empreinte des textes ;
+  acceptation horodatée par utilisateur (`studio_users.cgv_*`, IP et navigateur), rien d'autre n'est accessible avant.
+
 ## Lecture de pages web (`web_lire_page`)
 Outil disponible pour tous les agents : lit une page publique dont l'agent connaît l'adresse, et renvoie son texte
 avec les liens internes du site (`liensPage`) pour naviguer. Il réutilise `lireAdresse` de `veille.ts` : pas d'IP

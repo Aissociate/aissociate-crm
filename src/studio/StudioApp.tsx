@@ -28,6 +28,7 @@ const Taches = lazy(() => import('./pages/Taches'));
 const Veille = lazy(() => import('./pages/Veille'));
 const Contacts = lazy(() => import('./pages/Contacts'));
 const Desinscription = lazy(() => import('./pages/Desinscription'));
+const AccepterCgv = lazy(() => import('./pages/AccepterCgv'));
 
 type Ctx = {
   me: Me | null;
@@ -58,6 +59,9 @@ function Garde() {
   if (c.chargement) return <div className="min-h-screen bg-[#f6f6f4]"><Chargement /></div>;
   if (!c.me) return <Navigate to="/studio/connexion" replace />;
   if (c.me.user.doit_changer) return <Compte premiereConnexion />;
+  if (c.me.user.cgv_a_accepter) {
+    return <Suspense fallback={<Chargement />}><AccepterCgv onAccepte={c.rafraichir} onDeconnexion={c.deconnexion} gerer={c.gerer} /></Suspense>;
+  }
   return <Coquille />;
 }
 
@@ -138,13 +142,24 @@ function Coquille() {
       )}
       <main className="lg:pl-60">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+          {me.essai && (me.essai.termine ? (
+            <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm text-orange-900">
+              <p className="font-semibold">Votre essai gratuit est terminé.</p>
+              <p className="mt-1">Vos agents, ressources et créations sont conservés. Choisissez votre abonnement ci-dessous pour retrouver l'accès complet.</p>
+            </div>
+          ) : (
+            <NavLink to="/studio/perimetre" className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+              <AlarmClock className="h-5 w-5 shrink-0" />
+              <span>Essai gratuit : {me.essai.jours_restants > 1 ? `${me.essai.jours_restants} jours restants` : 'dernier jour'} (jusqu'au {new Date(me.essai.fin).toLocaleDateString('fr-FR')}) · un outil connectable. <span className="underline">Choisir mon abonnement</span></span>
+            </NavLink>
+          ))}
           {me.workspace.suspendu && (
             <NavLink to="/studio/perimetre" className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <PauseCircle className="h-5 w-5 shrink-0" />
               <span>Vos agents sont suspendus : aucune mission n'est traitée. <span className="underline">Voir mon périmètre</span></span>
             </NavLink>
           )}
-          <Suspense fallback={<Chargement />}><Outlet /></Suspense>
+          <Suspense fallback={<Chargement />}>{me.essai?.termine ? <Perimetre /> : <Outlet />}</Suspense>
         </div>
       </main>
     </div>

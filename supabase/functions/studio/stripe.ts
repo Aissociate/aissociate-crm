@@ -7,6 +7,10 @@
 // client sont retrouvés ou créés à la volée : passer du bac à sable au réel = changer
 // STRIPE_SECRET_KEY et STRIPE_WEBHOOK_SECRET, puis vider les colonnes stripe_* des espaces.
 //
+// TVA : La Réunion (code postal 974…, non gérée par Stripe Tax) → taux fixe de 8,5 % ;
+// ailleurs → Stripe Tax (automatic_tax, 20 % en métropole), adresse et n° de TVA demandés au
+// paiement. Stripe Tax exige une adresse de siège et un enregistrement TVA France sur le compte.
+//
 // Les crédits d'une recharge ne sont ajoutés qu'à réception du paiement confirmé (webhook),
 // une seule fois par session Stripe (index unique sur studio_recharges.stripe_ref).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
@@ -46,6 +50,24 @@ export function montantAgents(n: number): number {
   let t = 0;
   for (let i = 0; i < Math.max(0, Math.floor(n)); i++) t += PALIERS_AGENTS[Math.min(i, PALIERS_AGENTS.length - 1)];
   return t / 100;
+}
+
+/** Taux fixe de La Réunion (974…) ; sinon TVA calculée par Stripe Tax. */
+export function tvaReunion(codePostal: unknown): boolean {
+  return /^974\d{2}$/.test(String(codePostal ?? "").replace(/\s/g, ""));
+}
+
+/** Paramètres de taxe d'une session Checkout selon la zone du client. */
+export function parametresTaxe(reunion: boolean, tauxReunion: string | null) {
+  return reunion
+    ? { lignes: { tax_rates: [tauxReunion] }, session: {} }
+    : {
+      lignes: {},
+      session: {
+        automatic_tax: { enabled: true }, billing_address_collection: "required",
+        customer_update: { address: "auto", name: "auto" }, tax_id_collection: { enabled: true },
+      },
+    };
 }
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -115,7 +137,7 @@ async function prix(lookup: string, nomProduit: string, def: Record<string, unkn
   if (l.data[0]) return l.data[0].id;
   const produit = await appel<{ id: string }>("POST", "/products", { name: nomProduit, metadata: { app: "studio" } }, `studio-produit-${lookup}`);
   return (await appel<{ id: string }>("POST", "/prices", {
-    product: produit.id, currency: "eur", lookup_key: lookup, recurring: { interval: "month" }, metadata: { app: "studio" }, ...def,
+    product: produit.id, currency: "eur", lookup_key: lookup, recurring: { interval: "month" }, tax_behavior: "exclusive", metadata: { app: "studio" }, ...def,
   }, `studio-prix-${lookup}`)).id;
 }
 
@@ -125,29 +147,31 @@ const prixAgents = () => prix(CLE_AGENTS, "Studio IA — agents (abonnement mens
 });
 const prixConnecteur = (centimes: number) => prix(cleConnecteur(centimes), "Studio IA — connecteur supplémentaire", { unit_amount: centimes });
 
-/** Client Stripe de l'espace (créé au premier paiement, coordonnées de « Mon entreprise »). */
-async function clientStripe(sb: SupabaseClient, wsId: string, email: string): Promise<string> {
+/** Client Stripe de l'espace (créé au premier paiement, coordonnées de « Mon entreprise ») et sa zone de TVA. */
+async function clientStripe(sb: SupabaseClient, wsId: string, email: string): Promise<{ id: string; reunion: boolean }> {
   const { data: w } = await sb.from("studio_workspaces").select("nom, stripe_client, entete").eq("id", wsId).single();
-  if (w?.stripe_client) return String(w.stripe_client);
   const e = (w?.entete ?? {}) as Record<string, string>;
+  const reunion = tvaReunion(e.code_postal);
+  if (w?.stripe_client) return { id: String(w.stripe_client), reunion };
   const c = await appel<{ id: string }>("POST", "/customers", {
     name: (e.raison_sociale || String(w?.nom ?? "")).replace(/^Démo — /, "").slice(0, 250), email: email || undefined,
-    address: e.adresse || e.ville ? { line1: e.adresse || undefined, postal_code: e.code_postal || undefined, city: e.ville || undefined, country: "FR" } : undefined,
+    address: e.adresse || e.ville ? { line1: e.adresse || undefined, postal_code: e.code_postal || undefined, city: e.ville || undefined, country: reunion ? "RE" : "FR" } : undefined,
     preferred_locales: ["fr"], metadata: { app: "studio", workspace_id: wsId },
   }, `studio-client-${wsId}-${modeTest() ? "test" : "reel"}`);
   await sb.from("studio_workspaces").update({ stripe_client: c.id }).eq("id", wsId);
-  return c.id;
+  return { id: c.id, reunion };
 }
 
 /** Page de paiement Stripe d'un pack de recharge. */
 export async function sessionRecharge(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; pack: { prix: number; credits: number } }) {
-  const [client, tva] = await Promise.all([clientStripe(sb, p.wsId, p.email), tauxTva()]);
+  const client = await clientStripe(sb, p.wsId, p.email);
+  const taxe = parametresTaxe(client.reunion, client.reunion ? await tauxTva() : null);
   const meta = { app: "studio", workspace_id: p.wsId };
   const s = await appel<{ url: string }>("POST", "/checkout/sessions", {
-    mode: "payment", customer: client, locale: "fr",
+    mode: "payment", customer: client.id, locale: "fr", ...taxe.session,
     line_items: [{
-      quantity: 1, tax_rates: [tva],
-      price_data: { currency: "eur", unit_amount: Math.round(p.pack.prix * 100), product_data: { name: `Studio IA — recharge de ${p.pack.credits} crédits` } },
+      quantity: 1, ...taxe.lignes,
+      price_data: { currency: "eur", unit_amount: Math.round(p.pack.prix * 100), tax_behavior: "exclusive", product_data: { name: `Studio IA — recharge de ${p.pack.credits} crédits` } },
     }],
     metadata: { ...meta, nature: "recharge", credits: p.pack.credits, prix_ht: p.pack.prix, acteur: `client:${p.email}` },
     payment_intent_data: { metadata: meta, statement_descriptor_suffix: "STUDIO IA" },
@@ -161,14 +185,15 @@ export async function sessionRecharge(sb: SupabaseClient, p: { wsId: string; ema
 /** Page de souscription de l'abonnement mensuel (agents + connecteurs supplémentaires). */
 export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; agents: number; connecteurs: number; prixConnecteur: number }) {
   const centimes = Math.round(p.prixConnecteur * 100);
-  const [client, tva, pa, pc] = await Promise.all([
-    clientStripe(sb, p.wsId, p.email), tauxTva(), prixAgents(), p.connecteurs > 0 ? prixConnecteur(centimes) : Promise.resolve(""),
+  const [client, pa, pc] = await Promise.all([
+    clientStripe(sb, p.wsId, p.email), prixAgents(), p.connecteurs > 0 ? prixConnecteur(centimes) : Promise.resolve(""),
   ]);
+  const taxe = parametresTaxe(client.reunion, client.reunion ? await tauxTva() : null);
   const meta = { app: "studio", workspace_id: p.wsId };
   const s = await appel<{ url: string }>("POST", "/checkout/sessions", {
-    mode: "subscription", customer: client, locale: "fr",
+    mode: "subscription", customer: client.id, locale: "fr", ...taxe.session,
     line_items: [{ price: pa, quantity: p.agents }, ...(p.connecteurs > 0 ? [{ price: pc, quantity: p.connecteurs }] : [])],
-    subscription_data: { metadata: meta, default_tax_rates: [tva], description: "Studio IA — Aissociate" },
+    subscription_data: { metadata: meta, ...(client.reunion ? { default_tax_rates: taxe.lignes.tax_rates } : {}), description: "Studio IA — Aissociate" },
     metadata: { ...meta, nature: "abonnement" },
     success_url: `${p.origine}/studio/perimetre?paiement=abonnement`,
     cancel_url: `${p.origine}/studio/perimetre?paiement=annule`,
@@ -178,7 +203,7 @@ export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; e
 
 /** Portail client Stripe (carte, factures, résiliation), avec une configuration propre au Studio. */
 export async function sessionPortail(sb: SupabaseClient, p: { wsId: string; email: string; origine: string }) {
-  const client = await clientStripe(sb, p.wsId, p.email);
+  const client = (await clientStripe(sb, p.wsId, p.email)).id;
   const l = await appel<{ data: { id: string; active: boolean; metadata?: Record<string, string> }[] }>("GET", "/billing_portal/configurations", { limit: 100 });
   const config = l.data.find((c) => c.active && c.metadata?.app === "studio")?.id ?? (await appel<{ id: string }>("POST", "/billing_portal/configurations", {
     business_profile: { headline: "Studio IA — Aissociate" },
@@ -217,6 +242,10 @@ async function enregistrerAbonnement(sb: SupabaseClient, a: Abonnement) {
     abonnement_agents: enCours ? l.agents : null, abonnement_connecteurs: enCours ? l.connecteurs : null,
     ...(enCours && a.status !== "incomplete" ? { abonnement_mensuel: l.montant_ht } : {}),
   }).eq("id", wsId);
+  // Abonnement payé : l'espace d'essai devient un espace client (formule Essentiel).
+  if (["active", "trialing"].includes(a.status)) {
+    await sb.from("studio_workspaces").update({ offre: "essentiel" }).eq("id", wsId).eq("offre", "essai");
+  }
 }
 
 type Session = {

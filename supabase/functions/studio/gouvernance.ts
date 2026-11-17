@@ -8,6 +8,7 @@ import { hasherMotDePasse } from "./securite.ts";
 import { nettoyerHtml } from "./html.ts";
 import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Reponses } from "./questionnaire.ts";
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
+import * as courriel from "./courriel.ts";
 import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 
 export { journaliser };
@@ -74,7 +75,9 @@ export async function garde(sb: SupabaseClient, wsId: string): Promise<{ message
 // Onboarding public → demande dans le CRM
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function soumettreOnboarding(sb: SupabaseClient, body: Record<string, unknown>, origine: string): Promise<{ ok: true; id: string } | { erreur: string; statut: number }> {
+export type ResultatOnboarding = { ok: true; id: string; essai?: boolean; identifiants_envoyes?: boolean; deja_client?: boolean };
+
+export async function soumettreOnboarding(sb: SupabaseClient, body: Record<string, unknown>, origine: string, site = ""): Promise<ResultatOnboarding | { erreur: string; statut: number }> {
   // Champ piège invisible : un robot le remplit, un humain non. Réponse muette.
   if (String(body.site_web_entreprise ?? "").trim()) return { ok: true, id: "" };
   const cfg = await chargerConfig(sb, ["onboarding_ouvert"]);
@@ -122,7 +125,36 @@ export async function soumettreOnboarding(sb: SupabaseClient, body: Record<strin
     source: origine, status: "new",
   }).then(({ error: e }) => { if (e) console.error("[studio] lead onboarding:", e.message); });
 
-  return { ok: true, id: data.id };
+  return { ok: true, id: data.id, ...(await essaiAutomatique(sb, data.id, site)) };
+}
+
+/**
+ * Essai gratuit ouvert dès le questionnaire (réglage `essai_auto`) : espace créé avec les agents
+ * demandés, mot de passe provisoire envoyé par e-mail. Un échec d'envoi laisse l'espace créé :
+ * le CRM le voit (identifiants_envoyes_le vide) et peut régénérer le mot de passe.
+ */
+async function essaiAutomatique(sb: SupabaseClient, demandeId: string, site: string): Promise<{ essai: boolean; identifiants_envoyes?: boolean; deja_client?: boolean }> {
+  const cfg = await chargerConfig(sb, ["essai_auto", "essai_jours"]);
+  if (cfg.essai_auto !== "true" || !site) return { essai: false };
+  const jours = Math.min(60, Math.max(1, Math.round(Number(cfg.essai_jours) || 7)));
+  const p = await provisionner(sb, { demande_id: demandeId, offre: "essai" }, null, { essaiJours: jours });
+  if ("erreur" in p) {
+    console.error("[studio] essai automatique:", p.erreur);
+    return { essai: false, deja_client: String(p.erreur).includes("déjà un accès") };
+  }
+  try {
+    const m = courriel.mailIdentifiants({
+      prenom: p.prenom, entreprise: p.nom.replace(/^Démo — /, ""), email: p.email, motDePasse: p.mot_de_passe,
+      site, finEssai: String(p.essai_fin), jours,
+    });
+    await courriel.envoyer(sb, { a: p.email, ...m });
+    await sb.from("studio_onboarding").update({ identifiants_envoyes_le: new Date().toISOString() }).eq("id", demandeId);
+    await journaliser(sb, { wsId: p.workspace_id, acteur: "systeme", action: "identifiants_envoyes", detail: { email: p.email, essai_jours: jours } });
+    return { essai: true, identifiants_envoyes: true };
+  } catch (e) {
+    console.error("[studio] envoi des identifiants:", e instanceof Error ? e.message : String(e));
+    return { essai: true, identifiants_envoyes: false };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,7 +170,7 @@ export function motDePasseProvisoire(): string {
   return `${corps.slice(0, 4)}-${corps.slice(4)}-${fin}`;
 }
 
-export async function provisionner(sb: SupabaseClient, body: Record<string, unknown>, managerId: string | null) {
+export async function provisionner(sb: SupabaseClient, body: Record<string, unknown>, managerId: string | null, options: { essaiJours?: number } = {}) {
   const { data: d } = await sb.from("studio_onboarding").select("*").eq("id", String(body.demande_id ?? "")).maybeSingle();
   if (!d) return { erreur: "Demande introuvable", statut: 404 };
   if (d.statut === "provisionnee" && d.workspace_id) return { erreur: "Cet espace a déjà été créé.", statut: 400 };
@@ -149,7 +181,8 @@ export async function provisionner(sb: SupabaseClient, body: Record<string, unkn
   if (!agents.length) return { erreur: "Choisissez au moins un agent.", statut: 400 };
 
   const reponses = (d.reponses ?? {}) as Reponses;
-  const offre = ["essentiel", "pro", "sur_mesure"].includes(String(body.offre)) ? String(body.offre) : "sur_mesure";
+  const offre = ["essai", "essentiel", "pro", "sur_mesure"].includes(String(body.offre)) ? String(body.offre) : "sur_mesure";
+  const essaiFin = offre === "essai" ? new Date(Date.now() + (options.essaiJours ?? 7) * 86_400_000).toISOString() : null;
   const { data: ws, error } = await sb.from("studio_workspaces").insert({
     nom: String(body.nom ?? d.entreprise).trim().slice(0, 120) || d.entreprise,
     offre, secteur: String(reponses.A2 ?? "").slice(0, 120) || null,
@@ -159,6 +192,7 @@ export async function provisionner(sb: SupabaseClient, body: Record<string, unkn
     quota_videos_mois: nombreOuNull(cfg.defaut_quota_videos_mois) ?? 5,
     budget_ia_jour_eur: nombreOuNull(cfg.defaut_budget_ia_jour_eur),
     abonnement_mensuel: nombreOuNull(body.abonnement_mensuel),
+    essai_fin: essaiFin,
     created_by: managerId,
   }).select("id, nom").single();
   if (error) return { erreur: error.message, statut: 400 };
@@ -186,7 +220,10 @@ export async function provisionner(sb: SupabaseClient, body: Record<string, unkn
     wsId: ws.id, acteur: "crm", action: "espace_cree",
     detail: { demande: d.id, agents, score: d.score, drapeaux: d.drapeaux },
   });
-  return { ok: true, workspace_id: ws.id, nom: ws.nom, email: String(d.email).toLowerCase(), mot_de_passe: motDePasse };
+  return {
+    ok: true as const, workspace_id: ws.id, nom: String(ws.nom), email: String(d.email).toLowerCase(), mot_de_passe: motDePasse,
+    prenom: prenom || null, essai_fin: essaiFin,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

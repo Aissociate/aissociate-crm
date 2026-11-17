@@ -30,6 +30,8 @@ const LIBELLES: Record<string, string> = {
   dossier_supprime: 'Dossier supprimé',
   recharge_achetee: 'Recharge de crédits achetée',
   abonnement_mis_a_jour: 'Abonnement mis à jour',
+  cgv_acceptees: 'Conditions générales acceptées',
+  identifiants_envoyes: "Identifiants de l'essai envoyés",
   consultation: 'Collègue consulté',
   action_executee: 'Action exécutée après validation',
   action_echec: 'Action après validation en échec',

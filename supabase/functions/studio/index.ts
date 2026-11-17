@@ -93,6 +93,8 @@ import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
 import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as stripe from "./stripe.ts";
+import * as essai from "./essai.ts";
+import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
@@ -233,10 +235,12 @@ function textePieces(pieces: Piece[] | null | undefined, max: number): string {
 
 type Session = {
   sessionId: string;
-  user: { id: string; email: string; prenom: string | null; nom: string | null; role: string };
+  user: { id: string; email: string; prenom: string | null; nom: string | null; role: string; cgv_version?: string | null };
   ws: {
     id: string; nom: string; offre: string; quota_messages_mois: number | null;
     contexte_entreprise: string; expire_le: string | null;
+    /** Fin de l'essai gratuit (null : espace créé par le CRM) et statut de l'abonnement Stripe. */
+    essai_fin: string | null; abonnement_statut: string | null;
     /** Modèle imposé à tous les agents de ce client (null = hérité). */
     modele: string | null;
   };
@@ -246,17 +250,18 @@ type Session = {
 // Session
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele";
+const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele, essai_fin, abonnement_statut";
 
 function versSession(sessionId: string, u: Record<string, unknown>, w: Record<string, unknown>): Session {
   return {
     sessionId,
-    user: { id: String(u.id), email: String(u.email), prenom: u.prenom as string | null, nom: u.nom as string | null, role: String(u.role) },
+    user: { id: String(u.id), email: String(u.email), prenom: u.prenom as string | null, nom: u.nom as string | null, role: String(u.role), cgv_version: (u.cgv_version as string | null) ?? null },
     ws: {
       id: String(w.id), nom: String(w.nom), offre: String(w.offre),
       quota_messages_mois: w.quota_messages_mois as number | null,
       contexte_entreprise: String(w.contexte_entreprise ?? ""), expire_le: w.expire_le as string | null,
       modele: (w.modele as string | null) || null,
+      essai_fin: (w.essai_fin as string | null) ?? null, abonnement_statut: (w.abonnement_statut as string | null) ?? null,
     },
   };
 }
@@ -269,6 +274,8 @@ async function sessionUtilisateur(sb: SupabaseClient, userId: string, origine: "
   const w = u.studio_workspaces as unknown as Record<string, unknown>;
   if (!u.actif || !w.actif) return null;
   if (w.expire_le && String(w.expire_le) < new Date().toISOString().slice(0, 10)) return null;
+  // Essai terminé sans abonnement : plus de mission par e-mail ni de tâche planifiée.
+  if (essai.essaiTermine(w as { essai_fin?: string | null; abonnement_statut?: string | null })) return null;
   return versSession(origine, u as unknown as Record<string, unknown>, w);
 }
 
@@ -280,7 +287,7 @@ function acteurDe(s: Session): string {
 async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Session | null> {
   if (typeof token !== "string" || token.length !== 64) return null;
   const { data: s } = await sb.from("studio_sessions")
-    .select("id, expires_at, studio_users!inner(id, email, prenom, nom, role, actif, studio_workspaces!inner(id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele))")
+    .select(`id, expires_at, studio_users!inner(id, email, prenom, nom, role, actif, cgv_version, studio_workspaces!inner(${SELECT_WS}))`)
     .eq("token_hash", await sha256(token)).maybeSingle();
   if (!s || new Date(s.expires_at) < new Date()) return null;
   const u = s.studio_users as unknown as Record<string, unknown> & { studio_workspaces: Record<string, unknown> };
@@ -497,17 +504,26 @@ async function etatLiaison(sb: SupabaseClient, wsId: string, avecExpediteurs: bo
 }
 
 /** Agents accessibles à l'espace : actifs au catalogue, inclus dans l'offre, non désactivés pour l'espace. */
+/** Refus d'un nouveau connecteur pendant l'essai gratuit (un seul permis) ; null sinon. */
+async function refusConnecteurEssai(sb: SupabaseClient, s: Session): Promise<string | null> {
+  if (!essai.enEssai(s.ws)) return null;
+  const f = await facturationEspace(sb, s.ws.id);
+  return f.lignes.length >= essai.CONNECTEURS_ESSAI ? essai.MESSAGE_CONNECTEUR : null;
+}
+
 /** Abonnement en ligne de l'espace (Mon périmètre) : ce qui est facturé et ce que l'équipe compte aujourd'hui. */
 async function etatAbonnement(sb: SupabaseClient, wsId: string, nbAgents: number) {
   const [{ data: w }, conn] = await Promise.all([
-    sb.from("studio_workspaces").select("abonnement_statut, abonnement_fin, abonnement_agents, abonnement_connecteurs, abonnement_mensuel").eq("id", wsId).maybeSingle(),
+    sb.from("studio_workspaces").select("abonnement_statut, abonnement_fin, abonnement_agents, abonnement_connecteurs, abonnement_mensuel, entete").eq("id", wsId).maybeSingle(),
     facturationEspace(sb, wsId),
   ]);
   return {
     statut: w?.abonnement_statut ?? null, fin: w?.abonnement_fin ?? null, mensuel_ht: w?.abonnement_mensuel ?? null,
     factures: { agents: w?.abonnement_agents ?? null, connecteurs: w?.abonnement_connecteurs ?? null },
     actuels: { agents: nbAgents, connecteurs: conn.erreur ? null : conn.nb_factures },
-    prix_connecteur: conn.tarif.prix, tva_pourcent: stripe.TVA_POURCENT, test: stripe.modeTest(),
+    prix_connecteur: conn.tarif.prix, test: stripe.modeTest(),
+    // La Réunion : 8,5 % fixe ; ailleurs : TVA calculée par Stripe selon l'adresse (null).
+    tva_pourcent: stripe.tvaReunion((w?.entete as Record<string, string> | null)?.code_postal) ? stripe.TVA_POURCENT : null,
     estimation_ht: Math.round((stripe.montantAgents(nbAgents) + (conn.erreur ? 0 : conn.nb_factures * conn.tarif.prix)) * 100) / 100,
   };
 }
@@ -565,7 +581,11 @@ async function construireMe(sb: SupabaseClient, s: Session) {
     if (String(r.created_at) >= mois) { minutesMois += m; reponsesMois++; }
   }
   return {
-    user: { ...s.user, doit_changer: credentials?.doit_changer ?? false },
+    user: {
+      ...s.user, doit_changer: credentials?.doit_changer ?? false,
+      cgv_a_accepter: await cgv.chargerCgv(sb).then((c) => Boolean(c && c.version !== s.user.cgv_version)),
+    },
+    essai: essai.enEssai(s.ws) ? { fin: s.ws.essai_fin, jours_restants: essai.joursRestants(s.ws), termine: essai.essaiTermine(s.ws) } : null,
     workspace: { ...s.ws, suspendu: etat.suspendu },
     // Le gabarit (consigne détaillée) des super-pouvoirs reste côté serveur.
     agents: agents.map(({ prompt_systeme: _p, offres: _o, consignes: _c, modele: _m, modele_effectif: _me, super_pouvoirs, ...a }) => ({
@@ -1228,7 +1248,7 @@ Deno.serve(async (req: Request) => {
     // ── Questionnaire d'onboarding public (/studio/demarrer) ──
     if (action === "onboarding_soumettre") {
       const depuis = body.depuis ? ` (depuis ${String(body.depuis).slice(0, 60)})` : "";
-      const r = await soumettreOnboarding(sb, body, `/studio/demarrer${depuis}`);
+      const r = await soumettreOnboarding(sb, body, `/studio/demarrer${depuis}`, origineSure(req));
       return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
     }
 
@@ -1281,9 +1301,35 @@ Deno.serve(async (req: Request) => {
     const s = await chargerSession(sb, body.token);
     if (!s) return json({ error: "Session expirée", session: false }, 401);
 
+    // CGV non acceptées (ou modifiées depuis) : rien d'autre que les accepter.
+    const textesCgv = await cgv.chargerCgv(sb);
+    if (textesCgv && s.user.cgv_version !== textesCgv.version && !["me", "logout", "change_password", "cgv", "cgv_accepter"].includes(action)) {
+      return json({ error: "Acceptez les conditions générales pour accéder à votre Studio.", cgv: true }, 403);
+    }
+    if (essai.essaiTermine(s.ws) && !essai.ACTIONS_APRES_ESSAI.has(action)) {
+      return json({ error: essai.MESSAGE_FIN, essai_termine: true }, 402);
+    }
+
     switch (action) {
       case "me":
         return json(await construireMe(sb, s));
+
+      case "cgv": {
+        const c = await cgv.chargerCgv(sb);
+        return json({ version: c?.version ?? null, documents: c?.documents ?? [], acceptees: !c || s.user.cgv_version === c.version });
+      }
+
+      case "cgv_accepter": {
+        const c = await cgv.chargerCgv(sb);
+        if (!c) return json({ ok: true });
+        if (String(body.version ?? "") !== c.version) return json({ error: "Les conditions ont été mises à jour : relisez-les avant d'accepter." }, 409);
+        await cgv.accepter(sb, s.user.id, c.version, {
+          ip: (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null,
+          user_agent: (req.headers.get("User-Agent") ?? "").slice(0, 300), documents: c.documents.map((d) => d.titre),
+        });
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "cgv_acceptees", detail: { version: c.version, documents: c.documents.map((d) => d.titre) } });
+        return json({ ok: true });
+      }
 
       case "logout":
         await sb.from("studio_sessions").delete().eq("id", s.sessionId);
@@ -1339,6 +1385,7 @@ Deno.serve(async (req: Request) => {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         const quoi = String(body.quoi ?? "");
         if (quoi !== "google" && quoi !== "microsoft" && quoi !== "email") return json({ error: "Messagerie inconnue" }, 400);
+        if (!body.reconnecter) { const refus = await refusConnecteurEssai(sb, s); if (refus) return json({ error: refus }, 402); }
         const lien = await bureau.lienConnexion({
           wsId: s.ws.id, wsNom: s.ws.nom, quoi, retour: `${origineSure(req)}/studio/connecteurs?boite=${quoi}`,
           reconnecter: body.reconnecter ? String(body.reconnecter) : null,
@@ -1361,6 +1408,7 @@ Deno.serve(async (req: Request) => {
 
       case "connexion_invitation": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        { const refus = await refusConnecteurEssai(sb, s); if (refus) return json({ error: refus }, 402); }
         return json(await creerInvitation(sb, {
           wsId: s.ws.id, cible: body.cible ? String(body.cible) : null,
           email: body.email ? String(body.email) : null, creePar: `studio:${s.user.id}`, origine: origineSure(req),
@@ -1376,6 +1424,7 @@ Deno.serve(async (req: Request) => {
       case "reseaux_connecter": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         if (!zernio.estReseau(body.reseau)) return json({ error: "Réseau inconnu" }, 400);
+        if (!body.reconnecter) { const refus = await refusConnecteurEssai(sb, s); if (refus) return json({ error: refus }, 402); }
         const retour = `${origineSure(req)}/studio/connecteurs?reseau=${body.reseau}`;
         const lien = await zernio.lienConnexionReseau({
           wsId: s.ws.id, wsNom: s.ws.nom, reseau: body.reseau, retour,
@@ -1396,6 +1445,11 @@ Deno.serve(async (req: Request) => {
 
       case "connecteur_enregistrer": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (essai.enEssai(s.ws)) {
+          // Mise à jour d'un connecteur déjà présent : permise ; nouveau connecteur : limité pendant l'essai.
+          const { data: deja } = await sb.from("studio_connecteurs").select("id").eq("workspace_id", s.ws.id).eq("type", String(body.type ?? "")).maybeSingle();
+          if (!deja) { const refus = await refusConnecteurEssai(sb, s); if (refus) return json({ error: refus }, 402); }
+        }
         const r = await enregistrerConnecteur(sb, s.ws.id, s.user.id, body);
         if ("erreur" in r) return json({ error: r.erreur }, 400);
         await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connecteur_enregistre", detail: { type: String(body.type ?? "") } });

@@ -21,13 +21,14 @@ type Abonnement = {
   statut: string | null; fin: string | null; mensuel_ht: number | null;
   factures: { agents: number | null; connecteurs: number | null };
   actuels: { agents: number; connecteurs: number | null };
-  prix_connecteur: number; tva_pourcent: number; test: boolean; estimation_ht: number;
+  prix_connecteur: number; tva_pourcent: number | null; test: boolean; estimation_ht: number;
 };
 const STATUTS: Record<string, string> = {
   active: 'Actif', trialing: 'Essai', past_due: 'Paiement en retard', unpaid: 'Impayé', incomplete: 'Paiement à finaliser',
   paused: 'En pause', canceled: 'Résilié', incomplete_expired: 'Non finalisé',
 };
 const EN_COURS = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
+const tvaTexte = (t: number | null) => t != null ? `TVA ${String(t).replace('.', ',')} % en sus` : 'TVA en sus selon votre adresse (20 % en métropole)';
 type Recharges = {
   solde: number; consommes_mois: number; achat_libre: boolean; paiement_en_ligne?: boolean;
   packs: { prix: number; credits: number }[];
@@ -204,7 +205,7 @@ export default function PagePerimetre() {
                 <p>
                   {enCours ? `Facturé : ${a.factures.agents ?? 0} agent${(a.factures.agents ?? 0) > 1 ? 's' : ''}` : `${a.actuels.agents} agent${a.actuels.agents > 1 ? 's' : ''}`}
                   {(enCours ? a.factures.connecteurs : a.actuels.connecteurs) ? ` + ${enCours ? a.factures.connecteurs : a.actuels.connecteurs} connecteur(s) supplémentaire(s) à ${eur(a.prix_connecteur)}` : ''}
-                  {` · TVA ${String(a.tva_pourcent).replace('.', ',')} % en sus.`}
+                  {` · ${tvaTexte(a.tva_pourcent)}.`}
                 </p>
                 <p className="mt-1 text-neutral-500">99 € HT le premier agent, puis dégressif jusqu'à 49,50 € à partir du cinquième. Prélèvement automatique, factures et résiliation depuis votre espace de paiement.</p>
                 {ecart && (
@@ -278,7 +279,7 @@ export default function PagePerimetre() {
         ouvert={achat !== null}
         titre={achat !== null && p.recharges ? `Ajouter ${p.recharges.packs[achat].credits} crédits ?` : ''}
         message={achat !== null && p.recharges ? (p.recharges.paiement_en_ligne
-          ? `${eur(p.recharges.packs[achat].prix)} HT (TVA ${String(p.abonnement?.tva_pourcent ?? 8.5).replace('.', ',')} % en sus), réglés sur la page de paiement sécurisée de Stripe. Les crédits sont ajoutés dès le paiement confirmé et se reportent de mois en mois.`
+          ? `${eur(p.recharges.packs[achat].prix)} HT (${tvaTexte(p.abonnement?.tva_pourcent ?? null)}), réglés sur la page de paiement sécurisée de Stripe. Les crédits sont ajoutés dès le paiement confirmé et se reportent de mois en mois.`
           : `${eur(p.recharges.packs[achat].prix)} HT, ajoutés à votre prochaine facture. Les crédits sont disponibles tout de suite et se reportent de mois en mois.`) : ''}
         confirmer={{ label: p.recharges?.paiement_en_ligne ? 'Payer' : 'Ajouter les crédits', onClick: acheter }}
         annuler={{ onClick: () => setAchat(null) }}

@@ -39,7 +39,7 @@ type AgentCat = {
 type Catalogue = { modeles: ModeleOR[]; defaut: string; chargement: boolean };
 type Usage = { workspace_id: string; demandes: number; reponses: number; derniere_activite: string };
 
-const OFFRES = [['essentiel', 'Essentiel'], ['pro', 'Pro'], ['sur_mesure', 'Sur mesure']] as const;
+const OFFRES = [['essai', 'Essai gratuit'], ['essentiel', 'Essentiel'], ['pro', 'Pro'], ['sur_mesure', 'Sur mesure']] as const;
 const TAILLES = ['1', '2-4', '5-9', '10-49', '50+'];
 
 function motDePasseProvisoire(): string {

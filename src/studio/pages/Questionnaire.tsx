@@ -80,7 +80,7 @@ export default function Questionnaire() {
   const [piege, setPiege] = useState('');
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
-  const [fini, setFini] = useState(false);
+  const [fini, setFini] = useState<'' | 'essai' | 'essai_sans_mail' | 'deja_client' | 'demande'>('');
 
   useEffect(() => { document.title = 'Démarrer avec le Studio IA — Aissociate'; }, []);
   useEffect(() => {
@@ -110,11 +110,11 @@ export default function Questionnaire() {
     if (!accord) { setErreur('Cochez la case d\'accord pour envoyer votre demande.'); return; }
     setEnvoi(true);
     try {
-      await appel('onboarding_soumettre', {
+      const r = await appel<{ essai?: boolean; identifiants_envoyes?: boolean; deja_client?: boolean }>('onboarding_soumettre', {
         ...contact, reponses, accord, site_web_entreprise: piege, depuis: params.get('depuis') ?? document.referrer.slice(0, 60),
       });
       try { localStorage.removeItem(BROUILLON); } catch { /* */ }
-      setFini(true);
+      setFini(r.essai ? (r.identifiants_envoyes ? 'essai' : 'essai_sans_mail') : r.deja_client ? 'deja_client' : 'demande');
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Envoi impossible');
     } finally { setEnvoi(false); }
@@ -125,12 +125,16 @@ export default function Questionnaire() {
       <div className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-4 font-sans">
         <div className="max-w-md rounded-2xl border border-neutral-200 bg-white p-8 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="h-6 w-6" /></div>
-          <h1 className="text-2xl font-semibold">Merci, c'est bien reçu !</h1>
+          <h1 className="text-2xl font-semibold">{fini === 'essai' ? 'Votre Studio est prêt !' : 'Merci, c\'est bien reçu !'}</h1>
           <p className="mt-3 text-sm text-neutral-600">
-            Nous étudions vos réponses et revenons vers vous sous 48 h ouvrées avec votre plan de démarrage.
-            Vos identifiants d'accès au Studio vous seront transmis dès que votre espace sera prêt.
+            {fini === 'essai' && <>Vos identifiants viennent de vous être envoyés par e-mail (pensez à vérifier les indésirables). Votre essai gratuit de 7 jours démarre aujourd'hui : vos agents vous attendent déjà.</>}
+            {fini === 'essai_sans_mail' && <>Votre espace d'essai est créé, mais l'e-mail avec vos identifiants n'a pas pu partir. Nous vous les envoyons au plus vite : écrivez-nous à contact@aissociate.re si vous ne les recevez pas.</>}
+            {fini === 'deja_client' && <>Cette adresse e-mail a déjà un accès au Studio : connectez-vous avec vos identifiants habituels (ou « mot de passe oublié » auprès de contact@aissociate.re).</>}
+            {fini === 'demande' && <>Nous étudions vos réponses et revenons vers vous sous 48 h ouvrées avec votre plan de démarrage. Vos identifiants d'accès au Studio vous seront transmis dès que votre espace sera prêt.</>}
           </p>
-          <Link to="/agents-ia" className="mt-6 inline-block text-sm text-neutral-500 underline">Retour à la présentation</Link>
+          {fini === 'essai' || fini === 'deja_client'
+            ? <Link to="/studio/connexion" className="mt-6 inline-block rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white">Se connecter</Link>
+            : <Link to="/agents-ia" className="mt-6 inline-block text-sm text-neutral-500 underline">Retour à la présentation</Link>}
         </div>
       </div>
     );
