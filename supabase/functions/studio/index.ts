@@ -41,6 +41,10 @@
 //   webhook AgentMail signé Svix (en-têtes svix-*) sur cette même URL → traitement en arrière-plan
 //   client  liaison                                → adresse, agent par défaut, derniers e-mails reçus
 //   admin   admin_liaison {workspace_id, activer, username?, agent?} → crée / active / coupe la boîte
+// Tâches planifiées (taches.ts) :
+//   client  taches | tache_enregistrer {id?, titre, agent_id, consigne, heures[], jours[], actif} | tache_supprimer {id}
+//           tache_lancer {id}                       (écriture : propriétaire)
+//   cron    taches_cron {cle} (pg_cron horaire) → tache_executer {cle, id} par tâche échue, chacune dans sa propre instance
 //
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString), cf. Edge Function agent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -54,6 +58,7 @@ import {
   BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
+import { consigneTache, egaliteSure, libellePlanning, MODELES_TACHES, planningValide, prochaineExecution } from "./taches.ts";
 import {
   connexionsEspace, creerInvitation, deconnecter, lienConnexion, lienReconnexion, listerFournisseurs, listerIntegrations, nangoConfigure,
   ouvrirInvitation, synchroniser,
@@ -236,14 +241,19 @@ function versSession(sessionId: string, u: Record<string, unknown>, w: Record<st
 }
 
 /** Session « par e-mail » : l'utilisateur identifié par la boîte de liaison (sans jeton). */
-async function sessionUtilisateur(sb: SupabaseClient, userId: string): Promise<Session | null> {
+async function sessionUtilisateur(sb: SupabaseClient, userId: string, origine: "mail" | "tache" = "mail"): Promise<Session | null> {
   const { data: u } = await sb.from("studio_users")
     .select(`id, email, prenom, nom, role, actif, studio_workspaces!inner(${SELECT_WS})`).eq("id", userId).maybeSingle();
   if (!u) return null;
   const w = u.studio_workspaces as unknown as Record<string, unknown>;
   if (!u.actif || !w.actif) return null;
   if (w.expire_le && String(w.expire_le) < new Date().toISOString().slice(0, 10)) return null;
-  return versSession("mail", u as unknown as Record<string, unknown>, w);
+  return versSession(origine, u as unknown as Record<string, unknown>, w);
+}
+
+/** Auteur inscrit au journal : client connecté, e-mail de liaison ou tâche planifiée. */
+function acteurDe(s: Session): string {
+  return s.sessionId === "mail" ? `mail:${s.user.email}` : s.sessionId === "tache" ? `tache:${s.user.email}` : `client:${s.user.email}`;
 }
 
 async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Session | null> {
@@ -265,9 +275,9 @@ async function chargerSession(sb: SupabaseClient, token: unknown): Promise<Sessi
  * Mission demandée par e-mail : même chemin que le chat du Studio (garde, quotas,
  * contexte, coût, journal), flux SSE lu jusqu'au bout côté serveur.
  */
-function executeurMail(sb: SupabaseClient): Executeur {
+function executeurMail(sb: SupabaseClient, origine: "mail" | "tache" = "mail"): Executeur {
   return async (userId, body) => {
-    const s = await sessionUtilisateur(sb, userId);
+    const s = await sessionUtilisateur(sb, userId, origine);
     if (!s) return { ok: false, erreur: "Accès désactivé ou espace expiré." };
     const rep = await chat(sb, s, body);
     if (!(rep.headers.get("Content-Type") ?? "").includes("text/event-stream")) {
@@ -292,6 +302,116 @@ function executeurMail(sb: SupabaseClient): Executeur {
       message_id: (fin.message_id as string | null) ?? null, conversation_id: (fin.conversation_id as string | null) ?? null,
     };
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tâches planifiées
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SELECT_TACHE = "id, titre, agent_id, consigne, heures, jours, actif, prochaine_execution, en_cours_depuis, derniere_execution, dernier_statut, dernier_compte_rendu, conversation_id, user_id";
+/** Une exécution bloquée plus longtemps est considérée comme perdue. */
+const TACHE_BLOCAGE_MS = 15 * 60_000;
+
+async function cleCron(sb: SupabaseClient): Promise<string | null> {
+  const { data } = await sb.from("studio_cron_cle").select("cle").eq("id", 1).maybeSingle();
+  return (data?.cle as string | undefined) ?? null;
+}
+
+/** Lance une tâche dans sa propre instance de la fonction (la réponse revient tout de suite). */
+async function declencherTache(cle: string, id: string): Promise<void> {
+  await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/studio`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "tache_executer", cle, id }),
+  }).then((r) => r.body?.cancel()).catch((e) => console.error("[studio] tâche:", e instanceof Error ? e.message : String(e)));
+}
+
+/** Exécution d'une tâche : réservation (une seule instance à la fois), mission, compte rendu. */
+async function executerTache(sb: SupabaseClient, id: string): Promise<void> {
+  const maintenant = new Date();
+  const limite = new Date(maintenant.getTime() - TACHE_BLOCAGE_MS).toISOString();
+  const { data: t } = await sb.from("studio_taches").update({ en_cours_depuis: maintenant.toISOString() })
+    .eq("id", id).or(`en_cours_depuis.is.null,en_cours_depuis.lt.${limite}`).select(`${SELECT_TACHE}, workspace_id`).maybeSingle();
+  if (!t) return; // déjà en cours ailleurs
+  const prochaine = t.actif ? prochaineExecution({ heures: t.heures as number[], jours: t.jours as number[] }, maintenant) : null;
+  let statut: "ok" | "erreur" = "erreur", compteRendu = "", conversationId = t.conversation_id as string | null;
+  try {
+    const r = await executeurMail(sb, "tache")(String(t.user_id), {
+      agent_id: t.agent_id, message: consigneTache(String(t.titre), String(t.consigne), maintenant), conversation_id: conversationId,
+    });
+    if (r.ok) { statut = "ok"; compteRendu = r.texte; conversationId = r.conversation_id ?? conversationId; }
+    else compteRendu = r.erreur;
+  } catch (e) {
+    compteRendu = e instanceof Error ? e.message : String(e);
+  }
+  await sb.from("studio_taches").update({
+    en_cours_depuis: null, derniere_execution: maintenant.toISOString(), dernier_statut: statut,
+    dernier_compte_rendu: compteRendu.slice(0, 4000), conversation_id: conversationId,
+    ...(t.actif ? { prochaine_execution: prochaine?.toISOString() ?? null } : {}),
+  }).eq("id", id);
+  await journaliser(sb, {
+    wsId: String(t.workspace_id), acteur: "tache", agentId: String(t.agent_id), action: "tache_executee",
+    detail: { tache: id, titre: t.titre, statut, conversation: conversationId, erreur: statut === "erreur" ? compteRendu.slice(0, 300) : null },
+  });
+}
+
+/** Passage horaire : chaque tâche échue est avancée à son prochain créneau, puis lancée. */
+async function tachesEchues(sb: SupabaseClient, cle: string): Promise<number> {
+  const maintenant = new Date();
+  const { data } = await sb.from("studio_taches").select("id, heures, jours, prochaine_execution")
+    .eq("actif", true).lte("prochaine_execution", maintenant.toISOString()).order("prochaine_execution").limit(50);
+  let lancees = 0;
+  for (const t of data ?? []) {
+    const suivante = prochaineExecution({ heures: t.heures as number[], jours: t.jours as number[] }, maintenant);
+    // Réservation : seul le passage qui avance l'échéance lance la tâche.
+    const { data: ok } = await sb.from("studio_taches").update({ prochaine_execution: suivante?.toISOString() ?? null })
+      .eq("id", t.id).eq("prochaine_execution", t.prochaine_execution).select("id").maybeSingle();
+    if (!ok) continue;
+    await declencherTache(cle, String(t.id));
+    lancees++;
+  }
+  return lancees;
+}
+
+/** Tâches de l'espace, avec leur planning lisible. */
+async function listerTaches(sb: SupabaseClient, wsId: string) {
+  const { data } = await sb.from("studio_taches").select(SELECT_TACHE).eq("workspace_id", wsId).order("created_at");
+  return {
+    taches: (data ?? []).map((t) => ({
+      ...t, user_id: undefined,
+      planning: libellePlanning({ heures: t.heures as number[], jours: t.jours as number[] }),
+      en_cours: Boolean(t.en_cours_depuis && Date.parse(String(t.en_cours_depuis)) > Date.now() - TACHE_BLOCAGE_MS),
+    })),
+    modeles: MODELES_TACHES,
+  };
+}
+
+async function enregistrerTache(sb: SupabaseClient, s: Session, body: Record<string, unknown>) {
+  const titre = String(body.titre ?? "").trim().slice(0, 120);
+  const consigne = String(body.consigne ?? "").trim().slice(0, 4000);
+  if (!titre || !consigne) return { erreur: "Titre et consigne requis." };
+  const agents = await agentsDuWorkspace(sb, s.ws);
+  if (!agents.some((a) => a.id === body.agent_id)) return { erreur: "Agent indisponible pour votre offre." };
+  const p = planningValide({ heures: body.heures, jours: body.jours });
+  if ("erreur" in p) return p;
+  const actif = body.actif !== false;
+  const champs = {
+    titre, consigne, agent_id: String(body.agent_id), heures: p.heures, jours: p.jours, actif,
+    prochaine_execution: actif ? prochaineExecution(p, new Date())?.toISOString() ?? null : null,
+  };
+  if (typeof body.id === "string") {
+    const { data, error } = await sb.from("studio_taches").update(champs).eq("id", body.id).eq("workspace_id", s.ws.id).select("id").maybeSingle();
+    if (error || !data) return { erreur: error?.message ?? "Tâche introuvable." };
+  } else {
+    const { count } = await sb.from("studio_taches").select("id", { count: "exact", head: true }).eq("workspace_id", s.ws.id);
+    if ((count ?? 0) >= 20) return { erreur: "20 tâches planifiées au maximum par espace." };
+    const { error } = await sb.from("studio_taches").insert({ ...champs, workspace_id: s.ws.id, user_id: s.user.id });
+    if (error) return { erreur: error.message };
+  }
+  await journaliser(sb, {
+    wsId: s.ws.id, acteur: acteurDe(s), agentId: champs.agent_id, action: "tache_enregistree",
+    detail: { titre, planning: libellePlanning(p), actif, modification: typeof body.id === "string" },
+  });
+  return { ok: true };
 }
 
 /** État du canal e-mail d'un espace (+ derniers e-mails reçus). Colonnes absentes → non disponible. */
@@ -514,7 +634,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
 
   // Outils branchés sur les connexions Nango de l'espace (Drive…), s'il y en a.
   const outils = await outilsEspace({
-    sb, wsId: s.ws.id, acteur: s.sessionId === "mail" ? `mail:${s.user.email}` : `client:${s.user.email}`,
+    sb, wsId: s.ws.id, acteur: acteurDe(s),
     agentId: agent.id, agentPrenom: agent.prenom, userId: s.sessionId === "mail" ? null : s.user.id,
     conversationId: conversationId as string,
   }).catch(() => null);
@@ -631,7 +751,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         }, usage, model);
         emit("done", { message_id: row?.id ?? null, conversation_id: conversationId });
         await journaliser(sb, {
-          wsId: s.ws.id, acteur: `client:${s.user.email}`, agentId: agent.id, action: "mission",
+          wsId: s.ws.id, acteur: acteurDe(s), agentId: agent.id, action: "mission",
           detail: {
             conversation: conversationId, message: row?.id ?? null, titre: titreConv, pouvoir: pouvoir?.id ?? null,
             relais: answer.includes("[[RELAIS:"), cout_usd: typeof usage?.cost === "number" ? usage.cost : null,
@@ -866,6 +986,19 @@ Deno.serve(async (req: Request) => {
     let body: Record<string, unknown>;
     try { body = JSON.parse(brut || "{}") as Record<string, unknown>; } catch { body = {}; }
     const action = String(body.action ?? "");
+
+    // ── Tâches planifiées (pg_cron, puis une instance par tâche) : clé du déclencheur obligatoire ──
+    if (action === "taches_cron" || action === "tache_executer") {
+      const cle = await cleCron(sb);
+      if (!cle || typeof body.cle !== "string" || body.cle.length !== cle.length || !(await egaliteSure(body.cle, cle))) {
+        return json({ error: "Non autorisé" }, 401);
+      }
+      if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle) });
+      const travail = executerTache(sb, String(body.id ?? ""))
+        .catch((e) => console.error("[studio] tâche:", e instanceof Error ? e.message : String(e)));
+      (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+      return json({ ok: true });
+    }
 
     // ── Administration CRM ──
     if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_nango_etat",
@@ -1186,6 +1319,32 @@ Deno.serve(async (req: Request) => {
         const r = await suspendre(sb, s.ws.id, body.suspendu === true, `client:${s.user.email}`);
         if ("erreur" in r) return json({ error: r.erreur }, 400);
         return json({ ok: true, ...(await etatEspace(sb, s.ws.id)) });
+      }
+
+      case "taches":
+        return json(await listerTaches(sb, s.ws.id));
+
+      case "tache_enregistrer": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const r = await enregistrerTache(sb, s, body);
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        return json(await listerTaches(sb, s.ws.id));
+      }
+
+      case "tache_supprimer": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const { data: t } = await sb.from("studio_taches").delete().eq("id", String(body.id ?? "")).eq("workspace_id", s.ws.id).select("titre, agent_id").maybeSingle();
+        if (t) await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: String(t.agent_id), action: "tache_supprimee", detail: { titre: t.titre } });
+        return json(await listerTaches(sb, s.ws.id));
+      }
+
+      case "tache_lancer": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const { data: t } = await sb.from("studio_taches").select("id").eq("id", String(body.id ?? "")).eq("workspace_id", s.ws.id).maybeSingle();
+        const cle = await cleCron(sb);
+        if (!t || !cle) return json({ error: "Tâche introuvable ou planification non installée." }, 404);
+        await declencherTache(cle, String(t.id));
+        return json(await listerTaches(sb, s.ws.id));
       }
 
       case "journal":

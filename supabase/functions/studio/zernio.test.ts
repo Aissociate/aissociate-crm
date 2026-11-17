@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { controlePublication, corpsPublication, mediasValides } from "./zernio.ts";
+import { controlePublication, corpsPublication, dateProgrammee, mediasValides } from "./zernio.ts";
 import { apercuAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 
 describe("zernio — contrôles de publication", () => {
@@ -32,6 +32,24 @@ describe("zernio — contrôles de publication", () => {
   });
 });
 
+describe("zernio — programmation", () => {
+  const maintenant = Date.parse("2026-11-17T10:00:00+04:00");
+  it("accepte une date future en heure de La Réunion", () => {
+    expect(dateProgrammee("2026-11-18T09:30", maintenant)).toBe("2026-11-18T09:30");
+    expect(dateProgrammee("2026-11-18 09:30", maintenant)).toBe("2026-11-18T09:30");
+    expect(dateProgrammee("", maintenant)).toBeNull();
+  });
+  it("refuse une date passée ou mal formée", () => {
+    expect(dateProgrammee("2026-11-17T10:02", maintenant)).toBe("invalide");
+    expect(dateProgrammee("demain", maintenant)).toBe("invalide");
+  });
+  it("programme au lieu de publier tout de suite", () => {
+    const b = corpsPublication([{ id: "a1", reseau: "linkedin" }], "x", [], "2026-11-18T09:30");
+    expect(b).toMatchObject({ scheduledFor: "2026-11-18T09:30", timezone: "Indian/Reunion" });
+    expect("publishNow" in b).toBe(false);
+  });
+});
+
 describe("livrable de publication", () => {
   const action: ActionLivrable = { type: "reseaux_publier", texte: "Nouvelle formation IA ce jeudi !", comptes: [{ id: "a1", reseau: "facebook", nom: "Aissociate" }] };
   it("titre et aperçu lisibles", () => {
@@ -43,5 +61,12 @@ describe("livrable de publication", () => {
     expect(modifierAction(action, { texte: "x", medias: "http://non" })).toHaveProperty("erreur");
     const insta: ActionLivrable = { ...action, comptes: [{ id: "a2", reseau: "instagram", nom: "aissociate" }] };
     expect(modifierAction(insta, { texte: "x", medias: "" })).toHaveProperty("erreur");
+  });
+  it("réponse à un commentaire : titre, aperçu, texte modifiable", () => {
+    const r: ActionLivrable = { type: "reseaux_repondre_commentaire", compte: { id: "a1", reseau: "facebook", nom: "Aissociate" }, publication_id: "p1", commentaire_id: "c1", cite: "Marie : Combien ça coûte ?", texte: "Bonjour Marie, je vous écris en privé." };
+    expect(titreAction(r)).toMatch(/^Réponse Facebook — Bonjour Marie/);
+    expect(apercuAction(r)).toContain("« Marie : Combien ça coûte ? »");
+    expect(modifierAction(r, { texte: "Merci !" })).toMatchObject({ texte: "Merci !", publication_id: "p1" });
+    expect(modifierAction(r, { texte: " " })).toHaveProperty("erreur");
   });
 });

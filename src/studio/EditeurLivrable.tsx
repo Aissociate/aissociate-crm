@@ -11,7 +11,9 @@ export type ActionLivrable =
   | { type: 'drive_creer_document'; titre: string; contenu: string }
   | { type: 'gmail_envoyer'; a: string[]; cc?: string[]; objet: string; corps: string }
   | { type: 'agenda_creer'; titre: string; debut: string; fin: string; lieu?: string | null; description?: string | null; participants?: string[] }
-  | { type: 'reseaux_publier'; texte: string; comptes: { id: string; reseau: string; nom: string }[]; medias?: string[] };
+  | { type: 'reseaux_publier'; texte: string; comptes: { id: string; reseau: string; nom: string }[]; medias?: string[]; programme?: string | null }
+  | { type: 'reseaux_repondre_commentaire'; texte: string; compte: { nom: string }; cite?: string | null }
+  | { type: 'reseaux_envoyer_message'; texte: string; compte: { nom: string }; destinataire: string };
 
 /** Champs du formulaire à partir d'un livrable (ou d'une ancienne version). */
 export function champsDepuis(titre: string, contenu: string, action: ActionLivrable | null | undefined): Record<string, string> {
@@ -22,7 +24,8 @@ export function champsDepuis(titre: string, contenu: string, action: ActionLivra
       participants: (action.participants ?? []).join(', '), description: action.description ?? '',
     };
   }
-  if (action?.type === 'reseaux_publier') return { texte: action.texte, medias: (action.medias ?? []).join('\n') };
+  if (action?.type === 'reseaux_publier') return { texte: action.texte, medias: (action.medias ?? []).join('\n'), programme: action.programme ?? '' };
+  if (action?.type === 'reseaux_repondre_commentaire' || action?.type === 'reseaux_envoyer_message') return { texte: action.texte };
   if (action?.type === 'drive_creer_document') return { titre: action.titre, contenu: action.contenu };
   return { titre, contenu };
 }
@@ -74,6 +77,14 @@ export default function EditeurLivrable<L>({ id, titre, contenu, action, onSaved
           <p className="text-xs text-neutral-500">Sur : {action.comptes.map((c) => c.nom).join(', ')}</p>
           <Libelle texte={`Texte de la publication (${(v.texte ?? '').length} caractères)`}><TexteAuto value={v.texte} onChange={(t) => setV({ ...v, texte: t })} lignes={10} /></Libelle>
           <Libelle texte="Images ou vidéos (une adresse https publique par ligne ; obligatoire pour Instagram et TikTok)"><TexteAuto value={v.medias} onChange={(t) => setV({ ...v, medias: t })} lignes={3} mono /></Libelle>
+          <Libelle texte="Programmer le (heure de La Réunion ; vide = dès la validation)"><input type="datetime-local" className={champ} value={v.programme} onChange={(e) => setV({ ...v, programme: e.target.value })} /></Libelle>
+        </>
+      ) : action?.type === 'reseaux_repondre_commentaire' || action?.type === 'reseaux_envoyer_message' ? (
+        <>
+          <p className="text-xs text-neutral-500">
+            {action.type === 'reseaux_envoyer_message' ? `Message privé à ${action.destinataire}, depuis ${action.compte.nom}` : `Réponse publique depuis ${action.compte.nom}${action.cite ? ` à « ${action.cite} »` : ''}`}
+          </p>
+          <Libelle texte="Texte"><TexteAuto value={v.texte} onChange={(t) => setV({ ...v, texte: t })} lignes={6} /></Libelle>
         </>
       ) : action?.type === 'agenda_creer' ? (
         <>

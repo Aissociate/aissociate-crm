@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Lock, PauseCircle, PlayCircle } from 'lucide-react';
 import { appel } from '../api';
 import { Avatar, Bouton, Carte, Chargement, Titre, cx } from '../composants';
+import Confirmation from '../composants/Confirmation';
 import { useStudio } from '../StudioApp';
 
 type Quota = { utilise?: number; max: number | null };
@@ -35,17 +36,24 @@ export default function PagePerimetre() {
   const [p, setP] = useState<Perimetre | null>(null);
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  const [demandeSuspension, setDemandeSuspension] = useState(false);
   const proprietaire = me.user.role === 'proprietaire';
 
   const charger = useCallback(() => appel<Perimetre>('perimetre').then(setP).catch((e) => setErreur(gerer(e))), [gerer]);
   useEffect(() => { charger(); }, [charger]);
 
-  const basculer = async () => {
+  const appliquerBascule = async () => {
     if (!p) return;
-    if (!p.suspendu && !confirm('Suspendre tous les agents de votre espace ? Plus aucune mission ne sera traitée jusqu\'à la reprise.')) return;
     setEnvoi(true);
     try { await appel('suspendre', { suspendu: !p.suspendu }); await charger(); }
-    catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); }
+    catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); setDemandeSuspension(false); }
+  };
+
+  const basculer = () => {
+    if (!p) return;
+    // Suspension = geste à risque : on demande confirmation. Reprise = direct.
+    if (!p.suspendu) setDemandeSuspension(true);
+    else void appliquerBascule();
   };
 
   if (!p) return erreur ? <p className="text-sm text-red-700">{erreur}</p> : <Chargement />;
@@ -115,6 +123,14 @@ export default function PagePerimetre() {
         </Carte>
       </div>
       {erreur && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
+      <Confirmation
+        ouvert={demandeSuspension}
+        titre="Suspendre tous les agents ?"
+        message="Plus aucune mission ne sera traitée tant que vous n'aurez pas relancé l'espace. Les conversations en cours seront interrompues."
+        confirmer={{ label: 'Suspendre', danger: true, onClick: appliquerBascule }}
+        annuler={{ onClick: () => setDemandeSuspension(false) }}
+        enCours={envoi}
+      />
     </div>
   );
 }

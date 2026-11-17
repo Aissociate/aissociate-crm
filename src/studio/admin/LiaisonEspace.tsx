@@ -43,7 +43,7 @@ export default function LiaisonEspace({ workspaceId, nomEspace, agents }: { work
     <section>
       <h3 className="mb-2 flex items-center gap-2 font-semibold text-fg"><Mail className="h-4 w-4" />Canal e-mail</h3>
       {erreur && <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{erreur}</p>}
-      {!e ? <p className="text-sm text-muted">Chargement…</p> : !e.disponible ? (
+      {!e ? <p role="status" aria-live="polite" className="text-sm text-muted">Chargement…</p> : !e.disponible ? (
         <p className="text-sm text-muted">Migration « studio_liaison » non appliquée.</p>
       ) : (
         <div className="space-y-3 rounded-lg border border-line p-3 text-sm">

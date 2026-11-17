@@ -348,7 +348,7 @@ export default function AgentChat() {
                   <button type="button" onClick={() => setPieces((p) => p.filter((_, j) => j !== k))} aria-label={`Retirer ${x.nom}`}><X className="h-3 w-3" /></button>
                 </span>
               ))}
-              {lecture && <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" /> Lecture du document…</span>}
+              {lecture && <span role="status" aria-live="polite" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Lecture du document…</span>}
             </div>
           )}
           <div className="flex items-end gap-2">

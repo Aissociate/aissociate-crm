@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Download, PinOff } from 'lucide-react';
+import { Check, Copy, Download, PinOff, Pin } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Avatar, Chargement, Markdown, Titre } from '../composants';
+import EtatVide from '../composants/EtatVide';
 import BoutonsExport from '../BoutonsExport';
 
 type Creation = { id: string; agent_id: string; content: string; created_at: string; conversation_id: string; titre: string };
@@ -61,11 +62,13 @@ export default function Creations() {
           </div>
         </section>
       )}
-      {liste === null ? <Chargement /> : visibles.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-neutral-300 py-14 text-center text-sm text-neutral-500">
-          Aucun contenu gardé pour l'instant.
-        </div>
-      ) : (
+      {liste === null ? <Chargement /> : visibles.length === 0 && medias.filter((m) => !filtre || m.agent_id === filtre).length === 0 ? (
+        <EtatVide
+          icone={<Pin className="h-10 w-10" />}
+          titre="Aucun contenu gardé pour l'instant"
+          description="Sous chaque réponse d'agent, cliquez sur « Garder » pour épingler celles qui vous servent. Elles apparaîtront ici, partagées avec votre équipe."
+        />
+      ) : visibles.length === 0 ? null : (
         <div className="grid gap-4 lg:grid-cols-2">
           {visibles.map((c) => {
             const a = me.agents.find((x) => x.id === c.agent_id);

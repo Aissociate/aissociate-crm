@@ -6,6 +6,8 @@ import { Check, ExternalLink, History, Pencil, RotateCcw, Send, X } from 'lucide
 import { appel } from '../api';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, Bouton, Carte, Chargement, Markdown, Titre, cx } from '../composants';
+import EtatVide from '../composants/EtatVide';
+import Confirmation from '../composants/Confirmation';
 import { useStudio } from '../StudioApp';
 import EditeurLivrable, { champsDepuis, type ActionLivrable } from '../EditeurLivrable';
 
@@ -24,7 +26,9 @@ type Livrable = {
 const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   drive_creer_document: { avant: 'Création dans le Google Drive au « VALIDÉ »', fait: 'Document créé dans le Google Drive.', lien: 'Ouvrir le document' },
   gmail_envoyer: { avant: 'Envoi depuis votre Gmail au « VALIDÉ »', fait: 'E-mail envoyé depuis votre Gmail.', lien: 'Voir dans Gmail' },
-  reseaux_publier: { avant: 'Publication sur vos réseaux sociaux au « VALIDÉ »', fait: 'Publication envoyée sur vos réseaux sociaux.', lien: 'Voir la publication' },
+  reseaux_publier: { avant: 'Publication sur vos réseaux sociaux au « VALIDÉ » (ou à la date programmée)', fait: 'Publication envoyée (ou programmée) sur vos réseaux sociaux.', lien: 'Voir la publication' },
+  reseaux_repondre_commentaire: { avant: 'Réponse publiée sous le commentaire au « VALIDÉ »', fait: 'Réponse publiée.', lien: 'Voir' },
+  reseaux_envoyer_message: { avant: 'Message privé envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
   agenda_creer: { avant: 'Création dans votre agenda Google (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
 };
 
@@ -46,14 +50,15 @@ export default function PageLivrables() {
   const [info, setInfo] = useState('');
   const [edition, setEdition] = useState<string | null>(null);
   const [historique, setHistorique] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ action: 'refuser'; id: string } | null>(null);
+  const [envoiConfirm, setEnvoiConfirm] = useState(false);
   const proprietaire = me.user.role === 'proprietaire';
   const agents = new Map(me.agents.map((a) => [a.id, a]));
 
   const charger = useCallback(() => appel<{ livrables: Livrable[] }>('livrables').then((r) => setLivrables(r.livrables)).catch((e) => setErreur(gerer(e))), [gerer]);
   useEffect(() => { charger(); }, [charger]);
 
-  const decider = async (id: string, statut: Livrable['statut']) => {
-    if (statut === 'refuse' && !commentaire.trim() && !confirm('Refuser sans dire pourquoi ? Un mot aide l\'agent à mieux faire la prochaine fois.')) return;
+  const deciderDirect = async (id: string, statut: Livrable['statut']) => {
     try {
       const r = await appel<{ livrables: Livrable[]; execute?: boolean; lien?: string | null; erreur_action?: string }>('livrable_decider', { id, statut, commentaire });
       setLivrables(r.livrables); setCommentaire(''); setErreur(''); rafraichir();
@@ -64,7 +69,16 @@ export default function PageLivrables() {
     } catch (e) { setErreur(gerer(e)); }
   };
 
+  const decider = async (id: string, statut: Livrable['statut']) => {
+    if (statut === 'refuse' && !commentaire.trim()) {
+      setConfirmation({ action: 'refuser', id });
+      return;
+    }
+    await deciderDirect(id, statut);
+  };
+
   /** Restaurer une ancienne version : elle devient la version actuelle (l'actuelle est conservée). */
+  // Note : laissée sur window.confirm volontairement (geste bas risque, l'actuelle est préservée).
   const restaurer = async (l: Livrable, k: number) => {
     const v = l.versions?.[k];
     if (!v || !confirm(`Revenir à la version du ${new Date(v.le).toLocaleString('fr-FR')} ? La version actuelle reste dans l'historique.`)) return;
@@ -98,9 +112,13 @@ export default function PageLivrables() {
       {info && <p className="mb-4 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{info}</p>}
 
       {visibles.length === 0 ? (
-        <Carte><p className="text-sm text-neutral-500">
-          Aucun livrable ici. Dans une conversation, cliquez sur « Soumettre à validation » sous une réponse d'agent.
-        </p></Carte>
+        <EtatVide
+          icone={<Check className="h-10 w-10" />}
+          titre={filtre === 'a_valider' ? 'Aucun livrable à valider' : 'Aucun livrable dans cette vue'}
+          description={filtre === 'a_valider'
+            ? 'Bravo, tout est à jour. Dans une conversation, cliquez sur « Soumettre à validation » sous une réponse d\'agent pour en ajouter.'
+            : 'Changez de filtre pour voir les livrables dans d\'autres statuts.'}
+        />
       ) : (
         <div className="space-y-3">
           {visibles.map((l) => {
@@ -198,6 +216,22 @@ export default function PageLivrables() {
           })}
         </div>
       )}
+      <Confirmation
+        ouvert={confirmation?.action === 'refuser'}
+        titre="Refuser sans commentaire ?"
+        message="Un mot aide l'agent à mieux faire la prochaine fois. Vous pouvez aussi ajouter un commentaire dans le champ, puis refuser à nouveau."
+        confirmer={{
+          label: 'Refuser quand même',
+          danger: true,
+          onClick: async () => {
+            if (!confirmation) return;
+            setEnvoiConfirm(true);
+            try { await deciderDirect(confirmation.id, 'refuse'); } finally { setEnvoiConfirm(false); setConfirmation(null); }
+          },
+        }}
+        annuler={{ onClick: () => setConfirmation(null) }}
+        enCours={envoiConfirm}
+      />
     </div>
   );
 }

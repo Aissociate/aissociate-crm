@@ -118,11 +118,23 @@ export function mediasValides(brut: unknown): string[] | null {
   return [...new Set(liste)].slice(0, 10);
 }
 
-/** Corps de la requête de publication immédiate. TikTok : envoi dans la boîte du créateur (à finaliser dans l'appli). */
-export function corpsPublication(comptes: { id: string; reseau: Reseau }[], texte: string, medias: string[]) {
+/** « AAAA-MM-JJTHH:MM » (heure de La Réunion) dans le futur, ou null. */
+export function dateProgrammee(brut: unknown, maintenant = Date.now()): string | null | "invalide" {
+  const s = String(brut ?? "").trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  if (!m) return "invalide";
+  const iso = `${m[1]}T${m[2]}`;
+  const t = Date.parse(`${iso}:00+04:00`);
+  if (Number.isNaN(t) || t < maintenant + 5 * 60_000) return "invalide";
+  return iso;
+}
+
+/** Corps de la requête de publication (immédiate, ou programmée en heure de La Réunion). TikTok : boîte du créateur. */
+export function corpsPublication(comptes: { id: string; reseau: Reseau }[], texte: string, medias: string[], programme: string | null = null) {
   return {
     content: texte,
-    publishNow: true,
+    ...(programme ? { scheduledFor: programme, timezone: "Indian/Reunion" } : { publishNow: true }),
     platforms: comptes.map((c) => ({
       platform: c.reseau, accountId: c.id,
       ...(c.reseau === "tiktok" ? { platformSpecificData: { draft: true } } : {}),
@@ -134,15 +146,17 @@ export function corpsPublication(comptes: { id: string; reseau: Reseau }[], text
 type CiblePubliee = { platform?: string; status?: string; platformPostUrl?: string | null; errorMessage?: string | null };
 
 /** Publie maintenant sur les comptes de l'espace. Échec total → exception ; partiel → erreurs détaillées. */
-export async function publier(wsId: string, p: { comptes: string[]; texte: string; medias: string[] }) {
+export async function publier(wsId: string, p: { comptes: string[]; texte: string; medias: string[]; programme?: string | null }) {
   const connus = await comptesEspace(wsId);
   const cibles = p.comptes.map((id) => connus.find((c) => c.id === id));
   if (cibles.some((c) => !c)) throw new Error("Un des comptes n'est plus connecté à cet espace : reconnectez-le dans Connecteurs.");
   const comptes = cibles as CompteReseau[];
   const erreur = controlePublication(comptes.map((c) => c.reseau), p.texte, p.medias);
   if (erreur) throw new Error(erreur);
+  // Date passée entre la proposition et la validation : publication immédiate.
+  const programme = p.programme && dateProgrammee(p.programme) !== "invalide" ? p.programme : null;
   const { data } = await appel<{ post: { _id: string; status: string; platforms?: CiblePubliee[] } }>("/posts", {
-    method: "POST", body: JSON.stringify(corpsPublication(comptes, p.texte, p.medias)),
+    method: "POST", body: JSON.stringify(corpsPublication(comptes, p.texte, p.medias, programme)),
     headers: { "Idempotency-Key": crypto.randomUUID() },
   });
   const post = data.post;
@@ -156,4 +170,130 @@ export async function publier(wsId: string, p: { comptes: string[]; texte: strin
     lien: plateformes.find((x) => x.platformPostUrl)?.platformPostUrl ?? null,
     echecs,
   };
+}
+
+// ── Lecture (exécutée pendant la conversation) ──
+const court = (t: unknown, max: number) => {
+  const s = String(t ?? "").replace(/\s+\n/g, "\n").trim();
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+};
+const enc = encodeURIComponent;
+
+/** Les 25 dernières publications du compte, lues en direct sur le réseau. */
+export async function publicationsCompte(compteId: string) {
+  const { data } = await appel<{ posts: Record<string, unknown>[] }>(`/accounts/${enc(compteId)}/posts`);
+  return (data.posts ?? []).slice(0, 25).map((p) => ({
+    id: String(p.id), date: String(p.createdTime ?? "").slice(0, 16), texte: court(p.message, 500),
+    lien: p.permalink ?? null, commentaires: p.commentCount ?? 0, jaime: p.likeCount ?? 0,
+    reactions: p.reactionCount ?? undefined, partages: p.shareCount ?? undefined,
+  }));
+}
+
+/** Commentaires d'une publication (ou réponses à un commentaire). */
+export async function commentairesPublication(compteId: string, publicationId: string, commentaireId?: string | null) {
+  const q = new URLSearchParams({ accountId: compteId, limit: "50", view: "summary" });
+  if (commentaireId) q.set("commentId", commentaireId);
+  const { data } = await appel<{ comments: Record<string, unknown>[] }>(`/inbox/comments/${enc(publicationId)}?${q}`);
+  return (data.comments ?? []).map((c) => {
+    const de = (c.from ?? {}) as Record<string, unknown>;
+    return {
+      id: String(c.id), date: String(c.createdTime ?? "").slice(0, 16), auteur: String(de.name ?? de.username ?? "?"),
+      de_nous: Boolean(de.isOwner), texte: court(c.message, 800), jaime: c.likeCount ?? 0, reponses: c.replyCount ?? 0,
+    };
+  });
+}
+
+/** Conversations privées (messagerie de la page). */
+export async function conversationsCompte(compteId: string) {
+  const { data } = await appel<{ data: Record<string, unknown>[] }>(`/inbox/conversations?accountId=${enc(compteId)}&limit=20`);
+  return (data.data ?? []).map((c) => ({
+    id: String(c.id), avec: String(c.participantName ?? c.participantId ?? "?"), dernier_message: court(c.lastMessage, 300),
+    date: String(c.updatedTime ?? "").slice(0, 16), non_lus: c.unreadCount ?? 0,
+  }));
+}
+
+/** Les 30 derniers messages d'une conversation, du plus ancien au plus récent. */
+export async function messagesConversation(compteId: string, conversationId: string) {
+  const { data } = await appel<{ messages: Record<string, unknown>[] }>(
+    `/inbox/conversations/${enc(conversationId)}/messages?accountId=${enc(compteId)}&limit=30&sortOrder=desc`,
+  );
+  return (data.messages ?? []).filter((m) => !m.isDeleted).reverse().map((m) => ({
+    date: String(m.createdAt ?? "").slice(0, 16), de: m.direction === "outgoing" ? "nous" : String(m.senderName ?? "contact"),
+    texte: court(m.message, 1500), pieces_jointes: Array.isArray(m.attachments) ? m.attachments.length : 0,
+  }));
+}
+
+/** Le dernier message (non supprimé) vient du contact : la conversation attend une réponse de notre part. */
+export function attendReponse(messagesRecentsDAbord: Record<string, unknown>[]): boolean {
+  const dernier = messagesRecentsDAbord.find((m) => !m.isDeleted);
+  return Boolean(dernier) && dernier!.direction !== "outgoing";
+}
+
+/** Conversations dont le dernier message vient du contact, avec ses derniers messages. */
+export async function conversationsSansReponse(compteId: string) {
+  const liste = await conversationsCompte(compteId);
+  const resultats = await Promise.all(liste.map(async (c) => {
+    try {
+      const { data } = await appel<{ messages: Record<string, unknown>[] }>(
+        `/inbox/conversations/${enc(c.id)}/messages?accountId=${enc(compteId)}&limit=10&sortOrder=desc`,
+      );
+      const msgs = data.messages ?? [];
+      if (!attendReponse(msgs)) return null;
+      const attente = [];
+      for (const m of msgs) {
+        if (m.isDeleted) continue;
+        if (m.direction === "outgoing") break;
+        attente.unshift({ date: String(m.createdAt ?? "").slice(0, 16), texte: court(m.message, 800) });
+      }
+      return { ...c, messages_en_attente: attente.slice(-5) };
+    } catch { return null; }
+  }));
+  return resultats.filter((x) => x !== null);
+}
+
+/** Abonnés et engagement récent de chaque compte. */
+export async function statistiques(comptes: CompteReseau[]) {
+  const ids = comptes.map((c) => c.id).slice(0, 25);
+  const [abonnes, pubs] = await Promise.all([
+    appel<{ accounts: Record<string, unknown>[] }>(`/accounts/follower-stats?accountIds=${ids.join(",")}&granularity=monthly`)
+      .then((r) => r.data.accounts ?? []).catch(() => [] as Record<string, unknown>[]),
+    Promise.all(comptes.map((c) => publicationsCompte(c.id).catch(() => []))),
+  ]);
+  return comptes.map((c, i) => {
+    const a = abonnes.find((x) => String(x._id) === c.id) ?? {};
+    const p = pubs[i];
+    const somme = (k: "jaime" | "commentaires") => p.reduce((s, x) => s + Number(x[k] ?? 0), 0);
+    return {
+      compte: `${NOMS_RESEAUX[c.reseau]} — ${c.nom}`, abonnes: a.currentFollowers ?? null,
+      croissance: a.growth ?? null, croissance_pct: a.growthPercentage ?? null,
+      publications_analysees: p.length, derniere_publication: p[0]?.date ?? null,
+      jaime_total: somme("jaime"), commentaires_total: somme("commentaires"),
+      meilleure_publication: p.length ? [...p].sort((x, y) => (Number(y.jaime) + Number(y.commentaires)) - (Number(x.jaime) + Number(x.commentaires)))[0] : null,
+    };
+  });
+}
+
+// ── Écriture (exécutée au VALIDÉ, après contrôle d'appartenance du compte) ──
+async function compteDeLEspace(wsId: string, compteId: string): Promise<CompteReseau> {
+  const c = (await comptesEspace(wsId)).find((x) => x.id === compteId);
+  if (!c) throw new Error("Ce compte n'est plus connecté à cet espace : reconnectez-le dans Connecteurs.");
+  return c;
+}
+
+export async function repondreCommentaire(wsId: string, p: { compteId: string; publicationId: string; commentaireId?: string | null; texte: string }) {
+  await compteDeLEspace(wsId, p.compteId);
+  const { data } = await appel<{ data?: { commentId?: string } }>(`/inbox/comments/${enc(p.publicationId)}`, {
+    method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify({ accountId: p.compteId, message: p.texte, ...(p.commentaireId ? { commentId: p.commentaireId } : {}) }),
+  });
+  return { id: String(data.data?.commentId ?? "") };
+}
+
+export async function envoyerMessage(wsId: string, p: { compteId: string; conversationId: string; texte: string }) {
+  await compteDeLEspace(wsId, p.compteId);
+  const { data } = await appel<{ data?: { messageId?: string } }>(`/inbox/conversations/${enc(p.conversationId)}/messages`, {
+    method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify({ accountId: p.compteId, message: p.texte }),
+  });
+  return { id: String(data.data?.messageId ?? "") };
 }

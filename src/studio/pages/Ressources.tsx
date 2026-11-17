@@ -3,6 +3,7 @@ import { FileText, Plus, Search, StickyNote, Trash2, Upload, X } from 'lucide-re
 import { useStudio } from '../StudioApp';
 import { appel, type Ressource } from '../api';
 import { Bouton, Chargement, Interrupteur, Titre, cx } from '../composants';
+import Confirmation from '../composants/Confirmation';
 import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 
 const taille = (o: number | null) => (o == null ? '' : o > 1e6 ? `${(o / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(o / 1e3))} Ko`);
@@ -15,6 +16,8 @@ export default function Ressources() {
   const [erreur, setErreur] = useState('');
   const [import_, setImport] = useState(false);
   const [note, setNote] = useState<{ titre: string; contenu: string } | null>(null);
+  const [suppression, setSuppression] = useState<Ressource | null>(null);
+  const [envoiSuppr, setEnvoiSuppr] = useState(false);
   const fichier = useRef<HTMLInputElement>(null);
 
   const charger = useCallback(async () => {
@@ -53,9 +56,13 @@ export default function Ressources() {
     try { await appel('ressource_toggle', { id: r.id, actif }); rafraichir(); } catch (e) { setErreur(gerer(e)); }
   };
 
-  const supprimer = async (r: Ressource) => {
-    if (!confirm(`Supprimer « ${r.titre} » ?`)) return;
-    try { await appel('ressource_delete', { id: r.id }); await charger(); rafraichir(); } catch (e) { setErreur(gerer(e)); }
+  const supprimer = (r: Ressource) => setSuppression(r);
+  const confirmerSuppression = async () => {
+    if (!suppression) return;
+    setEnvoiSuppr(true);
+    try { await appel('ressource_delete', { id: suppression.id }); await charger(); rafraichir(); }
+    catch (e) { setErreur(gerer(e)); }
+    finally { setEnvoiSuppr(false); setSuppression(null); }
   };
 
   return (
@@ -127,6 +134,14 @@ export default function Ressources() {
           ))}
         </div>
       )}
+      <Confirmation
+        ouvert={suppression !== null}
+        titre={`Supprimer « ${suppression?.titre ?? ''} » ?`}
+        message="Cette ressource ne sera plus disponible pour vos agents. L'action est immédiate et sans corbeille."
+        confirmer={{ label: 'Supprimer', danger: true, onClick: confirmerSuppression }}
+        annuler={{ onClick: () => setSuppression(null) }}
+        enCours={envoiSuppr}
+      />
     </>
   );
 }

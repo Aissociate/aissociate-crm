@@ -1,8 +1,10 @@
 // « Journal » : tout ce que les agents et les utilisateurs ont fait dans l'espace.
 // Le journal est chaîné (chaque ligne scelle la précédente) : il ne se modifie pas.
 import { useEffect, useState } from 'react';
+import { History } from 'lucide-react';
 import { appel } from '../api';
 import { Carte, Chargement, Titre } from '../composants';
+import EtatVide from '../composants/EtatVide';
 import { useStudio } from '../StudioApp';
 import { libelleAction, type LigneJournal } from '../journal';
 
@@ -21,7 +23,11 @@ export default function PageJournal() {
       <Titre sous="Chaque mission, validation, connexion ou suspension est tracée ici. Ce journal est scellé : personne ne peut le réécrire.">Journal</Titre>
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
       {!lignes ? <Chargement /> : lignes.length === 0 ? (
-        <Carte><p className="text-sm text-neutral-500">Rien pour l'instant : la première mission confiée à un agent apparaîtra ici.</p></Carte>
+        <EtatVide
+          icone={<History className="h-10 w-10" />}
+          titre="Le journal est vierge"
+          description="La première mission confiée à un agent (ou toute action de l'espace) apparaîtra ici, scellée et impossible à modifier."
+        />
       ) : (
         <Carte className="p-0">
           <ul className="divide-y divide-neutral-100">

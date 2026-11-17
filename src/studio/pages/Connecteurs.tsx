@@ -8,6 +8,7 @@ import { CheckCircle2, Clock, Mail, Plug, RefreshCw, Search, Server, Trash2, X, 
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
+import Confirmation from '../composants/Confirmation';
 import { LigneIntegration, useNango, type Integration, type Nango } from '../ConnexionsUnClic';
 import { ComptesReseau, NOMS_RESEAUX, useReseaux, type Reseau } from '../ReseauxSociaux';
 
@@ -104,6 +105,8 @@ export default function Connecteurs() {
   const [liste, setListe] = useState<Connecteur[] | null>(null);
   const [ouvert, setOuvert] = useState<Def | null>(null);
   const [erreur, setErreur] = useState('');
+  const [suppression, setSuppression] = useState<{ type: string; nom: string } | null>(null);
+  const [envoiSuppr, setEnvoiSuppr] = useState(false);
 
   const charger = useCallback(async () => {
     try { setListe((await appel<{ connecteurs: Connecteur[] }>('connecteurs')).connecteurs); }
@@ -111,10 +114,16 @@ export default function Connecteurs() {
   }, [gerer]);
   useEffect(() => { charger(); }, [charger]);
 
-  const supprimer = async (type: string) => {
-    if (!confirm('Retirer ce connecteur ? Vos agents ne pourront plus l\'utiliser.')) return;
-    try { setListe((await appel<{ connecteurs: Connecteur[] }>('connecteur_supprimer', { type })).connecteurs); }
+  const supprimer = (type: string) => {
+    const def = CATALOGUE.find((d) => d.type === type);
+    setSuppression({ type, nom: def?.nom ?? type });
+  };
+  const confirmerSuppression = async () => {
+    if (!suppression) return;
+    setEnvoiSuppr(true);
+    try { setListe((await appel<{ connecteurs: Connecteur[] }>('connecteur_supprimer', { type: suppression.type })).connecteurs); }
     catch (e) { setErreur(gerer(e)); }
+    finally { setEnvoiSuppr(false); setSuppression(null); }
   };
 
   const integrations = nango.etat?.integrations ?? [];
@@ -214,6 +223,15 @@ export default function Connecteurs() {
         <Formulaire def={ouvert} existant={liste?.find((x) => x.type === ouvert.type) ?? null}
           onClose={() => setOuvert(null)} onSaved={(l) => { setListe(l); setOuvert(null); }} />
       )}
+
+      <Confirmation
+        ouvert={suppression !== null}
+        titre={`Retirer ${suppression?.nom ?? 'ce connecteur'} ?`}
+        message="Vos agents ne pourront plus l'utiliser. La reconnexion est possible à tout moment."
+        confirmer={{ label: 'Retirer', danger: true, onClick: confirmerSuppression }}
+        annuler={{ onClick: () => setSuppression(null) }}
+        enCours={envoiSuppr}
+      />
     </>
   );
 }

@@ -93,7 +93,7 @@ export default function SavoirsAgent({ agentId, prenom }: { agentId: string; pre
         </div>
       )}
 
-      {liste === null ? <p className="text-sm text-muted">Chargement…</p> : liste.length === 0 ? (
+      {liste === null ? <p role="status" aria-live="polite" className="text-sm text-muted">Chargement…</p> : liste.length === 0 ? (
         <p className="text-sm text-muted">Aucun document : {prenom} s'appuie seulement sur ses consignes et les données de chaque client.</p>
       ) : (
         <ul className="space-y-1.5">

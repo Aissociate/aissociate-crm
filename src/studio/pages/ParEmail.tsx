@@ -2,9 +2,10 @@
 // derniers e-mails reçus. Les utilisateurs de l'espace écrivent à cette adresse,
 // l'agent répond dans le même fil ; rien ne part vers un tiers sans validation.
 import { useEffect, useState } from 'react';
-import { Check, Copy, Mail } from 'lucide-react';
+import { Check, Copy, Mail, MailOpen } from 'lucide-react';
 import { appel } from '../api';
 import { Carte, Chargement, Titre, cx } from '../composants';
+import EtatVide from '../composants/EtatVide';
 import { useStudio } from '../StudioApp';
 
 type Instruction = {
@@ -79,6 +80,13 @@ export default function ParEmail() {
         </>
       )}
 
+      {ouvert && l.instructions.length === 0 && (
+        <EtatVide
+          icone={<MailOpen className="h-10 w-10" />}
+          titre="Aucun e-mail reçu pour l'instant"
+          description={<>Écrivez à <span className="font-mono">{l.email}</span> depuis votre adresse de connexion : votre premier e-mail, et la réponse de l'agent, apparaîtront ici.</>}
+        />
+      )}
       {l.instructions.length > 0 && (
         <Carte className="p-0">
           <p className="border-b border-neutral-100 px-5 py-3 font-semibold">Derniers e-mails reçus</p>
