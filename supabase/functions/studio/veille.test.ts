@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyserFlux, decouvrirFlux, texteArticle, urlPublique } from "./veille.ts";
+import { analyserFlux, decouvrirFlux, liensPage, texteArticle, urlPublique } from "./veille.ts";
 import { placeDisponible, contactsValides, markdownVersHtml, nettoyerListes, personnaliser } from "./mailing.ts";
 import { apercuAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 
@@ -78,5 +78,16 @@ describe("mailing", () => {
     expect(apercuAction(a)).toContain("liste « clients » (12");
     expect(modifierAction(a, { objet: "Autre", contenu: "Texte" })).toMatchObject({ objet: "Autre", contenu: "Texte", liste: "clients" });
     expect(modifierAction(a, { objet: "", contenu: "x" })).toHaveProperty("erreur");
+  });
+});
+
+describe("lecture de page web", () => {
+  it("garde les liens internes au site, dédoublonnés, sans ancre", () => {
+    const html = '<a href="/offres">Nos offres</a><a href="https://www.exemple.fr/offres#prix">Offres</a>'
+      + '<a href="https://autre.fr/x">Ailleurs</a><a href="mailto:a@b.fr">Écrire</a><a href="contact"><span>Contact</span></a>';
+    expect(liensPage(html, "https://exemple.fr/")).toEqual([
+      { texte: "Nos offres", url: "https://exemple.fr/offres" },
+      { texte: "Contact", url: "https://exemple.fr/contact" },
+    ]);
   });
 });

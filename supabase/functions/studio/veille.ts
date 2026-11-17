@@ -115,6 +115,27 @@ export function texteArticle(html: string): { titre: string; texte: string } {
   return { titre, texte: texteDeHtml(coeur) };
 }
 
+/** Liens d'une page vers le même site (pour naviguer de page en page), dédoublonnés. */
+export function liensPage(html: string, base: string, max = 40): { texte: string; url: string }[] {
+  let hote: string;
+  try { hote = new URL(base).hostname.replace(/^www\./, ""); } catch { return []; }
+  const vus = new Set<string>(), sortie: { texte: string; url: string }[] = [];
+  for (const m of html.matchAll(/<a\b[^>]*href=["']([^"'#]+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let u: URL;
+    try { u = new URL(decoderEntites(m[1]), base); } catch { continue; }
+    if (!/^https?:$/.test(u.protocol) || u.hostname.replace(/^www\./, "") !== hote) continue;
+    u.hash = "";
+    const url = u.toString();
+    const texte = texteDeHtml(m[2]).replace(/\s+/g, " ").slice(0, 80);
+    const cle = url.replace(/^(https?:\/\/)www\./, "$1").replace(/^http:/, "https:");
+    if (!texte || vus.has(cle) || cle === base.replace(/^(https?:\/\/)www\./, "$1").replace(/^http:/, "https:")) continue;
+    vus.add(cle);
+    sortie.push({ texte, url });
+    if (sortie.length >= max) break;
+  }
+  return sortie;
+}
+
 // ─── Réseau ──────────────────────────────────────────────────────────────────
 
 /** GET d'une adresse publique (redirections revérifiées, taille et durée bornées). */

@@ -75,6 +75,14 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `studio_workspaces.entete` et `logo_chemin` (migration `20261112120000`). Le logo est rangé dans le bucket
   `studio-medias`, en PNG, JPEG ou WebP (pas de SVG), 500 Ko au maximum.
 - Si la migration n'est pas appliquée, le bloc d'en-tête est masqué et les exports partent sans en-tête.
+- Les agents reçoivent ces coordonnées dans leur contexte (`blocCoordonnees`, `contexte.ts`) et ne recréent pas
+  l'en-tête dans un document HTML : l'aperçu (`EditeurDocument`) et les exports l'ajoutent autour du contenu.
+
+## Lecture de pages web (`web_lire_page`)
+Outil disponible pour tous les agents : lit une page publique dont l'agent connaît l'adresse, et renvoie son texte
+avec les liens internes du site (`liensPage`) pour naviguer. Il réutilise `lireAdresse` de `veille.ts` : pas d'IP
+privée ni de localhost, redirections revérifiées, 2 Mo et 10 s au plus. Le texte est marqué comme DONNÉE.
+Pas de moteur de recherche : une page affichée uniquement par JavaScript ressort sans texte.
 
 ## Connexions en un clic (Zernio)
 Le client connecte lui-même ses comptes : bouton « Connecter » dans Studio › Connecteurs, ou lien reçu par
