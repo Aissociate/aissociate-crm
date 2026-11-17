@@ -14,7 +14,21 @@ export const TYPES_CONNECTEURS: { type: string; libelle: string; court: string }
   { type: 'linkedin', libelle: 'LinkedIn', court: 'LinkedIn' },
   { type: 'imap', libelle: 'Autre messagerie (OVH, IONOS, Orange…)', court: 'autre messagerie' },
   { type: 'mcp', libelle: 'Serveur MCP de votre logiciel', court: 'serveur MCP' },
-  { type: 'app', libelle: 'Autres applications, sur demande', court: 'autre application' },
+  { type: 'app', libelle: 'Applications métier, sur demande (liste ci-dessous)', court: 'application métier' },
+];
+
+/**
+ * Applications connectables sur demande : chaque connexion est étudiée et mise en place sur mesure
+ * par Aissociate (faisabilité, accès, usages), puis facturée comme un connecteur actif.
+ */
+export const APPS_SUR_DEMANDE: { categorie: string; apps: string[] }[] = [
+  { categorie: 'CRM et ventes', apps: ['HubSpot', 'Pipedrive', 'Salesforce', 'Axonaut', 'Sellsy'] },
+  { categorie: 'Comptabilité et facturation', apps: ['Pennylane', 'Qonto', 'Tiime', 'Indy', 'QuickBooks', 'Sage'] },
+  { categorie: 'Rendez-vous et réservations', apps: ['Calendly', 'Planity', 'Google Business Profile'] },
+  { categorie: 'E-commerce et paiement', apps: ['Shopify', 'WooCommerce', 'PrestaShop', 'Stripe', 'SumUp'] },
+  { categorie: 'Organisation et projets', apps: ['Notion', 'Trello', 'Asana', 'Airtable', 'Slack', 'Microsoft Teams'] },
+  { categorie: 'Site et e-mailing', apps: ['WordPress', 'Brevo', 'Mailchimp'] },
+  { categorie: 'Ressources humaines', apps: ['PayFit', 'Lucca'] },
 ];
 
 export type TarifConnecteurs = { prix: number; inclus: string[] };

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { CheckCircle2, Clock, Plug, RefreshCw, Server, Trash2, X, AlertTriangle } from 'lucide-react';
 import { useStudio } from '../StudioApp';
+import { APPS_SUR_DEMANDE } from '@/lib/tarifConnecteurs';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
@@ -80,7 +81,7 @@ export default function Connecteurs() {
   const reseaux = useReseaux();
   const [liste, setListe] = useState<Connecteur[] | null>(null);
   const [ouvert, setOuvert] = useState<Def | null>(null);
-  const [demande, setDemande] = useState(false);
+  const [demande, setDemande] = useState<string | null>(null);
   const [erreur, setErreur] = useState('');
   const [suppression, setSuppression] = useState<{ type: string; nom: string } | null>(null);
   const [envoiSuppr, setEnvoiSuppr] = useState(false);
@@ -178,8 +179,31 @@ export default function Connecteurs() {
       {!proprietaire && <p className="mt-4 text-sm text-neutral-500">Seul le propriétaire de l'espace peut ajouter ou modifier un connecteur.</p>}
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Une autre application ?</h2>
-        <p className="mb-3 text-sm text-neutral-500">CRM, comptabilité, caisse, prise de rendez-vous… Dites-nous laquelle : l'équipe Aissociate étudie la connexion avec vous.</p>
+        <h2 className="text-lg font-semibold">Applications métier, sur demande</h2>
+        <p className="mb-3 text-sm text-neutral-500">
+          Choisissez votre logiciel : l'équipe Aissociate étudie la connexion avec vous et la met en place sur mesure.
+          Une fois active, elle compte comme un connecteur supplémentaire.
+        </p>
+        {proprietaire && (
+          <div className="mb-4 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            {APPS_SUR_DEMANDE.map((g) => (
+              <div key={g.categorie}>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">{g.categorie}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {g.apps.map((a) => {
+                    const deja = demandesApps.some((c) => c.type === `app:${slug(a)}`);
+                    return (
+                      <button key={a} type="button" disabled={deja} onClick={() => setDemande(a)}
+                        className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-xs hover:border-neutral-900 disabled:cursor-default disabled:opacity-50 disabled:hover:border-neutral-200">
+                        {a}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {demandesApps.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
             {demandesApps.map((c) => (
@@ -190,10 +214,10 @@ export default function Connecteurs() {
             ))}
           </div>
         )}
-        {proprietaire && <Bouton variante="clair" onClick={() => setDemande(true)}>Demander une application</Bouton>}
+        {proprietaire && <Bouton variante="clair" onClick={() => setDemande('')}>Une autre application</Bouton>}
       </section>
 
-      {demande && <DemandeApp onClose={() => setDemande(false)} onSaved={(l) => { setListe(l); setDemande(false); }} />}
+      {demande !== null && <DemandeApp nomInitial={demande} onClose={() => setDemande(null)} onSaved={(l) => { setListe(l); setDemande(null); }} />}
       {ouvert && (
         <Formulaire def={ouvert} existant={liste?.find((x) => x.type === ouvert.type) ?? null}
           onClose={() => setOuvert(null)} onSaved={(l) => { setListe(l); setOuvert(null); }} />
@@ -213,9 +237,9 @@ export default function Connecteurs() {
 
 const slug = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 
-function DemandeApp({ onClose, onSaved }: { onClose: () => void; onSaved: (l: Connecteur[]) => void }) {
+function DemandeApp({ nomInitial, onClose, onSaved }: { nomInitial: string; onClose: () => void; onSaved: (l: Connecteur[]) => void }) {
   const { gerer } = useStudio();
-  const [nom, setNom] = useState('');
+  const [nom, setNom] = useState(nomInitial);
   const [besoin, setBesoin] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState('');
@@ -235,7 +259,7 @@ function DemandeApp({ onClose, onSaved }: { onClose: () => void; onSaved: (l: Co
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4 sm:p-10" onClick={onClose}>
       <form onSubmit={envoyer} onClick={(e) => e.stopPropagation()} className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between">
-          <p className="text-lg font-semibold">Demander une application</p>
+          <p className="text-lg font-semibold">Demande de connexion sur mesure</p>
           <button type="button" onClick={onClose} aria-label="Fermer"><X className="h-5 w-5" /></button>
         </div>
         <label className="block">
@@ -247,6 +271,7 @@ function DemandeApp({ onClose, onSaved }: { onClose: () => void; onSaved: (l: Co
           <textarea rows={3} value={besoin} onChange={(e) => setBesoin(e.target.value)} maxLength={1000}
             placeholder="ex. retrouver les fiches clients, préparer les relances…" className={classe} />
         </label>
+        <p className="text-xs text-neutral-500">L'équipe Aissociate vous recontacte pour étudier la connexion. Une fois active, elle est facturée comme un connecteur supplémentaire.</p>
         {erreur && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
         <Bouton type="submit" disabled={envoi} className="w-full py-2.5">{envoi ? 'Envoi…' : 'Envoyer la demande'}</Bouton>
       </form>

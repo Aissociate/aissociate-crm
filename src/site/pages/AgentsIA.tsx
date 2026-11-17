@@ -7,7 +7,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
 import { supabase } from '@/lib/supabase';
-import { enumerer, libelle, TYPES_CONNECTEURS, useTarifConnecteurs, type TarifConnecteurs } from '@/lib/tarifConnecteurs';
+import { APPS_SUR_DEMANDE, enumerer, libelle, TYPES_CONNECTEURS, useTarifConnecteurs, type TarifConnecteurs } from '@/lib/tarifConnecteurs';
 import SamDemo from '../components/SamDemo';
 
 /**
@@ -478,6 +478,21 @@ export default function AgentsIA() {
                   ))}
                 </ul>
               </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white p-6 md:col-span-2">
+              <p className="font-semibold">Applications métier, sur demande</p>
+              <p className="mt-1 text-sm text-neutral-600">
+                Chaque connexion est étudiée avec vous et mise en place sur mesure (accès, usages, faisabilité),
+                puis facturée {eur(tarif.prix)} HT / mois comme tout connecteur actif. Votre logiciel n'est pas dans la liste ? Demandez-le aussi.
+              </p>
+              <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                {APPS_SUR_DEMANDE.map((g) => (
+                  <div key={g.categorie}>
+                    <dt className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{g.categorie}</dt>
+                    <dd className="mt-1 text-sm">{g.apps.join(' · ')}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
             </div>
           </div>
         </section>
