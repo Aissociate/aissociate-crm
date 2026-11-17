@@ -1,20 +1,28 @@
 // Panneau de droite : document HTML d'un agent, modifiable en WYSIWYG, exportable en PDF
 // ou Word. Le document est affiché dans un cadre isolé SANS script (sandbox sans
-// allow-scripts) passé en mode édition : un contenu malveillant ne peut rien exécuter.
+// allow-scripts) ; seule la zone du contenu est éditable : l'en-tête (logo, coordonnées)
+// et le pied de page (SIRET, mentions) de « Mon entreprise » l'encadrent, comme à l'export.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bold, Download, FileText, Heading1, Heading2, Italic, Link2, List, ListOrdered, Loader2, Redo2, RemoveFormatting, Save, Underline, Undo2, X } from 'lucide-react';
 import { appel } from './api';
-import { exporterDocumentHtml } from './exports';
+import { chargerEntete, exporterDocumentHtml } from './exports';
+import { lignesEntete } from './exportDoc';
 import { separer } from './htmlSur';
 import { cx } from './composants';
 
 export type DocumentHtml = { id: string; titre: string; contenu: string; statut?: string };
 
+const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 const BASE = `<style>
 html { background: #f5f5f4; }
-body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 15px; line-height: 1.55;
-  background: #fff; max-width: 820px; margin: 24px auto; padding: 40px 48px; box-shadow: 0 1px 4px rgba(0,0,0,.08); min-height: 80vh; }
-body:focus { outline: none; }
+body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 15px; line-height: 1.55; margin: 0; }
+.feuille { background: #fff; max-width: 820px; margin: 24px auto; padding: 32px 48px 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); min-height: 80vh; display: flex; flex-direction: column; }
+.papier { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 20px; user-select: none; }
+.papier img { max-height: 60px; max-width: 200px; object-fit: contain; }
+.papier .coord { text-align: right; font-size: 12px; color: #4b5563; } .papier .nom { font-size: 14px; font-weight: 700; color: #111827; }
+#doc { flex: 1; outline: none; min-height: 40vh; }
+.pied { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 8px; text-align: center; font-size: 11px; color: #9ca3af; user-select: none; }
 img { max-width: 100%; height: auto; }
 table { border-collapse: collapse; max-width: 100%; } th, td { border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: top; }
 </style>`;
@@ -30,7 +38,21 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
   const [export_, setExport] = useState<'' | 'pdf' | 'word'>('');
   const [message, setMessage] = useState('');
   const { styles, corps } = useMemo(() => separer(doc.contenu), [doc.contenu]);
-  const srcDoc = useMemo(() => `<!doctype html><html lang="fr"><head><meta charset="utf-8">${BASE}${styles}</head><body>${corps}</body></html>`, [styles, corps]);
+  // Papier à en-tête de « Mon entreprise », affiché autour du contenu (non modifiable ici).
+  const [papier, setPapier] = useState<{ haut: string; bas: string } | null>(null);
+  useEffect(() => {
+    chargerEntete().then((e) => {
+      const l = lignesEntete(e.entete, nomEspace);
+      setPapier({
+        haut: `<header class="papier" contenteditable="false"><div>${e.logo_url ? `<img src="${echapper(e.logo_url)}" alt="">` : ''}</div>`
+          + `<div class="coord"><div class="nom">${echapper(l.nom)}</div>${l.adresse ? `<div>${echapper(l.adresse)}</div>` : ''}${l.contacts ? `<div>${echapper(l.contacts)}</div>` : ''}</div></header>`,
+        bas: l.pied ? `<footer class="pied" contenteditable="false">${echapper(l.pied)}</footer>` : '',
+      });
+    });
+  }, [nomEspace]);
+  const srcDoc = useMemo(() => `<!doctype html><html lang="fr"><head><meta charset="utf-8">${BASE}${styles}</head><body><div class="feuille">`
+    + `${papier?.haut ?? ''}<div id="doc" contenteditable="${doc.statut === 'publie' ? 'false' : 'true'}">${corps}</div>${papier?.bas ?? ''}</div></body></html>`,
+  [styles, corps, papier, doc.statut]);
 
   useEffect(() => { setTitre(doc.titre); setModifie(false); }, [doc.id, doc.contenu, doc.titre]);
 
@@ -43,15 +65,18 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
   }, [modifie]);
 
   const docCadre = () => cadre.current?.contentDocument ?? null;
+  const zone = () => docCadre()?.getElementById('doc') ?? null;
   const charge = () => {
     const d = docCadre();
     if (!d) return;
-    d.designMode = 'on';
     d.addEventListener('input', () => setModifie(true));
   };
   const cmd = (c: string, v?: string) => {
     const d = docCadre();
     if (!d) return;
+    // Sélection hors de la zone éditable (ou aucune) : on place le curseur dans le contenu.
+    const z = zone();
+    if (z && !z.contains(d.getSelection()?.anchorNode ?? null)) z.focus();
     d.execCommand(c, false, v);
     setModifie(true);
     cadre.current?.contentWindow?.focus();
@@ -60,7 +85,7 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
     const url = prompt('Adresse du lien (https://…)');
     if (url && /^(https?:|mailto:)/i.test(url.trim())) cmd('createLink', url.trim());
   };
-  const contenuActuel = () => `${styles}\n${docCadre()?.body.innerHTML ?? corps}`;
+  const contenuActuel = () => `${styles}\n${zone()?.innerHTML ?? corps}`;
 
   const enregistrer = async () => {
     setEnvoi(true); setMessage('');
@@ -114,7 +139,7 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
             {outil('Rétablir', <Redo2 className={i} />, () => cmd('redo'))}
           </div>
         )}
-        <iframe ref={cadre} key={`${doc.id}:${doc.contenu.length}:${doc.contenu.slice(-40)}`} title={titre}
+        <iframe ref={cadre} key={`${doc.id}:${doc.contenu.length}:${doc.contenu.slice(-40)}:${papier ? 1 : 0}`} title={titre}
           sandbox="allow-same-origin" srcDoc={srcDoc} onLoad={charge} className="min-h-0 w-full flex-1 bg-stone-100" />
         <footer className="flex flex-wrap items-center gap-2 border-t border-neutral-200 px-4 py-3">
           {!publie && (

@@ -91,11 +91,35 @@ export function selectionnerRessources<T extends Ressource>(trouvees: T[], recen
   return out;
 }
 
+/** Papier à en-tête saisi dans « Mon entreprise » (raison sociale, coordonnées, mentions, logo). */
+export type EnteteEntreprise = Partial<Record<"raison_sociale" | "adresse" | "code_postal" | "ville" | "telephone" | "email" | "site" | "siret" | "mentions", string>>;
+
+/** Coordonnées officielles pour l'agent : à utiliser telles quelles, jamais en champ « à compléter ». */
+export function blocCoordonnees(e: EnteteEntreprise | null | undefined, logo: boolean, nomEspace: string): string {
+  const v = (k: keyof EnteteEntreprise) => (e?.[k] ?? "").trim();
+  const lignes = [
+    `- Raison sociale : ${v("raison_sociale") || nomEspace.replace(/^Démo — /, "")}`,
+    (v("adresse") || v("ville")) && `- Adresse : ${[v("adresse"), [v("code_postal"), v("ville")].filter(Boolean).join(" ")].filter(Boolean).join(", ")}`,
+    v("telephone") && `- Téléphone : ${v("telephone")}`,
+    v("email") && `- E-mail : ${v("email")}`,
+    v("site") && `- Site : ${v("site")}`,
+    v("siret") && `- SIRET : ${v("siret")}`,
+    v("mentions") && `- Mentions légales (pied de page) : ${v("mentions")}`,
+  ].filter(Boolean);
+  const renseigne = lignes.length > 1;
+  return `## Coordonnées officielles et papier à en-tête (« Mon entreprise »)
+${lignes.join("\n")}
+- Logo : ${logo ? "enregistré" : "aucun pour l'instant"}.
+${renseigne ? "Utilise ces coordonnées exactes dans tes productions (signature d'e-mail, devis, courrier, conditions, contact) ; ne laisse jamais de champ du type « [adresse] » ou « [téléphone] »." : "Les coordonnées ne sont pas encore renseignées : si un document en a besoin, signale-le et invite l'utilisateur à les saisir dans « Mon entreprise » (papier à en-tête)."}
+Dans un document mis en forme (document_rediger), ne recrée PAS l'en-tête (logo, raison sociale, coordonnées) ni le pied de page (SIRET, mentions) : ils sont ajoutés automatiquement à l'aperçu et aux exports PDF et Word. Commence directement par le titre du document.`;
+}
+
 export function construirePrompt(p: {
   agent: AgentPrompt; equipe: AgentPrompt[];
   ws: { nom: string; contexte_entreprise: string };
   ressources: Ressource[]; creations?: Creation[]; connecteurs?: ConnecteurActif[]; savoirs?: Savoir[];
   harness?: Harness; aujourdhui?: string;
+  entete?: EnteteEntreprise | null; logo?: boolean;
 }): string {
   const { agent, ws } = p;
   const parts = [
@@ -114,6 +138,7 @@ ${savoirs.map((s, i) => `### [S${i + 1}] ${s.titre}${s.source ? ` — référenc
   if (p.aujourdhui) parts.push(`Date du jour : ${p.aujourdhui}.`);
   parts.push(`## Entreprise cliente : ${ws.nom}\n${ws.contexte_entreprise.trim()
     || "(Fiche entreprise non encore renseignée : invite l'utilisateur à la compléter dans « Mon entreprise » pour des réponses plus personnalisées.)"}`);
+  parts.push(blocCoordonnees(p.entete, Boolean(p.logo), ws.nom));
   if (agent.consignes.trim()) parts.push(`## Consignes spécifiques de l'entreprise pour ${agent.prenom}\n${agent.consignes.trim()}`);
 
   const outils = p.connecteurs ?? [];

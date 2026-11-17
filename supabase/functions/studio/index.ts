@@ -61,7 +61,7 @@ import {
 import { lancerMedia, quotaMediaAtteint, statutMedia, urlSignee } from "./medias.ts";
 import {
   construirePrompt, selectionnerRessources, HARNESS_PERIMETRE_DEFAUT, HARNESS_REGLES_DEFAUT,
-  BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type Harness, type Savoir, type SuperPouvoir,
+  BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type EnteteEntreprise, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
 import * as veille from "./veille.ts";
@@ -697,7 +697,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   }
 
   // Contexte : historique, ressources (pertinentes + récentes), contenus gardés, outils connectés, harness.
-  const [{ data: past }, { data: trouves }, { data: recents }, { data: gardes }, connecteurs, harness] = await Promise.all([
+  const [{ data: past }, { data: trouves }, { data: recents }, { data: gardes }, connecteurs, harness, { data: papier }] = await Promise.all([
     sb.from("studio_messages").select("role, content, pieces").eq("conversation_id", conversationId)
       .order("created_at", { ascending: false }).limit(HISTORIQUE),
     sb.rpc("studio_recherche_docs", { p_workspace: s.ws.id, p_question: question.slice(0, 500), p_limite: 4 }),
@@ -708,7 +708,11 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
       .order("created_at", { ascending: false }).limit(6),
     connecteursActifs(sb, s.ws.id),
     chargerHarness(sb),
+    // Papier à en-tête (« Mon entreprise ») : coordonnées officielles données aux agents.
+    sb.from("studio_workspaces").select("entete, logo_chemin").eq("id", s.ws.id).maybeSingle(),
   ]);
+  const entete = (papier?.entete ?? null) as EnteteEntreprise | null;
+  const logo = Boolean(papier?.logo_chemin);
   const ressources = selectionnerRessources(
     (trouves ?? []) as { titre: string; extrait: string }[],
     (recents ?? []).map((d) => ({ titre: d.titre, extrait: String(d.contenu).slice(0, 4000) })),
@@ -733,7 +737,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     conversationId: conversationId as string,
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const systemeBase = construirePrompt({ agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui });
+  const systemeBase = construirePrompt({ agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo });
   // Missions d'équipe : l'agent peut consulter les collègues ouverts dans l'espace.
   const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, prenom: a.prenom, metier: a.metier }));
   if (outils && collegues.length) outils.definitions.push(equipe.definition(collegues));
@@ -802,7 +806,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           nbConsultations++;
           emit("outil", { libelle: `${collegue.prenom} est consulté…` });
           const sys = construirePrompt({
-            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui,
+            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
             savoirs: await chargerSavoirs(sb, collegue.id, q),
           }) + "\n\n" + equipe.consigneConsulte(agent);
           const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
