@@ -147,6 +147,7 @@ const routes = [
         offers: [
           { '@type': 'Offer', name: 'Initialisation du Studio IA', price: '499', priceCurrency: 'EUR', description: "Mise en place de l'espace, HT, une fois (plus 199 € HT par agent)" },
           { '@type': 'Offer', name: 'Abonnement — premier agent', price: '99', priceCurrency: 'EUR', description: "Par mois, HT ; dégressif jusqu'à -50 % pour le cinquième agent" },
+          { '@type': 'Offer', name: 'Connecteur supplémentaire', price: '9.99', priceCurrency: 'EUR', description: "Par mois et par connecteur actif, HT ; Google Workspace, Outlook, Facebook, Instagram, TikTok et LinkedIn inclus" },
         ],
       },
       breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Agents IA', url: `${SITE}/agents-ia` }]),

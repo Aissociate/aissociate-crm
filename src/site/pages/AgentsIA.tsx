@@ -7,6 +7,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
 import { supabase } from '@/lib/supabase';
+import { enumerer, libelle, TYPES_CONNECTEURS, useTarifConnecteurs, type TarifConnecteurs } from '@/lib/tarifConnecteurs';
 import SamDemo from '../components/SamDemo';
 
 /**
@@ -29,6 +30,8 @@ const OFFRE = {
   delaiJours: 15,
   // Kap Numérik (Région Réunion) — indicatif, sous réserve : voir mention sous le calculateur.
   kap: { taux: 0.8, plafond: 3200 },
+  // Connecteurs inclus et prix des autres : réglés dans CRM › Studio IA › Paramètres,
+  // lus en direct (useTarifConnecteurs, repli sur TARIF_DEFAUT de src/lib/tarifConnecteurs.ts).
 };
 const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
 const mensuelRang = (i: number) => OFFRE.mensuelParRang[Math.min(i, OFFRE.mensuelParRang.length - 1)];
@@ -95,12 +98,13 @@ const AGENTS: Agent[] = [
   },
 ];
 
-const FAQ_AGENTS = [
+const faqAgents = (t: TarifConnecteurs) => [
   { question: 'Est-ce un chatbot de plus ?', answer: "Non. Chaque agent est un spécialiste avec des missions cadrées (ses « super-pouvoirs »). Il connaît votre entreprise : votre fiche, vos tarifs, votre charte, les contenus que vous avez déjà validés. Si une demande sort de son métier, il ne bricole pas : il la confie au bon collègue." },
   { question: 'Combien ça coûte vraiment ?', answer: `Une mise en place unique de ${OFFRE.socle} € HT, plus ${OFFRE.parAgent} € HT par agent. Puis un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Le calculateur de la page vous donne votre montant exact.` },
   { question: 'Puis-je le financer avec le Kap Numérik ?', answer: "La mise en place est éligible au dispositif Kap Numérik 2026 de la Région Réunion, sous réserve de l'éligibilité de votre entreprise et de l'ouverture des dépôts. Nous vérifions votre situation et montons le dossier avec vous." },
+  { question: 'Les connecteurs sont-ils compris ?', answer: `${t.inclus.length ? `Oui pour ${enumerer(t.inclus.map((x) => libelle(x)))} (un compte de chaque). Tout autre connecteur actif` : 'Chaque connecteur actif'} (autre messagerie, serveur MCP, autre application${t.inclus.length ? ', compte supplémentaire' : ''}) coûte ${eur(t.prix)} HT par mois, uniquement tant qu'il est connecté.` },
   { question: 'En combien de temps est-ce opérationnel ?', answer: `${OFFRE.delaiJours} jours : audit et onboarding, configuration de votre espace (fiche entreprise, ressources, connecteurs), tests et prise en main avec vous.` },
-  { question: 'Les agents envoient-ils des messages à ma place ?', answer: "Ils préparent, vous validez. Rien ne part vers vos clients sans votre accord. Les connecteurs (Gmail, Outlook, votre messagerie, Facebook, Instagram, LinkedIn, TikTok) permettent de préparer du contenu directement adapté à vos outils." },
+  { question: 'Les agents envoient-ils des messages à ma place ?', answer: "Ils préparent, vous validez. Rien ne part vers vos clients sans votre accord. Les connecteurs (Google Workspace, Outlook, Facebook, Instagram, LinkedIn, TikTok…) permettent de préparer du contenu directement adapté à vos outils." },
   { question: 'Et mes données ?', answer: "Votre espace est cloisonné : vos données ne sont visibles que de vous et de votre équipe. Hébergement en Union européenne, mots de passe et secrets chiffrés, conformité RGPD." },
 ];
 
@@ -121,6 +125,13 @@ export default function AgentsIA() {
   // Anti-spam : champ piège invisible + temps minimal de saisie (trigger base en renfort).
   const [piege, setPiege] = useState('');
   const [ouvertLe] = useState(() => Date.now());
+  const tarif = useTarifConnecteurs();
+  const inclusCourt = enumerer(tarif.inclus.map((t) => libelle(t, true)));
+  const enOption = [
+    ...TYPES_CONNECTEURS.filter((t) => !tarif.inclus.includes(t.type)).map((t) => t.libelle),
+    ...(tarif.inclus.length ? ["Compte supplémentaire d'un connecteur inclus"] : []),
+  ];
+  const faq = useMemo(() => faqAgents(tarif), [tarif]);
 
   const calcul = useMemo(() => {
     const n = choisis.length;
@@ -174,7 +185,7 @@ export default function AgentsIA() {
         image={`${SITE_URL}/agents-ia/studio/equipe-og.jpg`}
         imageAlt="Studio IA Aissociate : l'équipe d'agents IA"
         breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Agents IA', url: `${SITE_URL}/agents-ia` }]}
-        faqData={FAQ_AGENTS}
+        faqData={faq}
       />
       <Header />
       <main id="contenu" className="bg-[#f6f6f4] font-sans text-neutral-900">
@@ -380,7 +391,7 @@ export default function AgentsIA() {
                   ['Leurs super-pouvoirs', 'Missions cadrées par des formulaires simples : résultat fiable, sans savoir « parler à l\'IA ».'],
                   ['Votre base de connaissances', 'Tarifs, plaquettes, charte, FAQ : lus par les agents avant chaque mission.'],
                   ['Visuels et vidéos IA', 'Générés à la demande, rangés dans votre galerie, prêts à publier.'],
-                  ['Les connecteurs', 'Gmail, Outlook, votre messagerie, Facebook, Instagram, LinkedIn, TikTok : nous les mettons en place avec vous.'],
+                  ['Les connecteurs', `${inclusCourt ? `${inclusCourt} inclus ; les autres` : 'Chaque connecteur'} à ${eur(tarif.prix)} HT / mois (détail ci-dessous).`],
                   ['L\'accompagnement humain', `Mise en place en ${OFFRE.delaiJours} jours, prise en main avec vous, support à La Réunion.`],
                   ['Le montage du dossier Kap Numérik', 'Nous vérifions votre éligibilité et préparons le dossier.'],
                 ].map(([t, d]) => (
@@ -426,6 +437,9 @@ export default function AgentsIA() {
                         <dt className="font-semibold">Abonnement</dt>
                         <dd className="text-3xl font-semibold">{eur(calcul.mensuel)}<span className="text-sm font-normal text-neutral-500"> HT / mois</span></dd>
                       </div>
+                      <p className="text-xs text-neutral-500">
+                        {inclusCourt && <>Connecteurs inclus : {inclusCourt}. </>}Autre connecteur actif : + {eur(tarif.prix)} HT / mois chacun.
+                      </p>
                       <p className="rounded-lg bg-neutral-50 px-3 py-2 text-neutral-600">
                         Soit environ <b>{calcul.heuresMois} h</b> libérées chaque mois si vous confiez une mission par jour ouvré à chaque agent (estimation).
                       </p>
@@ -440,6 +454,29 @@ export default function AgentsIA() {
                   dépenses HT pour les entreprises de 0 à 9 salariés, plafonnée à {eur(OFFRE.kap.plafond)} ; taux plus faible de 10 à 19 salariés).
                   Sous réserve de l'éligibilité de l'entreprise, de l'ouverture des dépôts et de la validation du dossier par la Région. Montants HT.
                 </p>
+              </div>
+            </div>
+
+            <div id="connecteurs" className="mt-12 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6">
+                <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">Connecteurs inclus</p>
+                <p className="mt-1 text-sm text-neutral-600">Compris dans l'abonnement, un compte de chaque.</p>
+                <ul className="mt-4 space-y-2">
+                  {tarif.inclus.map((t) => libelle(t)).map((c) => (
+                    <li key={c} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 shrink-0 text-emerald-600" />{c}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-neutral-200 p-6">
+                <p className="text-sm font-semibold uppercase tracking-wider text-orange-600">Connecteurs en option</p>
+                <p className="mt-1 text-sm text-neutral-600">
+                  <b className="text-neutral-900">{eur(tarif.prix)} HT / mois</b> par connecteur actif, facturé seulement tant qu'il est connecté.
+                </p>
+                <ul className="mt-4 space-y-2">
+                  {enOption.map((c) => (
+                    <li key={c} className="flex items-center gap-2 text-sm"><ArrowRight className="h-4 w-4 shrink-0 text-orange-500" />{c}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>
@@ -477,7 +514,7 @@ export default function AgentsIA() {
         <section className="mx-auto max-w-3xl px-4 py-20 sm:px-8">
           <h2 className="text-3xl font-semibold tracking-tight">Vos questions, nos réponses.</h2>
           <div className="mt-8 divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white">
-            {FAQ_AGENTS.map((q, i) => (
+            {faq.map((q, i) => (
               <div key={q.question}>
                 <button type="button" onClick={() => setFaqOuverte(faqOuverte === i ? null : i)} aria-expanded={faqOuverte === i}
                   className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left font-medium">

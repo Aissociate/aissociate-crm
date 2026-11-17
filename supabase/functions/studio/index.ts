@@ -91,6 +91,7 @@ import { verifierSvix } from "./liaison.ts";
 import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
 import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
+import { facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
   bornesMois, calculerRapport, moisValide,
@@ -949,6 +950,9 @@ async function admin(sb: SupabaseClient, action: string, body: Record<string, un
   if (action === "admin_connexions") {
     return json(await etatConnexions(String(body.workspace_id ?? "")));
   }
+  if (action === "admin_facturation_connecteurs") {
+    return json(await facturationEspaces(sb));
+  }
   if (action === "admin_invitation") {
     const wsId = String(body.workspace_id ?? "");
     const { data: w } = await sb.from("studio_workspaces").select("id").eq("id", wsId).maybeSingle();
@@ -1078,10 +1082,15 @@ Deno.serve(async (req: Request) => {
 
     // ── Administration CRM ──
     if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_connexions",
-      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison"].includes(action)) {
+      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs"].includes(action)) {
       const managerId = await estManager(req);
       if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body, managerId);
+    }
+
+    // ── Tarif public des connecteurs (page /agents-ia) : prix et types inclus, rien d'autre ──
+    if (action === "tarif_public") {
+      return json(await tarifConnecteurs(sb));
     }
 
     // ── Questionnaire d'onboarding public (/studio/demarrer) ──

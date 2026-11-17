@@ -16,6 +16,10 @@ type Ligne = {
   images: number; videos: number; cout_texte_usd: number; cout_medias_usd: number;
 };
 type Espace = { id: string; nom: string; actif: boolean; offre: string; abonnement_mensuel: number | null };
+type Connecteurs = {
+  workspace_id: string; nb_factures: number; montant_ht: number; erreur: string | null;
+  lignes: { type: string; libelle: string; detail: string; facture: boolean }[];
+};
 
 const eur = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
 
@@ -28,6 +32,17 @@ export default function RentabilitePanel() {
   const [demo, setDemo] = useState<{ appels: number; cout: number }>({ appels: 0, cout: 0 });
   const [erreur, setErreur] = useState('');
   const [rapportEnCours, setRapportEnCours] = useState('');
+  // Connecteurs facturables : état actuel (comptes connectés maintenant), pas l'historique du mois.
+  const [connecteurs, setConnecteurs] = useState<{ prix: number; espaces: Connecteurs[] } | null>(null);
+  const [erreurConnecteurs, setErreurConnecteurs] = useState('');
+
+  useEffect(() => {
+    supabase.functions.invoke('studio', { body: { action: 'admin_facturation_connecteurs' } }).then(async ({ data, error }) => {
+      if (error) { setErreurConnecteurs(await functionErrorMessage(error)); return; }
+      const d = data as { tarif: { prix: number }; espaces: Connecteurs[] };
+      setConnecteurs({ prix: d.tarif.prix, espaces: d.espaces });
+    });
+  }, []);
 
   const charger = useCallback(async () => {
     setLignes(null); setErreur('');
@@ -64,12 +79,17 @@ export default function RentabilitePanel() {
     const coutUsd = Number(l?.cout_texte_usd ?? 0) + Number(l?.cout_medias_usd ?? 0);
     const cout = coutUsd * taux;
     const abo = e.abonnement_mensuel != null ? Number(e.abonnement_mensuel) : null;
-    return { e, l, cout, abo, marge: abo != null ? abo - cout : null };
-  }).filter((x) => x.e.actif || x.l), [espaces, lignes, taux]);
+    const c = connecteurs?.espaces.find((x) => x.workspace_id === e.id) ?? null;
+    const supp = c?.montant_ht ?? 0;
+    const revenu = abo != null ? abo + supp : null;
+    return { e, l, cout, abo, c, revenu, marge: revenu != null ? revenu - cout : null };
+  }).filter((x) => x.e.actif || x.l), [espaces, lignes, taux, connecteurs]);
 
   const totaux = tableau.reduce((t, x) => ({
-    abo: t.abo + (x.abo ?? 0), cout: t.cout + x.cout, missions: t.missions + Number(x.l?.missions ?? 0),
-  }), { abo: 0, cout: 0, missions: 0 });
+    abo: t.abo + (x.abo ?? 0), connecteurs: t.connecteurs + (x.c?.montant_ht ?? 0),
+    cout: t.cout + x.cout, missions: t.missions + Number(x.l?.missions ?? 0),
+  }), { abo: 0, connecteurs: 0, cout: 0, missions: 0 });
+  const revenus = totaux.abo + totaux.connecteurs;
 
   const rapport = async (e: Espace) => {
     setRapportEnCours(e.id); setErreur('');
@@ -98,24 +118,26 @@ export default function RentabilitePanel() {
           <input type="number" step="0.01" min="0.5" max="1.5" className="input mt-1 w-28" value={taux}
             onChange={(e) => enregistrerTaux(Number(e.target.value) || 0.92)} />
         </label>
-        <div className="ml-auto grid grid-cols-3 gap-6 text-right text-sm">
+        <div className="ml-auto grid grid-cols-4 gap-6 text-right text-sm">
           <div><p className="text-muted">Abonnements</p><p className="text-lg font-semibold text-fg">{eur(totaux.abo)}</p></div>
+          <div><p className="text-muted">Connecteurs suppl.</p><p className="text-lg font-semibold text-fg">{connecteurs ? eur(totaux.connecteurs) : '…'}</p></div>
           <div><p className="text-muted">Coût IA clients</p><p className="text-lg font-semibold text-fg">{eur(totaux.cout)}</p></div>
-          <div><p className="text-muted">Marge brute</p><p className={`text-lg font-semibold ${totaux.abo - totaux.cout < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{eur(totaux.abo - totaux.cout)}</p></div>
+          <div><p className="text-muted">Marge brute</p><p className={`text-lg font-semibold ${revenus - totaux.cout < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{eur(revenus - totaux.cout)}</p></div>
         </div>
       </Card>
       {erreur && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{erreur}</p>}
+      {erreurConnecteurs && <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700">Connecteurs facturables indisponibles : {erreurConnecteurs}</p>}
       {lignes === null ? <Spinner /> : (
         <div className="card overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-muted">
               <tr>
-                <th className="px-4 py-3">Espace</th><th>Abonnement HT</th><th>Missions</th><th>À revoir</th>
+                <th className="px-4 py-3">Espace</th><th>Abonnement HT</th><th>Connecteurs suppl.</th><th>Missions</th><th>À revoir</th>
                 <th>Visuels / vidéos</th><th>Coût IA</th><th>Marge</th><th />
               </tr>
             </thead>
             <tbody>
-              {tableau.map(({ e, l, cout, abo, marge }) => {
+              {tableau.map(({ e, l, cout, abo, c, revenu, marge }) => {
                 const pctRevoir = l?.reponses ? Math.round((Number(l.a_revoir) / Number(l.reponses)) * 100) : 0;
                 return (
                   <tr key={e.id} className="border-b border-line/60">
@@ -126,12 +148,20 @@ export default function RentabilitePanel() {
                       )}
                     </td>
                     <td>{abo != null ? eur(abo) : <span className="text-xs text-muted">à renseigner</span>}</td>
+                    <td title={c?.lignes.map((x) => `${x.facture ? '€' : 'inclus'} · ${x.libelle}${x.detail ? ` (${x.detail})` : ''}`).join('\n') || undefined}>
+                      {!connecteurs ? '…' : !c ? '—' : (
+                        <>
+                          {c.nb_factures ? `${c.nb_factures} × ${eur(connecteurs.prix)} = ${eur(c.montant_ht)}` : <span className="text-muted">0</span>}
+                          <p className="text-xs text-muted">{c.lignes.length} actif{c.lignes.length > 1 ? 's' : ''}{c.erreur ? ' · Zernio injoignable' : ''}</p>
+                        </>
+                      )}
+                    </td>
                     <td>{l?.missions ?? 0}</td>
                     <td className={pctRevoir >= 20 ? 'font-semibold text-red-600' : ''}>{l?.reponses ? `${pctRevoir} %` : '—'}</td>
                     <td>{l ? `${l.images} / ${l.videos}` : '—'}</td>
                     <td>{eur(cout)}</td>
                     <td className={marge != null && marge < 0 ? 'font-semibold text-red-600' : 'text-emerald-600'}>
-                      {marge != null ? `${eur(marge)}${abo ? ` (${Math.round((marge / abo) * 100)} %)` : ''}` : '—'}
+                      {marge != null ? `${eur(marge)}${revenu ? ` (${Math.round((marge / revenu) * 100)} %)` : ''}` : '—'}
                     </td>
                     <td className="pr-4 text-right">
                       <button className="btn-ghost text-xs" disabled={rapportEnCours === e.id || !l?.missions} onClick={() => rapport(e)}
@@ -142,7 +172,7 @@ export default function RentabilitePanel() {
                   </tr>
                 );
               })}
-              {tableau.length === 0 && <tr><td colSpan={8} className="px-4 py-6 text-center text-muted">Aucun espace actif.</td></tr>}
+              {tableau.length === 0 && <tr><td colSpan={9} className="px-4 py-6 text-center text-muted">Aucun espace actif.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -151,6 +181,7 @@ export default function RentabilitePanel() {
         Coûts réels renvoyés par OpenRouter pour chaque réponse, visuel et vidéo (vidéos estimées à 0,08 $/s si le coût n'est pas renvoyé).
         Démo publique « Sam » ce mois-ci : {demo.appels} échange{demo.appels > 1 ? 's' : ''}, {eur(demo.cout * taux)} (coût d'acquisition, hors clients).
         Une part de « À revoir » au-delà de 20 % signale un agent ou un client à accompagner.
+        Connecteurs suppl. : connecteurs actifs aujourd'hui au-delà des inclus (CRM › Paramètres), comptés dans le revenu et la marge ; survolez pour le détail.
       </p>
     </div>
   );
