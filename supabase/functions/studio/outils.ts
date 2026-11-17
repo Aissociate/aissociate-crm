@@ -18,6 +18,7 @@ import * as bureau from "./bureau.ts";
 import * as zernio from "./zernio.ts";
 import * as veille from "./veille.ts";
 import * as mailing from "./mailing.ts";
+import * as dossiers from "./dossiers.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -315,23 +316,64 @@ const DEFINITIONS_BASE: DefinitionOutil[] = [
         properties: {
           titre: { type: "string", description: "Nom court de la compétence, ex. « Relance devis non signé »" },
           contenu: { type: "string", description: "La fiche complète, en Markdown" },
+          dossier: { type: "string", description: "Dossier où la ranger (facultatif), ex. « Méthodes/Commercial »" },
         },
         required: ["titre", "contenu"],
+      },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "note_enregistrer",
+      description: "Enregistre (ou met à jour, même titre) une note dans les ressources de l'entreprise : compte rendu, synthèse, informations sur un client ou un projet, à retrouver plus tard. Contenu en Markdown. Pour une méthode réutilisable, utilise plutôt competence_enregistrer.",
+      parameters: {
+        type: "object",
+        properties: {
+          titre: { type: "string" },
+          contenu: { type: "string", description: "La note, en Markdown" },
+          dossier: { type: "string", description: "Dossier où la ranger, ex. « Clients/Dupont » (créé s'il n'existe pas)" },
+        },
+        required: ["titre", "contenu"],
+      },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "dossiers_lister",
+      description: "Liste les dossiers de l'espace ; avec un chemin, liste aussi ce qu'il contient (ressources, livrables, visuels).",
+      parameters: { type: "object", properties: { chemin: { type: "string", description: "ex. « Clients/Dupont » (facultatif)" } } },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "ranger",
+      description: "Range une ressource (note, fichier, compétence), un livrable ou un visuel/vidéo dans un dossier, créé s'il n'existe pas. Dossier vide = racine.",
+      parameters: {
+        type: "object",
+        properties: {
+          quoi: { type: "string", enum: ["ressource", "livrable", "media"] },
+          cible: { type: "string", description: "Ressource : son titre exact. Livrable : sa référence L-xxxxxxxx ou son titre. Média : quelques mots de sa description." },
+          dossier: { type: "string", description: "Chemin du dossier, ex. « Marketing/Campagne janvier »" },
+        },
+        required: ["quoi", "cible", "dossier"],
       },
     },
   },
 ];
 
 /** Consigne des outils de base, avec l'index des ressources actives (titres). */
-export function consigneBase(index: string[]): string {
-  const competences = index.filter((t) => t.startsWith(PREFIXE_COMPETENCE));
-  const autres = index.filter((t) => !t.startsWith(PREFIXE_COMPETENCE));
+export function consigneBase(index: string[], arbre: string[] = []): string {
+  const titre = (t: string) => t.replace(/ \[dossier : .*\]$/, "");
+  const competences = index.filter((t) => titre(t).startsWith(PREFIXE_COMPETENCE));
+  const autres = index.filter((t) => !titre(t).startsWith(PREFIXE_COMPETENCE));
   return [
     "## Outils : compétences et ressources de l'entreprise",
     competences.length ? `Compétences enregistrées :\n${competences.map((t) => `- ${t}`).join("\n")}` : "Aucune compétence enregistrée pour l'instant.",
     autres.length ? `Autres ressources (notes et fichiers) :\n${autres.map((t) => `- ${t}`).join("\n")}` : "",
     "- Avant une mission, si une compétence ou une ressource de cet index s'y rapporte, lis-la avec ressource_lire (titre exact) et applique-la. Les extraits donnés plus haut peuvent être tronqués.",
     "- Quand l'utilisateur te donne une méthode, des règles ou une façon de faire réutilisable, ou te demande de « retenir » quelque chose, enregistre-la avec competence_enregistrer et signale-le en une ligne. Ne l'utilise pas pour une information ponctuelle.",
+    arbre.length ? `Dossiers de l'espace (nombre d'éléments) :\n${arbre.slice(0, 60).map((c) => `- ${c}`).join("\n")}` : "Aucun dossier pour l'instant.",
+    "- Range ce que tu produis : note_enregistrer (avec dossier) pour garder une synthèse ou des informations utiles plus tard, ranger pour classer une ressource, un livrable (référence L-…) ou un visuel. Réutilise les dossiers existants avant d'en créer ; noms courts et clairs (ex. « Clients/Dupont », « Marketing/Campagne janvier »). Pour lire une ressource, donne son titre exact, sans la mention [dossier : …].",
   ].filter(Boolean).join("\n");
 }
 
@@ -501,7 +543,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const zernioOk = zernio.zernioConfigure();
   const [boites, { data: docs }, comptesReseaux, { count: nbFlux }] = await Promise.all([
     zernioOk ? bureau.boitesEspace(ctx.wsId).catch(() => [] as bureau.Boite[]) : Promise.resolve([] as bureau.Boite[]),
-    ctx.sb.from("studio_documents").select("titre").eq("workspace_id", ctx.wsId).eq("actif", true)
+    ctx.sb.from("studio_documents").select("titre, dossier_id").eq("workspace_id", ctx.wsId).eq("actif", true)
       .order("created_at", { ascending: false }).limit(80),
     zernioOk ? zernio.comptesEspace(ctx.wsId).catch(() => [] as zernio.CompteReseau[]) : Promise.resolve([] as zernio.CompteReseau[]),
     ctx.sb.from("studio_flux").select("id", { count: "exact", head: true }).eq("workspace_id", ctx.wsId).eq("actif", true),
@@ -511,7 +553,17 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const boiteMail = bureau.boitePour(boites, "email"), boiteAgenda = bureau.boitePour(boites, "calendar");
   const boiteFichiers = bureau.boitePour(boites, "files");
   const mail = Boolean(boiteMail), cal = Boolean(boiteAgenda), fichiers = Boolean(boiteFichiers);
-  const index = (docs ?? []).map((d) => String(d.titre));
+  const [lesDossiers, nbParDossier] = await Promise.all([dossiers.listerDossiers(ctx.sb, ctx.wsId), dossiers.comptes(ctx.sb, ctx.wsId)]);
+  const index = (docs ?? []).map((d) => String(d.titre) + (d.dossier_id ? ` [dossier : ${dossiers.cheminDe(lesDossiers, d.dossier_id)}]` : ""));
+  const arbre = dossiers.arbreTexte(lesDossiers, nbParDossier);
+  /** Dossier d'un chemin donné par l'agent (créé au besoin) ; chemin vide = racine. */
+  const dossierPour = async (chemin: unknown) => {
+    const c = String(chemin ?? "").trim();
+    if (!c) return { id: null as string | null, chemin: "" };
+    const r = await dossiers.assurerChemin(ctx.sb, ctx.wsId, c, ctx.agentPrenom ?? "Agent");
+    if ("erreur" in r) throw new Error(r.erreur);
+    return { id: r.id, chemin: (dossiers.segments(c) ?? []).join("/") };
+  };
 
   /** Livrable « à valider » portant l'action à exécuter au VALIDÉ. */
   const proposer = async (titre: string, contenu: string, action: ActionLivrable, quoi: string) => {
@@ -533,7 +585,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       ...(mail ? [...DEFINITIONS_MAIL, ...DEFINITIONS_MAILING] : []), ...(cal ? DEFINITIONS_AGENDA : []), ...(reseaux ? DEFINITIONS_RESEAUX : []),
     ],
     consigne: [
-      consigneBase(index), CONSIGNE_ARTICLE, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
+      consigneBase(index, arbre), CONSIGNE_ARTICLE, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
       cal && CONSIGNE_AGENDA, reseaux && consigneReseaux(comptesReseaux),
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
@@ -553,17 +605,83 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const contenu = String(a.contenu ?? "").trim().slice(0, COMPETENCE_MAX);
           if (!titre || !contenu) return { resultat: "Titre et contenu requis.", libelle: "Compétence" };
           const signe = `${contenu}\n\n_Fiche rédigée par ${ctx.agentPrenom ?? "un agent"} le ${new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion" })}._`;
+          const d = a.dossier ? await dossierPour(a.dossier) : null;
           const { data: existe } = await ctx.sb.from("studio_documents").select("id")
             .eq("workspace_id", ctx.wsId).eq("titre", titre).limit(1).maybeSingle();
           const { error } = existe
-            ? await ctx.sb.from("studio_documents").update({ contenu: signe, actif: true }).eq("id", existe.id)
-            : await ctx.sb.from("studio_documents").insert({ workspace_id: ctx.wsId, titre, contenu: signe, type: "note", created_by: ctx.userId ?? null });
+            ? await ctx.sb.from("studio_documents").update({ contenu: signe, actif: true, ...(d ? { dossier_id: d.id } : {}) }).eq("id", existe.id)
+            : await ctx.sb.from("studio_documents").insert({ workspace_id: ctx.wsId, titre, contenu: signe, type: "note", created_by: ctx.userId ?? null, dossier_id: d?.id ?? null });
           if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Compétence non enregistrée" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "competence_enregistree", detail: { titre, mise_a_jour: Boolean(existe) } });
           return {
             resultat: `Compétence « ${titre} » ${existe ? "mise à jour" : "enregistrée"} dans les Notes de l'entreprise (rubrique Mes ressources). Elle sera relue lors des prochaines missions.`,
             libelle: `${existe ? "Compétence mise à jour" : "Nouvelle compétence"} : « ${titre.slice(PREFIXE_COMPETENCE.length)} »`,
           };
+        }
+        if (nom === "note_enregistrer") {
+          const titre = String(a.titre ?? "").trim().slice(0, 200);
+          const contenu = String(a.contenu ?? "").trim().slice(0, COMPETENCE_MAX);
+          if (!titre || !contenu) return { resultat: "Titre et contenu requis.", libelle: "Note non enregistrée" };
+          const d = await dossierPour(a.dossier);
+          const signe = `${contenu}\n\n_Note rédigée par ${ctx.agentPrenom ?? "un agent"} le ${new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion" })}._`;
+          const { data: existe } = await ctx.sb.from("studio_documents").select("id")
+            .eq("workspace_id", ctx.wsId).eq("titre", titre).eq("type", "note").limit(1).maybeSingle();
+          const { error } = existe
+            ? await ctx.sb.from("studio_documents").update({ contenu: signe, actif: true, dossier_id: d.id }).eq("id", existe.id)
+            : await ctx.sb.from("studio_documents").insert({ workspace_id: ctx.wsId, titre, contenu: signe, type: "note", created_by: ctx.userId ?? null, dossier_id: d.id });
+          if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Note non enregistrée" };
+          await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "note_enregistree", detail: { titre, dossier: d.chemin, mise_a_jour: Boolean(existe) } });
+          const ou = d.chemin ? `dans le dossier « ${d.chemin} »` : "à la racine des ressources";
+          return { resultat: `Note « ${titre} » ${existe ? "mise à jour" : "enregistrée"} ${ou} (rubrique Ressources).`, libelle: `Note ${existe ? "mise à jour" : "enregistrée"} : « ${titre.slice(0, 60)} »` };
+        }
+        if (nom === "dossiers_lister") {
+          const chemin = String(a.chemin ?? "").trim();
+          if (!chemin) return { resultat: arbre.length ? arbre.join("\n") : "Aucun dossier.", libelle: "Dossiers" };
+          const cible = dossiers.trouver(lesDossiers, dossiers.segments(chemin) ?? []);
+          if (!cible) return { resultat: `Aucun dossier « ${chemin} ». Dossiers existants :\n${arbre.join("\n") || "(aucun)"}`, libelle: "Dossier introuvable" };
+          const [r, l, m] = await Promise.all([
+            ctx.sb.from("studio_documents").select("titre, type").eq("workspace_id", ctx.wsId).eq("dossier_id", cible.id).limit(100),
+            ctx.sb.from("studio_livrables").select("id, titre, statut").eq("workspace_id", ctx.wsId).eq("dossier_id", cible.id).limit(100),
+            ctx.sb.from("studio_medias").select("type, prompt").eq("workspace_id", ctx.wsId).eq("dossier_id", cible.id).limit(100),
+          ]);
+          const sous = lesDossiers.filter((x) => x.parent_id === cible.id).map((x) => x.nom);
+          return {
+            resultat: JSON.stringify({
+              dossier: dossiers.cheminDe(lesDossiers, cible.id), sous_dossiers: sous,
+              ressources: (r.data ?? []).map((x) => ({ titre: x.titre, type: x.type })),
+              livrables: (l.data ?? []).map((x) => ({ ref: refLivrable(x.id), titre: x.titre, statut: x.statut })),
+              medias: (m.data ?? []).map((x) => ({ type: x.type, description: String(x.prompt ?? "").slice(0, 120) })),
+            }),
+            libelle: `Dossier « ${chemin.slice(0, 60)} »`,
+          };
+        }
+        if (nom === "ranger") {
+          const quoi = a.quoi as dossiers.Element, cible = String(a.cible ?? "").trim();
+          if (!(quoi in dossiers.TABLES) || !cible) return { resultat: "Précise quoi (ressource, livrable ou media) et la cible.", libelle: "Rangement" };
+          let id: string | null = null, nomCible = cible;
+          if (quoi === "ressource") {
+            const base = () => ctx.sb.from("studio_documents").select("id, titre").eq("workspace_id", ctx.wsId);
+            const doc = (await base().eq("titre", cible).limit(1).maybeSingle()).data
+              ?? (await base().ilike("titre", `%${cible.replace(/[%_\\]/g, "")}%`).order("created_at", { ascending: false }).limit(1).maybeSingle()).data;
+            if (doc) { id = doc.id; nomCible = doc.titre; }
+          } else if (quoi === "livrable") {
+            const { data } = await ctx.sb.from("studio_livrables").select("id, titre").eq("workspace_id", ctx.wsId).order("created_at", { ascending: false }).limit(200);
+            const ref = cible.toUpperCase().replace(/^L-?/, "L-");
+            const l = (data ?? []).find((x) => refLivrable(x.id).toUpperCase() === ref)
+              ?? (data ?? []).find((x) => x.titre.toLowerCase() === cible.toLowerCase())
+              ?? (data ?? []).find((x) => x.titre.toLowerCase().includes(cible.toLowerCase()));
+            if (l) { id = l.id; nomCible = l.titre; }
+          } else {
+            const { data } = await ctx.sb.from("studio_medias").select("id, prompt").eq("workspace_id", ctx.wsId).eq("statut", "pret")
+              .ilike("prompt", `%${cible.replace(/[%_\\]/g, "")}%`).order("created_at", { ascending: false }).limit(1).maybeSingle();
+            if (data) { id = data.id; nomCible = String(data.prompt ?? "").slice(0, 60); }
+          }
+          if (!id) return { resultat: `Aucun élément « ${cible} » trouvé (${quoi}).`, libelle: "Élément introuvable" };
+          const d = await dossierPour(a.dossier);
+          const r = await dossiers.ranger(ctx.sb, ctx.wsId, quoi, id, d.id);
+          if ("erreur" in r) return { resultat: `Rangement impossible : ${r.erreur}`, libelle: "Rangement impossible" };
+          await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "element_range", detail: { quoi, titre: nomCible, dossier: d.chemin } });
+          return { resultat: `« ${nomCible} » rangé ${d.chemin ? `dans « ${d.chemin} »` : "à la racine"}.`, libelle: `Rangé : « ${nomCible.slice(0, 50)} » → ${d.chemin || "racine"}` };
         }
         if (nom === "blog_proposer_article") {
           const titre = String(a.titre ?? "").trim().slice(0, 200), corps = String(a.contenu ?? "").trim().slice(0, 60_000);

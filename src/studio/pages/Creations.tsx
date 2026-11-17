@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Copy, Download, PinOff, Pin } from 'lucide-react';
 import { useStudio } from '../StudioApp';
@@ -6,9 +6,10 @@ import { appel } from '../api';
 import { Avatar, Chargement, Markdown, Titre } from '../composants';
 import EtatVide from '../composants/EtatVide';
 import BoutonsExport from '../BoutonsExport';
+import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 
 type Creation = { id: string; agent_id: string; content: string; created_at: string; conversation_id: string; titre: string };
-type MediaGalerie = { id: string; type: 'image' | 'video'; agent_id: string | null; prompt: string; url: string | null; created_at: string; conversation_id: string | null };
+type MediaGalerie = { id: string; type: 'image' | 'video'; agent_id: string | null; prompt: string; url: string | null; created_at: string; conversation_id: string | null; dossier_id?: string | null };
 
 export default function Creations() {
   const { me, gerer } = useStudio();
@@ -18,18 +19,25 @@ export default function Creations() {
   const [erreur, setErreur] = useState('');
 
   const [medias, setMedias] = useState<MediaGalerie[]>([]);
+  const dossiers = useDossiers(gerer);
+  const [filtreDossier, setFiltreDossier] = useState<Filtre>('tous');
 
+  const chargerMedias = useCallback(() => {
+    appel<{ medias: MediaGalerie[] }>('medias').then((r) => setMedias(r.medias)).catch(() => { /* galerie facultative */ });
+  }, []);
   useEffect(() => {
     appel<{ creations: Creation[] }>('creations').then((r) => setListe(r.creations)).catch((e) => setErreur(gerer(e)));
-    appel<{ medias: MediaGalerie[] }>('medias').then((r) => setMedias(r.medias)).catch(() => { /* galerie facultative */ });
-  }, [gerer]);
+    chargerMedias();
+  }, [gerer, chargerMedias]);
 
   const retirer = async (id: string) => {
     setListe((l) => l?.filter((c) => c.id !== id) ?? null);
     try { await appel('epingler', { message_id: id, epingle: false }); } catch (e) { setErreur(gerer(e)); }
   };
 
-  const visibles = (liste ?? []).filter((c) => !filtre || c.agent_id === filtre);
+  // Les contenus gardés ne se rangent pas : un filtre de dossier n'affiche que les visuels.
+  const visibles = filtreDossier === 'tous' ? (liste ?? []).filter((c) => !filtre || c.agent_id === filtre) : [];
+  const mediasVisibles = medias.filter((m) => (!filtre || m.agent_id === filtre) && dansFiltre(dossiers.dossiers, filtreDossier, m.dossier_id));
 
   return (
     <>
@@ -41,18 +49,24 @@ export default function Creations() {
             className={`rounded-full border px-3 py-1 text-xs ${filtre === a.id ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200'}`}>{a.prenom}</button>
         ))}
       </div>
+      {medias.length > 0 && (
+        <BarreDossiers dossiers={dossiers.dossiers} filtre={filtreDossier} onFiltre={setFiltreDossier} gerer={gerer}
+          onChange={() => { dossiers.charger(); chargerMedias(); }} />
+      )}
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
-      {medias.filter((m) => !filtre || m.agent_id === filtre).length > 0 && (
+      {mediasVisibles.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 font-semibold">Visuels et vidéos</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {medias.filter((m) => !filtre || m.agent_id === filtre).map((m) => m.url && (
+            {mediasVisibles.map((m) => m.url && (
               <figure key={m.id} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
                 {m.type === 'image'
                   ? <img src={m.url} alt={m.prompt.slice(0, 120)} className="aspect-square w-full object-cover" loading="lazy" />
                   : <video src={m.url} controls playsInline preload="metadata" className="aspect-square w-full bg-black object-cover" />}
-                <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-neutral-500">
+                <figcaption className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-neutral-500">
                   <span>{new Date(m.created_at).toLocaleDateString('fr-FR')}</span>
+                  <ChoixDossier options={dossiers.options} valeur={m.dossier_id ?? null} quoi="media" id={m.id} gerer={gerer}
+                    onRange={(d) => { setMedias((x) => x.map((y) => (y.id === m.id ? { ...y, dossier_id: d } : y))); dossiers.charger(); }} />
                   <a href={m.url} download target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-neutral-900">
                     <Download className="h-3.5 w-3.5" /> Télécharger
                   </a>
@@ -62,7 +76,7 @@ export default function Creations() {
           </div>
         </section>
       )}
-      {liste === null ? <Chargement /> : visibles.length === 0 && medias.filter((m) => !filtre || m.agent_id === filtre).length === 0 ? (
+      {liste === null ? <Chargement /> : visibles.length === 0 && mediasVisibles.length === 0 ? (
         <EtatVide
           icone={<Pin className="h-10 w-10" />}
           titre="Aucun contenu gardé pour l'instant"

@@ -29,6 +29,7 @@ export type PieceJointe = { nom: string; format: string; taille: number; contenu
 export type Ressource = {
   id: string; titre: string; type: 'fichier' | 'note'; format: string | null; taille: number | null;
   actif: boolean; created_at: string; studio_users: { prenom: string | null; nom: string | null } | null;
+  dossier_id?: string | null;
 };
 export type Me = {
   user: { id: string; email: string; prenom: string | null; nom: string | null; role: 'proprietaire' | 'membre'; doit_changer: boolean };

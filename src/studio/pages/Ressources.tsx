@@ -5,6 +5,7 @@ import { appel, type Ressource } from '../api';
 import { Bouton, Chargement, Interrupteur, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
 import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
+import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 
 const taille = (o: number | null) => (o == null ? '' : o > 1e6 ? `${(o / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(o / 1e3))} Ko`);
 
@@ -19,6 +20,10 @@ export default function Ressources() {
   const [suppression, setSuppression] = useState<Ressource | null>(null);
   const [envoiSuppr, setEnvoiSuppr] = useState(false);
   const fichier = useRef<HTMLInputElement>(null);
+  const dossiers = useDossiers(gerer);
+  const [filtre, setFiltre] = useState<Filtre>('tous');
+  /** Dossier où ranger ce qu'on ajoute : celui qu'on regarde. */
+  const dossierAjout = filtre === 'tous' ? null : filtre;
 
   const charger = useCallback(async () => {
     try { setListe((await appel<{ ressources: Ressource[] }>('ressources')).ressources); }
@@ -27,7 +32,8 @@ export default function Ressources() {
   useEffect(() => { charger(); }, [charger]);
 
   const visibles = useMemo(() => (liste ?? []).filter((r) => r.type === onglet
-    && r.titre.toLowerCase().includes(recherche.toLowerCase())), [liste, onglet, recherche]);
+    && dansFiltre(dossiers.dossiers, filtre, r.dossier_id)
+    && r.titre.toLowerCase().includes(recherche.toLowerCase())), [liste, onglet, recherche, filtre, dossiers.dossiers]);
 
   const importer = async (fichiers: File[]) => {
     setErreur(''); setImport(true);
@@ -35,7 +41,7 @@ export default function Ressources() {
     for (const f of fichiers) {
       try {
         const contenu = await extraireTexte(f);
-        await appel('ressource_add', { titre: f.name, contenu, type: 'fichier', format: extension(f.name), taille: f.size });
+        await appel('ressource_add', { titre: f.name, contenu, type: 'fichier', format: extension(f.name), taille: f.size, dossier_id: dossierAjout });
       } catch (e) { echecs.push(gerer(e)); }
     }
     if (echecs.length) setErreur(echecs.join(' · '));
@@ -46,7 +52,7 @@ export default function Ressources() {
   const enregistrerNote = async () => {
     if (!note) return;
     try {
-      await appel('ressource_add', { titre: note.titre, contenu: note.contenu, type: 'note' });
+      await appel('ressource_add', { titre: note.titre, contenu: note.contenu, type: 'note', dossier_id: dossierAjout });
       setNote(null); await charger(); rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
@@ -77,6 +83,9 @@ export default function Ressources() {
           </button>
         ))}
       </div>
+
+      <BarreDossiers dossiers={dossiers.dossiers} filtre={filtre} onFiltre={setFiltre} gerer={gerer}
+        onChange={() => { dossiers.charger(); charger(); }} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2">
@@ -113,7 +122,7 @@ export default function Ressources() {
 
       {liste === null ? <Chargement /> : visibles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-300 py-14 text-center text-sm text-neutral-500">
-          {onglet === 'fichier' ? 'Importez votre plaquette, vos offres, votre charte… vos agents les utiliseront.' : 'Ajoutez des notes : tarifs, process, FAQ clients…'}
+          {filtre !== 'tous' ? "Rien dans ce dossier pour l'instant." : onglet === 'fichier' ? 'Importez votre plaquette, vos offres, votre charte… vos agents les utiliseront.' : 'Ajoutez des notes : tarifs, process, FAQ clients…'}
         </div>
       ) : (
         <div className="space-y-2">
@@ -128,6 +137,8 @@ export default function Ressources() {
               </div>
               <span className="hidden text-sm text-neutral-500 md:block">{[r.studio_users?.prenom, r.studio_users?.nom].filter(Boolean).join(' ')}</span>
               <span className="hidden w-28 text-right text-sm text-neutral-500 sm:block">{new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+              <ChoixDossier options={dossiers.options} valeur={r.dossier_id ?? null} quoi="ressource" id={r.id} gerer={gerer}
+                onRange={(d) => { setListe((l) => l?.map((x) => (x.id === r.id ? { ...x, dossier_id: d } : x)) ?? null); dossiers.charger(); }} />
               <Interrupteur actif={r.actif} onChange={(v) => basculer(r, v)} label={`Utilisée par les agents : ${r.titre}`} />
               <button onClick={() => supprimer(r)} aria-label="Supprimer" className="p-1 text-neutral-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
             </div>

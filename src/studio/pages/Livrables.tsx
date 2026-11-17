@@ -10,6 +10,7 @@ import EtatVide from '../composants/EtatVide';
 import Confirmation from '../composants/Confirmation';
 import { useStudio } from '../StudioApp';
 import EditeurLivrable, { champsDepuis, type ActionLivrable } from '../EditeurLivrable';
+import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 
 type Livrable = {
   id: string; titre: string; contenu: string; statut: 'a_valider' | 'valide' | 'refuse' | 'publie';
@@ -21,6 +22,7 @@ type Livrable = {
   action?: ActionLivrable | null;
   /** Versions précédentes, la plus récente d'abord. */
   versions?: { titre: string; contenu: string; action: ActionLivrable | null; par: string; le: string }[];
+  dossier_id?: string | null;
 };
 
 const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
@@ -45,6 +47,8 @@ export default function PageLivrables() {
   const { me, gerer, rafraichir } = useStudio();
   const [livrables, setLivrables] = useState<Livrable[] | null>(null);
   const [filtre, setFiltre] = useState<Livrable['statut'] | 'tous'>('a_valider');
+  const dossiers = useDossiers(gerer);
+  const [filtreDossier, setFiltreDossier] = useState<Filtre>('tous');
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [commentaire, setCommentaire] = useState('');
   const [erreur, setErreur] = useState('');
@@ -90,8 +94,9 @@ export default function PageLivrables() {
   };
 
   if (!livrables) return erreur ? <p className="text-sm text-red-700">{erreur}</p> : <Chargement />;
-  const visibles = livrables.filter((l) => filtre === 'tous' || l.statut === filtre);
-  const compte = (s: Livrable['statut']) => livrables.filter((l) => l.statut === s).length;
+  const dansDossier = livrables.filter((l) => dansFiltre(dossiers.dossiers, filtreDossier, l.dossier_id));
+  const visibles = dansDossier.filter((l) => filtre === 'tous' || l.statut === filtre);
+  const compte = (s: Livrable['statut']) => dansDossier.filter((l) => l.statut === s).length;
 
   return (
     <div>
@@ -99,6 +104,8 @@ export default function PageLivrables() {
         ? 'Vos agents préparent, vous décidez : rien n\'est envoyé ni publié sans votre validation.'
         : 'Les livrables que vous soumettez sont validés par le propriétaire de l\'espace.'}>Livrables</Titre>
 
+      <BarreDossiers dossiers={dossiers.dossiers} filtre={filtreDossier} onFiltre={setFiltreDossier} gerer={gerer}
+        onChange={() => { dossiers.charger(); charger(); }} />
       <div className="mb-4 flex flex-wrap gap-2">
         {FILTRES.map((s) => (
           <button key={s} onClick={() => setFiltre(s)}
@@ -140,6 +147,11 @@ export default function PageLivrables() {
                 </button>
                 {deplie && (
                   <div className="border-t border-neutral-100 p-4">
+                    <div className="mb-3 flex items-center gap-2 text-xs text-neutral-500">
+                      Dossier :
+                      <ChoixDossier options={dossiers.options} valeur={l.dossier_id ?? null} quoi="livrable" id={l.id} gerer={gerer}
+                        onRange={(d) => { setLivrables((x) => x?.map((y) => (y.id === l.id ? { ...y, dossier_id: d } : y)) ?? null); dossiers.charger(); }} />
+                    </div>
                     {l.type_action && (
                       <div className="mb-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
                         <p className="font-medium">{ACTIONS[l.type_action]?.avant ?? l.type_action}</p>

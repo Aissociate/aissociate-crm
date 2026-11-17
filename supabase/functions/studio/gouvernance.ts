@@ -310,7 +310,7 @@ export async function modifierLivrable(sb: SupabaseClient, wsId: string, acteur:
 
 export async function listerLivrables(sb: SupabaseClient, wsId: string) {
   const { data } = await sb.from("studio_livrables")
-    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions")
+    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions, dossier_id")
     .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
   return data ?? [];
 }

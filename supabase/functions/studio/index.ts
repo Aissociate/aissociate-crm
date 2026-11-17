@@ -92,6 +92,7 @@ import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitem
 import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
 import { facturationEspaces, tarifConnecteurs } from "./facturation.ts";
+import * as dossiers from "./dossiers.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
   bornesMois, calculerRapport, moisValide,
@@ -1285,7 +1286,7 @@ Deno.serve(async (req: Request) => {
 
       case "medias": {
         // Galerie « Contenus » : visuels et vidéos prêts de tout l'espace.
-        const { data } = await sb.from("studio_medias").select("id, type, agent_id, prompt, chemin, mime, created_at, conversation_id")
+        const { data } = await sb.from("studio_medias").select("id, type, agent_id, prompt, chemin, mime, created_at, conversation_id, dossier_id")
           .eq("workspace_id", s.ws.id).eq("statut", "pret").order("created_at", { ascending: false }).limit(60);
         const medias = await Promise.all((data ?? []).map(async ({ chemin, ...m }) => ({
           ...m, url: chemin ? await urlSignee(sb, chemin) : null,
@@ -1333,7 +1334,7 @@ Deno.serve(async (req: Request) => {
 
       case "ressources": {
         const { data } = await sb.from("studio_documents")
-          .select("id, titre, type, format, taille, actif, created_at, created_by, studio_users(prenom, nom)")
+          .select("id, titre, type, format, taille, actif, created_at, created_by, dossier_id, studio_users(prenom, nom)")
           .eq("workspace_id", s.ws.id).order("created_at", { ascending: false });
         return json({ ressources: data ?? [] });
       }
@@ -1349,14 +1350,61 @@ Deno.serve(async (req: Request) => {
         const titre = String(body.titre ?? "").trim().slice(0, 200);
         const contenu = String(body.contenu ?? "").slice(0, DOC_MAX);
         if (!titre || !contenu.trim()) return json({ error: "Titre et contenu requis" }, 400);
+        const dossierAjout = await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id);
         const { data, error } = await sb.from("studio_documents").insert({
-          workspace_id: s.ws.id, titre, contenu, created_by: s.user.id,
+          workspace_id: s.ws.id, titre, contenu, created_by: s.user.id, dossier_id: dossierAjout || null,
           type: body.type === "fichier" ? "fichier" : "note",
           format: body.format ? String(body.format).slice(0, 10) : null,
           taille: Number.isFinite(Number(body.taille)) ? Number(body.taille) : null,
         }).select("id").single();
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true, id: data.id });
+      }
+
+      // ── Dossiers : ressources, livrables et médias ──
+      case "dossiers": {
+        const [liste, nb] = await Promise.all([dossiers.listerDossiers(sb, s.ws.id), dossiers.comptes(sb, s.ws.id)]);
+        return json({ dossiers: liste, comptes: Object.fromEntries(nb) });
+      }
+
+      case "dossier_creer": {
+        const parent = await dossiers.dossierDeLEspace(sb, s.ws.id, body.parent_id);
+        if (parent === false) return json({ error: "Dossier parent introuvable" }, 404);
+        const nom = dossiers.segments(String(body.nom ?? ""));
+        if (!nom || nom.length !== 1) return json({ error: "Nom de dossier invalide (sans « / », 80 caractères au plus)." }, 400);
+        const chemin = [parent ? dossiers.cheminDe(await dossiers.listerDossiers(sb, s.ws.id), parent) : "", nom[0]].filter(Boolean).join("/");
+        const r = await dossiers.assurerChemin(sb, s.ws.id, chemin, s.user.prenom ?? s.user.email);
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "dossier_cree", detail: { dossier: chemin } });
+        return json({ ok: true, id: r.id });
+      }
+
+      case "dossier_renommer": {
+        const r = await dossiers.renommer(sb, s.ws.id, String(body.id ?? ""), String(body.nom ?? ""));
+        return "erreur" in r ? json({ error: r.erreur }, 400) : json(r);
+      }
+
+      case "dossier_deplacer": {
+        const parent = await dossiers.dossierDeLEspace(sb, s.ws.id, body.parent_id);
+        if (parent === false) return json({ error: "Dossier parent introuvable" }, 404);
+        const r = await dossiers.deplacer(sb, s.ws.id, String(body.id ?? ""), parent);
+        return "erreur" in r ? json({ error: r.erreur }, 400) : json(r);
+      }
+
+      case "dossier_supprimer": {
+        const r = await dossiers.supprimer(sb, s.ws.id, String(body.id ?? ""));
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "dossier_supprime", detail: { id: String(body.id) } });
+        return json(r);
+      }
+
+      case "ranger": {
+        const quoi = String(body.quoi ?? "") as dossiers.Element;
+        if (!(quoi in dossiers.TABLES)) return json({ error: "Type d'élément inconnu" }, 400);
+        const dossier = await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id);
+        if (dossier === false) return json({ error: "Dossier introuvable" }, 404);
+        const r = await dossiers.ranger(sb, s.ws.id, quoi, String(body.id ?? ""), dossier);
+        return "erreur" in r ? json({ error: r.erreur }, 400) : json(r);
       }
 
       case "ressource_toggle": {

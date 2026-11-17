@@ -120,6 +120,17 @@ entreprise et les ressources plutôt que des champs « à compléter ».
 **Configuration :** secret Supabase `ZERNIO_API_KEY`. Les secrets `NANGO_*`, la fonction `nango-webhook`
 et la table `studio_nango_connexions` ne servent plus.
 
+## Dossiers (`dossiers.ts`, `src/studio/Dossiers.tsx`)
+Arborescence par espace (`studio_dossiers`, 5 niveaux) pour ranger ressources (notes, fichiers, compétences),
+livrables et visuels (`dossier_id` sur `studio_documents`, `studio_livrables`, `studio_medias`).
+- Client : barre de dossiers dans Ressources, Livrables et Contenus (créer, renommer, supprimer), sélecteur
+  « Ranger dans » sur chaque élément ; ce qu'on ajoute en regardant un dossier y est rangé.
+- Agents : `note_enregistrer` (note avec dossier), `ranger` (ressource par titre, livrable par référence L-…,
+  visuel par description), `dossiers_lister` ; `competence_enregistrer` accepte un dossier. Un chemin
+  « Clients/Dupont » crée les dossiers manquants. L'arborescence et le dossier de chaque ressource sont dans
+  la consigne. Rangements tracés au journal.
+- Supprimer un dossier ne supprime rien d'autre : contenu et sous-dossiers remontent d'un niveau.
+
 ## Coûts, rentabilité et rapport mensuel
 - **Coût réel** : chaque réponse enregistre `cout` (USD), les tokens et le modèle, lus dans le dernier fragment du
   flux OpenRouter (`usage`). Les médias gardent leur coût ; une vidéo sans coût renvoyé est estimée à 0,08 $/s.
