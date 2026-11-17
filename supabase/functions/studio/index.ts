@@ -93,6 +93,8 @@ import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
 import { facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as dossiers from "./dossiers.ts";
+import * as recharges from "./recharges.ts";
+import * as equipe from "./equipe.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
   bornesMois, calculerRapport, moisValide,
@@ -508,7 +510,7 @@ function debutMois(): string {
 
 async function compterDemandesMois(sb: SupabaseClient, wsId: string): Promise<number> {
   const { count } = await sb.from("studio_messages").select("id", { count: "exact", head: true })
-    .eq("workspace_id", wsId).eq("role", "user").gte("created_at", debutMois());
+    .eq("workspace_id", wsId).eq("role", "user").eq("hors_quota", false).gte("created_at", debutMois());
   return count ?? 0;
 }
 
@@ -600,9 +602,14 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     titreConv = (pieces.length && !String(body.message ?? "").trim() ? pieces.map((x) => x.nom).join(", ") : question).slice(0, 80);
   }
 
+  // Quota du mois atteint : la mission puise dans les crédits de recharge (reportés de mois en mois).
+  // Les visuels et vidéos ont leurs propres quotas, vérifiés plus bas.
   const quota = s.ws.quota_messages_mois;
-  if (quota != null && (await compterDemandesMois(sb, s.ws.id)) >= quota) {
-    return json({ error: `Quota mensuel atteint (${quota} demandes). Contactez Aissociate pour l'augmenter.` }, 429);
+  let demandeSurCredits = false;
+  if (!media && quota != null && (await compterDemandesMois(sb, s.ws.id)) >= quota) {
+    const refusCredits = await recharges.couvrable(sb, s.ws.id, "demande", quota);
+    if (refusCredits) return json({ error: refusCredits, recharge: true }, 429);
+    demandeSurCredits = true;
   }
   const refus = await garde(sb, s.ws.id);
   if (refus) return json({ error: refus.message, gouvernance: true }, refus.statut);
@@ -611,6 +618,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
   const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
   if (!apiKey) return json({ error: "Service IA non configuré. Contactez Aissociate." }, 503);
+  if (demandeSurCredits) await recharges.puiser(sb, s.ws.id, "demande", `client:${s.user.email}`);
   // Modèle : réglage agent/client (studio_*), puis parametres.ai.model_studio s'il est autorisé, puis DeepSeek.
   const model = agent.modele_effectif ?? autorise(ai.model_studio) ?? MODELE_DEFAUT;
 
@@ -633,15 +641,26 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
 
   // ── Super-pouvoir média : génération d'image ou de vidéo, sans passer par le chat ──
   if (media) {
-    const depasse = await quotaMediaAtteint(sb, s.ws, media.type);
-    if (depasse) return json({ error: depasse }, 429);
+    const quotaMedia = await quotaMediaAtteint(sb, s.ws, media.type);
+    if (quotaMedia !== null) {
+      if (quotaMedia === 0) return json({ error: media.type === "image" ? "Les visuels ne sont pas inclus dans votre formule. Contactez Aissociate." : "La vidéo n'est pas incluse dans votre formule. Contactez Aissociate." }, 403);
+      const refusCredits = await recharges.couvrable(sb, s.ws.id, media.type, quotaMedia);
+      if (refusCredits) return json({ error: refusCredits, recharge: true }, 429);
+    }
     const lance = await lancerMedia(sb, apiKey, {
       wsId: s.ws.id, userId: s.user.id, agentId: agent.id, conversationId: conversationId as string,
       type: media.type, prompt: question, format: media.format, duree: media.duree,
     });
     if ("erreur" in lance) return json({ error: lance.erreur }, 502);
+    if (quotaMedia !== null) {
+      await recharges.puiser(sb, s.ws.id, media.type, `client:${s.user.email}`, lance.id);
+      // Image déjà en échec avant le débit (tâche de fond rapide) : on recrédite aussitôt.
+      const { data: etatMedia } = await sb.from("studio_medias").select("statut").eq("id", lance.id).maybeSingle();
+      if (etatMedia?.statut === "echec") await recharges.rembourserMedia(sb, lance.id);
+    }
     await sb.from("studio_messages").insert({
       conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "user", content: affichage,
+      hors_quota: true, // compté sur le quota de visuels ou de vidéos, pas sur celui des demandes
     });
     const { data: rep } = await sb.from("studio_messages").insert({
       conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", media_id: lance.id,
@@ -682,10 +701,10 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     agent: prenoms.get(String(m.agent_id)),
   }));
 
-  await sb.from("studio_messages").insert({
+  const { data: messageClient } = await sb.from("studio_messages").insert({
     conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "user", content: affichage,
     pieces: pieces.length ? pieces : null,
-  });
+  }).select("id").single();
 
   // Outils branchés sur les connexions Zernio de l'espace (messagerie, agenda, fichiers, réseaux), s'il y en a.
   const outils = await outilsEspace({
@@ -693,11 +712,14 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     agentId: agent.id, agentPrenom: agent.prenom, userId: s.sessionId === "mail" ? null : s.user.id,
     conversationId: conversationId as string,
   }).catch(() => null);
-  const systemeBase = construirePrompt({
-    agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs,
-    aujourdhui: new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" }),
-  });
-  const systeme = outils ? `${systemeBase}\n\n${outils.consigne}` : systemeBase;
+  const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const systemeBase = construirePrompt({ agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui });
+  // Missions d'équipe : l'agent peut consulter les collègues ouverts dans l'espace.
+  const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, prenom: a.prenom, metier: a.metier }));
+  if (outils && collegues.length) outils.definitions.push(equipe.definition(collegues));
+  const systeme = outils
+    ? `${systemeBase}\n\n${outils.consigne}${collegues.length ? `\n\n${equipe.consigne(collegues)}` : ""}`
+    : systemeBase;
   const messages: Record<string, unknown>[] = [
     { role: "system", content: systeme },
     ...(past ?? []).reverse().map((m) => ({
@@ -729,6 +751,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
       const travail = (async () => {
       let answer = "";
       let usage: Usage | null = null;
+      const aides: string[] = [];
       try {
         emit("meta", {
           conversation_id: conversationId,
@@ -745,6 +768,44 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         let avecOutils = Boolean(outils);
         let total: Usage = {};
         let usageVu = false;
+        let nbConsultations = 0;
+        /** consulter_collegue : le collègue répond sans outils (il ne peut pas consulter à son tour). */
+        const consulter = async (argsJson: string): Promise<{ resultat: string; libelle: string }> => {
+          let a: Record<string, unknown> = {};
+          try { a = JSON.parse(argsJson || "{}"); } catch { /* arguments illisibles */ }
+          const collegue = agents.find((x) => x.id === String(a.agent_id ?? "") && x.id !== agent.id);
+          const q = String(a.question ?? "").trim().slice(0, 6000);
+          if (!collegue || !q) return { resultat: "Collègue inconnu ou question vide.", libelle: "Consultation impossible" };
+          if (nbConsultations >= equipe.MAX_CONSULTATIONS) {
+            return { resultat: `Limite de ${equipe.MAX_CONSULTATIONS} consultations atteinte : termine avec ce que tu as.`, libelle: "Limite de consultations atteinte" };
+          }
+          nbConsultations++;
+          emit("outil", { libelle: `${collegue.prenom} est consulté…` });
+          const sys = construirePrompt({
+            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui,
+            savoirs: await chargerSavoirs(sb, collegue.id, q),
+          }) + "\n\n" + equipe.consigneConsulte(agent);
+          const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST", signal: stop.signal, headers: entetesOR,
+            body: JSON.stringify({
+              model: collegue.modele_effectif ?? autorise(ai.model_studio) ?? MODELE_DEFAUT,
+              messages: [{ role: "system", content: sys }, { role: "user", content: q }],
+              temperature: 0.5, max_tokens: 3000, usage: { include: true },
+            }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (j?.usage) { total = cumulerUsage(total, j.usage); usageVu = true; }
+          const texte = r.ok ? equipe.nettoyer(String(j?.choices?.[0]?.message?.content ?? "")) : "";
+          if (!texte) {
+            return { resultat: `${collegue.prenom} n'a pas pu répondre${r.ok ? "" : ` (${r.status})`}. Continue sans sa contribution.`, libelle: `Consultation de ${collegue.prenom} impossible` };
+          }
+          aides.push(`${collegue.prenom} (${collegue.metier})`);
+          await journaliser(sb, {
+            wsId: s.ws.id, acteur: acteurDe(s), agentId: agent.id, action: "consultation",
+            detail: { collegue: collegue.id, prenom: collegue.prenom, conversation: conversationId, question: q.slice(0, 300) },
+          });
+          return { resultat: `Réponse de ${collegue.prenom} (${collegue.metier}) :\n${texte}`, libelle: `Contribution de ${collegue.prenom}` };
+        };
         for (let tour = 0; tour < 7; tour++) {
           const dernier = tour === 6;
           const corps: Record<string, unknown> = { model, messages, stream: true, temperature: 0.5, usage: { include: true } };
@@ -792,7 +853,9 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           if (!complets.length || !outils) break;
           messages.push({ role: "assistant", content: texteTour, tool_calls: complets });
           for (const a of complets.slice(0, 5)) {
-            const res = await outils.executer(a.function.name, a.function.arguments);
+            const res = a.function.name === equipe.NOM_OUTIL
+              ? await consulter(a.function.arguments)
+              : await outils.executer(a.function.name, a.function.arguments);
             emit("outil", { libelle: res.libelle });
             messages.push({ role: "tool", tool_call_id: a.id, content: res.resultat.slice(0, 40_000) });
           }
@@ -801,10 +864,21 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         }
         usage = usageVu ? total : null;
         if (!answer.trim()) answer = "Je n'ai pas pu produire de réponse. Pouvez-vous reformuler ?";
+        // Mission d'équipe : mention discrète des collègues consultés.
+        const mention = equipe.mentionAide(aides);
+        if (mention && !answer.includes("[[RELAIS:")) {
+          const ajout = `${answer.endsWith("\n\n") ? "" : "\n\n"}${mention}`;
+          answer += ajout; emit("delta", { text: ajout });
+        }
         const row = await insererReponse(sb, {
           conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", content: answer,
         }, usage, model);
         emit("done", { message_id: row?.id ?? null, conversation_id: conversationId });
+        // Demande relayée à un collègue : elle ne compte pas (le client la renverra au bon agent).
+        if (answer.includes("[[RELAIS:") && messageClient?.id) {
+          await sb.from("studio_messages").update({ hors_quota: true }).eq("id", messageClient.id);
+          if (demandeSurCredits) await recharges.recrediter(sb, s.ws.id, "demande", "Demande relayée à un collègue : recréditée");
+        }
         await journaliser(sb, {
           wsId: s.ws.id, acteur: acteurDe(s), agentId: agent.id, action: "mission",
           detail: {
@@ -1423,12 +1497,13 @@ Deno.serve(async (req: Request) => {
 
       // ── Gouvernance : périmètre, suspension, journal, livrables ──
       case "perimetre": {
-        const [etat, depense, agents, { data: catalogue }, { data: w }, demandes, { data: medias }] = await Promise.all([
+        const [etat, depense, agents, { data: catalogue }, { data: w }, demandes, { data: medias }, credits] = await Promise.all([
           etatEspace(sb, s.ws.id), depenseJour(sb, s.ws.id), agentsDuWorkspace(sb, s.ws),
           sb.from("studio_agents").select("id, prenom, metier, photo, couleur").eq("actif", true).order("ordre"),
           sb.from("studio_workspaces").select("quota_images_mois, quota_videos_mois, max_utilisateurs").eq("id", s.ws.id).maybeSingle(),
           compterDemandesMois(sb, s.ws.id),
-          sb.from("studio_medias").select("type").eq("workspace_id", s.ws.id).gte("created_at", debutMois()),
+          sb.from("studio_medias").select("type").eq("workspace_id", s.ws.id).neq("statut", "echec").gte("created_at", debutMois()),
+          recharges.etat(sb, s.ws.id),
         ]);
         const ouverts = new Set(agents.map((a) => a.id));
         return json({
@@ -1441,7 +1516,19 @@ Deno.serve(async (req: Request) => {
             videos: { utilise: (medias ?? []).filter((m) => m.type === "video").length, max: w?.quota_videos_mois ?? null },
             utilisateurs: { max: w?.max_utilisateurs ?? null },
           },
+          recharges: credits,
         });
+      }
+
+      case "recharge_acheter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const r = await recharges.acheter(sb, s.ws.id, Number(body.pack), `client:${s.user.email}`);
+        if ("erreur" in r) return json({ error: r.erreur }, r.statut);
+        await journaliser(sb, {
+          wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "recharge_achetee",
+          detail: { credits: r.pack.credits, prix_ht: r.pack.prix },
+        });
+        return json({ ok: true, solde: await recharges.solde(sb, s.ws.id) });
       }
 
       case "suspendre": {

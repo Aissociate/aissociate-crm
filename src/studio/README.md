@@ -131,6 +131,37 @@ livrables et visuels (`dossier_id` sur `studio_documents`, `studio_livrables`, `
   la consigne. Rangements tracés au journal.
 - Supprimer un dossier ne supprime rien d'autre : contenu et sous-dossiers remontent d'un niveau.
 
+## Missions d'équipe (`equipe.ts`)
+
+- L'agent qui reçoit la demande peut consulter un collègue ouvert dans l'espace avec l'outil
+  `consulter_collegue`. Exemple : un article de blog, avec l'angle par le marketing et les mots-clés par le SEO.
+  Il intègre ensuite la contribution dans un seul livrable.
+- Garde-fous :
+  - 3 consultations par demande au plus ;
+  - le collègue répond sans outils, donc ne consulte pas à son tour, et sa balise de relais est retirée ;
+  - son coût OpenRouter s'ajoute à celui de la demande ;
+  - chaque consultation est notée au journal (`consultation`).
+- Une consultation ne compte pas dans le quota : seul le message du client compte. La réponse finale se
+  termine par « _Avec l'aide de …_ ».
+- La balise de relais reste réservée aux demandes entièrement hors du métier de l'agent.
+
+## Quotas, demandes et recharges (`recharges.ts`)
+
+- **1 demande = 1 message envoyé à un agent**, relances comprises, que ce soit par le chat, une tâche
+  ou un e-mail. Ne comptent pas (`studio_messages.hors_quota`) :
+  - une demande relayée à un collègue ;
+  - un visuel ou une vidéo, qui ont leurs propres quotas.
+- Quand un quota du mois est atteint, l'usage puise dans les **crédits de recharge**. Le registre
+  `studio_recharges` (achat, offert, correction, consommation) ne périme pas : le solde se reporte de mois en mois.
+  - Coûts par défaut : 1 demande = 1 crédit, 1 visuel = 5, 1 vidéo = 30.
+  - Un visuel ou une vidéo en échec, ou une demande relayée, est recrédité.
+- Packs : 10 € HT = 100 crédits et 30 € HT = 350 crédits. Ils se règlent dans CRM › Studio IA ›
+  Paramètres et peuvent être modifiés par client dans sa fiche (`recharge_packs`).
+- Achat en libre-service par le propriétaire dans « Mon périmètre » (`recharge_acheter`), si
+  `recharge_achat_libre` le permet.
+- Le CRM peut ajouter des crédits (offerts, achat à facturer, correction). Les achats du mois
+  entrent dans le revenu de l'onglet Rentabilité. Aucun paiement en ligne : la facturation reste manuelle.
+
 ## Coûts, rentabilité et rapport mensuel
 - **Coût réel** : chaque réponse enregistre `cout` (USD), les tokens et le modèle, lus dans le dernier fragment du
   flux OpenRouter (`usage`). Les médias gardent leur coût ; une vidéo sans coût renvoyé est estimée à 0,08 $/s.

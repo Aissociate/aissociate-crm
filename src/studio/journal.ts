@@ -28,6 +28,8 @@ const LIBELLES: Record<string, string> = {
   element_range: 'Élément rangé dans un dossier',
   dossier_cree: 'Dossier créé',
   dossier_supprime: 'Dossier supprimé',
+  recharge_achetee: 'Recharge de crédits achetée',
+  consultation: 'Collègue consulté',
   action_executee: 'Action exécutée après validation',
   action_echec: 'Action après validation en échec',
   livrable_valide: 'Livrable validé',

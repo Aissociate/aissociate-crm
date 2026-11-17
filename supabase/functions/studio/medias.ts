@@ -9,6 +9,7 @@
 //   dans le bucket privé `studio-medias`.
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (cf. agent).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { rembourserMedia } from "./recharges.ts";
 
 export const MODELE_IMAGE = "meta/muse-image";
 export const MODELE_VIDEO = "minimax/hailuo-3-max";
@@ -37,20 +38,20 @@ function debutMois(): string {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
 }
 
-/** Quota mensuel par type (null = illimité). Les échecs ne comptent pas. */
-export async function quotaMediaAtteint(sb: SupabaseClient, ws: Ws, type: "image" | "video"): Promise<string | null> {
+/** Quota mensuel par type atteint : renvoie le quota (0 = type désactivé), sinon null. Les échecs ne comptent pas. */
+export async function quotaMediaAtteint(sb: SupabaseClient, ws: Ws, type: "image" | "video"): Promise<number | null> {
   const { data: w } = await sb.from("studio_workspaces").select("quota_images_mois, quota_videos_mois").eq("id", ws.id).single();
   const quota = type === "image" ? w?.quota_images_mois : w?.quota_videos_mois;
   if (quota == null) return null;
   const { count } = await sb.from("studio_medias").select("id", { count: "exact", head: true })
     .eq("workspace_id", ws.id).eq("type", type).neq("statut", "echec").gte("created_at", debutMois());
-  return (count ?? 0) >= quota
-    ? `Quota mensuel atteint (${quota} ${type === "image" ? "visuels" : "vidéos"}). Contactez Aissociate pour l'augmenter.`
-    : null;
+  return (count ?? 0) >= quota ? quota : null;
 }
 
 async function finir(sb: SupabaseClient, id: string, maj: Record<string, unknown>) {
   await sb.from("studio_medias").update({ ...maj, termine_at: new Date().toISOString() }).eq("id", id);
+  // Échec : un visuel ou une vidéo payé en crédits de recharge est recrédité.
+  if (maj.statut === "echec") await rembourserMedia(sb, id);
 }
 
 /** Lance la génération et renvoie l'id du média (statut en_cours). */

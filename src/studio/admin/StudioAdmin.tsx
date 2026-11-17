@@ -18,6 +18,7 @@ import OnboardingPanel from './OnboardingPanel';
 import ParametresPanel from './ParametresPanel';
 import GouvernanceEspace from './GouvernanceEspace';
 import LiaisonEspace from './LiaisonEspace';
+import RechargesEspace from './RechargesEspace';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -60,6 +61,7 @@ export default function StudioAdmin() {
   const [espaces, setEspaces] = useState<Workspace[] | null>(null);
   const [users, setUsers] = useState<StudioUser[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
+  const [soldes, setSoldes] = useState<Record<string, number>>({});
   const [agents, setAgents] = useState<AgentCat[]>([]);
   const [entreprises, setEntreprises] = useState<{ id: string; raison_sociale: string }[]>([]);
   const [ouvert, setOuvert] = useState<Workspace | 'nouveau' | null>(null);
@@ -82,6 +84,9 @@ export default function StudioAdmin() {
       db.from('studio_agents').select('*').order('ordre'),
       db.from('entreprises').select('id, raison_sociale').order('raison_sociale').limit(2000),
     ]);
+    // Crédits de recharge (absents tant que la migration studio_recharges n'est pas appliquée).
+    db.from('studio_recharges_solde').select('workspace_id, solde').then(({ data }) =>
+      setSoldes(Object.fromEntries((data ?? []).map((r) => [r.workspace_id, Number(r.solde)]))));
     const e = w.error ?? u.error ?? ag.error;
     if (e) setErreur(e.message.includes('studio_') ? `${e.message} — migration Studio IA non appliquée ?` : e.message);
     setEspaces((w.data ?? []) as Workspace[]); setUsers((u.data ?? []) as StudioUser[]);
@@ -118,7 +123,7 @@ export default function StudioAdmin() {
         <div className="card overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-muted">
-              <tr><th className="px-4 py-3">Espace</th><th>Offre</th><th>Accès</th><th>Missions ce mois</th><th>Dernière activité</th><th>Échéance</th><th /></tr>
+              <tr><th className="px-4 py-3">Espace</th><th>Offre</th><th>Accès</th><th>Demandes ce mois</th><th>Crédits</th><th>Dernière activité</th><th>Échéance</th><th /></tr>
             </thead>
             <tbody>
               {espaces.map((w) => {
@@ -129,7 +134,8 @@ export default function StudioAdmin() {
                     <td className="px-4 py-3 font-medium text-fg">{w.nom}{!w.actif && <Badge tone="danger" className="ml-2">inactif</Badge>}{w.suspendu && <Badge tone="danger" className="ml-2">suspendu</Badge>}</td>
                     <td>{OFFRES.find(([k]) => k === w.offre)?.[1]}</td>
                     <td>{nb} / {w.max_utilisateurs}</td>
-                    <td>{u?.demandes ?? 0}{w.quota_messages_mois ? ` / ${w.quota_messages_mois}` : ''}</td>
+                    <td className={w.quota_messages_mois && (u?.demandes ?? 0) >= w.quota_messages_mois ? 'font-semibold text-red-600' : ''}>{u?.demandes ?? 0}{w.quota_messages_mois ? ` / ${w.quota_messages_mois}` : ''}</td>
+                    <td>{soldes[w.id] ?? 0}</td>
                     <td>{u?.derniere_activite ? new Date(u.derniere_activite).toLocaleDateString('fr-FR') : '—'}</td>
                     <td>{w.expire_le ? new Date(w.expire_le).toLocaleDateString('fr-FR') : '—'}</td>
                     <td className="pr-4 text-right text-muted">›</td>
@@ -288,7 +294,7 @@ function EspaceModal({
             </select>
           </Field>
           <Field label="Utilisateurs inclus"><input type="number" min={1} className="input" value={f.max_utilisateurs ?? 5} onChange={(e) => set('max_utilisateurs', Number(e.target.value))} /></Field>
-          <Field label="Quota de missions / mois" hint="Vide = illimité"><input type="number" min={0} className="input" value={f.quota_messages_mois ?? ''} onChange={(e) => set('quota_messages_mois', e.target.value ? Number(e.target.value) : null)} /></Field>
+          <Field label="Demandes aux agents / mois" hint="1 demande = 1 message envoyé à un agent. Vide = illimité."><input type="number" min={0} className="input" value={f.quota_messages_mois ?? ''} onChange={(e) => set('quota_messages_mois', e.target.value ? Number(e.target.value) : null)} /></Field>
           <Field label="Visuels IA / mois" hint="Vide = illimité · 0 = désactivé"><input type="number" min={0} className="input" value={f.quota_images_mois ?? ''} onChange={(e) => set('quota_images_mois', e.target.value === '' ? null : Number(e.target.value))} /></Field>
           <Field label="Abonnement mensuel HT (€)" hint="Ce que le client paie : base du calcul de marge (onglet Rentabilité).">
             <input type="number" min={0} step="0.5" className="input" value={f.abonnement_mensuel ?? ''}
@@ -351,6 +357,8 @@ function EspaceModal({
             {espace.suspendu !== undefined && (
               <GouvernanceEspace workspaceId={espace.id} suspendu={espace.suspendu} budget={espace.budget_ia_jour_eur ?? null} />
             )}
+
+            <RechargesEspace workspaceId={espace.id} />
 
             <LiaisonEspace workspaceId={espace.id} nomEspace={espace.nom} agents={agents.filter((a) => a.actif)} />
 

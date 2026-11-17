@@ -67,7 +67,7 @@ export default function Accueil() {
           <p className="mt-1 text-xs text-neutral-500">{minutesEnTexte(s.minutes_gagnees_total)} depuis le début · estimation par mission utile</p>
         </Carte>
         <Carte>
-          <div className="flex items-center gap-2 text-sm text-neutral-500"><MessageSquare className="h-4 w-4" /> Missions ce mois-ci</div>
+          <div className="flex items-center gap-2 text-sm text-neutral-500"><MessageSquare className="h-4 w-4" /> Demandes ce mois-ci</div>
           <p className="mt-2 text-3xl font-semibold">{s.demandes_mois}{s.quota_mois ? <span className="text-base font-normal text-neutral-400"> / {s.quota_mois}</span> : null}</p>
           {s.quota_mois ? (
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100">

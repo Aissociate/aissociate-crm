@@ -35,6 +35,7 @@ export default function RentabilitePanel() {
   // Connecteurs facturables : état actuel (comptes connectés maintenant), pas l'historique du mois.
   const [connecteurs, setConnecteurs] = useState<{ prix: number; espaces: Connecteurs[] } | null>(null);
   const [erreurConnecteurs, setErreurConnecteurs] = useState('');
+  const [recharges, setRecharges] = useState<Record<string, number>>({});
 
   useEffect(() => {
     supabase.functions.invoke('studio', { body: { action: 'admin_facturation_connecteurs' } }).then(async ({ data, error }) => {
@@ -49,12 +50,17 @@ export default function RentabilitePanel() {
     const debut = `${choix}-01`;
     const [a, m] = choix.split('-').map(Number);
     const fin = new Date(Date.UTC(a, m, 1)).toISOString();
-    const [w, r, t, d] = await Promise.all([
+    const [w, r, t, d, rc] = await Promise.all([
       db.from('studio_workspaces').select('id, nom, actif, offre, abonnement_mensuel').order('nom'),
       db.from('studio_rentabilite_mois').select('*').eq('mois', debut),
       db.from('studio_config').select('valeur').eq('cle', 'taux_usd_eur').maybeSingle(),
       db.from('studio_demo_appels').select('cout').gte('created_at', debut).lt('created_at', fin),
+      db.from('studio_recharges').select('workspace_id, prix_ht').eq('nature', 'achat').gte('created_at', debut).lt('created_at', fin),
     ]);
+    // Recharges achetées dans le mois (absentes tant que la migration studio_recharges n'est pas appliquée).
+    const parEspace: Record<string, number> = {};
+    for (const x of rc.data ?? []) parEspace[x.workspace_id] = (parEspace[x.workspace_id] ?? 0) + Number(x.prix_ht ?? 0);
+    setRecharges(parEspace);
     if (w.error || r.error) {
       setErreur((r.error ?? w.error)!.message.includes('studio_rentabilite_mois') || (r.error ?? w.error)!.message.includes('abonnement_mensuel')
         ? 'Migration « studio_couts » non appliquée : la rentabilité sera disponible après son exécution.'
@@ -81,15 +87,16 @@ export default function RentabilitePanel() {
     const abo = e.abonnement_mensuel != null ? Number(e.abonnement_mensuel) : null;
     const c = connecteurs?.espaces.find((x) => x.workspace_id === e.id) ?? null;
     const supp = c?.montant_ht ?? 0;
-    const revenu = abo != null ? abo + supp : null;
-    return { e, l, cout, abo, c, revenu, marge: revenu != null ? revenu - cout : null };
-  }).filter((x) => x.e.actif || x.l), [espaces, lignes, taux, connecteurs]);
+    const rech = recharges[e.id] ?? 0;
+    const revenu = abo != null ? abo + supp + rech : null;
+    return { e, l, cout, abo, c, rech, revenu, marge: revenu != null ? revenu - cout : null };
+  }).filter((x) => x.e.actif || x.l), [espaces, lignes, taux, connecteurs, recharges]);
 
   const totaux = tableau.reduce((t, x) => ({
-    abo: t.abo + (x.abo ?? 0), connecteurs: t.connecteurs + (x.c?.montant_ht ?? 0),
+    abo: t.abo + (x.abo ?? 0), connecteurs: t.connecteurs + (x.c?.montant_ht ?? 0), recharges: t.recharges + x.rech,
     cout: t.cout + x.cout, missions: t.missions + Number(x.l?.missions ?? 0),
-  }), { abo: 0, connecteurs: 0, cout: 0, missions: 0 });
-  const revenus = totaux.abo + totaux.connecteurs;
+  }), { abo: 0, connecteurs: 0, recharges: 0, cout: 0, missions: 0 });
+  const revenus = totaux.abo + totaux.connecteurs + totaux.recharges;
 
   const rapport = async (e: Espace) => {
     setRapportEnCours(e.id); setErreur('');
@@ -118,9 +125,10 @@ export default function RentabilitePanel() {
           <input type="number" step="0.01" min="0.5" max="1.5" className="input mt-1 w-28" value={taux}
             onChange={(e) => enregistrerTaux(Number(e.target.value) || 0.92)} />
         </label>
-        <div className="ml-auto grid grid-cols-4 gap-6 text-right text-sm">
+        <div className="ml-auto grid grid-cols-5 gap-6 text-right text-sm">
           <div><p className="text-muted">Abonnements</p><p className="text-lg font-semibold text-fg">{eur(totaux.abo)}</p></div>
           <div><p className="text-muted">Connecteurs suppl.</p><p className="text-lg font-semibold text-fg">{connecteurs ? eur(totaux.connecteurs) : '…'}</p></div>
+          <div><p className="text-muted">Recharges</p><p className="text-lg font-semibold text-fg">{eur(totaux.recharges)}</p></div>
           <div><p className="text-muted">Coût IA clients</p><p className="text-lg font-semibold text-fg">{eur(totaux.cout)}</p></div>
           <div><p className="text-muted">Marge brute</p><p className={`text-lg font-semibold ${revenus - totaux.cout < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{eur(revenus - totaux.cout)}</p></div>
         </div>
@@ -132,12 +140,12 @@ export default function RentabilitePanel() {
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-muted">
               <tr>
-                <th className="px-4 py-3">Espace</th><th>Abonnement HT</th><th>Connecteurs suppl.</th><th>Missions</th><th>À revoir</th>
+                <th className="px-4 py-3">Espace</th><th>Abonnement HT</th><th>Connecteurs suppl.</th><th>Recharges</th><th>Demandes</th><th>À revoir</th>
                 <th>Visuels / vidéos</th><th>Coût IA</th><th>Marge</th><th />
               </tr>
             </thead>
             <tbody>
-              {tableau.map(({ e, l, cout, abo, c, revenu, marge }) => {
+              {tableau.map(({ e, l, cout, abo, c, rech, revenu, marge }) => {
                 const pctRevoir = l?.reponses ? Math.round((Number(l.a_revoir) / Number(l.reponses)) * 100) : 0;
                 return (
                   <tr key={e.id} className="border-b border-line/60">
@@ -156,6 +164,7 @@ export default function RentabilitePanel() {
                         </>
                       )}
                     </td>
+                    <td>{rech ? eur(rech) : <span className="text-muted">—</span>}</td>
                     <td>{l?.missions ?? 0}</td>
                     <td className={pctRevoir >= 20 ? 'font-semibold text-red-600' : ''}>{l?.reponses ? `${pctRevoir} %` : '—'}</td>
                     <td>{l ? `${l.images} / ${l.videos}` : '—'}</td>
@@ -172,7 +181,7 @@ export default function RentabilitePanel() {
                   </tr>
                 );
               })}
-              {tableau.length === 0 && <tr><td colSpan={9} className="px-4 py-6 text-center text-muted">Aucun espace actif.</td></tr>}
+              {tableau.length === 0 && <tr><td colSpan={10} className="px-4 py-6 text-center text-muted">Aucun espace actif.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -182,6 +191,7 @@ export default function RentabilitePanel() {
         Démo publique « Sam » ce mois-ci : {demo.appels} échange{demo.appels > 1 ? 's' : ''}, {eur(demo.cout * taux)} (coût d'acquisition, hors clients).
         Une part de « À revoir » au-delà de 20 % signale un agent ou un client à accompagner.
         Connecteurs suppl. : connecteurs actifs aujourd'hui au-delà des inclus (CRM › Paramètres), comptés dans le revenu et la marge ; survolez pour le détail.
+        Recharges : packs de crédits achetés dans le mois (Studio ou CRM), comptés dans le revenu.
       </p>
     </div>
   );
