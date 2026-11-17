@@ -255,7 +255,7 @@ export async function deciderLivrable(sb: SupabaseClient, wsId: string, acteur: 
   // Livrable porteur d'une action (ex. créer un document dans le Drive) : le « VALIDÉ »
   // déclenche l'exécution. Réussite → publié avec le lien ; échec → reste validé, erreur notée.
   if (statut === "valide" && l.action) {
-    const r = await executerAction(sb, wsId, l.action as ActionLivrable);
+    const r = await executerAction(sb, wsId, l.action as ActionLivrable, String(l.id));
     if (r.ok) {
       await sb.from("studio_livrables").update({ statut: "publie", resultat: { id: r.id, lien: r.lien } }).eq("id", l.id);
       await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_executee", detail: { livrable: l.id, titre: l.titre, lien: r.lien } });

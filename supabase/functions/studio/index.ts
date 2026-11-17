@@ -45,6 +45,12 @@
 //   client  taches | tache_enregistrer {id?, titre, agent_id, consigne, heures[], jours[], actif} | tache_supprimer {id}
 //           tache_lancer {id}                       (écriture : propriétaire)
 //   cron    taches_cron {cle} (pg_cron horaire) → tache_executer {cle, id} par tâche échue, chacune dans sa propre instance
+// Veille, contacts et mailings (veille.ts, mailing.ts) :
+//   client  flux | flux_ajouter {url} | flux_basculer {id, actif} | flux_supprimer {id} | flux_actualiser
+//           contacts {recherche?} | contact_ajouter {email, prenom?, nom?, listes?} | contacts_importer {lignes[], listes?, consentement:true}
+//           contact_supprimer {id} | contact_desinscrire {id}          (écriture des contacts : propriétaire)
+//   cron    envois_traiter {cle, id} : un lot d'une campagne validée (relancé jusqu'à épuisement ou plafond du jour)
+//   public  desinscription {jeton} ; POST …/studio?desinscription=<jeton> (désinscription en un clic des messageries)
 //
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString), cf. Edge Function agent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -58,6 +64,10 @@ import {
   BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
+import * as veille from "./veille.ts";
+import * as mailing from "./mailing.ts";
+import { envoyerBrut } from "./gmail.ts";
+import { jetonAcces } from "./nango.ts";
 import { consigneTache, egaliteSure, libellePlanning, MODELES_TACHES, planningValide, prochaineExecution } from "./taches.ts";
 import {
   connexionsEspace, creerInvitation, deconnecter, lienConnexion, lienReconnexion, listerFournisseurs, listerIntegrations, nangoConfigure,
@@ -412,6 +422,49 @@ async function enregistrerTache(sb: SupabaseClient, s: Session, body: Record<str
     detail: { titre, planning: libellePlanning(p), actif, modification: typeof body.id === "string" },
   });
   return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Veille, contacts, mailings
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Désinscription par jeton → nom de l'entreprise, ou null si jeton inconnu. */
+async function desinscrire(sb: SupabaseClient, jeton: string): Promise<string | null> {
+  if (!/^[a-f0-9]{32,64}$/.test(jeton)) return null;
+  const { data: c } = await sb.from("studio_contacts").select("id, workspace_id, desinscrit_le, studio_workspaces(nom)").eq("jeton", jeton).maybeSingle();
+  if (!c) return null;
+  if (!c.desinscrit_le) {
+    await sb.from("studio_contacts").update({ desinscrit_le: new Date().toISOString() }).eq("id", c.id);
+    await sb.from("studio_envois").update({ statut: "ignore" }).eq("contact_id", c.id).eq("statut", "a_envoyer");
+    await journaliser(sb, { wsId: String(c.workspace_id), acteur: "contact", agentId: null, action: "contact_desinscrit", detail: { contact: c.id } });
+  }
+  return String((c.studio_workspaces as unknown as { nom: string } | null)?.nom ?? "");
+}
+
+/** Passage horaire : campagnes avec des envois en attente (ou bloqués) relancées. */
+async function relancerEnvois(sb: SupabaseClient): Promise<number> {
+  await sb.from("studio_envois").update({ statut: "a_envoyer" }).eq("statut", "en_cours").lt("updated_at", new Date(Date.now() - 15 * 60_000).toISOString());
+  const { data } = await sb.from("studio_envois").select("livrable_id").eq("statut", "a_envoyer").limit(2000);
+  const ids = [...new Set((data ?? []).map((x) => String(x.livrable_id)))].slice(0, 20);
+  for (const id of ids) await mailing.declencherEnvois(sb, id);
+  return ids.length;
+}
+
+async function etatVeille(sb: SupabaseClient, wsId: string) {
+  const [{ data: flux }, articles] = await Promise.all([
+    sb.from("studio_flux").select("id, url, titre, site, actif, derniere_lecture, erreur").eq("workspace_id", wsId).order("created_at"),
+    veille.actualites(sb, wsId, { heures: 24 * 7, max: 100 }),
+  ]);
+  return { flux: flux ?? [], articles, max: veille.FLUX_MAX };
+}
+
+async function etatContacts(sb: SupabaseClient, wsId: string, recherche: unknown) {
+  let q = sb.from("studio_contacts").select("id, email, prenom, nom, listes, source, desinscrit_le, created_at")
+    .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(300);
+  const r = String(recherche ?? "").trim().replace(/[%_,()\\]/g, " ").slice(0, 80);
+  if (r) q = q.or(`email.ilike.%${r}%,prenom.ilike.%${r}%,nom.ilike.%${r}%`);
+  const [{ data }, resume, campagnes] = await Promise.all([q, mailing.resumeContacts(sb, wsId), mailing.campagnes(sb, wsId)]);
+  return { contacts: data ?? [], ...resume, campagnes, plafond_jour: mailing.PLAFOND_JOUR };
 }
 
 /** État du canal e-mail d'un espace (+ derniers e-mails reçus). Colonnes absentes → non disponible. */
@@ -963,6 +1016,13 @@ Deno.serve(async (req: Request) => {
   try {
     const brut = await req.text();
 
+    // ── Désinscription en un clic (en-tête List-Unsubscribe-Post des messageries) ──
+    const jetonDesinscription = new URL(req.url).searchParams.get("desinscription");
+    if (jetonDesinscription) {
+      await desinscrire(sb, jetonDesinscription);
+      return json({ ok: true });
+    }
+
     // ── Webhook AgentMail (canal e-mail de liaison), signé Svix ──
     if (req.headers.get("svix-id")) {
       const ok = await verifierSvix(secretsWebhook(), {
@@ -988,12 +1048,21 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Tâches planifiées (pg_cron, puis une instance par tâche) : clé du déclencheur obligatoire ──
-    if (action === "taches_cron" || action === "tache_executer") {
+    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter") {
       const cle = await cleCron(sb);
       if (!cle || typeof body.cle !== "string" || body.cle.length !== cle.length || !(await egaliteSure(body.cle, cle))) {
         return json({ error: "Non autorisé" }, 401);
       }
-      if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle) });
+      if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle), campagnes: await relancerEnvois(sb) });
+      if (action === "envois_traiter") {
+        const id = String(body.id ?? "");
+        const travail = (async () => {
+          const r = await mailing.traiterLot(sb, id, async (wsId, raw) => envoyerBrut(await jetonAcces(sb, wsId, "google-mail"), raw));
+          if (r.restants && !r.plafond) await mailing.declencherEnvois(sb, id);
+        })().catch((e) => console.error("[studio] envois:", e instanceof Error ? e.message : String(e)));
+        (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+        return json({ ok: true });
+      }
       const travail = executerTache(sb, String(body.id ?? ""))
         .catch((e) => console.error("[studio] tâche:", e instanceof Error ? e.message : String(e)));
       (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
@@ -1013,6 +1082,11 @@ Deno.serve(async (req: Request) => {
       const depuis = body.depuis ? ` (depuis ${String(body.depuis).slice(0, 60)})` : "";
       const r = await soumettreOnboarding(sb, body, `/studio/demarrer${depuis}`);
       return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
+    }
+
+    if (action === "desinscription") {
+      const r = await desinscrire(sb, String(body.jeton ?? ""));
+      return r ? json({ ok: true, entreprise: r }) : json({ error: "Lien de désinscription invalide." }, 404);
     }
 
     // ── Connexion ──
@@ -1323,6 +1397,70 @@ Deno.serve(async (req: Request) => {
 
       case "taches":
         return json(await listerTaches(sb, s.ws.id));
+
+      // ── Veille ──
+      case "flux":
+        return json(await etatVeille(sb, s.ws.id));
+      case "flux_ajouter": {
+        const r = await veille.ajouterFlux(sb, s.ws.id, body.url);
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: null, action: "flux_ajoute", detail: { titre: r.titre } });
+        return json(await etatVeille(sb, s.ws.id));
+      }
+      case "flux_basculer":
+        await sb.from("studio_flux").update({ actif: body.actif === true }).eq("id", String(body.id ?? "")).eq("workspace_id", s.ws.id);
+        return json(await etatVeille(sb, s.ws.id));
+      case "flux_supprimer":
+        await sb.from("studio_flux").delete().eq("id", String(body.id ?? "")).eq("workspace_id", s.ws.id);
+        return json(await etatVeille(sb, s.ws.id));
+      case "flux_actualiser":
+        await veille.actualiserFlux(sb, s.ws.id, true);
+        return json(await etatVeille(sb, s.ws.id));
+
+      // ── Contacts ──
+      case "contacts":
+        return json(await etatContacts(sb, s.ws.id, body.recherche));
+      case "contact_ajouter":
+      case "contacts_importer": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (body.consentement !== true) return json({ error: "Confirmez que ces personnes ont accepté de recevoir vos e-mails." }, 400);
+        const lignes = action === "contact_ajouter" ? [body] : body.lignes;
+        const { contacts, rejets } = mailing.contactsValides(lignes);
+        if (!contacts.length) return json({ error: "Aucune adresse e-mail valide." }, 400);
+        const { count } = await sb.from("studio_contacts").select("id", { count: "exact", head: true }).eq("workspace_id", s.ws.id);
+        if ((count ?? 0) + contacts.length > 20_000) return json({ error: "20 000 contacts au maximum par espace." }, 400);
+        const listes = mailing.nettoyerListes(body.listes);
+        // Contacts déjà présents : listes fusionnées, désinscription conservée.
+        const { data: existants } = await sb.from("studio_contacts").select("id, email, listes")
+          .eq("workspace_id", s.ws.id).in("email", contacts.map((c) => c.email));
+        const parEmail = new Map((existants ?? []).map((e) => [String(e.email), e]));
+        const nouveaux = contacts.filter((c) => !parEmail.has(c.email));
+        for (let i = 0; i < nouveaux.length; i += 1000) {
+          const { error } = await sb.from("studio_contacts").insert(nouveaux.slice(i, i + 1000).map((c) => ({
+            ...c, workspace_id: s.ws.id, listes, source: action === "contact_ajouter" ? "saisie" : "import",
+          })));
+          if (error) return json({ error: error.message }, 400);
+        }
+        if (listes.length) {
+          for (const e of existants ?? []) {
+            const fusion = [...new Set([...((e.listes as string[]) ?? []), ...listes])];
+            if (fusion.length !== ((e.listes as string[]) ?? []).length) await sb.from("studio_contacts").update({ listes: fusion }).eq("id", e.id);
+          }
+        }
+        await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: null, action: "contacts_importes", detail: { ajoutes: nouveaux.length, deja_presents: contacts.length - nouveaux.length, rejets, listes } });
+        return json({ ...(await etatContacts(sb, s.ws.id, "")), import: { ajoutes: nouveaux.length, deja_presents: contacts.length - nouveaux.length, rejets } });
+      }
+      case "contact_supprimer":
+      case "contact_desinscrire": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const id = String(body.id ?? "");
+        if (action === "contact_supprimer") await sb.from("studio_contacts").delete().eq("id", id).eq("workspace_id", s.ws.id);
+        else {
+          await sb.from("studio_contacts").update({ desinscrit_le: new Date().toISOString() }).eq("id", id).eq("workspace_id", s.ws.id);
+          await sb.from("studio_envois").update({ statut: "ignore" }).eq("contact_id", id).eq("statut", "a_envoyer");
+        }
+        return json(await etatContacts(sb, s.ws.id, body.recherche));
+      }
 
       case "tache_enregistrer": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);

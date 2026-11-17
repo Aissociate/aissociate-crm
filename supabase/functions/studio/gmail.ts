@@ -104,3 +104,10 @@ export async function envoyer(jeton: string, c: Courriel & { fil?: string | null
   const j = await r.json() as { id: string; threadId: string };
   return { id: j.id, fil: j.threadId };
 }
+
+/** Envoi d'un message MIME déjà construit (base64url) — mailings validés. */
+export async function envoyerBrut(jeton: string, raw: string): Promise<void> {
+  await appelGoogle(jeton, `${API}/messages/send`, "Gmail", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ raw }),
+  });
+}

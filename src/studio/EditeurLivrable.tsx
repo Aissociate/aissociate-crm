@@ -13,7 +13,8 @@ export type ActionLivrable =
   | { type: 'agenda_creer'; titre: string; debut: string; fin: string; lieu?: string | null; description?: string | null; participants?: string[] }
   | { type: 'reseaux_publier'; texte: string; comptes: { id: string; reseau: string; nom: string }[]; medias?: string[]; programme?: string | null }
   | { type: 'reseaux_repondre_commentaire'; texte: string; compte: { nom: string }; cite?: string | null }
-  | { type: 'reseaux_envoyer_message'; texte: string; compte: { nom: string }; destinataire: string };
+  | { type: 'reseaux_envoyer_message'; texte: string; compte: { nom: string }; destinataire: string }
+  | { type: 'mailing_envoyer'; objet: string; contenu: string; liste: string | null; destinataires: number };
 
 /** Champs du formulaire à partir d'un livrable (ou d'une ancienne version). */
 export function champsDepuis(titre: string, contenu: string, action: ActionLivrable | null | undefined): Record<string, string> {
@@ -27,6 +28,7 @@ export function champsDepuis(titre: string, contenu: string, action: ActionLivra
   if (action?.type === 'reseaux_publier') return { texte: action.texte, medias: (action.medias ?? []).join('\n'), programme: action.programme ?? '' };
   if (action?.type === 'reseaux_repondre_commentaire' || action?.type === 'reseaux_envoyer_message') return { texte: action.texte };
   if (action?.type === 'drive_creer_document') return { titre: action.titre, contenu: action.contenu };
+  if (action?.type === 'mailing_envoyer') return { objet: action.objet, contenu: action.contenu };
   return { titre, contenu };
 }
 
@@ -71,6 +73,14 @@ export default function EditeurLivrable<L>({ id, titre, contenu, action, onSaved
           <Libelle texte="Cc"><input className={champ} value={v.cc} onChange={(e) => setV({ ...v, cc: e.target.value })} /></Libelle>
           <Libelle texte="Objet"><input className={champ} value={v.objet} onChange={(e) => setV({ ...v, objet: e.target.value })} /></Libelle>
           <Libelle texte="Texte de l'e-mail"><TexteAuto value={v.corps} onChange={(t) => setV({ ...v, corps: t })} lignes={12} /></Libelle>
+        </>
+      ) : action?.type === 'mailing_envoyer' ? (
+        <>
+          <p className="text-xs text-neutral-500">
+            Pour : {action.liste ? `la liste « ${action.liste} »` : 'tous les abonnés'}. Markdown accepté ; {'{{prenom}}'} est remplacé par le prénom. Le lien de désinscription est ajouté automatiquement.
+          </p>
+          <Libelle texte="Objet"><input className={champ} value={v.objet} onChange={(e) => setV({ ...v, objet: e.target.value })} /></Libelle>
+          <Libelle texte="Contenu"><TexteAuto value={v.contenu} onChange={(t) => setV({ ...v, contenu: t })} lignes={16} /></Libelle>
         </>
       ) : action?.type === 'reseaux_publier' ? (
         <>

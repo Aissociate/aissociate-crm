@@ -83,6 +83,18 @@ export const MODELES_TACHES = [
     heures: [10, 17], jours: [1, 2, 3, 4, 5, 6, 7],
   },
   {
+    id: "article_du_jour",
+    titre: "Article : les 3 news du jour",
+    consigne: "Parcours la veille des dernières 24 heures. Choisis les 3 actualités les plus utiles pour nos clients (critères : impact concret pour une petite entreprise, nouveauté, fiabilité de la source). Lis les 3 articles, puis rédige un article de blog « Les 3 news du jour » : un titre accrocheur, un chapô, une partie par news (ce qui s'est passé, pourquoi c'est important, ce qu'il faut en retenir) et une conclusion. Cite les sources. Enregistre-le comme article à valider.",
+    heures: [7], jours: [1, 2, 3, 4, 5],
+  },
+  {
+    id: "newsletter_hebdo",
+    titre: "Newsletter hebdomadaire",
+    consigne: "Prépare la newsletter de la semaine à partir de la veille des 7 derniers jours et des articles validés cette semaine : 4 à 5 sujets, chacun résumé en 2 phrases avec son lien, une introduction personnalisée ({{prenom}}) et un appel à l'action final. Propose-la comme mailing à tous les abonnés.",
+    heures: [8], jours: [5],
+  },
+  {
     id: "bilan_hebdo",
     titre: "Bilan hebdomadaire des réseaux",
     consigne: "Fais le bilan de la semaine sur mes réseaux sociaux : abonnés, publications qui ont le mieux marché, commentaires et messages reçus. Termine par 3 idées de publications pour la semaine prochaine.",

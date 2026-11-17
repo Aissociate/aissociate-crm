@@ -4,7 +4,7 @@ import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock } from 'lucide-react';
+import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
 import { appel, jeton, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 
@@ -25,6 +25,9 @@ const Journal = lazy(() => import('./pages/Journal'));
 const Livrables = lazy(() => import('./pages/Livrables'));
 const ParEmail = lazy(() => import('./pages/ParEmail'));
 const Taches = lazy(() => import('./pages/Taches'));
+const Veille = lazy(() => import('./pages/Veille'));
+const Contacts = lazy(() => import('./pages/Contacts'));
+const Desinscription = lazy(() => import('./pages/Desinscription'));
 
 type Ctx = {
   me: Me | null;
@@ -65,6 +68,8 @@ const MENU = [
   { to: '/studio/connecteurs', label: 'Connecteurs', icon: Plug },
   { to: '/studio/par-email', label: 'Par e-mail', icon: Mail },
   { to: '/studio/taches', label: 'Tâches planifiées', icon: AlarmClock },
+  { to: '/studio/veille', label: 'Veille', icon: Newspaper },
+  { to: '/studio/contacts', label: 'Contacts', icon: Contact },
 ];
 const MENU_CREATIONS = [
   { to: '/studio/creations', label: 'Contenus', icon: Sparkles },
@@ -180,6 +185,7 @@ export default function StudioApp() {
           <Route path="connecter/:jeton" element={<ConnecterInvitation />} />
           {/* Questionnaire d'onboarding public (nouveaux clients) */}
           <Route path="demarrer" element={<Questionnaire />} />
+          <Route path="desinscription/:jeton" element={<Desinscription />} />
           <Route element={<Garde />}>
             <Route index element={<Accueil />} />
             <Route path="assistants" element={<Assistants />} />
@@ -192,6 +198,8 @@ export default function StudioApp() {
             <Route path="livrables" element={<Livrables />} />
             <Route path="par-email" element={<ParEmail />} />
             <Route path="taches" element={<Taches />} />
+            <Route path="veille" element={<Veille />} />
+            <Route path="contacts" element={<Contacts />} />
             <Route path="creations" element={<Creations />} />
             <Route path="entreprise" element={<Entreprise />} />
             <Route path="compte" element={<Compte />} />

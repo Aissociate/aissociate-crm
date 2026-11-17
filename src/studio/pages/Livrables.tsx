@@ -29,6 +29,7 @@ const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   reseaux_publier: { avant: 'Publication sur vos réseaux sociaux au « VALIDÉ » (ou à la date programmée)', fait: 'Publication envoyée (ou programmée) sur vos réseaux sociaux.', lien: 'Voir la publication' },
   reseaux_repondre_commentaire: { avant: 'Réponse publiée sous le commentaire au « VALIDÉ »', fait: 'Réponse publiée.', lien: 'Voir' },
   reseaux_envoyer_message: { avant: 'Message privé envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
+  mailing_envoyer: { avant: 'Envoi depuis votre Gmail aux abonnés au « VALIDÉ » (un e-mail chacun, par lots ; suivi dans Contacts)', fait: 'Mailing mis en file : les envois partent par lots depuis votre Gmail (suivi dans Contacts).', lien: 'Voir' },
   agenda_creer: { avant: 'Création dans votre agenda Google (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
 };
 
