@@ -9,6 +9,7 @@ import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
 import { LigneIntegration, useNango, type Integration, type Nango } from '../ConnexionsUnClic';
+import { ComptesReseau, NOMS_RESEAUX, useReseaux, type Reseau } from '../ReseauxSociaux';
 
 type Statut = 'demande' | 'en_cours' | 'connecte' | 'erreur' | 'desactive';
 type Connecteur = { id: string; type: string; statut: Statut; infos: Record<string, string>; secret_renseigne: boolean; notes_admin: string; updated_at: string };
@@ -99,6 +100,7 @@ export default function Connecteurs() {
   const { me, gerer } = useStudio();
   const proprietaire = me.user.role === 'proprietaire';
   const nango = useNango();
+  const reseaux = useReseaux();
   const [liste, setListe] = useState<Connecteur[] | null>(null);
   const [ouvert, setOuvert] = useState<Def | null>(null);
   const [erreur, setErreur] = useState('');
@@ -126,6 +128,8 @@ export default function Connecteurs() {
     const c = liste?.find((x) => x.type === d.type);
     const st = c ? STATUTS[c.statut] : null;
     const apps = correspondances(d, integrations);
+    // Réseaux sociaux : connexion en un clic via Zernio quand il est configuré.
+    const reseau = reseaux.etat?.configure && d.type in NOMS_RESEAUX ? d.type as Reseau : null;
     return (
       <div key={d.type} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-4">
         <div className="flex items-center gap-3">
@@ -136,7 +140,7 @@ export default function Connecteurs() {
           </div>
         </div>
         <p className="mt-3 text-sm text-neutral-600">{d.agents}</p>
-        {apps.length > 0 ? (
+        {reseau ? <ComptesReseau reseaux={reseaux} reseau={reseau} /> : apps.length > 0 ? (
           // Connexion en un clic disponible : une ligne par service (Gmail, Agenda, Drive…).
           <div className="mt-3 space-y-2">
             {apps.map((i) => <LigneIntegration key={i.id} nango={nango} integration={i} libelle={d.unClic![i.provider] ?? d.unClic![i.id]} compacte />)}
@@ -174,17 +178,20 @@ export default function Connecteurs() {
           Aucune action n'est jamais lancée sans votre validation.
         </p>
       </div>
-      {(erreur || nango.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || nango.erreur}</p>}
+      {(erreur || nango.erreur || reseaux.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || nango.erreur || reseaux.erreur}</p>}
+      {reseaux.retour && (
+        <p className={cx('mb-4 rounded-xl px-3 py-2 text-sm', reseaux.retour.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')} role="status">{reseaux.retour.texte}</p>
+      )}
 
       <div className="mb-3 flex items-end justify-between gap-3">
         <h2 className="text-lg font-semibold">Connexion en un clic</h2>
         {nango.etat?.configure && (
-          <button onClick={() => nango.charger(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
+          <button onClick={() => { nango.charger(true); reseaux.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
             <RefreshCw className="h-3.5 w-3.5" /> Actualiser
           </button>
         )}
       </div>
-      {liste === null || nango.etat === null ? <Chargement /> : (
+      {liste === null || nango.etat === null || reseaux.etat === null ? <Chargement /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cartesUnClic.map(carte)}
           {autres.map((i) => (

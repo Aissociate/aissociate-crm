@@ -24,6 +24,7 @@ type Livrable = {
 const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   drive_creer_document: { avant: 'Création dans le Google Drive au « VALIDÉ »', fait: 'Document créé dans le Google Drive.', lien: 'Ouvrir le document' },
   gmail_envoyer: { avant: 'Envoi depuis votre Gmail au « VALIDÉ »', fait: 'E-mail envoyé depuis votre Gmail.', lien: 'Voir dans Gmail' },
+  reseaux_publier: { avant: 'Publication sur vos réseaux sociaux au « VALIDÉ »', fait: 'Publication envoyée sur vos réseaux sociaux.', lien: 'Voir la publication' },
   agenda_creer: { avant: 'Création dans votre agenda Google (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
 };
 

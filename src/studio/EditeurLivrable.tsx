@@ -10,7 +10,8 @@ import { Bouton, cx } from './composants';
 export type ActionLivrable =
   | { type: 'drive_creer_document'; titre: string; contenu: string }
   | { type: 'gmail_envoyer'; a: string[]; cc?: string[]; objet: string; corps: string }
-  | { type: 'agenda_creer'; titre: string; debut: string; fin: string; lieu?: string | null; description?: string | null; participants?: string[] };
+  | { type: 'agenda_creer'; titre: string; debut: string; fin: string; lieu?: string | null; description?: string | null; participants?: string[] }
+  | { type: 'reseaux_publier'; texte: string; comptes: { id: string; reseau: string; nom: string }[]; medias?: string[] };
 
 /** Champs du formulaire à partir d'un livrable (ou d'une ancienne version). */
 export function champsDepuis(titre: string, contenu: string, action: ActionLivrable | null | undefined): Record<string, string> {
@@ -21,6 +22,7 @@ export function champsDepuis(titre: string, contenu: string, action: ActionLivra
       participants: (action.participants ?? []).join(', '), description: action.description ?? '',
     };
   }
+  if (action?.type === 'reseaux_publier') return { texte: action.texte, medias: (action.medias ?? []).join('\n') };
   if (action?.type === 'drive_creer_document') return { titre: action.titre, contenu: action.contenu };
   return { titre, contenu };
 }
@@ -66,6 +68,12 @@ export default function EditeurLivrable<L>({ id, titre, contenu, action, onSaved
           <Libelle texte="Cc"><input className={champ} value={v.cc} onChange={(e) => setV({ ...v, cc: e.target.value })} /></Libelle>
           <Libelle texte="Objet"><input className={champ} value={v.objet} onChange={(e) => setV({ ...v, objet: e.target.value })} /></Libelle>
           <Libelle texte="Texte de l'e-mail"><TexteAuto value={v.corps} onChange={(t) => setV({ ...v, corps: t })} lignes={12} /></Libelle>
+        </>
+      ) : action?.type === 'reseaux_publier' ? (
+        <>
+          <p className="text-xs text-neutral-500">Sur : {action.comptes.map((c) => c.nom).join(', ')}</p>
+          <Libelle texte={`Texte de la publication (${(v.texte ?? '').length} caractères)`}><TexteAuto value={v.texte} onChange={(t) => setV({ ...v, texte: t })} lignes={10} /></Libelle>
+          <Libelle texte="Images ou vidéos (une adresse https publique par ligne ; obligatoire pour Instagram et TikTok)"><TexteAuto value={v.medias} onChange={(t) => setV({ ...v, medias: t })} lignes={3} mono /></Libelle>
         </>
       ) : action?.type === 'agenda_creer' ? (
         <>

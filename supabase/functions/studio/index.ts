@@ -79,6 +79,7 @@ import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
 import { verifierSvix } from "./liaison.ts";
 import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
 import { outilsEspace } from "./outils.ts";
+import * as zernio from "./zernio.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
   bornesMois, calculerRapport, moisValide,
@@ -1017,6 +1018,30 @@ Deno.serve(async (req: Request) => {
           wsId: s.ws.id, integrationId: body.integration_id ? String(body.integration_id) : null,
           email: body.email ? String(body.email) : null, creePar: `studio:${s.user.id}`, origine: origineSure(req),
         }));
+      }
+
+      // ── Réseaux sociaux (Zernio) : un profil Zernio par espace ──
+      case "reseaux_etat": {
+        if (!zernio.zernioConfigure()) return json({ configure: false, comptes: [] });
+        return json({ configure: true, comptes: await zernio.comptesEspace(s.ws.id) });
+      }
+
+      case "reseaux_connecter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (!zernio.estReseau(body.reseau)) return json({ error: "Réseau inconnu" }, 400);
+        const retour = `${origineSure(req)}/studio/connecteurs?reseau=${body.reseau}`;
+        const lien = await zernio.lienConnexionReseau({
+          wsId: s.ws.id, wsNom: s.ws.nom, reseau: body.reseau, retour,
+          reconnecter: body.reconnecter ? String(body.reconnecter) : null,
+        });
+        return json({ lien });
+      }
+
+      case "reseaux_deconnecter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const c = await zernio.deconnecterCompte(s.ws.id, String(body.compte_id ?? ""));
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: `zernio:${c.reseau}`, compte: c.nom } });
+        return json({ configure: true, comptes: await zernio.comptesEspace(s.ws.id) });
       }
 
       case "connecteurs":
