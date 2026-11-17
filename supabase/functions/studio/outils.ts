@@ -421,6 +421,17 @@ const DEFINITIONS_VEILLE: DefinitionOutil[] = [
   },
 ];
 
+const DEFINITION_AJOUT_FLUX: DefinitionOutil = {
+  type: "function", function: {
+    name: "veille_ajouter_flux",
+    description: "Ajoute un flux RSS à la veille de l'entreprise (rubrique Veille), à partir de l'adresse du flux ou simplement du site : son flux est trouvé automatiquement s'il en déclare un. À utiliser quand l'utilisateur demande de suivre un site ou une source.",
+    parameters: { type: "object", properties: { url: { type: "string", description: "Adresse https du flux ou du site" } }, required: ["url"] },
+  },
+};
+
+const CONSIGNE_AJOUT_FLUX = `## Outil : suivre une source
+- veille_ajouter_flux ajoute un site ou un flux RSS à la veille, quand l'utilisateur le demande (« suis tel site »). Ne l'utilise que sur demande, avec l'adresse donnée par l'utilisateur ; s'il ne la connaît pas, propose l'adresse du site officiel et demande confirmation avant de l'ajouter.`;
+
 const CONSIGNE_VEILLE = `## Outils : veille (flux RSS)
 - veille_actualites liste les actualités des flux suivis ; veille_lire_article lit un article en entier avant d'en parler en détail.
 - Pour une sélection (« les 3 meilleures news du jour »), lis d'abord la liste, choisis selon les critères demandés, lis les articles retenus, puis rédige.
@@ -522,11 +533,11 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
 
   return {
     definitions: [
-      ...DEFINITIONS_BASE, DEFINITION_ARTICLE, ...(aVeille ? DEFINITIONS_VEILLE : []), ...(drive ? DEFINITIONS_DRIVE : []),
+      ...DEFINITIONS_BASE, DEFINITION_ARTICLE, DEFINITION_AJOUT_FLUX, ...(aVeille ? DEFINITIONS_VEILLE : []), ...(drive ? DEFINITIONS_DRIVE : []),
       ...(mail ? [...DEFINITIONS_GMAIL, ...DEFINITIONS_MAILING] : []), ...(cal ? DEFINITIONS_AGENDA : []), ...(reseaux ? DEFINITIONS_RESEAUX : []),
     ],
     consigne: [
-      consigneBase(index), CONSIGNE_ARTICLE, aVeille && CONSIGNE_VEILLE, drive && CONSIGNE_DRIVE, mail && CONSIGNE_GMAIL, mail && CONSIGNE_MAILING,
+      consigneBase(index), CONSIGNE_ARTICLE, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, drive && CONSIGNE_DRIVE, mail && CONSIGNE_GMAIL, mail && CONSIGNE_MAILING,
       cal && CONSIGNE_AGENDA, reseaux && consigneReseaux(comptesReseaux),
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
@@ -576,6 +587,15 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Article non enregistré" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre: `Article — ${titre}` } });
           return { resultat: `Article enregistré comme brouillon à valider, référence ${refLivrable(l.id)} (rubrique Livrables).`, libelle: `Article « ${titre.slice(0, 60)} » (à valider)` };
+        }
+        if (nom === "veille_ajouter_flux") {
+          const r = await veille.ajouterFlux(ctx.sb, ctx.wsId, a.url);
+          if ("erreur" in r) return { resultat: r.erreur ?? "Ajout impossible.", libelle: "Flux non ajouté" };
+          await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "flux_ajoute", detail: { titre: r.titre } });
+          return {
+            resultat: `Flux « ${r.titre} » ajouté à la veille (${r.articles} articles lus). Ses actualités sont disponibles dès maintenant avec veille_actualites.`,
+            libelle: `Veille : « ${String(r.titre).slice(0, 60)} » ajouté`,
+          };
         }
         if (nom === "veille_actualites") {
           if (!aVeille) return { resultat: "Aucun flux RSS n'est suivi : ajoutez-en dans la rubrique Veille.", libelle: "Veille vide" };
