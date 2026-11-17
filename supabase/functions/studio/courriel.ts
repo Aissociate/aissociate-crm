@@ -1,10 +1,17 @@
-// E-mails transactionnels du Studio (identifiants de l'essai…), par le même SMTP que la
-// fonction send-email du CRM : secrets SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD,
-// SMTP_FROM en priorité, sinon la table parametres (cle = 'smtp').
+// E-mails transactionnels du Studio (identifiants de l'essai…), envoyés depuis
+// studio@aissociate.re (alias de contact@aissociate.re).
+//
+// Le serveur SMTP n'accepte un expéditeur que s'il appartient à la boîte authentifiée : le Studio
+// s'authentifie donc avec la boîte contact@ (secrets STUDIO_SMTP_USERNAME, STUDIO_SMTP_PASSWORD ;
+// STUDIO_SMTP_FROM pour changer l'expéditeur), sur le même serveur que le CRM (SMTP_HOST / SMTP_PORT,
+// sinon la table parametres, cle = 'smtp'). Sans ces secrets, ou si l'envoi échoue, l'e-mail part
+// par le SMTP du CRM avec « Répondre à » studio@aissociate.re.
 import nodemailer from "npm:nodemailer@6.9.15";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 
 type Smtp = { host?: string; port: number; user?: string; pass?: string; from?: string };
+
+export const EXPEDITEUR_STUDIO = '"Aissociate Studio IA" <studio@aissociate.re>';
 
 async function config(sb: SupabaseClient): Promise<Smtp> {
   const env = {
@@ -20,12 +27,25 @@ async function config(sb: SupabaseClient): Promise<Smtp> {
   };
 }
 
-/** Envoie un e-mail ; lève une erreur si le SMTP n'est pas configuré ou refuse l'envoi. */
+async function expedier(c: Smtp, m: { a: string; objet: string; html: string; texte: string }, from: string) {
+  if (!c.host || !c.user || !c.pass || !from) throw new Error("SMTP non configuré");
+  const t = nodemailer.createTransport({ host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } });
+  await t.sendMail({ from, replyTo: "studio@aissociate.re", to: m.a, subject: m.objet, html: m.html, text: m.texte });
+}
+
+/** Envoie un e-mail depuis studio@ ; repli sur le SMTP du CRM ; erreur si aucun envoi n'a abouti. */
 export async function envoyer(sb: SupabaseClient, m: { a: string; objet: string; html: string; texte: string }): Promise<void> {
   const c = await config(sb);
-  if (!c.host || !c.user || !c.pass || !c.from) throw new Error("SMTP non configuré");
-  const t = nodemailer.createTransport({ host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } });
-  await t.sendMail({ from: c.from, to: m.a, subject: m.objet, html: m.html, text: m.texte });
+  const user = Deno.env.get("STUDIO_SMTP_USERNAME")?.trim(), pass = Deno.env.get("STUDIO_SMTP_PASSWORD");
+  if (user && pass) {
+    try {
+      await expedier({ ...c, user, pass }, m, Deno.env.get("STUDIO_SMTP_FROM")?.trim() || EXPEDITEUR_STUDIO);
+      return;
+    } catch (e) {
+      console.error("[studio] envoi depuis studio@ refusé, repli sur le SMTP du CRM :", e instanceof Error ? e.message : String(e));
+    }
+  }
+  await expedier(c, m, c.from ?? "");
 }
 
 const echapper = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

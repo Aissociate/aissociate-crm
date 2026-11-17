@@ -99,8 +99,9 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
 
 ## Essai gratuit, identifiants et CGV (`essai.ts`, `courriel.ts`, `cgv.ts`)
 - Fin du questionnaire (`essai_auto` = true) : espace `offre = 'essai'` créé avec les agents demandés,
-  `essai_fin` = +7 jours (`essai_jours`), mot de passe provisoire envoyé par e-mail (SMTP du CRM : secrets
-  `SMTP_*` ou `parametres.smtp`). Échec d'envoi : espace créé, `studio_onboarding.identifiants_envoyes_le` vide.
+  `essai_fin` = +7 jours (`essai_jours`), mot de passe provisoire envoyé par e-mail depuis studio@aissociate.re
+  (alias de contact@ : secrets `STUDIO_SMTP_USERNAME` / `STUDIO_SMTP_PASSWORD` de la boîte contact@, serveur du CRM ;
+  sans eux, repli sur le SMTP du CRM avec « Répondre à » studio@). Échec d'envoi : espace créé, `studio_onboarding.identifiants_envoyes_le` vide.
 - Pendant l'essai : quotas habituels, un seul connecteur (Zernio ou manuel). Après : seules les actions de
   `ACTIONS_APRES_ESSAI` répondent (Mon périmètre, abonnement, mot de passe, CGV, en-tête) ; missions par e-mail
   et tâches planifiées s'arrêtent. Un abonnement payé lève le blocage et passe l'offre en « essentiel ».
