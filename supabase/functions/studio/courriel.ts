@@ -1,17 +1,18 @@
-// E-mails transactionnels du Studio (identifiants de l'essai…), envoyés depuis
-// studio@aissociate.re (alias de contact@aissociate.re).
+// E-mails transactionnels du Studio (identifiants de l'essai…), envoyés depuis contact@aissociate.re,
+// sur le serveur SMTP du CRM (SMTP_HOST / SMTP_PORT, sinon la table parametres, cle = 'smtp').
 //
-// Le serveur SMTP n'accepte un expéditeur que s'il appartient à la boîte authentifiée : le Studio
-// s'authentifie donc avec la boîte contact@ (secrets STUDIO_SMTP_USERNAME, STUDIO_SMTP_PASSWORD ;
-// STUDIO_SMTP_FROM pour changer l'expéditeur), sur le même serveur que le CRM (SMTP_HOST / SMTP_PORT,
-// sinon la table parametres, cle = 'smtp'). Sans ces secrets, ou si l'envoi échoue, l'e-mail part
-// par le SMTP du CRM avec « Répondre à » studio@aissociate.re.
+// Le serveur peut refuser un expéditeur qui n'appartient pas à la boîte authentifiée. Ordre d'essai :
+//   1. boîte contact@ elle-même si ses identifiants sont posés (STUDIO_SMTP_USERNAME / STUDIO_SMTP_PASSWORD) ;
+//   2. boîte du CRM avec l'expéditeur contact@ ;
+//   3. boîte du CRM avec son propre expéditeur.
+// Les réponses vont toujours à contact@aissociate.re. STUDIO_SMTP_FROM change l'expéditeur.
 import nodemailer from "npm:nodemailer@6.9.15";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 
 type Smtp = { host?: string; port: number; user?: string; pass?: string; from?: string };
 
-export const EXPEDITEUR_STUDIO = '"Aissociate Studio IA" <studio@aissociate.re>';
+export const ADRESSE_STUDIO = "contact@aissociate.re";
+export const EXPEDITEUR_STUDIO = `"Aissociate Studio IA" <${ADRESSE_STUDIO}>`;
 
 async function config(sb: SupabaseClient): Promise<Smtp> {
   const env = {
@@ -30,22 +31,24 @@ async function config(sb: SupabaseClient): Promise<Smtp> {
 async function expedier(c: Smtp, m: { a: string; objet: string; html: string; texte: string }, from: string) {
   if (!c.host || !c.user || !c.pass || !from) throw new Error("SMTP non configuré");
   const t = nodemailer.createTransport({ host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } });
-  await t.sendMail({ from, replyTo: "studio@aissociate.re", to: m.a, subject: m.objet, html: m.html, text: m.texte });
+  await t.sendMail({ from, replyTo: ADRESSE_STUDIO, to: m.a, subject: m.objet, html: m.html, text: m.texte });
 }
 
-/** Envoie un e-mail depuis studio@ ; repli sur le SMTP du CRM ; erreur si aucun envoi n'a abouti. */
+/** Envoie un e-mail depuis contact@ (voir l'ordre d'essai en tête) ; erreur si aucun envoi n'a abouti. */
 export async function envoyer(sb: SupabaseClient, m: { a: string; objet: string; html: string; texte: string }): Promise<void> {
   const c = await config(sb);
+  const from = Deno.env.get("STUDIO_SMTP_FROM")?.trim() || EXPEDITEUR_STUDIO;
   const user = Deno.env.get("STUDIO_SMTP_USERNAME")?.trim(), pass = Deno.env.get("STUDIO_SMTP_PASSWORD");
-  if (user && pass) {
-    try {
-      await expedier({ ...c, user, pass }, m, Deno.env.get("STUDIO_SMTP_FROM")?.trim() || EXPEDITEUR_STUDIO);
-      return;
-    } catch (e) {
-      console.error("[studio] envoi depuis studio@ refusé, repli sur le SMTP du CRM :", e instanceof Error ? e.message : String(e));
+  const essais: [Smtp, string][] = [...(user && pass ? [[{ ...c, user, pass }, from] as [Smtp, string]] : []), [c, from], [c, c.from ?? ""]];
+  let derniere: unknown = null;
+  for (const [smtp, expediteur] of essais) {
+    try { await expedier(smtp, m, expediteur); return; }
+    catch (e) {
+      derniere = e;
+      console.error(`[studio] envoi refusé (${smtp.user} → ${expediteur}) :`, e instanceof Error ? e.message : String(e));
     }
   }
-  await expedier(c, m, c.from ?? "");
+  throw derniere instanceof Error ? derniere : new Error("Envoi impossible");
 }
 
 const echapper = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
