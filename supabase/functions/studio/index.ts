@@ -16,9 +16,9 @@
 //   chat avec un super-pouvoir « media » → JSON {media:{id,…}} (image ou vidéo, voir medias.ts)
 //   media_statut {id} | medias (galerie des visuels et vidéos prêts)
 //   entete | entete_update {entete} | entete_logo {fichier base64, type} ou {supprimer:true}   (papier à en-tête)
-//   nango_etat | nango_connecter {integration_id?} | nango_synchroniser | nango_deconnecter {integration_id} | nango_catalogue
-//   nango_invitation {integration_id?, email?}      (connexions en un clic, cloisonnées par espace)
-// Public : invitation_ouvrir {jeton}                → lien Nango pour l'espace de l'invitation
+//   bureau_etat | bureau_connecter {quoi: google|microsoft|email, reconnecter?} | bureau_deconnecter {compte_id}
+//   drive_choisir {compte_id} | connexion_invitation {cible?, email?}   (messagerie, agenda, fichiers via Zernio)
+// Public : invitation_ouvrir {jeton}                → lien Zernio pour l'espace de l'invitation
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
 //   ressource_toggle {id, actif} | ressource_delete {id}
@@ -66,13 +66,9 @@ import {
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
 import * as veille from "./veille.ts";
 import * as mailing from "./mailing.ts";
-import { envoyerBrut } from "./gmail.ts";
-import { jetonAcces } from "./nango.ts";
+import * as bureau from "./bureau.ts";
+import { creerInvitation, ouvrirInvitation } from "./invitations.ts";
 import { consigneTache, egaliteSure, libellePlanning, MODELES_TACHES, planningValide, prochaineExecution } from "./taches.ts";
-import {
-  connexionsEspace, creerInvitation, deconnecter, lienConnexion, lienReconnexion, listerFournisseurs, listerIntegrations, nangoConfigure,
-  ouvrirInvitation, synchroniser,
-} from "./nango.ts";
 
 /** Origine des liens d'invitation : seulement nos domaines (l'en-tête Origin est contrôlé par le client). */
 function origineSure(req: Request | string): string {
@@ -80,11 +76,11 @@ function origineSure(req: Request | string): string {
   return /^https:\/\/(www\.)?aissociate\.re$/.test(o) || /^http:\/\/localhost:\d+$/.test(o) ? o : "https://aissociate.re";
 }
 
-/** État des connexions en un clic d'un espace (intégrations proposées + connexions de CET espace). */
-async function etatNango(sb: SupabaseClient, wsId: string) {
-  if (!nangoConfigure()) return { configure: false, integrations: [], connexions: [] };
-  const [integrations, connexions] = await Promise.all([listerIntegrations(), connexionsEspace(sb, wsId)]);
-  return { configure: true, integrations, connexions };
+/** Messageries (Google, Microsoft, IMAP) et réseaux sociaux connectés à un espace, via Zernio. */
+async function etatConnexions(wsId: string) {
+  if (!zernio.zernioConfigure()) return { configure: false, boites: [], comptes: [] };
+  const [boites, comptes] = await Promise.all([bureau.boitesEspace(wsId), zernio.comptesEspace(wsId)]);
+  return { configure: true, boites, comptes };
 }
 import {
   deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner,
@@ -464,7 +460,11 @@ async function etatContacts(sb: SupabaseClient, wsId: string, recherche: unknown
   const r = String(recherche ?? "").trim().replace(/[%_,()\\]/g, " ").slice(0, 80);
   if (r) q = q.or(`email.ilike.%${r}%,prenom.ilike.%${r}%,nom.ilike.%${r}%`);
   const [{ data }, resume, campagnes] = await Promise.all([q, mailing.resumeContacts(sb, wsId), mailing.campagnes(sb, wsId)]);
-  return { contacts: data ?? [], ...resume, campagnes, plafond_jour: mailing.PLAFOND_JOUR };
+  const boite = zernio.zernioConfigure() ? bureau.boitePour(await bureau.boitesEspace(wsId).catch(() => []), "email") : null;
+  return {
+    contacts: data ?? [], ...resume, campagnes, boite: boite?.adresse ?? null,
+    plafond_jour: boite ? bureau.plafondJour(boite) : 0, plafond_heure: mailing.PLAFOND_HEURE,
+  };
 }
 
 /** État du canal e-mail d'un espace (+ derniers e-mails reçus). Colonnes absentes → non disponible. */
@@ -685,7 +685,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     pieces: pieces.length ? pieces : null,
   });
 
-  // Outils branchés sur les connexions Nango de l'espace (Drive…), s'il y en a.
+  // Outils branchés sur les connexions Zernio de l'espace (messagerie, agenda, fichiers, réseaux), s'il y en a.
   const outils = await outilsEspace({
     sb, wsId: s.ws.id, acteur: acteurDe(s),
     agentId: agent.id, agentPrenom: agent.prenom, userId: s.sessionId === "mail" ? null : s.user.id,
@@ -946,15 +946,15 @@ async function admin(sb: SupabaseClient, action: string, body: Record<string, un
     const [lignes, verification, depense] = await Promise.all([lireJournal(sb, wsId, 500), verifierJournal(sb, wsId), depenseJour(sb, wsId)]);
     return json({ lignes, verification, depense_jour_eur: depense });
   }
-  if (action === "admin_nango_etat") {
-    return json(await etatNango(sb, String(body.workspace_id ?? "")));
+  if (action === "admin_connexions") {
+    return json(await etatConnexions(String(body.workspace_id ?? "")));
   }
-  if (action === "admin_nango_invitation") {
+  if (action === "admin_invitation") {
     const wsId = String(body.workspace_id ?? "");
     const { data: w } = await sb.from("studio_workspaces").select("id").eq("id", wsId).maybeSingle();
     if (!w) return json({ error: "Espace introuvable" }, 404);
     const inv = await creerInvitation(sb, {
-      wsId, integrationId: body.integration_id ? String(body.integration_id) : null,
+      wsId, cible: body.cible ? String(body.cible) : null,
       email: body.email ? String(body.email) : null, creePar: "crm", origine: origineSure(String(body.origine ?? "")),
     });
     return json(inv);
@@ -1057,7 +1057,14 @@ Deno.serve(async (req: Request) => {
       if (action === "envois_traiter") {
         const id = String(body.id ?? "");
         const travail = (async () => {
-          const r = await mailing.traiterLot(sb, id, async (wsId, raw) => envoyerBrut(await jetonAcces(sb, wsId, "google-mail"), raw));
+          const r = await mailing.traiterLot(sb, id, async (wsId) => {
+            const b = bureau.boitePour(await bureau.boitesEspace(wsId), "email");
+            if (!b) throw new Error("Aucune messagerie connectée");
+            return {
+              plafondJour: bureau.plafondJour(b), bloquante: bureau.erreurBloquante, lisible: bureau.messageErreur,
+              envoyer: (m) => bureau.envoyerMessageMailing(b.id, m),
+            };
+          });
           if (r.restants && !r.plafond) await mailing.declencherEnvois(sb, id);
         })().catch((e) => console.error("[studio] envois:", e instanceof Error ? e.message : String(e)));
         (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
@@ -1070,8 +1077,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Administration CRM ──
-    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_nango_etat",
-      "admin_nango_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison"].includes(action)) {
+    if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_connexions",
+      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison"].includes(action)) {
       const managerId = await estManager(req);
       if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body, managerId);
@@ -1092,7 +1099,7 @@ Deno.serve(async (req: Request) => {
     // ── Connexion ──
     // ── Invitation publique « connectez votre application » (sans session : l'espace vient de l'invitation) ──
     if (action === "invitation_ouvrir") {
-      const r = await ouvrirInvitation(sb, body.jeton);
+      const r = await ouvrirInvitation(sb, body.jeton, origineSure(req));
       if (!r) return json({ error: "Ce lien a expiré ou n'est plus valide. Demandez-en un nouveau." }, 404);
       return json(r);
     }
@@ -1183,46 +1190,38 @@ Deno.serve(async (req: Request) => {
         return json({ conversation: c, messages, en_cours });
       }
 
-      // ── Connexions en un clic (Nango) : toujours l'espace de la session ──
-      case "nango_etat":
-        return json(await etatNango(sb, s.ws.id));
+      // ── Messagerie, agenda et fichiers (Zernio) : toujours l'espace de la session ──
+      case "bureau_etat":
+        return json(await etatConnexions(s.ws.id));
 
-      case "nango_connecter": {
+      case "bureau_connecter": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
-        const integrationId = body.integration_id ? String(body.integration_id) : null;
-        const qui = { wsId: s.ws.id, wsNom: s.ws.nom, email: s.user.email, utilisateurId: s.user.id };
-        // « reconnecter » : ressaisir le même compte (la connexion garde son identifiant).
-        // « changer » : retirer le compte actuel puis en connecter un autre.
-        if (integrationId && body.mode === "changer") {
-          await deconnecter(sb, s.ws.id, integrationId);
-          await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: integrationId, motif: "changement de compte" } });
-        }
-        const r = integrationId && body.mode === "reconnecter"
-          ? await lienReconnexion(sb, { ...qui, integrationId })
-          : await lienConnexion({ ...qui, integrationId });
-        return json(r);
+        const quoi = String(body.quoi ?? "");
+        if (quoi !== "google" && quoi !== "microsoft" && quoi !== "email") return json({ error: "Messagerie inconnue" }, 400);
+        const lien = await bureau.lienConnexion({
+          wsId: s.ws.id, wsNom: s.ws.nom, quoi, retour: `${origineSure(req)}/studio/connecteurs?boite=${quoi}`,
+          reconnecter: body.reconnecter ? String(body.reconnecter) : null,
+        });
+        return json({ lien });
       }
 
-      case "nango_catalogue":
-        // Catalogue des applications Nango, proposées sur demande (mis en cache 24 h).
-        return json({ fournisseurs: nangoConfigure() ? await listerFournisseurs() : [] });
-
-      case "nango_synchroniser": {
-        await synchroniser(sb, s.ws.id);
-        return json(await etatNango(sb, s.ws.id));
-      }
-
-      case "nango_deconnecter": {
+      case "bureau_deconnecter": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
-        await deconnecter(sb, s.ws.id, String(body.integration_id ?? ""));
-        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: String(body.integration_id ?? "") } });
-        return json(await etatNango(sb, s.ws.id));
+        const b = await bureau.deconnecterBoite(s.ws.id, String(body.compte_id ?? ""));
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: `zernio:${b.fournisseur}`, compte: b.adresse || b.nom } });
+        return json(await etatConnexions(s.ws.id));
       }
 
-      case "nango_invitation": {
+      case "drive_choisir": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const lien = await bureau.lienChoixFichiers(s.ws.id, String(body.compte_id ?? ""), `${origineSure(req)}/studio/connecteurs?drive=1`);
+        return json({ lien });
+      }
+
+      case "connexion_invitation": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         return json(await creerInvitation(sb, {
-          wsId: s.ws.id, integrationId: body.integration_id ? String(body.integration_id) : null,
+          wsId: s.ws.id, cible: body.cible ? String(body.cible) : null,
           email: body.email ? String(body.email) : null, creePar: `studio:${s.user.id}`, origine: origineSure(req),
         }));
       }
@@ -1240,7 +1239,7 @@ Deno.serve(async (req: Request) => {
         const lien = await zernio.lienConnexionReseau({
           wsId: s.ws.id, wsNom: s.ws.nom, reseau: body.reseau, retour,
           reconnecter: body.reconnecter ? String(body.reconnecter) : null,
-        });
+        }).catch((e) => { throw new Error(bureau.messageErreur(e)); });
         return json({ lien });
       }
 

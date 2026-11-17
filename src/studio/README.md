@@ -76,39 +76,36 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `studio-medias`, en PNG, JPEG ou WebP (pas de SVG), 500 Ko au maximum.
 - Si la migration n'est pas appliquée, le bloc d'en-tête est masqué et les exports partent sans en-tête.
 
-## Connexions en un clic (Nango)
-Le client connecte lui-même ses applications : bouton « Connecter » dans Studio › Connecteurs, ou lien reçu
-par e-mail (`/studio/connecter/<jeton>`, valable 7 jours). Toute intégration activée dans le compte Nango
-apparaît automatiquement.
+## Connexions en un clic (Zernio)
+Le client connecte lui-même ses comptes : bouton « Connecter » dans Studio › Connecteurs, ou lien reçu par
+e-mail (`/studio/connecter/<jeton>`, valable 7 jours, envoyé depuis le Studio ou le CRM). Tout passe par
+Zernio (`zernio.ts`, `bureau.ts`) : Google (Gmail, Agenda, Drive), Microsoft (Outlook, calendrier, OneDrive),
+toute autre messagerie en IMAP (page hébergée `GET /connect/email`), Facebook, Instagram, LinkedIn, TikTok.
 
-**Cloisonnement par client (tenant = `studio_workspaces.id`) :**
-1. Seule l'Edge Function `studio` crée les sessions Nango, avec le tag `organization_id` égal à l'espace de
-   la session Studio, ou de l'invitation, ou d'un appel manager vérifié. Ce n'est jamais une valeur envoyée
-   par le navigateur.
-2. Le webhook `nango-webhook` vérifie d'abord la signature HMAC-SHA256 du corps brut. Il rattache ensuite
-   la connexion à l'espace lu dans les tags, refuse un espace inexistant et ne déplace jamais une connexion
-   d'un espace à un autre.
-3. La synchronisation de secours ne liste chez Nango que `tags[organization_id]=<espace>`, puis revérifie le tag.
-4. `studio_nango_connexions` et `studio_connexion_invitations` n'ont aucune politique côté client : seul le
-   service role y écrit, et les managers les lisent. Pour les invitations, seul le SHA-256 du jeton est stocké.
+**Cloisonnement par client (tenant = `studio_workspaces.id`) :** un profil Zernio par espace, retrouvé par
+son `externalId` (= id de l'espace). L'espace vient toujours du serveur (session, invitation ou appel manager
+vérifié). Toute opération vérifie que le compte visé appartient au profil de l'espace. `studio_connexion_invitations`
+n'a aucune politique côté client ; seul le SHA-256 du jeton est stocké.
 
-**Page Connecteurs :**
-- les cartes Google Workspace, Outlook / Microsoft 365, Facebook, Instagram, LinkedIn et TikTok affichent un
-  bouton « Connecter » par service dès que l'intégration correspondante est activée dans Nango (rapprochement
-  par fournisseur : `google-mail`, `google-calendar`, `google-drive`, `outlook`, `microsoft`, `facebook`,
-  `instagram`, `linkedin`, `tiktok-accounts`…). Sans intégration activée, la carte garde la demande assistée ;
-- SMTP et serveur MCP restent des connexions directes ;
-- « Sur demande, en contactant Aissociate » liste tout le catalogue Nango (`GET /providers`, cache 24 h). Une
-  demande crée une ligne `studio_connecteurs` de type `app:<fournisseur>`, suivie dans le CRM. Pour la
-  servir : activer l'intégration dans Nango, elle apparaît alors en un clic chez le client.
+**Coût et limites (à connaître) :**
+- chaque compte connecté est facturé par Zernio au-delà de 2 (une boîte Google ou Microsoft compte une fois,
+  quelles que soient ses zones) ; un moyen de paiement est requis au 3e compte et pour envoyer depuis Gmail ou IMAP ;
+- Google Drive est connecté en `drive.file` : les agents ne voient que les documents qu'ils créent et ceux que le
+  client choisit (bouton « Choisir des fichiers Drive », sélecteur hébergé par Zernio). OneDrive est lisible en entier ;
+- une boîte sert au courrier individuel : le même contenu vers plus de 50 personnes en une heure met la boîte
+  en pause. Les mailings partent donc à 45 par heure au plus, et sous un plafond quotidien par fournisseur
+  (Gmail 180, Google Workspace 450, Microsoft 900, IMAP 180 ; remis à zéro à minuit UTC).
 
-**Outils des agents (Google Drive) :** `outils.ts` + `drive.ts`. Si l'espace a une connexion `google-drive`,
-le chat passe en appel de fonctions : `drive_rechercher`, `drive_lister`, `drive_lire` (exécutés tout de suite,
-tracés au journal) et `drive_creer_document`, qui ne crée rien mais enregistre un livrable « à valider »
-portant l'action (`studio_livrables.action`). Le « VALIDÉ » du propriétaire exécute l'action, puis passe le
-livrable en « publié » avec le lien (`resultat`). En cas d'échec, l'erreur est notée et le dépôt peut être
-relancé. Le jeton Google est demandé à Nango pour la connexion de l'espace de la session uniquement.
-Migration `20261117120000_studio_outils.sql`.
+**Outils des agents :** selon les zones de la boîte connectée (`scopeAreas`) :
+- `mail_rechercher`, `mail_lire`, `mail_proposer_envoi` ;
+- `agenda_lister`, `agenda_proposer_rdv` ;
+- `fichiers_rechercher`, `fichiers_lister`, `fichiers_lire` (texte, PDF, Docs/Slides exportés en PDF, Sheets et
+  Excel, Word), `fichiers_creer_document` (Google Doc sur Drive, fichier Word sur OneDrive).
+
+Les lectures s'exécutent tout de suite et sont tracées au journal. Les écritures enregistrent un livrable
+« à valider » portant l'action (`studio_livrables.action`, avec `compte_id`) ; le « VALIDÉ » du propriétaire
+l'exécute, puis passe le livrable en « publié » avec le lien. En cas d'échec, l'erreur est notée en clair
+(paiement, accès manquant, plafond) et l'action peut être relancée.
 
 **Compétences, ressources et pièces jointes :** tous les agents ont toujours deux outils, `ressource_lire`
 (relit en entier une note, une compétence ou un fichier de l'index des ressources actives) et
@@ -120,10 +117,8 @@ dans le navigateur (`src/studio/extraction.ts`, bibliothèques chargées depuis 
 `studio_messages.pieces` et relu aux tours suivants. Un rappel en fin de prompt impose d'utiliser la fiche
 entreprise et les ressources plutôt que des champs « à compléter ».
 
-**Configuration :**
-- secrets Supabase `NANGO_SECRET_KEY` et `NANGO_WEBHOOK_SIGNING_KEY` ;
-- dans Nango › Environment settings › Webhooks, l'URL `https://<projet>.supabase.co/functions/v1/nango-webhook` ;
-- migration `20261116100000_studio_nango.sql`.
+**Configuration :** secret Supabase `ZERNIO_API_KEY`. Les secrets `NANGO_*`, la fonction `nango-webhook`
+et la table `studio_nango_connexions` ne servent plus.
 
 ## Coûts, rentabilité et rapport mensuel
 - **Coût réel** : chaque réponse enregistre `cout` (USD), les tokens et le modèle, lus dans le dernier fragment du

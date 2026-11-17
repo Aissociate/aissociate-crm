@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { analyserFlux, decouvrirFlux, texteArticle, urlPublique } from "./veille.ts";
-import { construireMimeHtml, contactsValides, markdownVersHtml, nettoyerListes, personnaliser } from "./mailing.ts";
+import { placeDisponible, contactsValides, markdownVersHtml, nettoyerListes, personnaliser } from "./mailing.ts";
 import { apercuAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 
 describe("veille — adresses", () => {
@@ -66,12 +66,11 @@ describe("mailing", () => {
     expect(r.contacts).toEqual([{ email: "a@b.fr", prenom: "A", nom: null }]);
     expect(r.rejets).toBe(3);
   });
-  it("construit un message avec désinscription en un clic", () => {
-    const m = construireMimeHtml({ a: "x@y.fr", objet: "Édition n°1", texte: "t", html: "<p>h</p>", desinscription: "https://d/1", desinscriptionDirecte: "https://f?desinscription=1" });
-    expect(m).toMatch(/^To: x@y\.fr\r\nSubject: =\?UTF-8\?B\?/);
-    expect(m).toContain("List-Unsubscribe: <https://f?desinscription=1>, <https://d/1>");
-    expect(m).toContain("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
-    expect(m).toContain("multipart/alternative");
+  it("rythme les envois : plafond du jour et 45 par heure", () => {
+    expect(placeDisponible(180, 0, 0)).toBe(45);
+    expect(placeDisponible(180, 170, 0)).toBe(10);
+    expect(placeDisponible(180, 20, 45)).toBe(0);
+    expect(placeDisponible(180, 200, 0)).toBe(0);
   });
   it("livrable de mailing : titre, aperçu, modification", () => {
     const a: ActionLivrable = { type: "mailing_envoyer", objet: "News", contenu: "Bonjour", liste: "clients", destinataires: 12 };

@@ -24,13 +24,13 @@ type Livrable = {
 };
 
 const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
-  drive_creer_document: { avant: 'Création dans le Google Drive au « VALIDÉ »', fait: 'Document créé dans le Google Drive.', lien: 'Ouvrir le document' },
-  gmail_envoyer: { avant: 'Envoi depuis votre Gmail au « VALIDÉ »', fait: 'E-mail envoyé depuis votre Gmail.', lien: 'Voir dans Gmail' },
+  drive_creer_document: { avant: 'Création dans votre Drive / OneDrive au « VALIDÉ »', fait: 'Document créé dans votre espace de fichiers.', lien: 'Ouvrir le document' },
+  gmail_envoyer: { avant: 'Envoi depuis votre messagerie au « VALIDÉ »', fait: 'E-mail envoyé depuis votre messagerie.', lien: 'Voir l\'e-mail' },
   reseaux_publier: { avant: 'Publication sur vos réseaux sociaux au « VALIDÉ » (ou à la date programmée)', fait: 'Publication envoyée (ou programmée) sur vos réseaux sociaux.', lien: 'Voir la publication' },
   reseaux_repondre_commentaire: { avant: 'Réponse publiée sous le commentaire au « VALIDÉ »', fait: 'Réponse publiée.', lien: 'Voir' },
   reseaux_envoyer_message: { avant: 'Message privé envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
-  mailing_envoyer: { avant: 'Envoi depuis votre Gmail aux abonnés au « VALIDÉ » (un e-mail chacun, par lots ; suivi dans Contacts)', fait: 'Mailing mis en file : les envois partent par lots depuis votre Gmail (suivi dans Contacts).', lien: 'Voir' },
-  agenda_creer: { avant: 'Création dans votre agenda Google (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
+  mailing_envoyer: { avant: 'Envoi depuis votre messagerie aux abonnés au « VALIDÉ » (un e-mail chacun, 45 par heure au plus ; suivi dans Contacts)', fait: 'Mailing mis en file : les envois partent par lots depuis votre messagerie (suivi dans Contacts).', lien: 'Voir' },
+  agenda_creer: { avant: 'Création dans votre agenda (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
 };
 
 const STATUTS: Record<Livrable['statut'], { label: string; style: string }> = {

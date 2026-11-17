@@ -1,15 +1,15 @@
 // Connecteurs : relier les outils de l'entreprise à ses agents, le plus simplement possible.
-// 1. En un clic (Nango) : Google, Microsoft, Meta, LinkedIn, TikTok… le client autorise lui-même.
-//    Une application pas encore activée chez Nango retombe sur la demande assistée.
-// 2. Connexions directes : SMTP et serveur MCP (paramètres saisis, secret chiffré).
-// 3. Sur demande : tout le catalogue Nango, mis en place par Aissociate.
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { CheckCircle2, Clock, Mail, Plug, RefreshCw, Search, Server, Trash2, X, AlertTriangle } from 'lucide-react';
+// 1. En un clic (Zernio) : Google, Microsoft, toute messagerie (IMAP), Facebook, Instagram,
+//    LinkedIn, TikTok… le client autorise lui-même, le compte est rattaché à son espace.
+// 2. Connexion directe : serveur MCP (paramètres saisis, jeton chiffré).
+// 3. Sur demande : toute autre application, mise en place par Aissociate.
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { CheckCircle2, Clock, Plug, RefreshCw, Server, Trash2, X, AlertTriangle } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
-import { LigneIntegration, useNango, type Integration, type Nango } from '../ConnexionsUnClic';
+import { ComptesMessagerie, useMessageries, type Quoi } from '../Messageries';
 import { ComptesReseau, NOMS_RESEAUX, useReseaux, type Reseau } from '../ReseauxSociaux';
 
 type Statut = 'demande' | 'en_cours' | 'connecte' | 'erreur' | 'desactive';
@@ -18,62 +18,40 @@ type Champ = { nom: string; label: string; aide?: string; type?: 'texte' | 'choi
 type Def = {
   type: string; nom: string; logo: string; couleur: string; accroche: string; agents: string;
   champs: Champ[]; mode: 'assiste' | 'direct';
-  /** Fournisseurs Nango couverts par cette carte (connexion en un clic), avec leur libellé court. */
-  unClic?: Record<string, string>;
-};
-
-// Préréglages SMTP des hébergeurs courants : le client choisit, on remplit.
-const SMTP_PRESETS: Record<string, { hote: string; port: string; securite: string; imap_hote: string }> = {
-  'OVHcloud': { hote: 'ssl0.ovh.net', port: '465', securite: 'SSL/TLS', imap_hote: 'ssl0.ovh.net' },
-  'Gandi': { hote: 'mail.gandi.net', port: '465', securite: 'SSL/TLS', imap_hote: 'mail.gandi.net' },
-  'IONOS': { hote: 'smtp.ionos.fr', port: '465', securite: 'SSL/TLS', imap_hote: 'imap.ionos.fr' },
-  'o2switch': { hote: 'mail.votre-domaine.fr', port: '465', securite: 'SSL/TLS', imap_hote: 'mail.votre-domaine.fr' },
-  'Infomaniak': { hote: 'mail.infomaniak.com', port: '465', securite: 'SSL/TLS', imap_hote: 'mail.infomaniak.com' },
-  'Orange / SFR / autre': { hote: '', port: '587', securite: 'STARTTLS', imap_hote: '' },
+  /** Connexion en un clic via Zernio : messagerie (google, microsoft, email) ou réseau social. */
+  zernio?: Quoi | Reseau;
 };
 
 const CATALOGUE: Def[] = [
-  { type: 'google', nom: 'Google Workspace', logo: 'G', couleur: '#4285F4', mode: 'assiste',
-    unClic: { 'google-mail': 'Gmail', 'google-calendar': 'Agenda', 'google-drive': 'Drive', 'google-sheet': 'Sheets', 'google-docs': 'Docs' },
+  { type: 'google', nom: 'Google', logo: 'G', couleur: '#4285F4', mode: 'assiste', zernio: 'google',
     accroche: 'Gmail, Agenda et Drive', agents: 'Léa prépare vos réponses e-mail et vos rendez-vous, retrouve vos documents.',
     champs: [
       { nom: 'adresse', label: 'Votre adresse Google', aide: 'contact@votre-entreprise.fr', requis: true },
       { nom: 'services', label: 'Services à connecter', type: 'cases', options: ['Gmail', 'Agenda', 'Drive'] },
     ] },
-  { type: 'outlook', nom: 'Outlook / Microsoft 365', logo: 'O', couleur: '#0078D4', mode: 'assiste',
-    unClic: { outlook: 'Outlook', microsoft: 'Microsoft 365', 'one-drive': 'OneDrive', 'microsoft-teams': 'Teams', 'sharepoint-online': 'SharePoint' },
-    accroche: 'Messagerie et calendrier Microsoft', agents: 'Léa prépare vos réponses et vos invitations.',
+  { type: 'outlook', nom: 'Microsoft', logo: 'O', couleur: '#0078D4', mode: 'assiste', zernio: 'microsoft',
+    accroche: 'Outlook, calendrier et OneDrive', agents: 'Léa prépare vos réponses et vos invitations, retrouve vos documents.',
     champs: [{ nom: 'adresse', label: 'Votre adresse Microsoft', requis: true }] },
-  { type: 'smtp', nom: 'Messagerie sur mesure', logo: '@', couleur: '#525252', mode: 'direct',
-    accroche: 'Votre adresse pro chez votre hébergeur (SMTP)', agents: 'Envoi des e-mails préparés par vos agents, depuis votre propre adresse.',
-    champs: [
-      { nom: 'fournisseur', label: 'Votre hébergeur', type: 'choix', options: Object.keys(SMTP_PRESETS) },
-      { nom: 'expediteur', label: 'Adresse d\'envoi', aide: 'contact@votre-entreprise.fr', requis: true },
-      { nom: 'nom_affiche', label: 'Nom affiché', aide: 'Boulangerie Martin' },
-      { nom: 'utilisateur', label: 'Identifiant de connexion', aide: 'souvent identique à l\'adresse', requis: true },
-      { nom: 'mot_de_passe', label: 'Mot de passe de la boîte', type: 'secret', requis: true },
-      { nom: 'hote', label: 'Serveur SMTP', requis: true },
-      { nom: 'port', label: 'Port', requis: true },
-      { nom: 'securite', label: 'Sécurité', type: 'choix', options: ['SSL/TLS', 'STARTTLS'] },
-      { nom: 'imap_hote', label: 'Serveur IMAP (lecture, facultatif)' },
-    ] },
-  { type: 'facebook', nom: 'Facebook', logo: 'f', couleur: '#1877F2', mode: 'assiste',
-    unClic: { facebook: 'Facebook' }, accroche: 'Votre page entreprise', agents: 'Hugo prépare et planifie vos publications.',
+  { type: 'messagerie', nom: 'Autre messagerie', logo: '@', couleur: '#525252', mode: 'assiste', zernio: 'email',
+    accroche: 'Votre adresse pro chez votre hébergeur', agents: 'Léa lit vos e-mails et prépare vos réponses, envoyées depuis votre adresse.',
+    champs: [] },
+  { type: 'facebook', nom: 'Facebook', logo: 'f', couleur: '#1877F2', mode: 'assiste', zernio: 'facebook',
+    accroche: 'Votre page entreprise', agents: 'Hugo prépare et planifie vos publications.',
     champs: [{ nom: 'page', label: 'Adresse de votre page', aide: 'https://facebook.com/votre-page', requis: true }] },
-  { type: 'instagram', nom: 'Instagram', logo: 'IG', couleur: '#E1306C', mode: 'assiste',
-    unClic: { instagram: 'Instagram' }, accroche: 'Compte professionnel', agents: 'Hugo prépare vos posts, légendes et visuels.',
+  { type: 'instagram', nom: 'Instagram', logo: 'IG', couleur: '#E1306C', mode: 'assiste', zernio: 'instagram',
+    accroche: 'Compte professionnel', agents: 'Hugo prépare vos posts, légendes et visuels.',
     champs: [
       { nom: 'compte', label: 'Nom du compte', aide: '@votre-compte', requis: true },
       { nom: 'page_facebook', label: 'Page Facebook reliée (si elle existe)' },
     ] },
-  { type: 'linkedin', nom: 'LinkedIn', logo: 'in', couleur: '#0A66C2', mode: 'assiste',
-    unClic: { linkedin: 'LinkedIn' }, accroche: 'Page entreprise ou profil', agents: 'Hugo publie votre ligne éditoriale, Sam prépare votre prospection.',
+  { type: 'linkedin', nom: 'LinkedIn', logo: 'in', couleur: '#0A66C2', mode: 'assiste', zernio: 'linkedin',
+    accroche: 'Page entreprise ou profil', agents: 'Hugo publie votre ligne éditoriale, Sam prépare votre prospection.',
     champs: [
       { nom: 'page', label: 'Adresse de la page ou du profil', aide: 'https://linkedin.com/company/…', requis: true },
       { nom: 'type_compte', label: 'Type', type: 'choix', options: ['Page entreprise', 'Profil personnel'] },
     ] },
-  { type: 'tiktok', nom: 'TikTok', logo: '♪', couleur: '#111111', mode: 'assiste',
-    unClic: { 'tiktok-accounts': 'TikTok', 'tiktok-personal': 'TikTok', 'tiktok-ads': 'TikTok Ads' }, accroche: 'Compte TikTok', agents: 'Hugo prépare vos vidéos courtes et leurs descriptions.',
+  { type: 'tiktok', nom: 'TikTok', logo: '♪', couleur: '#111111', mode: 'assiste', zernio: 'tiktok',
+    accroche: 'Compte TikTok', agents: 'Hugo prépare vos vidéos courtes et leurs descriptions.',
     champs: [{ nom: 'compte', label: 'Nom du compte', aide: '@votre-compte', requis: true }] },
   { type: 'mcp', nom: 'Serveur MCP', logo: 'MCP', couleur: '#7c3aed', mode: 'direct',
     accroche: 'Pour les outils qui proposent un serveur MCP (avancé)', agents: 'Vos agents utilisent les outils exposés par ce serveur.',
@@ -93,17 +71,16 @@ const STATUTS: Record<Statut, { label: string; classe: string; Icone: typeof Clo
   desactive: { label: 'Désactivé', classe: 'bg-neutral-100 text-neutral-500', Icone: X },
 };
 
-/** Intégrations Nango activées qui correspondent à une carte (par fournisseur ou identifiant). */
-const correspondances = (d: Def, integrations: Integration[]) =>
-  d.unClic ? integrations.filter((i) => i.provider in d.unClic! || i.id in d.unClic!) : [];
+const estReseau = (x: string): x is Reseau => x in NOMS_RESEAUX;
 
 export default function Connecteurs() {
   const { me, gerer } = useStudio();
   const proprietaire = me.user.role === 'proprietaire';
-  const nango = useNango();
+  const messageries = useMessageries();
   const reseaux = useReseaux();
   const [liste, setListe] = useState<Connecteur[] | null>(null);
   const [ouvert, setOuvert] = useState<Def | null>(null);
+  const [demande, setDemande] = useState(false);
   const [erreur, setErreur] = useState('');
   const [suppression, setSuppression] = useState<{ type: string; nom: string } | null>(null);
   const [envoiSuppr, setEnvoiSuppr] = useState(false);
@@ -114,10 +91,7 @@ export default function Connecteurs() {
   }, [gerer]);
   useEffect(() => { charger(); }, [charger]);
 
-  const supprimer = (type: string) => {
-    const def = CATALOGUE.find((d) => d.type === type);
-    setSuppression({ type, nom: def?.nom ?? type });
-  };
+  const nomDe = (type: string) => CATALOGUE.find((d) => d.type === type)?.nom ?? (type.startsWith('app:') ? liste?.find((c) => c.type === type)?.infos.libelle : null) ?? type;
   const confirmerSuppression = async () => {
     if (!suppression) return;
     setEnvoiSuppr(true);
@@ -126,19 +100,17 @@ export default function Connecteurs() {
     finally { setEnvoiSuppr(false); setSuppression(null); }
   };
 
-  const integrations = nango.etat?.integrations ?? [];
-  const cartesUnClic = CATALOGUE.filter((d) => d.unClic);
-  const directes = CATALOGUE.filter((d) => !d.unClic);
-  // Intégrations activées chez Nango qui n'appartiennent à aucune carte : affichées telles quelles.
-  const couvertes = new Set(cartesUnClic.flatMap((d) => correspondances(d, integrations).map((i) => i.id)));
-  const autres = integrations.filter((i) => !couvertes.has(i.id));
+  const enLigne = Boolean(messageries.etat?.configure);
+  // Sans Zernio, les cartes en un clic retombent sur la demande assistée (sauf « Autre messagerie »).
+  const cartesUnClic = CATALOGUE.filter((d) => d.zernio && (enLigne || d.type !== 'messagerie'));
+  const directes = CATALOGUE.filter((d) => !d.zernio);
+  const demandesApps = (liste ?? []).filter((c) => c.type.startsWith('app:'));
+  const retour = messageries.retour ?? reseaux.retour;
 
   const carte = (d: Def) => {
     const c = liste?.find((x) => x.type === d.type);
     const st = c ? STATUTS[c.statut] : null;
-    const apps = correspondances(d, integrations);
-    // Réseaux sociaux : connexion en un clic via Zernio quand il est configuré.
-    const reseau = reseaux.etat?.configure && d.type in NOMS_RESEAUX ? d.type as Reseau : null;
+    const enUnClic = enLigne && d.zernio;
     return (
       <div key={d.type} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-4">
         <div className="flex items-center gap-3">
@@ -149,11 +121,8 @@ export default function Connecteurs() {
           </div>
         </div>
         <p className="mt-3 text-sm text-neutral-600">{d.agents}</p>
-        {reseau ? <ComptesReseau reseaux={reseaux} reseau={reseau} /> : apps.length > 0 ? (
-          // Connexion en un clic disponible : une ligne par service (Gmail, Agenda, Drive…).
-          <div className="mt-3 space-y-2">
-            {apps.map((i) => <LigneIntegration key={i.id} nango={nango} integration={i} libelle={d.unClic![i.provider] ?? d.unClic![i.id]} compacte />)}
-          </div>
+        {enUnClic ? (
+          estReseau(d.zernio!) ? <ComptesReseau reseaux={reseaux} reseau={d.zernio} /> : <ComptesMessagerie m={messageries} quoi={d.zernio as Quoi} />
         ) : (
           <>
             {c?.notes_admin && <p className="mt-2 rounded-lg bg-neutral-50 px-2 py-1.5 text-xs text-neutral-600">Aissociate : {c.notes_admin}</p>}
@@ -163,7 +132,7 @@ export default function Connecteurs() {
               ) : <span className="text-xs text-neutral-400">{d.mode === 'direct' ? 'Connexion directe' : 'Mise en place par Aissociate'}</span>}
               {proprietaire && (
                 <div className="flex items-center gap-1">
-                  {c && <button onClick={() => supprimer(d.type)} aria-label="Retirer" className="p-1.5 text-neutral-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
+                  {c && <button onClick={() => setSuppression({ type: d.type, nom: d.nom })} aria-label="Retirer" className="p-1.5 text-neutral-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
                   <Bouton variante={c && c.statut !== 'erreur' ? 'clair' : 'noir'} className="px-3 py-1.5" onClick={() => setOuvert(d)}>
                     {c?.statut === 'erreur' ? 'Ressaisir' : c ? 'Modifier' : d.mode === 'direct' ? 'Connecter' : 'Demander'}
                   </Bouton>
@@ -187,38 +156,44 @@ export default function Connecteurs() {
           Aucune action n'est jamais lancée sans votre validation.
         </p>
       </div>
-      {(erreur || nango.erreur || reseaux.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || nango.erreur || reseaux.erreur}</p>}
-      {reseaux.retour && (
-        <p className={cx('mb-4 rounded-xl px-3 py-2 text-sm', reseaux.retour.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')} role="status">{reseaux.retour.texte}</p>
+      {(erreur || messageries.erreur || reseaux.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || messageries.erreur || reseaux.erreur}</p>}
+      {retour && (
+        <p className={cx('mb-4 rounded-xl px-3 py-2 text-sm', retour.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')} role="status">{retour.texte}</p>
       )}
 
       <div className="mb-3 flex items-end justify-between gap-3">
         <h2 className="text-lg font-semibold">Connexion en un clic</h2>
-        {nango.etat?.configure && (
-          <button onClick={() => { nango.charger(true); reseaux.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
+        {enLigne && (
+          <button onClick={() => { messageries.charger(); reseaux.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
             <RefreshCw className="h-3.5 w-3.5" /> Actualiser
           </button>
         )}
       </div>
-      {liste === null || nango.etat === null || reseaux.etat === null ? <Chargement /> : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {cartesUnClic.map(carte)}
-          {autres.map((i) => (
-            <div key={i.id} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-4">
-              <LigneIntegration nango={nango} integration={i} />
-            </div>
-          ))}
-        </div>
+      {liste === null || messageries.etat === null || reseaux.etat === null ? <Chargement /> : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{cartesUnClic.map(carte)}</div>
       )}
 
-      <h2 className="mb-3 mt-10 text-lg font-semibold">Connexions directes</h2>
+      <h2 className="mb-3 mt-10 text-lg font-semibold">Connexion directe</h2>
       {liste === null ? <Chargement /> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{directes.map(carte)}</div>}
       {!proprietaire && <p className="mt-4 text-sm text-neutral-500">Seul le propriétaire de l'espace peut ajouter ou modifier un connecteur.</p>}
 
-      {nango.etat?.configure && liste && (
-        <CatalogueSurDemande nango={nango} demandes={liste} onDemande={setListe} />
-      )}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Une autre application ?</h2>
+        <p className="mb-3 text-sm text-neutral-500">CRM, comptabilité, caisse, prise de rendez-vous… Dites-nous laquelle : l'équipe Aissociate étudie la connexion avec vous.</p>
+        {demandesApps.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {demandesApps.map((c) => (
+              <span key={c.id} className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-xs">
+                {c.infos.libelle ?? c.type.slice(4)} <span className={cx('rounded-full px-1.5', STATUTS[c.statut].classe)}>{STATUTS[c.statut].label}</span>
+                {proprietaire && <button onClick={() => setSuppression({ type: c.type, nom: nomDe(c.type) })} aria-label="Retirer la demande" className="text-neutral-400 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>}
+              </span>
+            ))}
+          </div>
+        )}
+        {proprietaire && <Bouton variante="clair" onClick={() => setDemande(true)}>Demander une application</Bouton>}
+      </section>
 
+      {demande && <DemandeApp onClose={() => setDemande(false)} onSaved={(l) => { setListe(l); setDemande(false); }} />}
       {ouvert && (
         <Formulaire def={ouvert} existant={liste?.find((x) => x.type === ouvert.type) ?? null}
           onClose={() => setOuvert(null)} onSaved={(l) => { setListe(l); setOuvert(null); }} />
@@ -236,127 +211,42 @@ export default function Connecteurs() {
   );
 }
 
-type Fournisseur = { nom: string; libelle: string; categories: string[]; logo: string | null };
-const CATEGORIES: Record<string, string> = {
-  communication: 'Communication', productivity: 'Productivité', crm: 'CRM', accounting: 'Comptabilité',
-  marketing: 'Marketing', 'e-commerce': 'E-commerce', 'file-storage': 'Fichiers', hr: 'RH', ticketing: 'Support',
-  'knowledge-base': 'Documentation', payment: 'Paiement', social: 'Réseaux sociaux', analytics: 'Analyse',
-  design: 'Design', dev: 'Développement', erp: 'ERP', banking: 'Banque', legal: 'Juridique',
-};
-const PAR_PAGE = 48;
+const slug = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 
-/** Catalogue Nango complet : chaque application peut être demandée à Aissociate. */
-function CatalogueSurDemande({ nango, demandes, onDemande }: { nango: Nango; demandes: Connecteur[]; onDemande: (l: Connecteur[]) => void }) {
-  const { me, gerer } = useStudio();
-  const proprietaire = me.user.role === 'proprietaire';
-  const [fournisseurs, setFournisseurs] = useState<Fournisseur[] | null>(null);
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState('');
-  const [max, setMax] = useState(PAR_PAGE);
-  const [choisi, setChoisi] = useState<Fournisseur | null>(null);
-  const [erreur, setErreur] = useState('');
-
-  useEffect(() => {
-    appel<{ fournisseurs: Fournisseur[] }>('nango_catalogue').then((r) => setFournisseurs(r.fournisseurs))
-      .catch((e) => { setErreur(gerer(e)); setFournisseurs([]); });
-  }, [gerer]);
-
-  // Déjà connectables en un clic : inutile de les proposer sur demande.
-  const actifs = useMemo(() => new Set((nango.etat?.integrations ?? []).map((i) => i.provider)), [nango.etat]);
-  const demandees = useMemo(() => new Map(demandes.filter((d) => d.type.startsWith('app:')).map((d) => [d.type.slice(4), d])), [demandes]);
-  // Catégories réellement présentes dans le catalogue, dans l'ordre de CATEGORIES.
-  const categories = useMemo(() => {
-    const presentes = new Set((fournisseurs ?? []).flatMap((f) => f.categories));
-    return Object.entries(CATEGORIES).filter(([k]) => presentes.has(k));
-  }, [fournisseurs]);
-  const visibles = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return (fournisseurs ?? []).filter((f) => !actifs.has(f.nom)
-      && (!cat || f.categories.includes(cat))
-      && (!t || f.libelle.toLowerCase().includes(t) || f.nom.includes(t)));
-  }, [fournisseurs, actifs, q, cat]);
-
-  return (
-    <section className="mt-10">
-      <h2 className="text-lg font-semibold">Sur demande, en contactant Aissociate</h2>
-      <p className="mb-3 text-sm text-neutral-500">
-        {fournisseurs?.length ? `Plus de ${Math.floor(fournisseurs.length / 50) * 50} applications` : 'Des centaines d\'applications'} peuvent être reliées à vos agents.
-        Choisissez la vôtre : l'équipe Aissociate l'active, puis vous la connectez en un clic.
-      </p>
-      {erreur && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
-      <label className="relative mb-3 block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-        <input value={q} onChange={(e) => { setQ(e.target.value); setMax(PAR_PAGE); }} placeholder="Rechercher une application (HubSpot, Notion, Pennylane…)"
-          className="w-full rounded-xl border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-neutral-900" />
-      </label>
-      {categories.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {[['', 'Toutes'], ...categories].map(([k, l]) => (
-            <button key={k} onClick={() => { setCat(k); setMax(PAR_PAGE); }}
-              className={cx('rounded-full border px-2.5 py-0.5 text-xs', cat === k ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-white text-neutral-600')}>{l}</button>
-          ))}
-        </div>
-      )}
-      {fournisseurs === null ? <Chargement /> : visibles.length === 0 ? (
-        <p className="text-sm text-neutral-500">Aucune application trouvée. Écrivez-nous : nous étudions toute demande.</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-4">
-            {visibles.slice(0, max).map((f) => {
-              const d = demandees.get(f.nom);
-              return (
-                <div key={f.nom} className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white p-2.5">
-                  {f.logo ? <img src={f.logo} alt="" loading="lazy" className="h-7 w-7 shrink-0 object-contain" />
-                    : <span className="h-7 w-7 shrink-0 rounded-md bg-neutral-100" />}
-                  <p className="min-w-0 flex-1 truncate text-sm" title={f.libelle}>{f.libelle}</p>
-                  {d ? <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">{STATUTS[d.statut].label}</span>
-                    : proprietaire && <button onClick={() => setChoisi(f)} className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50">Demander</button>}
-                </div>
-              );
-            })}
-          </div>
-          {visibles.length > max && (
-            <div className="mt-3 text-center">
-              <Bouton variante="clair" onClick={() => setMax(max + PAR_PAGE * 2)}>Afficher plus ({visibles.length - max} autres)</Bouton>
-            </div>
-          )}
-        </>
-      )}
-      {choisi && <DemandeApp f={choisi} onClose={() => setChoisi(null)} onSaved={(l) => { onDemande(l); setChoisi(null); }} />}
-    </section>
-  );
-}
-
-function DemandeApp({ f, onClose, onSaved }: { f: Fournisseur; onClose: () => void; onSaved: (l: Connecteur[]) => void }) {
+function DemandeApp({ onClose, onSaved }: { onClose: () => void; onSaved: (l: Connecteur[]) => void }) {
   const { gerer } = useStudio();
+  const [nom, setNom] = useState('');
   const [besoin, setBesoin] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState('');
   const envoyer = async (e: FormEvent) => {
-    e.preventDefault(); setEnvoi(true); setErreur('');
+    e.preventDefault();
+    if (!slug(nom)) { setErreur('Indiquez le nom de l\'application.'); return; }
+    setEnvoi(true); setErreur('');
     try {
       const r = await appel<{ connecteurs: Connecteur[] }>('connecteur_enregistrer', {
-        type: `app:${f.nom}`, infos: { libelle: f.libelle, besoin }, accord: true,
+        type: `app:${slug(nom)}`, infos: { libelle: nom.trim(), besoin }, accord: true,
       });
       onSaved(r.connecteurs);
     } catch (err) { setErreur(gerer(err)); } finally { setEnvoi(false); }
   };
+  const classe = 'w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:bg-white';
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4 sm:p-10" onClick={onClose}>
       <form onSubmit={envoyer} onClick={(e) => e.stopPropagation()} className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between">
-          <p className="flex items-center gap-2 text-lg font-semibold">
-            {f.logo && <img src={f.logo} alt="" className="h-6 w-6 object-contain" />} Demander {f.libelle}
-          </p>
+          <p className="text-lg font-semibold">Demander une application</p>
           <button type="button" onClick={onClose} aria-label="Fermer"><X className="h-5 w-5" /></button>
         </div>
         <label className="block">
+          <span className="mb-1 block text-sm text-neutral-700">Application<span className="text-orange-600"> *</span></span>
+          <input value={nom} onChange={(e) => setNom(e.target.value)} maxLength={120} required placeholder="ex. HubSpot, Pennylane, Planity…" className={classe} />
+        </label>
+        <label className="block">
           <span className="mb-1 block text-sm text-neutral-700">Que voulez-vous que vos agents en fassent ? (facultatif)</span>
           <textarea rows={3} value={besoin} onChange={(e) => setBesoin(e.target.value)} maxLength={1000}
-            placeholder="ex. retrouver les fiches clients, préparer les relances…"
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:bg-white" />
+            placeholder="ex. retrouver les fiches clients, préparer les relances…" className={classe} />
         </label>
-        <p className="text-xs text-neutral-500">L'équipe Aissociate active l'application, puis elle apparaît dans « Connexion en un clic » pour que vous l'autorisiez vous-même.</p>
         {erreur && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
         <Bouton type="submit" disabled={envoi} className="w-full py-2.5">{envoi ? 'Envoi…' : 'Envoyer la demande'}</Bouton>
       </form>
@@ -379,11 +269,6 @@ function Formulaire({ def, existant, onClose, onSaved }: {
   const [erreur, setErreur] = useState('');
   const champSecret = def.champs.find((c) => c.type === 'secret');
 
-  const choisirPreset = (f: string) => {
-    const p = SMTP_PRESETS[f];
-    setV((x) => ({ ...x, fournisseur: f, ...(p ? { hote: p.hote, port: p.port, securite: p.securite, imap_hote: p.imap_hote } : {}) }));
-  };
-
   const soumettre = async (e: FormEvent) => {
     e.preventDefault();
     setErreur(''); setEnvoi(true);
@@ -401,7 +286,7 @@ function Formulaire({ def, existant, onClose, onSaved }: {
       <form onSubmit={soumettre} onClick={(e) => e.stopPropagation()} className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-2 text-lg font-semibold">
-            {def.type === 'smtp' ? <Mail className="h-5 w-5" /> : def.type === 'mcp' ? <Server className="h-5 w-5" /> : <Plug className="h-5 w-5" />}
+            {def.type === 'mcp' ? <Server className="h-5 w-5" /> : <Plug className="h-5 w-5" />}
             Connecter {def.nom}
           </p>
           <button type="button" onClick={onClose} aria-label="Fermer"><X className="h-5 w-5" /></button>
@@ -410,7 +295,7 @@ function Formulaire({ def, existant, onClose, onSaved }: {
           <label key={c.nom} className="block">
             <span className="mb-1 block text-sm text-neutral-700">{c.label}{c.requis && <span className="text-orange-600"> *</span>}</span>
             {c.type === 'choix' ? (
-              <select className={classe} value={v[c.nom] ?? ''} onChange={(e) => (c.nom === 'fournisseur' ? choisirPreset(e.target.value) : setV({ ...v, [c.nom]: e.target.value }))}>
+              <select className={classe} value={v[c.nom] ?? ''} onChange={(e) => setV({ ...v, [c.nom]: e.target.value })}>
                 <option value="">—</option>
                 {c.options?.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>

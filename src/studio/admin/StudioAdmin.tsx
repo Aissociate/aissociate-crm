@@ -12,7 +12,7 @@ import { ModeleSelect, type ModeleOR } from './ModeleSelect';
 import HarnessPanel from './HarnessPanel';
 import RentabilitePanel from './RentabilitePanel';
 import ConnecteursEspace from './ConnecteursEspace';
-import NangoEspace from './NangoEspace';
+import ConnexionsEspace from './ConnexionsEspace';
 import SavoirsAgent from './SavoirsAgent';
 import OnboardingPanel from './OnboardingPanel';
 import ParametresPanel from './ParametresPanel';
@@ -354,7 +354,7 @@ function EspaceModal({
 
             <LiaisonEspace workspaceId={espace.id} nomEspace={espace.nom} agents={agents.filter((a) => a.actif)} />
 
-            <NangoEspace workspaceId={espace.id} nomEspace={espace.nom} emailDefaut={users.find((u) => u.role === 'proprietaire')?.email ?? ''} />
+            <ConnexionsEspace workspaceId={espace.id} nomEspace={espace.nom} emailDefaut={users.find((u) => u.role === 'proprietaire')?.email ?? ''} />
 
             <ConnecteursEspace workspaceId={espace.id} />
 

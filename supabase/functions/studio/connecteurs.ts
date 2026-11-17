@@ -8,6 +8,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import type { ConnecteurActif } from "./contexte.ts";
 import { chiffrer } from "./securite.ts";
+import * as bureau from "./bureau.ts";
+import * as zernio from "./zernio.ts";
 
 type Def = {
   libelle: string;
@@ -53,14 +55,22 @@ const DEMANDE_APP: Def = { libelle: "Application sur demande", champs: [{ nom: "
 
 /** Connecteurs au statut « connecte », pour le prompt des agents. */
 export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promise<ConnecteurActif[]> {
-  const [{ data }, { data: nango }] = await Promise.all([
+  const [{ data }, comptes] = await Promise.all([
     sb.from("studio_connecteurs").select("type, infos").eq("workspace_id", wsId).eq("statut", "connecte"),
-    // Connexions en un clic (Nango) de CET espace ; table absente → aucune.
-    sb.from("studio_nango_connexions").select("integration_id, provider").eq("workspace_id", wsId).eq("statut", "connecte"),
+    // Connexions en un clic (Zernio) de CET espace : messageries et réseaux sociaux.
+    zernio.zernioConfigure() ? zernio.comptesBruts(wsId).catch(() => []) : Promise.resolve([] as Record<string, unknown>[]),
   ]);
-  const enUnClic: ConnecteurActif[] = (nango ?? []).map((c) => ({
-    type: `nango:${c.integration_id}`, libelle: String(c.integration_id).replace(/-/g, " "), detail: "connecté par le client",
-  }));
+  const enUnClic: ConnecteurActif[] = comptes.flatMap((a): ConnecteurActif[] => {
+    const b = bureau.versBoite(a);
+    if (b) {
+      return [{
+        type: `zernio:${b.fournisseur}`, libelle: `${bureau.NOMS_FOURNISSEURS[b.fournisseur]} (${b.zones.map((z) => bureau.NOMS_ZONES[z]).join(", ")})`,
+        detail: [b.adresse, b.a_reconnecter ? "à reconnecter" : "connecté par le client"].filter(Boolean).join(" · "),
+      }];
+    }
+    if (!zernio.estReseau(a.platform)) return [];
+    return [{ type: `zernio:${a.platform}`, libelle: zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "connecté par le client") }];
+  });
   return [...enUnClic, ...(data ?? []).filter((c) => CONNECTEURS[c.type]).map((c) => ({
     type: c.type, libelle: CONNECTEURS[c.type].libelle,
     detail: CONNECTEURS[c.type].detail?.((c.infos ?? {}) as Record<string, string>),
@@ -78,7 +88,7 @@ export async function enregistrerConnecteur(
   sb: SupabaseClient, wsId: string, userId: string, body: Record<string, unknown>,
 ): Promise<{ ok: true } | { erreur: string }> {
   const type = String(body.type ?? "");
-  // Application du catalogue Nango demandée à Aissociate : « app:<fournisseur> ».
+  // Autre application demandée à Aissociate : « app:<nom> ».
   const def = /^app:[a-z0-9][a-z0-9._-]{0,79}$/.test(type) ? DEMANDE_APP : CONNECTEURS[type];
   if (!def) return { erreur: "Connecteur inconnu" };
   if (body.accord !== true) return { erreur: "Merci de cocher votre accord pour la mise en place de la connexion." };

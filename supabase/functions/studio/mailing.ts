@@ -1,15 +1,18 @@
-// Contacts et mailings d'un espace, envoyés depuis le Gmail connecté du client.
+// Contacts et mailings d'un espace, envoyés depuis la messagerie connectée du client (Zernio).
 //
 // Une campagne est un livrable « mailing_envoyer » : rien ne part avant le
 // VALIDÉ. Au VALIDÉ, un envoi par contact abonné est mis en file
 // (studio_envois), puis traité par lots (un message par destinataire, jamais en
-// copie), avec lien et en-tête de désinscription. Plafond quotidien par espace
-// (Gmail limite les envois) : le reste part au passage horaire suivant.
+// copie), avec lien et en-tête de désinscription.
+// Une boîte personnelle n'est pas un outil de newsletter : Zernio met la boîte en
+// pause si le même contenu part vers plus de 50 personnes en une heure. D'où un
+// rythme de PLAFOND_HEURE envois par heure et un plafond quotidien selon le
+// fournisseur ; le reste part aux passages horaires suivants.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
-import { b64, b64url, encoderObjet } from "./gmail.ts";
+import type { MessageMailing } from "./bureau.ts";
 
-export const PLAFOND_JOUR = 400;
-const LOT = 40;
+export const PLAFOND_HEURE = 45;
+const LOT = 45;
 export const IMPORT_MAX = 5000;
 const ORIGINE = "https://aissociate.re";
 
@@ -71,23 +74,9 @@ Vous recevez cet e-mail de la part de ${esc(o.entreprise)}. <a href="${o.desinsc
 </td></tr></table></td></tr></table></body></html>`;
 }
 
-const lignes76 = (t: string) => (b64(t).match(/.{1,76}/g) ?? []).join("\r\n");
-
-/** Message MIME multipart/alternative (texte + HTML) avec en-têtes de désinscription en un clic. */
-export function construireMimeHtml(o: { a: string; objet: string; texte: string; html: string; desinscription: string; desinscriptionDirecte: string }): string {
-  const frontiere = `studio-${crypto.randomUUID()}`;
-  return [
-    `To: ${o.a}`,
-    `Subject: ${encoderObjet(o.objet.replace(/[\r\n]+/g, " "))}`,
-    `List-Unsubscribe: <${o.desinscriptionDirecte}>, <${o.desinscription}>`,
-    "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
-    "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${frontiere}"`,
-    "",
-    `--${frontiere}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", lignes76(o.texte),
-    `--${frontiere}`, "Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: base64", "", lignes76(o.html),
-    `--${frontiere}--`, "",
-  ].join("\r\n");
+/** Envois encore possibles : plafond du jour (remis à zéro à minuit UTC, comme Zernio) et rythme horaire. */
+export function placeDisponible(plafondJour: number, envoyesJour: number, envoyesHeure: number): number {
+  return Math.max(0, Math.min(plafondJour - envoyesJour, PLAFOND_HEURE - envoyesHeure));
 }
 
 const EMAIL = /^[^\s@,;<>"]+@[^\s@,;<>"]+\.[a-z]{2,}$/i;
@@ -153,19 +142,33 @@ export async function mettreEnFile(sb: SupabaseClient, wsId: string, livrableId:
  * Un lot d'envois d'une campagne. Renvoie le nombre restant et si le plafond
  * du jour est atteint (le passage horaire reprendra).
  */
+export type Expediteur = {
+  plafondJour: number;
+  envoyer: (m: MessageMailing) => Promise<void>;
+  /** Erreur qui doit suspendre la campagne jusqu'au passage suivant (quota, connexion, paiement). */
+  bloquante: (e: unknown) => boolean;
+  lisible: (e: unknown) => string;
+};
+
 export async function traiterLot(
   sb: SupabaseClient, livrableId: string,
-  envoyer: (wsId: string, raw: string) => Promise<void>,
+  expediteurDe: (wsId: string) => Promise<Expediteur>,
 ): Promise<{ restants: number; plafond: boolean }> {
   const { data: l } = await sb.from("studio_livrables").select("id, workspace_id, action, statut").eq("id", livrableId).maybeSingle();
   const action = l?.action as { type?: string; objet?: string; contenu?: string } | null;
   if (!l || action?.type !== "mailing_envoyer") return { restants: 0, plafond: false };
   const wsId = String(l.workspace_id);
-  const debutJour = new Date(Date.now() + 4 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00+04:00";
-  const { count: envoyesJour } = await sb.from("studio_envois").select("id", { count: "exact", head: true })
-    .eq("workspace_id", wsId).eq("statut", "envoye").gte("envoye_le", debutJour);
-  const place = PLAFOND_JOUR - (envoyesJour ?? 0);
   const reste = async () => (await sb.from("studio_envois").select("id", { count: "exact", head: true }).eq("livrable_id", livrableId).eq("statut", "a_envoyer")).count ?? 0;
+  let exp: Expediteur;
+  try { exp = await expediteurDe(wsId); }
+  catch { return { restants: await reste(), plafond: true }; } // aucune messagerie connectée : on attend
+  const compter = async (depuis: string) => (await sb.from("studio_envois").select("id", { count: "exact", head: true })
+    .eq("workspace_id", wsId).eq("statut", "envoye").gte("envoye_le", depuis)).count ?? 0;
+  const [envoyesJour, envoyesHeure] = await Promise.all([
+    compter(new Date().toISOString().slice(0, 10) + "T00:00:00Z"),
+    compter(new Date(Date.now() - 3_600_000).toISOString()),
+  ]);
+  const place = placeDisponible(exp.plafondJour, envoyesJour, envoyesHeure);
   if (place <= 0) return { restants: await reste(), plafond: true };
 
   const { data: ws } = await sb.from("studio_workspaces").select("nom").eq("id", wsId).maybeSingle();
@@ -181,18 +184,19 @@ export async function traiterLot(
       const md = personnaliser(String(action.contenu ?? ""), c);
       const objet = personnaliser(String(action.objet ?? ""), c);
       const desinscription = lienDesinscription(c.jeton);
-      const raw = construireMimeHtml({
-        a: String(e.email), objet, desinscription, desinscriptionDirecte: lienDesinscriptionDirecte(c.jeton),
+      await exp.envoyer({
+        a: String(e.email), objet, desinscription, desinscriptionDirecte: lienDesinscriptionDirecte(c.jeton), cle: String(e.id),
         texte: `${markdownVersTexte(md)}\n\n—\nSe désinscrire : ${desinscription}`,
         html: gabarit({ objet, html: markdownVersHtml(md), entreprise: String(ws?.nom ?? ""), desinscription }),
       });
-      await envoyer(wsId, b64url(raw));
       await sb.from("studio_envois").update({ statut: "envoye", envoye_le: new Date().toISOString(), erreur: null }).eq("id", e.id);
     } catch (err) {
-      const msg = (err instanceof Error ? err.message : String(err)).slice(0, 300);
-      await sb.from("studio_envois").update({ statut: "echec", erreur: msg }).eq("id", e.id);
-      // Gmail refuse (quota, connexion) : on s'arrête, le passage suivant reprendra.
-      if (/429|quota|limit|401|403|reconnect/i.test(msg)) return { restants: await reste(), plafond: true };
+      // Quota, pause ou connexion : l'envoi reste en file, le passage suivant reprendra.
+      if (exp.bloquante(err)) {
+        await sb.from("studio_envois").update({ statut: "a_envoyer", erreur: exp.lisible(err).slice(0, 300) }).eq("id", e.id);
+        return { restants: await reste(), plafond: true };
+      }
+      await sb.from("studio_envois").update({ statut: "echec", erreur: exp.lisible(err).slice(0, 300) }).eq("id", e.id);
     }
   }
   return { restants: await reste(), plafond: false };

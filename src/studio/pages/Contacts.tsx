@@ -1,6 +1,6 @@
 // « Contacts » : les abonnés de l'espace (import CSV, saisie, listes,
 // désinscriptions) et l'avancement des mailings validés. Les mailings partent
-// du Gmail connecté, un message par contact, avec lien de désinscription.
+// de la messagerie connectée (Zernio), un message par contact, 45 par heure au plus, avec lien de désinscription.
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Mail, Search, Trash2, Upload, UserMinus, UserPlus } from 'lucide-react';
@@ -14,7 +14,7 @@ type Contact = { id: string; email: string; prenom: string | null; nom: string |
 type Campagne = { id: string; objet: string; liste: string | null; statut: string; date: string; total: number; envoyes: number; echecs: number; en_attente: number };
 type Etat = {
   contacts: Contact[]; abonnes: number; desinscrits: number; listes: { nom: string; nombre: number }[];
-  campagnes: Campagne[]; plafond_jour: number; import?: { ajoutes: number; deja_presents: number; rejets: number };
+  campagnes: Campagne[]; plafond_jour: number; plafond_heure: number; boite: string | null; import?: { ajoutes: number; deja_presents: number; rejets: number };
 };
 
 const champ = 'w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm';
@@ -56,7 +56,7 @@ export default function Contacts() {
 
   return (
     <div className="space-y-6">
-      <Titre sous={<>Vos abonnés pour les newsletters et mailings. Vos agents préparent les envois ; rien ne part sans votre validation, depuis votre Gmail connecté (<Link to="/studio/connecteurs" className="underline">Connecteurs</Link>), {e.plafond_jour} e-mails par jour au plus.</>}>
+      <Titre sous={<>Vos abonnés pour les newsletters et mailings. Vos agents préparent les envois ; rien ne part sans votre validation, {e.boite ? <>depuis {e.boite} (<Link to="/studio/connecteurs" className="underline">Connecteurs</Link>), {e.plafond_heure} e-mails par heure et {e.plafond_jour} par jour au plus : une boîte personnelle n'est pas faite pour les gros volumes.</> : <>depuis votre messagerie, à connecter dans <Link to="/studio/connecteurs" className="underline">Connecteurs</Link>.</>}</>}>
         Contacts
       </Titre>
       {erreur && <p className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700">{erreur}</p>}

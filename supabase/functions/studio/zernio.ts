@@ -1,4 +1,5 @@
 // Réseaux sociaux via Zernio (https://docs.zernio.com) : Facebook, Instagram, LinkedIn, TikTok.
+// (Messagerie, agenda et fichiers passent aussi par Zernio : voir bureau.ts.)
 //
 // Zernio détient des applications Meta / LinkedIn / TikTok déjà validées : le client
 // connecte ses comptes en un clic, sans revue d'application de notre côté.
@@ -22,7 +23,7 @@ export type CompteReseau = {
 export const zernioConfigure = () => Boolean(Deno.env.get("ZERNIO_API_KEY"));
 export const estReseau = (x: unknown): x is Reseau => RESEAUX.includes(x as Reseau);
 
-async function appel<T>(chemin: string, init: RequestInit = {}): Promise<{ statut: number; data: T }> {
+export async function appel<T>(chemin: string, init: RequestInit = {}): Promise<{ statut: number; data: T; entetes: Headers }> {
   const cle = Deno.env.get("ZERNIO_API_KEY");
   if (!cle) throw new Error("Réseaux sociaux non configurés (clé Zernio absente).");
   const r = await fetch(`${BASE}${chemin}`, {
@@ -36,18 +37,38 @@ async function appel<T>(chemin: string, init: RequestInit = {}): Promise<{ statu
   if (!r.ok) {
     const d = (data ?? {}) as Record<string, unknown>;
     const msg = String(d.message ?? d.error ?? d.code ?? r.statusText);
-    throw Object.assign(new Error(`Zernio (${r.status}) : ${msg}`), { statut: r.status, data });
+    throw Object.assign(new Error(`Zernio (${r.status}) : ${msg}`), { statut: r.status, data, code: String(d.code ?? "") });
   }
-  return { statut: r.status, data: data as T };
+  return { statut: r.status, data: data as T, entetes: r.headers };
+}
+
+/** Réponse brute (téléchargement de fichier). */
+export async function appelBrut(chemin: string): Promise<Response> {
+  const cle = Deno.env.get("ZERNIO_API_KEY");
+  if (!cle) throw new Error("Connexions non configurées (clé Zernio absente).");
+  const r = await fetch(`${BASE}${chemin}`, { headers: { Authorization: `Bearer ${cle}` }, signal: AbortSignal.timeout(60_000) });
+  if (!r.ok) {
+    let d: Record<string, unknown> = {};
+    try { d = await r.json(); } catch { /* corps non JSON */ }
+    throw Object.assign(new Error(`Zernio (${r.status}) : ${String(d.error ?? d.message ?? r.statusText)}`), { statut: r.status, data: d, code: String(d.code ?? "") });
+  }
+  return r;
 }
 
 const idDe = (x: unknown): string => (typeof x === "string" ? x : String((x as { _id?: string } | null)?._id ?? ""));
 
+// Caches de l'instance : le profil d'un espace ne change pas ; ses comptes sont relus après 30 s
+// (une conversation consulte réseaux, messagerie et connecteurs coup sur coup).
+const profils = new Map<string, string>();
+const comptesCache = new Map<string, { t: number; comptes: Promise<Record<string, unknown>[]> }>();
+export const oublierComptes = (wsId: string) => comptesCache.delete(wsId);
+
 /** Profil Zernio de l'espace (créé à la demande). */
 export async function profilEspace(wsId: string, nom: string, creer: boolean): Promise<string | null> {
+  if (profils.has(wsId)) return profils.get(wsId)!;
   const { data } = await appel<{ profiles: { _id: string; externalId: string | null }[] }>(`/profiles?externalId=${encodeURIComponent(wsId)}`);
   const trouve = (data.profiles ?? []).find((p) => p.externalId === wsId);
-  if (trouve) return trouve._id;
+  if (trouve) { profils.set(wsId, trouve._id); return trouve._id; }
   if (!creer) return null;
   try {
     const r = await appel<{ profile: { _id: string } }>("/profiles", {
@@ -63,13 +84,25 @@ export async function profilEspace(wsId: string, nom: string, creer: boolean): P
   }
 }
 
+/** Tous les comptes Zernio du profil de l'espace (réseaux, messageries), et de lui seul. */
+export function comptesBruts(wsId: string): Promise<Record<string, unknown>[]> {
+  const c = comptesCache.get(wsId);
+  if (c && Date.now() - c.t < 30_000) return c.comptes;
+  const comptes = (async () => {
+    const profil = await profilEspace(wsId, "", false);
+    if (!profil) return [];
+    const { data } = await appel<{ accounts: Record<string, unknown>[] }>(`/accounts?profileId=${profil}`);
+    return (data.accounts ?? []).filter((a) => idDe(a.profileId) === profil);
+  })();
+  comptes.catch(() => comptesCache.delete(wsId));
+  comptesCache.set(wsId, { t: Date.now(), comptes });
+  return comptes;
+}
+
 /** Comptes de réseaux sociaux connectés à l'espace (et à lui seul). */
 export async function comptesEspace(wsId: string): Promise<CompteReseau[]> {
-  const profil = await profilEspace(wsId, "", false);
-  if (!profil) return [];
-  const { data } = await appel<{ accounts: Record<string, unknown>[] }>(`/accounts?profileId=${profil}`);
-  return (data.accounts ?? [])
-    .filter((a) => estReseau(a.platform) && idDe(a.profileId) === profil)
+  return (await comptesBruts(wsId))
+    .filter((a) => estReseau(a.platform))
     .map((a) => ({
       id: String(a._id), reseau: a.platform as Reseau,
       nom: String(a.displayName || a.username || NOMS_RESEAUX[a.platform as Reseau]),
@@ -88,6 +121,7 @@ export async function lienConnexionReseau(p: { wsId: string; wsNom: string; rese
     q.set("reconnectAccountId", p.reconnecter);
   }
   const { data } = await appel<{ authUrl: string }>(`/connect/${p.reseau}?${q}`);
+  oublierComptes(p.wsId);
   return data.authUrl;
 }
 
@@ -95,6 +129,7 @@ export async function deconnecterCompte(wsId: string, compteId: string): Promise
   const compte = (await comptesEspace(wsId)).find((c) => c.id === compteId);
   if (!compte) throw new Error("Compte inconnu dans cet espace.");
   await appel(`/accounts/${encodeURIComponent(compteId)}`, { method: "DELETE" });
+  oublierComptes(wsId);
   return compte;
 }
 
