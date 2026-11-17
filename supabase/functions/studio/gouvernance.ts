@@ -77,7 +77,10 @@ export async function garde(sb: SupabaseClient, wsId: string): Promise<{ message
 
 export type ResultatOnboarding = { ok: true; id: string; essai?: boolean; identifiants_envoyes?: boolean; deja_client?: boolean };
 
-export async function soumettreOnboarding(sb: SupabaseClient, body: Record<string, unknown>, origine: string, site = ""): Promise<ResultatOnboarding | { erreur: string; statut: number }> {
+/** Contrôle quotidien du parcours (controle.ts) : pas de lead dans le CRM, e-mail capturé au lieu d'être envoyé. */
+export type ModeControle = { courriel: (m: { a: string; objet: string; html: string; texte: string }) => void };
+
+export async function soumettreOnboarding(sb: SupabaseClient, body: Record<string, unknown>, origine: string, site = "", controle?: ModeControle): Promise<ResultatOnboarding | { erreur: string; statut: number }> {
   // Champ piège invisible : un robot le remplit, un humain non. Réponse muette.
   if (String(body.site_web_entreprise ?? "").trim()) return { ok: true, id: "" };
   const cfg = await chargerConfig(sb, ["onboarding_ouvert"]);
@@ -112,20 +115,22 @@ export async function soumettreOnboarding(sb: SupabaseClient, body: Record<strin
 
   // Lead dans le CRM, comme les formulaires du site (trigger lead_to_contact).
   const [prenom, ...reste] = contact.split(/\s+/);
-  const libelles = new Map(AGENTS_CATALOGUE.map((a) => [a.id, a.libelle.split(" —")[0]]));
-  await sb.from("contact_requests").insert({
-    first_name: reste.length ? prenom : null, last_name: reste.length ? reste.join(" ") : contact,
-    email, phone: telephone, company: entreprise || null, request_type: "Studio IA (questionnaire d'onboarding)",
-    message: [
-      `Questionnaire d'onboarding complété : score ${s.score}/100 (${s.lecture}).`,
-      `Agents souhaités : ${agents.map((a) => libelles.get(a) ?? a).join(", ")}`,
-      s.drapeaux.length ? `Points d'attention : ${s.drapeaux.join(", ")}` : "",
-      `Demande à traiter dans CRM › Studio IA clients › Demandes. [onboarding:${data.id}]`,
-    ].filter(Boolean).join("\n"),
-    source: origine, status: "new",
-  }).then(({ error: e }) => { if (e) console.error("[studio] lead onboarding:", e.message); });
+  if (!controle) {
+    const libelles = new Map(AGENTS_CATALOGUE.map((a) => [a.id, a.libelle.split(" —")[0]]));
+    await sb.from("contact_requests").insert({
+      first_name: reste.length ? prenom : null, last_name: reste.length ? reste.join(" ") : contact,
+      email, phone: telephone, company: entreprise || null, request_type: "Studio IA (questionnaire d'onboarding)",
+      message: [
+        `Questionnaire d'onboarding complété : score ${s.score}/100 (${s.lecture}).`,
+        `Agents souhaités : ${agents.map((a) => libelles.get(a) ?? a).join(", ")}`,
+        s.drapeaux.length ? `Points d'attention : ${s.drapeaux.join(", ")}` : "",
+        `Demande à traiter dans CRM › Studio IA clients › Demandes. [onboarding:${data.id}]`,
+      ].filter(Boolean).join("\n"),
+      source: origine, status: "new",
+    }).then(({ error: e }) => { if (e) console.error("[studio] lead onboarding:", e.message); });
+  }
 
-  return { ok: true, id: data.id, ...(await essaiAutomatique(sb, data.id, site)) };
+  return { ok: true, id: data.id, ...(await essaiAutomatique(sb, data.id, site, controle)) };
 }
 
 /**
@@ -133,7 +138,7 @@ export async function soumettreOnboarding(sb: SupabaseClient, body: Record<strin
  * demandés, mot de passe provisoire envoyé par e-mail. Un échec d'envoi laisse l'espace créé :
  * le CRM le voit (identifiants_envoyes_le vide) et peut régénérer le mot de passe.
  */
-async function essaiAutomatique(sb: SupabaseClient, demandeId: string, site: string): Promise<{ essai: boolean; identifiants_envoyes?: boolean; deja_client?: boolean }> {
+async function essaiAutomatique(sb: SupabaseClient, demandeId: string, site: string, controle?: ModeControle): Promise<{ essai: boolean; identifiants_envoyes?: boolean; deja_client?: boolean }> {
   const cfg = await chargerConfig(sb, ["essai_auto", "essai_jours"]);
   if (cfg.essai_auto !== "true" || !site) return { essai: false };
   const jours = Math.min(60, Math.max(1, Math.round(Number(cfg.essai_jours) || 7)));
@@ -147,7 +152,8 @@ async function essaiAutomatique(sb: SupabaseClient, demandeId: string, site: str
       prenom: p.prenom, entreprise: p.nom.replace(/^Démo — /, ""), email: p.email, motDePasse: p.mot_de_passe,
       site, finEssai: String(p.essai_fin), jours,
     });
-    await courriel.envoyer(sb, { a: p.email, ...m });
+    if (controle) controle.courriel({ a: p.email, ...m });
+    else await courriel.envoyer(sb, { a: p.email, ...m });
     await sb.from("studio_onboarding").update({ identifiants_envoyes_le: new Date().toISOString() }).eq("id", demandeId);
     await journaliser(sb, { wsId: p.workspace_id, acteur: "systeme", action: "identifiants_envoyes", detail: { email: p.email, essai_jours: jours } });
     return { essai: true, identifiants_envoyes: true };

@@ -4,13 +4,14 @@
 // l'Edge Function `studio` (hash côté serveur, jamais lisible depuis le CRM).
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Bot, Building2, ShieldCheck, TrendingUp, Copy, ExternalLink, KeyRound, Plus, UserPlus, Inbox, Settings } from 'lucide-react';
+import { Activity, Bot, Building2, ShieldCheck, TrendingUp, Copy, ExternalLink, KeyRound, Plus, UserPlus, Inbox, Settings } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
 import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Spinner } from '@/components/ui';
 import { ModeleSelect, type ModeleOR } from './ModeleSelect';
 import HarnessPanel from './HarnessPanel';
 import RentabilitePanel from './RentabilitePanel';
+import ControlePanel from './ControlePanel';
 import ConnecteursEspace from './ConnecteursEspace';
 import ConnexionsEspace from './ConnexionsEspace';
 import SavoirsAgent from './SavoirsAgent';
@@ -57,7 +58,7 @@ async function adminStudio<T = unknown>(body: Record<string, unknown>): Promise<
 }
 
 export default function StudioAdmin() {
-  const [onglet, setOnglet] = useState<'demandes' | 'espaces' | 'agents' | 'harness' | 'rentabilite' | 'parametres'>('espaces');
+  const [onglet, setOnglet] = useState<'demandes' | 'espaces' | 'agents' | 'harness' | 'rentabilite' | 'controle' | 'parametres'>('espaces');
   const [espaces, setEspaces] = useState<Workspace[] | null>(null);
   const [users, setUsers] = useState<StudioUser[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -113,6 +114,7 @@ export default function StudioAdmin() {
         <button onClick={() => setOnglet('agents')} className={onglet === 'agents' ? 'btn-primary' : 'btn-secondary'}><Bot className="mr-1 inline h-4 w-4" />Catalogue d'agents</button>
         <button onClick={() => setOnglet('harness')} className={onglet === 'harness' ? 'btn-primary' : 'btn-secondary'}><ShieldCheck className="mr-1 inline h-4 w-4" />Harness général</button>
         <button onClick={() => setOnglet('rentabilite')} className={onglet === 'rentabilite' ? 'btn-primary' : 'btn-secondary'}><TrendingUp className="mr-1 inline h-4 w-4" />Rentabilité</button>
+        <button onClick={() => setOnglet('controle')} className={onglet === 'controle' ? 'btn-primary' : 'btn-secondary'}><Activity className="mr-1 inline h-4 w-4" />Contrôle</button>
         <button onClick={() => setOnglet('parametres')} className={onglet === 'parametres' ? 'btn-primary' : 'btn-secondary'}><Settings className="mr-1 inline h-4 w-4" />Paramètres</button>
       </div>
       {erreur && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{erreur}</p>}
@@ -151,6 +153,7 @@ export default function StudioAdmin() {
       {onglet === 'parametres' && <ParametresPanel />}
       {onglet === 'harness' && <HarnessPanel />}
       {onglet === 'rentabilite' && <RentabilitePanel />}
+      {onglet === 'controle' && <ControlePanel />}
 
       {onglet === 'agents' && (
         <div className="grid gap-3 md:grid-cols-2">

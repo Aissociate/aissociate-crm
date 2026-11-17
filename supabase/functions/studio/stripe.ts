@@ -103,7 +103,7 @@ export function lireAbonnement(a: Abonnement) {
 
 // ─── Réseau ──────────────────────────────────────────────────────────────────
 
-async function appel<T = Record<string, unknown>>(methode: "GET" | "POST", chemin: string, params: Record<string, unknown> = {}, idem?: string): Promise<T> {
+export async function appel<T = Record<string, unknown>>(methode: "GET" | "POST" | "DELETE", chemin: string, params: Record<string, unknown> = {}, idem?: string): Promise<T> {
   const corps = formulaire(params);
   const r = await fetch(methode === "GET" && corps ? `${API}${chemin}?${corps}` : `${API}${chemin}`, {
     method: methode,

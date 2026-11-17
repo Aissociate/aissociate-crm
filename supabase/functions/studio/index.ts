@@ -44,6 +44,7 @@
 // Tâches planifiées (taches.ts) :
 //   client  taches | tache_enregistrer {id?, titre, agent_id, consigne, heures[], jours[], actif} | tache_supprimer {id}
 //           tache_lancer {id}                       (écriture : propriétaire)
+//   cron    controle_cron {cle} (pg_cron quotidien) → contrôle du parcours client, alerte e-mail si problème (controle.ts)
 //   cron    taches_cron {cle} (pg_cron horaire) → tache_executer {cle, id} par tâche échue, chacune dans sa propre instance
 // Veille, contacts et mailings (veille.ts, mailing.ts) :
 //   client  flux | flux_ajouter {url} | flux_basculer {id, actif} | flux_supprimer {id} | flux_actualiser
@@ -93,6 +94,7 @@ import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
 import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as stripe from "./stripe.ts";
+import * as controle from "./controle.ts";
 import * as essai from "./essai.ts";
 import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
@@ -535,8 +537,10 @@ async function agentsDuWorkspace(sb: SupabaseClient, ws: Session["ws"]) {
     sb.from("studio_workspace_agents").select("agent_id, actif, consignes, modele").eq("workspace_id", ws.id),
   ]);
   const parAgent = new Map((reglages ?? []).map((r) => [r.agent_id, r]));
+  // L'essai gratuit donne les agents de la formule Essentiel (aucun agent ne liste « essai » dans ses offres).
+  const offre = ws.offre === "essai" ? "essentiel" : ws.offre;
   return (agents ?? [])
-    .filter((a) => (a.offres as string[]).includes(ws.offre) && parAgent.get(a.id)?.actif !== false)
+    .filter((a) => (a.offres as string[]).includes(offre) && parAgent.get(a.id)?.actif !== false)
     .map((a) => ({
       ...a,
       consignes: parAgent.get(a.id)?.consignes ?? "",
@@ -1043,6 +1047,8 @@ async function listerModeles(sb: SupabaseClient): Promise<Response> {
 
 async function admin(sb: SupabaseClient, action: string, body: Record<string, unknown>, managerId: string): Promise<Response> {
   if (action === "admin_modeles") return await listerModeles(sb);
+  // Contrôle du parcours client à la demande (l'e-mail d'alerte part seulement si demandé).
+  if (action === "admin_controle") return json(await controle.executer(sb, { envoyer: body.envoyer === true }));
   if (action === "admin_liaison") {
     const wsId = String(body.workspace_id ?? "");
     const { data: w } = await sb.from("studio_workspaces").select("id, nom, liaison_inbox_id").eq("id", wsId).maybeSingle();
@@ -1204,12 +1210,17 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Tâches planifiées (pg_cron, puis une instance par tâche) : clé du déclencheur obligatoire ──
-    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter") {
+    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter" || action === "controle_cron") {
       const cle = await cleCron(sb);
       if (!cle || typeof body.cle !== "string" || body.cle.length !== cle.length || !(await egaliteSure(body.cle, cle))) {
         return json({ error: "Non autorisé" }, 401);
       }
       if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle), campagnes: await relancerEnvois(sb) });
+      if (action === "controle_cron") {
+        const travail = controle.executer(sb).catch((e) => console.error("[studio] contrôle du parcours :", e instanceof Error ? e.message : String(e)));
+        (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+        return json({ ok: true });
+      }
       if (action === "envois_traiter") {
         const id = String(body.id ?? "");
         const travail = (async () => {
@@ -1234,7 +1245,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Administration CRM ──
     if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_connexions",
-      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs"].includes(action)) {
+      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs", "admin_controle"].includes(action)) {
       const managerId = await estManager(req);
       if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body, managerId);

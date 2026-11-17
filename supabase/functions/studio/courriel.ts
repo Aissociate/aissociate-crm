@@ -51,6 +51,23 @@ export async function envoyer(sb: SupabaseClient, m: { a: string; objet: string;
   throw derniere instanceof Error ? derniere : new Error("Envoi impossible");
 }
 
+/** Contrôle des connexions SMTP (sans envoi) : chaque compte de la chaîne d'envoi s'authentifie-t-il ? */
+export async function verifierSmtp(sb: SupabaseClient): Promise<{ compte: string; ok: boolean; erreur?: string }[]> {
+  const c = await config(sb);
+  const user = Deno.env.get("STUDIO_SMTP_USERNAME")?.trim(), pass = Deno.env.get("STUDIO_SMTP_PASSWORD");
+  const comptes: [string, Smtp][] = [...(user && pass ? [[`boîte dédiée (${user})`, { ...c, user, pass }] as [string, Smtp]] : []), [`boîte du CRM (${c.user ?? "non configurée"})`, c]];
+  return await Promise.all(comptes.map(async ([compte, s]) => {
+    if (!s.host || !s.user || !s.pass) return { compte, ok: false, erreur: "SMTP non configuré" };
+    try {
+      const t = nodemailer.createTransport({ host: s.host, port: s.port, secure: s.port === 465, auth: { user: s.user, pass: s.pass }, connectionTimeout: 15_000 });
+      await t.verify();
+      return { compte, ok: true };
+    } catch (e) {
+      return { compte, ok: false, erreur: e instanceof Error ? e.message : String(e) };
+    }
+  }));
+}
+
 const echapper = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** E-mail d'accueil de l'essai : adresse de connexion, identifiant, mot de passe provisoire. */

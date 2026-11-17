@@ -108,6 +108,28 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
 - CGV : livrables désignés par `studio_config.cgv_livrables` (ids, dans l'ordre). Version = empreinte des textes ;
   acceptation horodatée par utilisateur (`studio_users.cgv_*`, IP et navigateur), rien d'autre n'est accessible avant.
 
+## Contrôle quotidien du parcours client (`controle.ts`, `controle_rapport.ts`)
+- pg_cron `studio-controle`, chaque jour à 02:00 UTC (06:00 à La Réunion), appelle l'action `controle_cron` (clé `studio_cron_cle`).
+  Il est aussi lancé à la demande depuis CRM › Studio IA clients › Contrôle (action `admin_controle`).
+- Un client fictif (`parcours-<horodatage>@controle.aissociate.re`) passe par le vrai parcours, en appelant la fonction déployée :
+  - questionnaire, puis espace d'essai et e-mail d'identifiants (capturé, pas envoyé) ;
+  - connexion, puis nouveau mot de passe ;
+  - CGV : accès bloqué avant l'acceptation, ouvert après ;
+  - essai en cours, puis refus d'un deuxième connecteur ;
+  - page de paiement d'une recharge, puis blocage à la fin de l'essai ;
+  - page de paiement de l'abonnement ;
+  - webhook Stripe signé (abonnement, puis recharge rejouée deux fois), puis déblocage ;
+  - nettoyage : espace, demande et client Stripe de test supprimés. Aucun lead n'est créé dans le CRM.
+- En Stripe live (compte partagé), aucune session de paiement n'est créée. Seuls la clé, le prix, le webhook et
+  les livraisons sont vérifiés.
+- Autres contrôles :
+  - secrets, job `studio-taches` (RPC `studio_controle_crons`), pages du site ;
+  - SMTP (`verifierSmtp`, sans envoi), Stripe (webhook et événements non livrés sur 24 h), OpenRouter (crédit), Zernio ;
+  - activité réelle sur 24 h : identifiants non envoyés, tâches en erreur.
+- Tout échec est rejoué 20 s plus tard. S'il se reproduit, il est « confirmé » ; sinon il est « intermittent » et n'envoie pas d'e-mail.
+  Un problème confirmé, ou un parcours rétabli après une panne, envoie un e-mail (constat, cause probable, solution
+  préconisée) à `studio_config.controle_destinataires`. Chaque passage est consigné dans `job_runs` (`studio-controle`).
+
 ## Lecture de pages web (`web_lire_page`)
 Outil disponible pour tous les agents : lit une page publique dont l'agent connaît l'adresse, et renvoie son texte
 avec les liens internes du site (`liensPage`) pour naviguer. Il réutilise `lireAdresse` de `veille.ts` : pas d'IP
