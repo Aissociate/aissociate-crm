@@ -52,6 +52,29 @@ export function boutiqueShopify(brut: unknown): string | null {
   return /^[a-z0-9][a-z0-9-]{0,60}$/.test(nom) ? `${nom}.myshopify.com` : null;
 }
 
+/**
+ * Régies publicitaires : Zernio les connecte par `GET /connect/{chemin}/ads`, où le chemin est le
+ * réseau porteur (facebook → compte « metaads », twitter → « xads »…), et non par `/connect/{slug}`.
+ */
+export const CHEMIN_PUB: Record<string, string> = {
+  metaads: "facebook", googleads: "googleads", linkedinads: "linkedin", tiktokads: "tiktok",
+  pinterestads: "pinterest", xads: "twitter", redditads: "redditads", microsoftads: "microsoftads",
+};
+
+/** Chemin et paramètres de connexion d'une application (pur : testé sans réseau). */
+export function cheminConnexion(app: string, q: URLSearchParams, compteX: string | null): string | { erreur: string } {
+  const pub = CHEMIN_PUB[app];
+  if (!pub) return `/connect/${app}?${q}`;
+  if (app === "xads") {
+    // X Ads s'appuie sur le compte X de l'espace : il doit être connecté d'abord.
+    if (!compteX) return { erreur: "Connectez d'abord votre compte X (carte « X » plus haut), puis X Ads." };
+    q.set("accountId", compteX);
+  }
+  // Meta : connexion « business », indépendante de la page Facebook reliée pour publier.
+  if (app === "metaads") q.set("loginMode", "business");
+  return `/connect/${pub}/ads?${q}`;
+}
+
 /** Lien d'autorisation (fenêtre de l'application), retour sur `retour`. */
 export async function lienConnexionApplication(p: {
   wsId: string; wsNom: string; app: string; retour: string; reconnecter?: string | null; boutique?: string | null;
@@ -66,8 +89,24 @@ export async function lienConnexionApplication(p: {
     if (!(await comptesApplications(p.wsId)).some((c) => c.id === p.reconnecter)) throw new Error("Compte inconnu dans cet espace.");
     q.set("reconnectAccountId", p.reconnecter);
   }
-  const { data } = await zernio.appel<{ authUrl: string }>(`/connect/${p.app}?${q}`);
+  const compteX = p.app === "xads"
+    ? String((await zernio.comptesBruts(p.wsId)).find((a) => a.platform === "twitter" && a.isActive !== false)?._id ?? "") || null
+    : null;
+  const chemin = cheminConnexion(p.app, q, compteX);
+  if (typeof chemin !== "string") throw new Error(chemin.erreur);
+  type Reponse = { authUrl?: string; alreadyConnected?: boolean };
+  let data: Reponse;
+  try {
+    ({ data } = await zernio.appel<Reponse>(chemin));
+  } catch (e) {
+    // Connexion « business » de Meta indisponible chez Zernio (503) : connexion classique.
+    if (p.app !== "metaads" || (e as { statut?: number }).statut !== 503) throw e;
+    q.delete("loginMode");
+    ({ data } = await zernio.appel<Reponse>(`/connect/facebook/ads?${q}`));
+  }
   zernio.oublierComptes(p.wsId);
+  // Régie déjà reliée (droits déjà accordés avec le compte de publication) : retour direct, sans fenêtre.
+  if (data?.alreadyConnected) return `${p.retour}${p.retour.includes("?") ? "&" : "?"}connected=1`;
   if (!data?.authUrl) throw new Error("Cette application ne propose pas encore la connexion en un clic.");
   return data.authUrl;
 }

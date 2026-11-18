@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { APPLICATIONS, applicationsDepuis, boutiqueShopify, estApplication } from './applications';
+import { APPLICATIONS, applicationsDepuis, boutiqueShopify, cheminConnexion, CHEMIN_PUB, estApplication } from './applications';
 import { RESEAUX } from './zernio';
 import { actifsDepuis } from './facturation';
 import { APPLICATIONS_UN_CLIC, RESEAUX_PUBLICATION } from '../../../src/lib/tarifConnecteurs';
@@ -32,5 +32,15 @@ describe('applications en un clic', () => {
       { _id: '3', platform: 'twitter', username: 'moi' },
     ], []);
     expect(a).toEqual([{ type: 'app', libelle: 'HubSpot', detail: 'Ma société' }, { type: 'twitter', libelle: 'X', detail: 'moi' }]);
+  });
+  it('connecte les régies publicitaires par le chemin /ads de leur réseau', () => {
+    const q = () => new URLSearchParams({ profileId: 'p' });
+    expect(cheminConnexion('hubspot', q(), null)).toBe('/connect/hubspot?profileId=p');
+    expect(cheminConnexion('googleads', q(), null)).toBe('/connect/googleads/ads?profileId=p');
+    expect(cheminConnexion('metaads', q(), null)).toBe('/connect/facebook/ads?profileId=p&loginMode=business');
+    expect(cheminConnexion('linkedinads', q(), null)).toBe('/connect/linkedin/ads?profileId=p');
+    expect(cheminConnexion('xads', q(), null)).toMatchObject({ erreur: expect.stringContaining('compte X') });
+    expect(cheminConnexion('xads', q(), 'x1')).toBe('/connect/twitter/ads?profileId=p&accountId=x1');
+    for (const a of Object.keys(APPLICATIONS).filter((k) => APPLICATIONS[k].categorie === 'Publicité')) expect(CHEMIN_PUB[a]).toBeTruthy();
   });
 });

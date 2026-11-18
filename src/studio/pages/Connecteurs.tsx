@@ -175,7 +175,7 @@ export default function Connecteurs() {
           Aucune action n'est jamais lancée sans votre validation.
         </p>
       </div>
-      {(erreur || messageries.erreur || reseaux.erreur || apps.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || messageries.erreur || reseaux.erreur || apps.erreur}</p>}
+      {(erreur || messageries.erreur || reseaux.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || messageries.erreur || reseaux.erreur}</p>}
       {retour && (
         <p className={cx('mb-4 rounded-xl px-3 py-2 text-sm', retour.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')} role="status">{retour.texte}</p>
       )}
@@ -207,6 +207,8 @@ export default function Connecteurs() {
         {apps.etat === null ? <Chargement /> : (
           <>
             {!apps.etat.configure && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">La connexion en un clic est momentanément indisponible.</p>}
+            {/* L'erreur s'affiche ici, sous les yeux : le bandeau du haut de page est hors de l'écran. */}
+            {apps.erreur && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{apps.erreur}</p>}
             <GrilleApplications apps={apps} />
           </>
         )}
