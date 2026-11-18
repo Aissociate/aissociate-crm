@@ -22,9 +22,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = process.env.CRM_SUPABASE_URL || 'https://vkirutbpxzybucuiyjnb.supabase.co';
+const SUPABASE_URL = process.env.CRM_SUPABASE_URL || 'https://api.aissociate.re';
 const SUPABASE_ANON_KEY = process.env.CRM_SUPABASE_ANON_KEY
-  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZraXJ1dGJweHp5YnVjdWl5am5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzE4MTYsImV4cCI6MjA5NTY0NzgxNn0.AHMDxQdgBD3fMhnsTLMI-i7b-zymC33vbL4BXay_w-M';
+  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3OTUwMjUyMzEsImlzcyI6ImFpc3NvY2lhdGUiLCJyb2xlIjoiYW5vbiIsImV4cCI6MjExMDM4NTIzMX0.jHsKdP0KCcDO8kcNT2PyrI3zsK2viNybzxoreA2nGuM';
 const CRM_EMAIL = process.env.CRM_EMAIL;
 const CRM_PASSWORD = process.env.CRM_PASSWORD;
 
