@@ -26,3 +26,12 @@ for _ in $(seq 1 30); do
 done
 echo "Santé du conteneur : $s"
 [ "$s" = healthy ]
+
+# Traefik met ~1 s à router le nouveau conteneur : attendre qu'il serve le site.
+for _ in $(seq 1 30); do
+  c=$(curl -sk -o /dev/null -w '%{http_code}' --resolve aissociate.re:443:127.0.0.1 https://aissociate.re/healthz || true)
+  [ "$c" = 200 ] && break
+  sleep 1
+done
+echo "Routage Traefik : $c"
+[ "$c" = 200 ]

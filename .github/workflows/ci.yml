@@ -57,5 +57,8 @@ jobs:
       - name: Vérifier le site
         run: |
           for u in https://aissociate.re/ https://aissociate.re/formations/ https://aissociate.re/blog/; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$u"); echo "$u -> $code"; [ "$code" = 200 ]
+            for i in 1 2 3 4 5 6; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$u"); [ "$code" = 200 ] && break; sleep 5
+            done
+            echo "$u -> $code"; [ "$code" = 200 ]
           done
