@@ -7,7 +7,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
 import { supabase } from '@/lib/supabase';
-import { APPS_SUR_DEMANDE, enumerer, libelle, TYPES_CONNECTEURS, useTarifConnecteurs, type TarifConnecteurs } from '@/lib/tarifConnecteurs';
+import { APPLICATIONS_UN_CLIC, logoConnecteur, enumerer, libelle, TYPES_CONNECTEURS, useTarifConnecteurs, type TarifConnecteurs } from '@/lib/tarifConnecteurs';
 import SamDemo from '../components/SamDemo';
 
 /**
@@ -476,16 +476,22 @@ export default function AgentsIA() {
                 </ul>
               </div>
             <div className="rounded-2xl border border-neutral-200 bg-white p-6 md:col-span-2">
-              <p className="font-semibold">Applications métier, sur demande</p>
+              <p className="font-semibold">Toutes les autres applications, en un clic</p>
               <p className="mt-1 text-sm text-neutral-600">
-                Chaque connexion est étudiée avec vous et mise en place sur mesure (accès, usages, faisabilité),
-                puis facturée {eur(tarif.prix)} HT / mois comme tout connecteur actif. Votre logiciel n'est pas dans la liste ? Demandez-le aussi.
+                Vous les reliez vous-même depuis votre espace, sans attendre : un clic, vous autorisez l'accès, c'est connecté.
+                Chacune est facturée {eur(tarif.prix)} HT / mois comme tout connecteur actif. Votre logiciel n'est pas dans la liste ? Demandez-le.
               </p>
-              <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-                {APPS_SUR_DEMANDE.map((g) => (
+              <dl className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                {APPLICATIONS_UN_CLIC.map((g) => (
                   <div key={g.categorie}>
                     <dt className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{g.categorie}</dt>
-                    <dd className="mt-1 text-sm">{g.apps.join(' · ')}</dd>
+                    <dd className="mt-2 flex flex-wrap gap-1.5">
+                      {g.apps.map((a) => (
+                        <span key={a.slug} className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 py-1 pl-1.5 pr-2.5 text-sm">
+                          <img src={logoConnecteur(a.slug)} alt="" width={16} height={16} loading="lazy" className="h-4 w-4" /> {a.nom}
+                        </span>
+                      ))}
+                    </dd>
                   </div>
                 ))}
               </dl>

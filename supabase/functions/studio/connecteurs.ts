@@ -10,6 +10,7 @@ import type { ConnecteurActif } from "./contexte.ts";
 import { chiffrer } from "./securite.ts";
 import * as bureau from "./bureau.ts";
 import * as zernio from "./zernio.ts";
+import { APPLICATIONS, estApplication } from "./applications.ts";
 
 type Def = {
   libelle: string;
@@ -67,6 +68,10 @@ export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promi
         type: `zernio:${b.fournisseur}`, libelle: `${bureau.NOMS_FOURNISSEURS[b.fournisseur]} (${b.zones.map((z) => bureau.NOMS_ZONES[z]).join(", ")})`,
         detail: [b.adresse, b.a_reconnecter ? "à reconnecter" : "connecté par le client"].filter(Boolean).join(" · "),
       }];
+    }
+    if (estApplication(a.platform)) {
+      // Connectée par le client, mais sans outil d'action pour l'instant : l'agent ne doit pas prétendre y agir.
+      return [{ type: `zernio:${a.platform}`, libelle: APPLICATIONS[a.platform].nom, detail: `${String(a.displayName || a.username || "compte relié")} · reliée par le client ; tu n'as pas d'outil pour y lire ni y agir : dis-le si on te le demande` }];
     }
     if (!zernio.estReseau(a.platform)) return [];
     return [{ type: `zernio:${a.platform}`, libelle: zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "connecté par le client") }];

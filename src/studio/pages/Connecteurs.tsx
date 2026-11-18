@@ -2,16 +2,17 @@
 // 1. En un clic (Zernio) : Google, Microsoft, toute messagerie (IMAP), Facebook, Instagram,
 //    LinkedIn, TikTok… le client autorise lui-même, le compte est rattaché à son espace.
 // 2. Connexion directe : serveur MCP (paramètres saisis, jeton chiffré).
-// 3. Sur demande : toute autre application, mise en place par Aissociate.
+// 3. Autres applications en un clic (Applications.tsx) : vidéo, messageries, publicité, boutique, CRM…
+// 4. Application absente de la liste : demande à Aissociate.
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { CheckCircle2, Clock, Plug, RefreshCw, Server, Trash2, X, AlertTriangle } from 'lucide-react';
 import { useStudio } from '../StudioApp';
-import { APPS_SUR_DEMANDE } from '@/lib/tarifConnecteurs';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
 import { ComptesMessagerie, useMessageries, type Quoi } from '../Messageries';
 import { ComptesReseau, NOMS_RESEAUX, useReseaux, type Reseau } from '../ReseauxSociaux';
+import { GrilleApplications, Logo, useApplications } from '../Applications';
 
 type Statut = 'demande' | 'en_cours' | 'connecte' | 'erreur' | 'desactive';
 type Connecteur = { id: string; type: string; statut: Statut; infos: Record<string, string>; secret_renseigne: boolean; notes_admin: string; updated_at: string };
@@ -54,6 +55,14 @@ const CATALOGUE: Def[] = [
   { type: 'tiktok', nom: 'TikTok', logo: '♪', couleur: '#111111', mode: 'assiste', zernio: 'tiktok',
     accroche: 'Compte TikTok', agents: 'Hugo prépare vos vidéos courtes et leurs descriptions.',
     champs: [{ nom: 'compte', label: 'Nom du compte', aide: '@votre-compte', requis: true }] },
+  { type: 'twitter', nom: 'X', logo: 'X', couleur: '#000000', mode: 'assiste', zernio: 'twitter',
+    accroche: 'Votre compte X (ex-Twitter)', agents: 'Hugo prépare vos publications courtes.', champs: [] },
+  { type: 'threads', nom: 'Threads', logo: '@', couleur: '#000000', mode: 'assiste', zernio: 'threads',
+    accroche: 'Le compte relié à votre Instagram', agents: 'Hugo décline vos publications pour Threads.', champs: [] },
+  { type: 'pinterest', nom: 'Pinterest', logo: 'P', couleur: '#BD081C', mode: 'assiste', zernio: 'pinterest',
+    accroche: 'Vos tableaux', agents: 'Hugo prépare vos épingles (image requise).', champs: [] },
+  { type: 'googlebusiness', nom: 'Google Business', logo: 'G', couleur: '#4285F4', mode: 'assiste', zernio: 'googlebusiness',
+    accroche: 'Votre fiche d\'établissement Google', agents: 'Hugo prépare les actualités de votre fiche.', champs: [] },
   { type: 'mcp', nom: 'Serveur MCP', logo: 'MCP', couleur: '#7c3aed', mode: 'direct',
     accroche: 'Pour les outils qui proposent un serveur MCP (avancé)', agents: 'Vos agents utilisent les outils exposés par ce serveur.',
     champs: [
@@ -63,6 +72,12 @@ const CATALOGUE: Def[] = [
       { nom: 'description', label: 'À quoi sert-il ?' },
     ] },
 ];
+
+/** Logo de marque (public/connecteurs) ; sinon la pastille de couleur. */
+const LOGOS: Record<string, string> = {
+  google: 'google', outlook: 'microsoft', facebook: 'facebook', instagram: 'instagram', linkedin: 'linkedin', tiktok: 'tiktok',
+  twitter: 'twitter', threads: 'threads', pinterest: 'pinterest', googlebusiness: 'googlebusiness',
+};
 
 const STATUTS: Record<Statut, { label: string; classe: string; Icone: typeof Clock }> = {
   demande: { label: 'Demande envoyée', classe: 'bg-amber-50 text-amber-700', Icone: Clock },
@@ -79,6 +94,7 @@ export default function Connecteurs() {
   const proprietaire = me.user.role === 'proprietaire';
   const messageries = useMessageries();
   const reseaux = useReseaux();
+  const apps = useApplications();
   const [liste, setListe] = useState<Connecteur[] | null>(null);
   const [ouvert, setOuvert] = useState<Def | null>(null);
   const [demande, setDemande] = useState<string | null>(null);
@@ -103,10 +119,11 @@ export default function Connecteurs() {
 
   const enLigne = Boolean(messageries.etat?.configure);
   // Sans Zernio, les cartes en un clic retombent sur la demande assistée (sauf « Autre messagerie »).
-  const cartesUnClic = CATALOGUE.filter((d) => d.zernio && (enLigne || d.type !== 'messagerie'));
+  // Les réseaux ajoutés avec la liste complète (sans formulaire de demande) n'existent qu'en un clic.
+  const cartesUnClic = CATALOGUE.filter((d) => d.zernio && (enLigne || (d.type !== 'messagerie' && d.champs.length > 0)));
   const directes = CATALOGUE.filter((d) => !d.zernio);
   const demandesApps = (liste ?? []).filter((c) => c.type.startsWith('app:'));
-  const retour = messageries.retour ?? reseaux.retour;
+  const retour = messageries.retour ?? reseaux.retour ?? apps.retour;
 
   const carte = (d: Def) => {
     const c = liste?.find((x) => x.type === d.type);
@@ -115,7 +132,8 @@ export default function Connecteurs() {
     return (
       <div key={d.type} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ background: d.couleur }}>{d.logo}</span>
+          {LOGOS[d.type] ? <Logo slug={LOGOS[d.type]} />
+            : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ background: d.couleur }}>{d.logo}</span>}
           <div className="min-w-0">
             <p className="font-medium">{d.nom}</p>
             <p className="truncate text-xs text-neutral-500">{d.accroche}</p>
@@ -153,11 +171,11 @@ export default function Connecteurs() {
         <Plug className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
         <p>
           Cliquez sur « Connecter » et autorisez l'accès depuis votre compte : la connexion est sécurisée et réservée à votre espace.
-          Une application absente de la liste ? Demandez-la plus bas, l'équipe Aissociate la met en place avec vous.
+          Toutes les applications de cette page se connectent de la même façon, en un clic.
           Aucune action n'est jamais lancée sans votre validation.
         </p>
       </div>
-      {(erreur || messageries.erreur || reseaux.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || messageries.erreur || reseaux.erreur}</p>}
+      {(erreur || messageries.erreur || reseaux.erreur || apps.erreur) && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur || messageries.erreur || reseaux.erreur || apps.erreur}</p>}
       {retour && (
         <p className={cx('mb-4 rounded-xl px-3 py-2 text-sm', retour.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')} role="status">{retour.texte}</p>
       )}
@@ -165,7 +183,7 @@ export default function Connecteurs() {
       <div className="mb-3 flex items-end justify-between gap-3">
         <h2 className="text-lg font-semibold">Connexion en un clic</h2>
         {enLigne && (
-          <button onClick={() => { messageries.charger(); reseaux.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
+          <button onClick={() => { messageries.charger(); reseaux.charger(); apps.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
             <RefreshCw className="h-3.5 w-3.5" /> Actualiser
           </button>
         )}
@@ -179,31 +197,23 @@ export default function Connecteurs() {
       {!proprietaire && <p className="mt-4 text-sm text-neutral-500">Seul le propriétaire de l'espace peut ajouter ou modifier un connecteur.</p>}
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Applications métier, sur demande</h2>
-        <p className="mb-3 text-sm text-neutral-500">
-          Choisissez votre logiciel : l'équipe Aissociate étudie la connexion avec vous et la met en place sur mesure.
-          Une fois active, elle compte comme un connecteur supplémentaire.
+        <h2 className="text-lg font-semibold">Toutes les autres applications, en un clic</h2>
+        <p className="mb-4 text-sm text-neutral-500">
+          Cliquez sur « Connecter » et autorisez l'accès depuis votre compte : l'application est reliée à votre espace aussitôt.
+          Chaque application connectée compte comme un connecteur supplémentaire. Les actions de vos agents dans ces applications
+          sont activées avec vous par l'équipe Aissociate.
         </p>
-        {proprietaire && (
-          <div className="mb-4 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-            {APPS_SUR_DEMANDE.map((g) => (
-              <div key={g.categorie}>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-500">{g.categorie}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {g.apps.map((a) => {
-                    const deja = demandesApps.some((c) => c.type === `app:${slug(a)}`);
-                    return (
-                      <button key={a} type="button" disabled={deja} onClick={() => setDemande(a)}
-                        className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-xs hover:border-neutral-900 disabled:cursor-default disabled:opacity-50 disabled:hover:border-neutral-200">
-                        {a}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+        {apps.etat === null ? <Chargement /> : (
+          <>
+            {!apps.etat.configure && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">La connexion en un clic est momentanément indisponible.</p>}
+            <GrilleApplications apps={apps} />
+          </>
         )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Une application absente de la liste ?</h2>
+        <p className="mb-3 text-sm text-neutral-500">Indiquez-la : l'équipe Aissociate étudie la connexion avec vous.</p>
         {demandesApps.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
             {demandesApps.map((c) => (
@@ -214,7 +224,7 @@ export default function Connecteurs() {
             ))}
           </div>
         )}
-        {proprietaire && <Bouton variante="clair" onClick={() => setDemande('')}>Une autre application</Bouton>}
+        {proprietaire && <Bouton variante="clair" onClick={() => setDemande('')}>Demander une autre application</Bouton>}
       </section>
 
       {demande !== null && <DemandeApp nomInitial={demande} onClose={() => setDemande(null)} onSaved={(l) => { setListe(l); setDemande(null); }} />}

@@ -15,7 +15,7 @@ const CIBLES: Record<string, string> = {
   facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', tiktok: 'TikTok',
 };
 const FOURNISSEURS: Record<string, string> = { google: 'Google', microsoft: 'Microsoft', imap: 'IMAP' };
-const RESEAUX: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', tiktok: 'TikTok' };
+const RESEAUX: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', tiktok: 'TikTok', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest', googlebusiness: 'Google Business' };
 
 async function studio<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('studio', { body });

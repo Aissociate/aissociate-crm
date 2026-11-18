@@ -6,16 +6,23 @@ import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { Bouton, cx } from './composants';
 
-export type Reseau = 'facebook' | 'instagram' | 'linkedin' | 'tiktok';
+export type Reseau = 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'twitter' | 'threads' | 'pinterest' | 'googlebusiness';
 export type CompteReseau = { id: string; reseau: Reseau; nom: string; identifiant: string; photo: string | null; lien: string | null; a_reconnecter: boolean };
 type Etat = { configure: boolean; comptes: CompteReseau[] };
 
-export const NOMS_RESEAUX: Record<Reseau, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', tiktok: 'TikTok' };
+export const NOMS_RESEAUX: Record<Reseau, string> = {
+  facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', tiktok: 'TikTok',
+  twitter: 'X', threads: 'Threads', pinterest: 'Pinterest', googlebusiness: 'Google Business',
+};
 const AIDE: Record<Reseau, string> = {
   facebook: 'Choisissez la page entreprise à relier pendant la connexion.',
   instagram: 'Compte professionnel (Business ou Créateur) requis.',
   linkedin: 'Profil personnel, ou page entreprise dont vous êtes administrateur.',
   tiktok: 'Les vidéos arrivent dans votre boîte TikTok, à finaliser dans l\'application.',
+  twitter: 'Votre compte X (ex-Twitter). Publications de 280 caractères au plus.',
+  threads: 'Le compte Threads relié à votre Instagram.',
+  pinterest: 'Choisissez le tableau où publier pendant la connexion. Une image est requise.',
+  googlebusiness: 'Choisissez votre établissement pendant la connexion.',
 };
 
 /** Message lisible au retour de la fenêtre d'autorisation (paramètres ajoutés par Zernio). */

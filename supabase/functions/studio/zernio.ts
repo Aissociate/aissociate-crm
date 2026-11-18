@@ -1,4 +1,5 @@
-// Réseaux sociaux via Zernio (https://docs.zernio.com) : Facebook, Instagram, LinkedIn, TikTok.
+// Réseaux sociaux via Zernio (https://docs.zernio.com) : Facebook, Instagram, LinkedIn, TikTok,
+// X, Threads, Pinterest et fiche Google Business. (Autres applications : applications.ts.)
 // (Messagerie, agenda et fichiers passent aussi par Zernio : voir bureau.ts.)
 //
 // Zernio détient des applications Meta / LinkedIn / TikTok déjà validées : le client
@@ -9,11 +10,14 @@
 
 const BASE = "https://zernio.com/api/v1";
 
-export const RESEAUX = ["facebook", "instagram", "linkedin", "tiktok"] as const;
+export const RESEAUX = ["facebook", "instagram", "linkedin", "tiktok", "twitter", "threads", "pinterest", "googlebusiness"] as const;
 export type Reseau = typeof RESEAUX[number];
-export const NOMS_RESEAUX: Record<Reseau, string> = { facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn", tiktok: "TikTok" };
+export const NOMS_RESEAUX: Record<Reseau, string> = {
+  facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn", tiktok: "TikTok",
+  twitter: "X", threads: "Threads", pinterest: "Pinterest", googlebusiness: "Google Business",
+};
 /** Réseaux qui refusent une publication sans image ni vidéo. */
-const MEDIA_OBLIGATOIRE: Reseau[] = ["instagram", "tiktok"];
+const MEDIA_OBLIGATOIRE: Reseau[] = ["instagram", "tiktok", "pinterest"];
 
 export type CompteReseau = {
   id: string; reseau: Reseau; nom: string; identifiant: string; photo: string | null;
@@ -143,6 +147,9 @@ export function controlePublication(reseaux: Reseau[], texte: string, medias: st
   if (!texte.trim() && !medias.length) return "Texte de la publication requis.";
   if (reseaux.includes("linkedin") && texte.length > 3000) return "LinkedIn limite une publication à 3 000 caractères.";
   if (reseaux.includes("instagram") && texte.length > 2200) return "Instagram limite une légende à 2 200 caractères.";
+  if (reseaux.includes("twitter") && texte.length > 280) return "X limite une publication à 280 caractères.";
+  if (reseaux.includes("threads") && texte.length > 500) return "Threads limite une publication à 500 caractères.";
+  if (reseaux.includes("googlebusiness") && texte.length > 1500) return "Google Business limite une publication à 1 500 caractères.";
   return null;
 }
 

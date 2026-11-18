@@ -92,6 +92,7 @@ import { verifierSvix } from "./liaison.ts";
 import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
 import { outilsEspace } from "./outils.ts";
 import * as zernio from "./zernio.ts";
+import * as applications from "./applications.ts";
 import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as stripe from "./stripe.ts";
 import * as controle from "./controle.ts";
@@ -1506,6 +1507,32 @@ Deno.serve(async (req: Request) => {
         const c = await zernio.deconnecterCompte(s.ws.id, String(body.compte_id ?? ""));
         await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: `zernio:${c.reseau}`, compte: c.nom } });
         return json({ configure: true, comptes: await zernio.comptesEspace(s.ws.id) });
+      }
+
+      // ── Autres applications en un clic (Zernio) : vidéo, messageries, publicité, boutique, CRM… ──
+      case "apps_etat": {
+        if (!zernio.zernioConfigure()) return json({ configure: false, comptes: [] });
+        return json({ configure: true, comptes: await applications.comptesApplications(s.ws.id) });
+      }
+
+      case "apps_connecter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (!applications.estApplication(body.app)) return json({ error: "Application inconnue" }, 400);
+        if (!body.reconnecter) { const refus = await refusConnecteurEssai(sb, s); if (refus) return json({ error: refus }, 402); }
+        const boutique = body.app === "shopify" ? applications.boutiqueShopify(body.boutique) : null;
+        if (body.app === "shopify" && !boutique) return json({ error: "Adresse de boutique Shopify invalide (ex. ma-boutique.myshopify.com)." }, 400);
+        const lien = await applications.lienConnexionApplication({
+          wsId: s.ws.id, wsNom: s.ws.nom, app: body.app, retour: `${origineSure(req)}/studio/connecteurs?app=${body.app}`,
+          reconnecter: body.reconnecter ? String(body.reconnecter) : null, boutique,
+        }).catch((e) => { throw new Error(bureau.messageErreur(e)); });
+        return json({ lien });
+      }
+
+      case "apps_deconnecter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const c = await applications.deconnecterApplication(s.ws.id, String(body.compte_id ?? ""));
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connexion_retiree", detail: { integration: `zernio:${c.app}`, compte: c.nom } });
+        return json({ configure: true, comptes: await applications.comptesApplications(s.ws.id) });
       }
 
       case "connecteurs":

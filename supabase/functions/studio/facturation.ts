@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import * as bureau from "./bureau.ts";
 import * as zernio from "./zernio.ts";
+import { APPLICATIONS, estApplication } from "./applications.ts";
 
 export const TYPES = ["google", "microsoft", "facebook", "instagram", "tiktok", "linkedin", "imap", "mcp", "app"] as const;
 export const INCLUS_DEFAUT = ["google", "microsoft", "facebook", "instagram", "tiktok", "linkedin"];
@@ -54,9 +55,11 @@ export function actifsDepuis(comptes: Record<string, unknown>[], manuels: { type
       if (!b.a_reconnecter) actifs.push({ type: b.fournisseur, libelle: NOMS[b.fournisseur], detail: b.adresse });
       continue;
     }
-    if (!zernio.estReseau(a.platform)) continue;
     if (a.needsReconnection || a.isActive === false) continue;
-    actifs.push({ type: a.platform, libelle: NOMS[a.platform], detail: String(a.displayName || a.username || "") });
+    // Application en un clic (applications.ts) : facturée comme une application.
+    if (estApplication(a.platform)) { actifs.push({ type: "app", libelle: APPLICATIONS[a.platform].nom, detail: String(a.displayName || a.username || "") }); continue; }
+    if (!zernio.estReseau(a.platform)) continue;
+    actifs.push({ type: a.platform, libelle: NOMS[a.platform] ?? zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "") });
   }
   const zernioTypes = new Set(actifs.map((a) => a.type));
   for (const m of manuels) {

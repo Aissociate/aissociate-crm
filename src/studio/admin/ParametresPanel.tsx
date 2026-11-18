@@ -79,7 +79,7 @@ export default function ParametresPanel() {
           <h4 className="font-semibold text-fg">Tarif des connecteurs</h4>
           <p className="text-sm text-muted">
             Les connecteurs inclus sont compris dans l'abonnement (un compte de chaque). Tout autre connecteur actif
-            (autre messagerie, serveur MCP, application sur demande, compte supplémentaire) est facturé en plus, par mois.
+            (autre messagerie, serveur MCP, autre application, compte supplémentaire) est facturé en plus, par mois.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">

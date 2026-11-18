@@ -14,22 +14,37 @@ export const TYPES_CONNECTEURS: { type: string; libelle: string; court: string }
   { type: 'linkedin', libelle: 'LinkedIn', court: 'LinkedIn' },
   { type: 'imap', libelle: 'Autre messagerie (OVH, IONOS, Orange…)', court: 'autre messagerie' },
   { type: 'mcp', libelle: 'Serveur MCP de votre logiciel', court: 'serveur MCP' },
-  { type: 'app', libelle: 'Applications métier, sur demande (liste ci-dessous)', court: 'application métier' },
+  { type: 'app', libelle: 'Autre application en un clic (liste ci-dessous)', court: 'autre application' },
 ];
 
 /**
- * Applications connectables sur demande : chaque connexion est étudiée et mise en place sur mesure
- * par Aissociate (faisabilité, accès, usages), puis facturée comme un connecteur actif.
+ * Applications connectables en un clic depuis Studio › Connecteurs, en plus des connecteurs ci-dessus.
+ * `slug` = identifiant de connexion et nom du logo (public/connecteurs/<slug>.svg).
+ * ⚠ Même liste que APPLICATIONS (supabase/functions/studio/applications.ts) et RESEAUX (zernio.ts).
  */
-export const APPS_SUR_DEMANDE: { categorie: string; apps: string[] }[] = [
-  { categorie: 'CRM et ventes', apps: ['HubSpot', 'Pipedrive', 'Salesforce', 'Axonaut', 'Sellsy'] },
-  { categorie: 'Comptabilité et facturation', apps: ['Pennylane', 'Qonto', 'Tiime', 'Indy', 'QuickBooks', 'Sage'] },
-  { categorie: 'Rendez-vous et réservations', apps: ['Calendly', 'Planity', 'Google Business Profile'] },
-  { categorie: 'E-commerce et paiement', apps: ['Shopify', 'WooCommerce', 'PrestaShop', 'Stripe', 'SumUp'] },
-  { categorie: 'Organisation et projets', apps: ['Notion', 'Trello', 'Asana', 'Airtable', 'Slack', 'Microsoft Teams'] },
-  { categorie: 'Site et e-mailing', apps: ['WordPress', 'Brevo', 'Mailchimp'] },
-  { categorie: 'Ressources humaines', apps: ['PayFit', 'Lucca'] },
+export type AppUnClic = { slug: string; nom: string };
+export const APPLICATIONS_UN_CLIC: { categorie: string; apps: AppUnClic[] }[] = [
+  { categorie: 'Réseaux et vidéo', apps: [
+    { slug: 'twitter', nom: 'X' }, { slug: 'threads', nom: 'Threads' }, { slug: 'pinterest', nom: 'Pinterest' },
+    { slug: 'googlebusiness', nom: 'Google Business' }, { slug: 'youtube', nom: 'YouTube' }, { slug: 'reddit', nom: 'Reddit' },
+  ] },
+  { categorie: 'Messageries instantanées', apps: [
+    { slug: 'whatsapp', nom: 'WhatsApp Business' }, { slug: 'slack', nom: 'Slack' }, { slug: 'discord', nom: 'Discord' },
+  ] },
+  { categorie: 'Publicité', apps: [
+    { slug: 'metaads', nom: 'Meta Ads' }, { slug: 'googleads', nom: 'Google Ads' }, { slug: 'linkedinads', nom: 'LinkedIn Ads' },
+    { slug: 'tiktokads', nom: 'TikTok Ads' }, { slug: 'pinterestads', nom: 'Pinterest Ads' }, { slug: 'xads', nom: 'X Ads' },
+    { slug: 'redditads', nom: 'Reddit Ads' }, { slug: 'microsoftads', nom: 'Microsoft Ads' },
+  ] },
+  { categorie: 'Site et boutique', apps: [
+    { slug: 'shopify', nom: 'Shopify' }, { slug: 'wordpress', nom: 'WordPress.com' }, { slug: 'wix', nom: 'Wix' }, { slug: 'webflow', nom: 'Webflow' },
+  ] },
+  { categorie: 'CRM et ventes', apps: [{ slug: 'hubspot', nom: 'HubSpot' }, { slug: 'salesforce', nom: 'Salesforce' }] },
+  { categorie: 'Mesure et paiement', apps: [{ slug: 'googleanalytics', nom: 'Google Analytics' }, { slug: 'stripe', nom: 'Stripe' }] },
 ];
+/** Réseaux de la liste où les agents publient déjà (les autres applications sont reliées, sans action directe pour l'instant). */
+export const RESEAUX_PUBLICATION = ['twitter', 'threads', 'pinterest', 'googlebusiness'];
+export const logoConnecteur = (slug: string) => `/connecteurs/${slug}.svg`;
 
 export type TarifConnecteurs = { prix: number; inclus: string[] };
 export const TARIF_DEFAUT: TarifConnecteurs = {
