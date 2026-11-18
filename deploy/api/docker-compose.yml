@@ -24,6 +24,9 @@ services:
       - traefik.http.routers.aissociate-api.rule=Host(`api.aissociate.re`)
       - traefik.http.routers.aissociate-api.entrypoints=websecure
       - traefik.http.routers.aissociate-api.tls.certresolver=ledns
+      # Pas de middleware « compress » ici : Traefik ne compresse pas les réponses
+      # portant Content-Range (toutes les lectures /rest/v1). La compression est
+      # faite par l'API (api/src/server.js, hook onSend).
       - traefik.http.routers.aissociate-api.middlewares=aissociate-api-headers
       - traefik.http.services.aissociate-api.loadbalancer.server.port=3000
       - traefik.http.middlewares.aissociate-api-headers.headers.stsSeconds=31536000
