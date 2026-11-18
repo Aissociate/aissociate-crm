@@ -107,7 +107,7 @@ export default function Questionnaire() {
     if (m) { setErreur(m); return; }
     setErreur('');
     if (!derniere) { setEtape(etape + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-    if (!accord) { setErreur('Cochez la case d\'accord pour envoyer votre demande.'); return; }
+    if (!accord) { setErreur('Cochez la case d\'accord pour ouvrir votre essai.'); return; }
     setEnvoi(true);
     try {
       const r = await appel<{ essai?: boolean; identifiants_envoyes?: boolean; deja_client?: boolean }>('onboarding_soumettre', {
@@ -129,7 +129,7 @@ export default function Questionnaire() {
           <p className="mt-3 text-sm text-neutral-600">
             {fini === 'essai' && <>Vos identifiants viennent de vous être envoyés par e-mail (pensez à vérifier les indésirables). Votre essai gratuit de 7 jours démarre aujourd'hui : vos agents vous attendent déjà.</>}
             {fini === 'essai_sans_mail' && <>Votre espace d'essai est créé, mais l'e-mail avec vos identifiants n'a pas pu partir. Nous vous les envoyons au plus vite : écrivez-nous à contact@aissociate.re si vous ne les recevez pas.</>}
-            {fini === 'deja_client' && <>Cette adresse e-mail a déjà un accès au Studio : connectez-vous avec vos identifiants habituels (ou « mot de passe oublié » auprès de contact@aissociate.re).</>}
+            {fini === 'deja_client' && <>Cette adresse e-mail a déjà un accès au Studio : connectez-vous avec vos identifiants habituels (ou « Mot de passe oublié ? » sur la page de connexion).</>}
             {fini === 'demande' && <>Nous étudions vos réponses et revenons vers vous sous 48 h ouvrées avec votre plan de démarrage. Vos identifiants d'accès au Studio vous seront transmis dès que votre espace sera prêt.</>}
           </p>
           {fini === 'essai' || fini === 'deja_client'
@@ -153,8 +153,9 @@ export default function Questionnaire() {
       <main className="mx-auto max-w-3xl px-4 py-8">
         {etape === 0 && (
           <p className="mb-6 text-sm text-neutral-600">
-            10 minutes pour nous décrire votre entreprise : vos agents démarrent avec ces informations,
-            et nous construisons votre plan de mise en place sur vos réponses. Vos réponses sont gardées sur cet appareil si vous faites une pause.
+            <b className="text-neutral-900">Essai gratuit de 7 jours, sans carte bancaire.</b> Décrivez votre entreprise en 10 minutes : à la fin,
+            votre espace s'ouvre aussitôt avec les agents choisis, et vos identifiants arrivent par e-mail. Vos agents démarrent
+            avec ces informations. Vos réponses sont gardées sur cet appareil si vous faites une pause.
           </p>
         )}
         <h1 className="text-2xl font-semibold tracking-tight">{section.titre}</h1>
@@ -163,9 +164,9 @@ export default function Questionnaire() {
         <div className="mt-6 space-y-5 rounded-2xl border border-neutral-200 bg-white p-5 sm:p-6">
           {etape === 0 && (
             <div className="grid gap-4 sm:grid-cols-3">
-              {([['contact_nom', 'Votre nom', 'name'], ['email', 'E-mail', 'email'], ['telephone', 'Téléphone (facultatif)', 'tel']] as const).map(([k, l, ac]) => (
+              {([['contact_nom', 'Votre nom', 'name'], ['email', 'E-mail (vos identifiants y seront envoyés)', 'email'], ['telephone', 'Téléphone (facultatif)', 'tel']] as const).map(([k, l, ac]) => (
                 <label key={k} className="block">
-                  <span className="mb-1 block text-sm font-medium text-neutral-700">{l}</span>
+                  <span className="mb-1 block text-sm font-medium text-neutral-700">{l}{k !== 'telephone' && <span className="text-orange-600"> *</span>}</span>
                   <input className={champ} autoComplete={ac} type={k === 'email' ? 'email' : 'text'} value={contact[k]}
                     onChange={(e) => setContact({ ...contact, [k]: e.target.value })} />
                 </label>
@@ -195,7 +196,7 @@ export default function Questionnaire() {
             <ArrowLeft className="h-4 w-4" /> Précédent
           </Bouton>
           <Bouton onClick={suivant} disabled={envoi}>
-            {derniere ? (envoi ? 'Envoi…' : 'Envoyer ma demande') : <>Suivant <ArrowRight className="h-4 w-4" /></>}
+            {derniere ? (envoi ? 'Ouverture de votre espace…' : 'Ouvrir mon essai gratuit') : <>Suivant <ArrowRight className="h-4 w-4" /></>}
           </Bouton>
         </div>
       </main>

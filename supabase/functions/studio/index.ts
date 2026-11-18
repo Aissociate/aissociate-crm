@@ -95,6 +95,7 @@ import * as zernio from "./zernio.ts";
 import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as stripe from "./stripe.ts";
 import * as controle from "./controle.ts";
+import * as courriel from "./courriel.ts";
 import * as essai from "./essai.ts";
 import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
@@ -527,6 +528,9 @@ async function etatAbonnement(sb: SupabaseClient, wsId: string, nbAgents: number
     // La Réunion : 8,5 % fixe ; ailleurs : TVA calculée par Stripe selon l'adresse (null).
     tva_pourcent: stripe.tvaReunion((w?.entete as Record<string, string> | null)?.code_postal) ? stripe.TVA_POURCENT : null,
     estimation_ht: Math.round((stripe.montantAgents(nbAgents) + (conn.erreur ? 0 : conn.nb_factures * conn.tarif.prix)) * 100) / 100,
+    // Ce qu'un agent de plus ajoute à l'abonnement (tarif dégressif).
+    agent_suivant_ht: Math.round((stripe.montantAgents(nbAgents + 1) - stripe.montantAgents(nbAgents)) * 100) / 100,
+    premier_agent_ht: stripe.PALIERS_AGENTS[0] / 100, dernier_palier_ht: stripe.PALIERS_AGENTS[stripe.PALIERS_AGENTS.length - 1] / 100,
   };
 }
 
@@ -1259,7 +1263,8 @@ Deno.serve(async (req: Request) => {
     // ── Questionnaire d'onboarding public (/studio/demarrer) ──
     if (action === "onboarding_soumettre") {
       const depuis = body.depuis ? ` (depuis ${String(body.depuis).slice(0, 60)})` : "";
-      const r = await soumettreOnboarding(sb, body, `/studio/demarrer${depuis}`, origineSure(req));
+      const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
+      const r = await soumettreOnboarding(sb, body, `/studio/demarrer${depuis}`, origineSure(req), undefined, ip);
       return "erreur" in r ? json({ error: r.erreur }, r.statut) : json(r);
     }
 
@@ -1274,6 +1279,50 @@ Deno.serve(async (req: Request) => {
       const r = await ouvrirInvitation(sb, body.jeton, origineSure(req));
       if (!r) return json({ error: "Ce lien a expiré ou n'est plus valide. Demandez-en un nouveau." }, 404);
       return json(r);
+    }
+
+    // ── Mot de passe oublié : lien à usage unique envoyé par e-mail (réponse identique que le compte existe ou non) ──
+    if (action === "mdp_oublie") {
+      const email = String(body.email ?? "").trim().toLowerCase();
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        const { data: u } = await sb.from("studio_users").select("id, prenom, actif").eq("email", email).maybeSingle();
+        if (u?.actif) {
+          const { count } = await sb.from("studio_reinitialisations").select("id", { count: "exact", head: true })
+            .eq("user_id", u.id).gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
+          if ((count ?? 0) < 3) {
+            const jetonReinit = nouveauJeton();
+            const { error } = await sb.from("studio_reinitialisations").insert({
+              user_id: u.id, jeton_hash: await sha256(jetonReinit), expire_le: new Date(Date.now() + 3_600_000).toISOString(),
+            });
+            if (error) console.error("[studio] mot de passe oublié :", error.message);
+            else {
+              await courriel.envoyer(sb, { a: email, ...courriel.mailReinitialisation({ prenom: u.prenom, lien: `${origineSure(req)}/studio/mot-de-passe/${jetonReinit}` }) })
+                .catch((e) => console.error("[studio] e-mail de réinitialisation :", e instanceof Error ? e.message : String(e)));
+            }
+          }
+        }
+      }
+      return json({ ok: true });
+    }
+    if (action === "mdp_reinitialiser") {
+      const nouveau = String(body.nouveau ?? "");
+      const invalide = motDePasseValide(nouveau);
+      if (invalide) return json({ error: invalide }, 400);
+      const { data: r } = await sb.from("studio_reinitialisations").select("id, user_id, expire_le, utilise_le")
+        .eq("jeton_hash", await sha256(String(body.jeton ?? ""))).maybeSingle();
+      if (!r || r.utilise_le || new Date(r.expire_le) < new Date()) {
+        return json({ error: "Ce lien a expiré ou a déjà servi. Demandez-en un nouveau depuis la page de connexion." }, 400);
+      }
+      await sb.from("studio_credentials").update({ password_hash: await hasherMotDePasse(nouveau), doit_changer: false }).eq("user_id", r.user_id);
+      await sb.from("studio_reinitialisations").update({ utilise_le: new Date().toISOString() }).eq("id", r.id);
+      // Toutes les sessions ouvertes sont fermées : seul le nouveau mot de passe permet d'entrer.
+      await sb.from("studio_sessions").delete().eq("user_id", r.user_id);
+      const { data: u } = await sb.from("studio_users").select("workspace_id, email").eq("id", r.user_id).maybeSingle();
+      if (u) {
+        await sb.from("studio_login_echecs").delete().eq("email", u.email);
+        await journaliser(sb, { wsId: u.workspace_id, acteur: `client:${u.email}`, action: "mot_de_passe_reinitialise" });
+      }
+      return json({ ok: true });
     }
 
     if (action === "login") {
@@ -1682,6 +1731,34 @@ Deno.serve(async (req: Request) => {
           return json({ error: "Un abonnement est déjà en place : gérez-le depuis « Gérer mon abonnement »." }, 409);
         }
         return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: agents.length, connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix }) });
+      }
+
+      // Le propriétaire ouvre lui-même un agent de plus ; l'abonnement en cours suit (prorata).
+      case "agent_ajouter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const id = String(body.agent_id ?? "");
+        const { data: a } = await sb.from("studio_agents").select("id, prenom, offres").eq("id", id).eq("actif", true).maybeSingle();
+        const offre = s.ws.offre === "essai" ? "essentiel" : s.ws.offre;
+        if (!a) return json({ error: "Agent introuvable" }, 404);
+        if (!(a.offres as string[]).includes(offre)) return json({ error: "Cet agent n'est pas proposé dans votre formule. Écrivez à contact@aissociate.re." }, 403);
+        const { error } = await sb.from("studio_workspace_agents").upsert({ workspace_id: s.ws.id, agent_id: id, actif: true }, { onConflict: "workspace_id,agent_id" });
+        if (error) return json({ error: error.message }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, agentId: id, action: "agent_ajoute", detail: { agent: a.prenom } });
+        let abonnementMisAJour = false;
+        if (stripe.stripeConfigure() && s.ws.abonnement_statut && s.ws.abonnement_statut !== "incomplete" && stripe.STATUTS_EN_COURS.includes(String(s.ws.abonnement_statut))) {
+          try {
+            const [agents, conn] = await Promise.all([agentsDuWorkspace(sb, s.ws), facturationEspace(sb, s.ws.id)]);
+            if (!conn.erreur) {
+              const ab = await stripe.synchroniser(sb, s.ws.id, agents.length, conn.nb_factures, conn.tarif.prix);
+              await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "abonnement_mis_a_jour", detail: { agents: ab.agents, connecteurs: ab.connecteurs, montant_ht: ab.montant_ht } });
+              abonnementMisAJour = true;
+            }
+          } catch (e) {
+            // L'agent est ouvert ; « Mon périmètre » signale l'écart et propose de mettre l'abonnement à jour.
+            console.error("[studio] abonnement après ajout d'agent :", e instanceof Error ? e.message : String(e));
+          }
+        }
+        return json({ ok: true, abonnement_mis_a_jour: abonnementMisAJour });
       }
 
       case "suspendre": {

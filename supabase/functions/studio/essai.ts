@@ -9,7 +9,7 @@ export const CONNECTEURS_ESSAI = 1;
 
 /** Actions encore permises une fois l'essai terminé. */
 export const ACTIONS_APRES_ESSAI = new Set([
-  "me", "logout", "change_password", "cgv", "cgv_accepter", "perimetre", "abonnement_souscrire", "abonnement_gerer",
+  "me", "logout", "change_password", "cgv", "cgv_accepter", "perimetre", "abonnement_souscrire", "abonnement_gerer", "agent_ajouter",
   "entete", "entete_update",
 ]);
 

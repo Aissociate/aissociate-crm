@@ -15,7 +15,10 @@ type Demande = {
   id: string; statut: 'nouvelle' | 'en_revue' | 'provisionnee' | 'refusee'; entreprise: string; contact_nom: string | null;
   email: string; telephone: string | null; agents: string[]; reponses: Reponses; score: number; lecture: string | null;
   drapeaux: string[]; workspace_id: string | null; notes_crm: string; created_at: string;
+  identifiants_envoyes_le?: string | null; traite_par?: string | null;
 };
+/** Essai ouvert automatiquement par le questionnaire, mais e-mail d'identifiants non parti. */
+const sansIdentifiants = (d: Demande) => d.statut === 'provisionnee' && !d.traite_par && !d.identifiants_envoyes_le;
 
 const STATUTS: Record<Demande['statut'], { label: string; tone: 'info' | 'warning' | 'success' | 'danger' }> = {
   nouvelle: { label: 'Nouvelle', tone: 'info' }, en_revue: { label: 'En revue', tone: 'warning' },
@@ -81,7 +84,10 @@ export default function OnboardingPanel({ onProvisionne }: { onProvisionne: () =
                   <td><span className={d.score > 70 ? 'font-semibold text-emerald-600' : d.score >= 40 ? 'font-semibold text-amber-600' : 'font-semibold text-red-600'}>{d.score}</span><span className="text-muted">/100</span></td>
                   <td>{d.drapeaux.length ? <Badge tone="danger">{d.drapeaux.length}</Badge> : '—'}</td>
                   <td>{new Date(d.created_at).toLocaleDateString('fr-FR')}</td>
-                  <td><Badge tone={STATUTS[d.statut].tone}>{STATUTS[d.statut].label}</Badge></td>
+                  <td>
+                    <Badge tone={STATUTS[d.statut].tone}>{d.statut === 'provisionnee' && !d.traite_par ? 'Essai ouvert' : STATUTS[d.statut].label}</Badge>
+                    {sansIdentifiants(d) && <Badge tone="danger" className="ml-1">identifiants non envoyés</Badge>}
+                  </td>
                 </tr>
               ))}
             </tbody>

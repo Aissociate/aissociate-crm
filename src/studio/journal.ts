@@ -31,6 +31,8 @@ const LIBELLES: Record<string, string> = {
   recharge_achetee: 'Recharge de crédits achetée',
   abonnement_mis_a_jour: 'Abonnement mis à jour',
   cgv_acceptees: 'Conditions générales acceptées',
+  agent_ajoute: "Agent ajouté à l'équipe",
+  mot_de_passe_reinitialise: 'Mot de passe réinitialisé',
   identifiants_envoyes: "Identifiants de l'essai envoyés",
   consultation: 'Collègue consulté',
   action_executee: 'Action exécutée après validation',

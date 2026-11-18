@@ -81,7 +81,7 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
 ## Paiement en ligne Stripe (`stripe.ts`)
 - Recharges : « Mon périmètre » ouvre une page Stripe Checkout (paiement unique, facture Stripe). Les crédits
   ne sont ajoutés qu'à la confirmation (webhook), une seule fois par session (`studio_recharges.stripe_ref` unique).
-- Abonnement mensuel : agents ouverts au tarif dégressif (prix `studio_agents_v1`, paliers 99 → 49,50 € HT)
+- Abonnement mensuel : agents ouverts au tarif dégressif (prix `studio_agents_v2`, paliers 149 → 74,50 € HT, sans frais de mise en place)
   + connecteurs facturés (`studio_connecteur_<centimes>`), TVA fixe 8,5 % (La Réunion). Portail client Stripe
   (carte, factures, résiliation en fin de période) ; « Mettre à jour mon abonnement » aligne les quantités au prorata.
 - Le compte Stripe est partagé avec d'autres produits : tout porte `metadata.app = "studio"`, le portail a sa propre
@@ -107,6 +107,19 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   et tâches planifiées s'arrêtent. Un abonnement payé lève le blocage et passe l'offre en « essentiel ».
 - CGV : livrables désignés par `studio_config.cgv_livrables` (ids, dans l'ordre). Version = empreinte des textes ;
   acceptation horodatée par utilisateur (`studio_users.cgv_*`, IP et navigateur), rien d'autre n'est accessible avant.
+
+## Autonomie du client (mot de passe, agents, inscriptions)
+- **Mot de passe oublié** : `mdp_oublie {email}` répond toujours `ok` (pas d'énumération des comptes), au plus 3 liens par heure et par compte.
+  Le lien `/studio/mot-de-passe/:jeton` vaut une heure et ne sert qu'une fois (`studio_reinitialisations`, seul le SHA-256 est stocké).
+  `mdp_reinitialiser` ferme toutes les sessions du compte.
+- **Ajout d'un agent** : `agent_ajouter {agent_id}` (propriétaire) ouvre l'agent dans `studio_workspace_agents`. Si un abonnement est en cours,
+  il est synchronisé aussitôt (prorata). Autorisé aussi après la fin de l'essai, pour composer l'équipe avant de s'abonner. Le retrait passe par Aissociate.
+- **Inscriptions** : 3 questionnaires par adresse IP et par 24 h (`studio_onboarding.ip`), en plus de la limite par e-mail. L'e-mail n'est pas vérifié par
+  un lien : le mot de passe n'est envoyé qu'à cette adresse, donc seul son titulaire peut entrer.
+- **Offre** : 149 € HT le premier agent, puis 131, 112, 93 et 74,50 € (`PALIERS_AGENTS`, prix Stripe `studio_agents_v2`). Aucuns frais de mise en place.
+  Les mêmes montants sont dans `src/site/pages/AgentsIA.tsx`, `scripts/prerender.mjs` et `supabase/functions/studio-demo`.
+- **Fin d'essai** : le menu se réduit à « Mon abonnement » et « Mon compte » ; la carte d'abonnement passe en tête, sans suspension ni recharges.
+- **CRM** : la liste des espaces affiche l'essai (jours restants, terminé) et l'abonnement Stripe ; les demandes signalent les identifiants non envoyés.
 
 ## Contrôle quotidien du parcours client (`controle.ts`, `controle_rapport.ts`)
 - pg_cron `studio-controle`, chaque jour à 02:00 UTC (06:00 à La Réunion), appelle l'action `controle_cron` (clé `studio_cron_cle`).

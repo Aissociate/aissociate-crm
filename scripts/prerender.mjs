@@ -133,9 +133,9 @@ const routes = [
   {
     // Page « Agents IA » (employés virtuels) : aligné sur le <SEO> de src/site/pages/AgentsIA.tsx.
     path: '/agents-ia',
-    title: "Studio IA : votre équipe d'agents IA en 15 jours — dès 99 €/mois | Aissociate",
-    description: "Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Mise en place en 15 jours à La Réunion, éligible Kap Numérik 2026. Dès 99 € HT/mois.",
-    keywords: 'agent IA PME, agents IA La Réunion, Kap Numérik 2026, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
+    title: "Studio IA : votre équipe d'agents IA — essai gratuit, dès 149 €/mois | Aissociate",
+    description: "Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Essai gratuit de 7 jours, sans frais de mise en place, accompagnement à La Réunion. Dès 149 € HT/mois.",
+    keywords: 'agent IA PME, agents IA La Réunion, essai gratuit agent IA, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
     schemas: [
       {
         '@context': 'https://schema.org', '@type': 'Service',
@@ -145,8 +145,8 @@ const routes = [
         areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
         url: `${SITE}/agents-ia/`, inLanguage: 'fr-FR',
         offers: [
-          { '@type': 'Offer', name: 'Initialisation du Studio IA', price: '499', priceCurrency: 'EUR', description: "Mise en place de l'espace, HT, une fois (plus 199 € HT par agent)" },
-          { '@type': 'Offer', name: 'Abonnement — premier agent', price: '99', priceCurrency: 'EUR', description: "Par mois, HT ; dégressif jusqu'à -50 % pour le cinquième agent" },
+          { '@type': 'Offer', name: 'Essai gratuit du Studio IA', price: '0', priceCurrency: 'EUR', description: '7 jours, sans carte bancaire, sans frais de mise en place' },
+          { '@type': 'Offer', name: 'Abonnement — premier agent', price: '149', priceCurrency: 'EUR', description: "Par mois, HT, sans engagement ; dégressif jusqu'à -50 % pour le cinquième agent" },
           { '@type': 'Offer', name: 'Connecteur supplémentaire', price: '9.99', priceCurrency: 'EUR', description: "Par mois et par connecteur actif, HT ; Google Workspace, Outlook, Facebook, Instagram, TikTok et LinkedIn inclus" },
         ],
       },

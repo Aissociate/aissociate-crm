@@ -80,7 +80,10 @@ export type ResultatOnboarding = { ok: true; id: string; essai?: boolean; identi
 /** Contrôle quotidien du parcours (controle.ts) : pas de lead dans le CRM, e-mail capturé au lieu d'être envoyé. */
 export type ModeControle = { courriel: (m: { a: string; objet: string; html: string; texte: string }) => void };
 
-export async function soumettreOnboarding(sb: SupabaseClient, body: Record<string, unknown>, origine: string, site = "", controle?: ModeControle): Promise<ResultatOnboarding | { erreur: string; statut: number }> {
+/** Demandes acceptées par adresse IP et par 24 h (un essai ouvre un espace et envoie un e-mail : pas d'envoi en rafale). */
+export const DEMANDES_PAR_IP_JOUR = 3;
+
+export async function soumettreOnboarding(sb: SupabaseClient, body: Record<string, unknown>, origine: string, site = "", controle?: ModeControle, ip: string | null = null): Promise<ResultatOnboarding | { erreur: string; statut: number }> {
   // Champ piège invisible : un robot le remplit, un humain non. Réponse muette.
   if (String(body.site_web_entreprise ?? "").trim()) return { ok: true, id: "" };
   const cfg = await chargerConfig(sb, ["onboarding_ouvert"]);
@@ -104,14 +107,25 @@ export async function soumettreOnboarding(sb: SupabaseClient, body: Record<strin
     return { erreur: "Nous avons déjà reçu votre demande : nous revenons vers vous très vite.", statut: 429 };
   }
 
+  if (ip && !controle) {
+    // Colonne absente (migration studio_autonomie non appliquée) : la limite est simplement ignorée.
+    const { count, error: eIp } = await sb.from("studio_onboarding").select("id", { count: "exact", head: true })
+      .eq("ip", ip).gte("created_at", new Date(Date.now() - 86_400_000).toISOString());
+    if (!eIp && (count ?? 0) >= DEMANDES_PAR_IP_JOUR) {
+      return { erreur: "Plusieurs demandes viennent d'être envoyées depuis cette connexion. Réessayez demain ou écrivez-nous à contact@aissociate.re.", statut: 429 };
+    }
+  }
+
   const s = scorer(reponses);
   const entreprise = String(reponses.A1 ?? "").trim().slice(0, 200);
   const agents = (reponses.agents as string[]) ?? [];
-  const { data, error } = await sb.from("studio_onboarding").insert({
+  const ligne = {
     entreprise, contact_nom: contact, email, telephone, agents, reponses,
     score: s.score, lecture: s.lecture, drapeaux: s.drapeaux,
-  }).select("id").single();
-  if (error) return { erreur: `Enregistrement impossible : ${error.message}`, statut: 500 };
+  };
+  let { data, error } = await sb.from("studio_onboarding").insert(ip && !controle ? { ...ligne, ip } : ligne).select("id").single();
+  if (error && /\bip\b/.test(error.message)) ({ data, error } = await sb.from("studio_onboarding").insert(ligne).select("id").single());
+  if (error || !data) return { erreur: `Enregistrement impossible : ${error?.message ?? "réponse vide"}`, statut: 500 };
 
   // Lead dans le CRM, comme les formulaires du site (trigger lead_to_contact).
   const [prenom, ...reste] = contact.split(/\s+/);

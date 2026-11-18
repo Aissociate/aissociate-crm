@@ -3,8 +3,8 @@
 // Chaque jour (pg_cron, action controle_cron) ou à la demande (CRM, admin_controle), un client
 // fictif parcourt le Studio de bout en bout, par les mêmes portes qu'un vrai client :
 // questionnaire → espace d'essai et e-mail d'identifiants → connexion → nouveau mot de passe →
-// CGV → essai en cours → limite d'un connecteur → fin d'essai → abonnement et recharge (Stripe) →
-// confirmation de paiement (webhook signé) → déblocage. S'ajoutent la configuration, les pages
+// CGV → essai en cours → ajout d'un agent → limite d'un connecteur → fin d'essai → abonnement et
+// recharge (Stripe) → confirmation de paiement (webhook signé) → déblocage → mot de passe oublié. S'ajoutent la configuration, les pages
 // publiques, les services externes (Stripe, SMTP, OpenRouter, Zernio) et l'activité réelle
 // des dernières 24 h (identifiants non envoyés, webhooks non livrés, tâches en erreur).
 //
@@ -25,6 +25,7 @@ import * as cgv from "./cgv.ts";
 import * as zernio from "./zernio.ts";
 import * as recharges from "./recharges.ts";
 import { AGENTS_CATALOGUE } from "./questionnaire.ts";
+import { nouveauJeton, sha256 } from "./securite.ts";
 import { bilan, ENTREPRISE, enEchec, fusionner, mailAlerte, motDePasseDuMail, reponsesFactices, type Resultat } from "./controle_rapport.ts";
 
 export type { Niveau, Resultat } from "./controle_rapport.ts";
@@ -216,6 +217,17 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       return `${e.jours_restants} jour(s) d'essai restant(s), ${agents.length} agent(s) visible(s).`;
     });
 
+    await controler(res, E, "parcours.agent", "Ajout d'un agent par le client", async () => {
+      const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
+      const id = AGENTS_CATALOGUE[1].id;
+      const r = await studio("agent_ajouter", { token: p.token, agent_id: id });
+      if (r.statut !== 200) echec(`Ajout refusé (HTTP ${r.statut}) : ${erreurDe(r.data)}`, "Le propriétaire ne peut plus ajouter un agent à son équipe depuis « Mon périmètre ».", `Vérifier l'action agent_ajouter (index.ts), studio_agents.offres et ${LOGS}.`);
+      const me = await studio("me", { token: p.token });
+      const agents = (me.data.agents ?? []) as { id: string }[];
+      if (!agents.some((a) => a.id === id)) echec(`Agent ajouté mais absent de l'équipe (${agents.map((a) => a.id).join(", ")}).`, "L'ajout n'est pas pris en compte.", "Vérifier agent_ajouter (studio_workspace_agents) et agentsDuWorkspace.");
+      return `Agent ajouté, ${agents.length} agents dans l'équipe.`;
+    });
+
     await controler(res, E, "parcours.connecteur", "Un seul connecteur pendant l'essai", async () => {
       const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
       await sb.from("studio_connecteurs").insert({ workspace_id: p.wsId, type: "google", statut: "connecte", infos: { adresse: `connecteur@${DOMAINE_TEST}` } });
@@ -287,6 +299,26 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       if (r1.statut !== 200 || apres - avant !== 10) echec(`Recharge payée : HTTP ${r1.statut}, solde ${avant} → ${apres} (attendu +10).`, "Une recharge payée n'est pas créditée.", "Vérifier traiterEvenement (branche recharge) et la table studio_recharges.");
       if (r2.statut !== 200) echec(`Événement de recharge rejoué : HTTP ${r2.statut}.`, "Un événement envoyé deux fois par Stripe provoque une erreur.", "Vérifier l'index unique studio_recharges.stripe_ref.", "alerte");
       return "Abonnement payé → espace débloqué ; recharge payée créditée une seule fois (événement rejoué ignoré).";
+    });
+    await controler(res, E, "parcours.mot_de_passe_oublie", "Mot de passe oublié (lien de réinitialisation)", async () => {
+      const pre = prerequis(p.wsId && p.token, "la connexion"); if (pre) return pre;
+      // Le lien est posé directement (l'e-mail réel partirait vers une adresse fictive) ; l'envoi est couvert par le contrôle SMTP.
+      const { data: u } = await sb.from("studio_users").select("id").eq("workspace_id", p.wsId).maybeSingle();
+      const jeton = nouveauJeton();
+      const { error } = await sb.from("studio_reinitialisations").insert({ user_id: u?.id, jeton_hash: await sha256(jeton), expire_le: new Date(Date.now() + 600_000).toISOString() });
+      if (error) echec(`Table des liens de réinitialisation inaccessible : ${error.message}`, "La migration studio_autonomie n'est pas appliquée : « Mot de passe oublié ? » ne fonctionne pas.", "Appliquer supabase/migrations/20261118220000_studio_autonomie.sql.");
+      const demande = await studio("mdp_oublie", { email: `inconnu-${p.ts}@${DOMAINE_TEST}` });
+      if (demande.statut !== 200) echec(`Demande de lien : HTTP ${demande.statut}.`, "Le formulaire « Mot de passe oublié ? » est en panne.", `Vérifier l'action mdp_oublie (index.ts) et ${LOGS}.`);
+      const nouveau = `Reinit-${crypto.randomUUID().slice(0, 8)}-4k`;
+      const r = await studio("mdp_reinitialiser", { jeton, nouveau });
+      if (r.statut !== 200) echec(`Nouveau mot de passe refusé (HTTP ${r.statut}) : ${erreurDe(r.data)}`, "Le lien reçu par e-mail ne permet pas de changer le mot de passe.", "Vérifier l'action mdp_reinitialiser (index.ts).");
+      const rejoue = await studio("mdp_reinitialiser", { jeton, nouveau });
+      if (rejoue.statut === 200) echec("Le même lien a servi deux fois.", "Le lien de réinitialisation n'est pas à usage unique.", "Vérifier utilise_le dans mdp_reinitialiser.");
+      const ancienne = await studio("me", { token: p.token });
+      if (ancienne.statut !== 401) echec("L'ancienne session reste ouverte après la réinitialisation.", "Les sessions ne sont pas fermées au changement de mot de passe.", "Vérifier la suppression de studio_sessions dans mdp_reinitialiser.", "alerte");
+      const l = await studio("login", { email: p.email, password: nouveau });
+      if (l.statut !== 200) echec(`Connexion avec le nouveau mot de passe : HTTP ${l.statut}.`, "Le mot de passe réinitialisé n'est pas enregistré.", "Vérifier mdp_reinitialiser (studio_credentials).");
+      return "Lien à usage unique accepté, anciennes sessions fermées, connexion avec le nouveau mot de passe.";
     });
   } finally {
     await controler(res, E, "parcours.nettoyage", "Suppression du client fictif", async () => {

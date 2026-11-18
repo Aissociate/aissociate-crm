@@ -309,7 +309,7 @@ export default function AgentChat() {
             <div key={i} className="flex gap-3">
               <Avatar prenom={agent.prenom} couleur={agent.couleur} photo={agent.photo} taille={30} />
               <div className="min-w-0 flex-1">
-                <div className="rounded-2xl rounded-tl-md border border-neutral-200 bg-white px-4 py-3">
+                <div className="overflow-hidden break-words rounded-2xl rounded-tl-md border border-neutral-200 bg-white px-4 py-3">
                   {m.media && <div className="mb-2"><MediaVue media={m.media} /></div>}
                   {m.outils?.length ? (
                     <ul className="mb-2 space-y-0.5 border-b border-neutral-100 pb-2 text-xs text-neutral-500">
@@ -335,7 +335,7 @@ export default function AgentChat() {
                   </p>
                 )}
                 {m.id && (
-                  <div className="mt-1 flex items-center gap-0.5 text-neutral-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-0.5 text-neutral-400">
                     <button onClick={() => copier(m.content, String(i))} className="rounded-lg p-1.5 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Copier">
                       {copie === String(i) ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
@@ -343,7 +343,7 @@ export default function AgentChat() {
                       className={cx('rounded-lg p-1.5 hover:bg-neutral-100', m.retour === 1 && 'text-emerald-600')}><ThumbsUp className="h-3.5 w-3.5" /></button>
                     <button onClick={() => majMessage(i, 'retour', m.retour === -1 ? 0 : -1)} aria-label="À revoir"
                       className={cx('rounded-lg p-1.5 hover:bg-neutral-100', m.retour === -1 && 'text-red-600')}><ThumbsDown className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => majMessage(i, 'epingler', !m.epingle)} aria-label={m.epingle ? 'Retirer de Mes créations' : 'Garder dans Mes créations'}
+                    <button onClick={() => majMessage(i, 'epingler', !m.epingle)} aria-label={m.epingle ? 'Retirer de mes contenus' : 'Garder dans mes contenus'}
                       className={cx('flex items-center gap-1 rounded-lg p-1.5 text-xs hover:bg-neutral-100', m.epingle && 'text-orange-600')}>
                       {m.epingle ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />} {m.epingle ? 'Gardé' : 'Garder'}
                     </button>

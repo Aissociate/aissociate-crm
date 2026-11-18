@@ -30,7 +30,23 @@ type Workspace = {
   quota_images_mois: number | null; quota_videos_mois: number | null; abonnement_mensuel?: number | null;
   expire_le: string | null; created_at: string; modele: string | null;
   suspendu?: boolean; budget_ia_jour_eur?: number | null;
+  essai_fin?: string | null; abonnement_statut?: string | null; abonnement_fin?: string | null;
 };
+
+/** Où en est le client : essai en cours ou terminé, abonnement Stripe (mêmes règles que essai.ts). */
+function situation(w: Workspace): { label: string; tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral' } | null {
+  const s = w.abonnement_statut;
+  if (s === 'active' || s === 'trialing') return { label: 'Abonné', tone: 'success' };
+  if (s === 'past_due') return { label: 'Paiement en retard', tone: 'warning' };
+  if (w.essai_fin) {
+    const jours = Math.ceil((new Date(w.essai_fin).getTime() - Date.now()) / 86_400_000);
+    if (jours <= 0) return { label: s === 'canceled' ? 'Résilié, accès bloqué' : 'Essai terminé, accès bloqué', tone: 'danger' };
+    return { label: `Essai : ${jours} j restant${jours > 1 ? 's' : ''}`, tone: 'info' };
+  }
+  if (s === 'unpaid') return { label: 'Impayé', tone: 'danger' };
+  if (s === 'canceled') return { label: 'Abonnement résilié', tone: 'warning' };
+  return null;
+}
 type StudioUser = { id: string; workspace_id: string; email: string; prenom: string | null; nom: string | null; role: string; actif: boolean; last_login_at: string | null };
 type AgentCat = {
   id: string; prenom: string; metier: string; accroche: string; description: string; prompt_systeme: string;
@@ -125,7 +141,7 @@ export default function StudioAdmin() {
         <div className="card overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-muted">
-              <tr><th className="px-4 py-3">Espace</th><th>Offre</th><th>Accès</th><th>Demandes ce mois</th><th>Crédits</th><th>Dernière activité</th><th>Échéance</th><th /></tr>
+              <tr><th className="px-4 py-3">Espace</th><th>Offre</th><th>Accès</th><th>Demandes ce mois</th><th>Crédits</th><th>Dernière activité</th><th>Essai / abonnement</th><th>Échéance</th><th /></tr>
             </thead>
             <tbody>
               {espaces.map((w) => {
@@ -139,6 +155,7 @@ export default function StudioAdmin() {
                     <td className={w.quota_messages_mois && (u?.demandes ?? 0) >= w.quota_messages_mois ? 'font-semibold text-red-600' : ''}>{u?.demandes ?? 0}{w.quota_messages_mois ? ` / ${w.quota_messages_mois}` : ''}</td>
                     <td>{soldes[w.id] ?? 0}</td>
                     <td>{u?.derniere_activite ? new Date(u.derniere_activite).toLocaleDateString('fr-FR') : '—'}</td>
+                    <td>{(() => { const x = situation(w); return x ? <Badge tone={x.tone}>{x.label}</Badge> : '—'; })()}</td>
                     <td>{w.expire_le ? new Date(w.expire_le).toLocaleDateString('fr-FR') : '—'}</td>
                     <td className="pr-4 text-right text-muted">›</td>
                   </tr>
@@ -310,7 +327,7 @@ function EspaceModal({
                 onChange={(e) => setF((x) => ({ ...x, budget_ia_jour_eur: e.target.value === '' ? null : Number(e.target.value) }))} />
             </Field>
           )}
-          <Field label="Échéance (fin d'essai ou d'abonnement)"><input type="date" className="input" value={f.expire_le ?? ''} onChange={(e) => set('expire_le', e.target.value || null)} /></Field>
+          <Field label="Échéance (coupe l'accès à cette date)" hint="Différent de l'essai gratuit de 7 jours, géré automatiquement (colonne « Essai / abonnement »)."><input type="date" className="input" value={f.expire_le ?? ''} onChange={(e) => set('expire_le', e.target.value || null)} /></Field>
         </div>
         <label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={f.actif !== false} onChange={(e) => set('actif', e.target.checked)} /> Espace actif</label>
         <Field label="Modèle IA pour ce client (tous ses agents)" hint="Laisser « hérité » : chaque agent garde son propre modèle. Un réglage par agent, plus bas, l'emporte sur celui-ci.">

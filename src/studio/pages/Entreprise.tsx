@@ -34,8 +34,10 @@ export default function Entreprise() {
       <Carte className="space-y-4">
         <div className="grid gap-2 text-sm sm:grid-cols-3">
           <p><span className="text-neutral-500">Espace :</span> {me.workspace.nom}</p>
-          <p><span className="text-neutral-500">Offre :</span> {{ essentiel: 'Essentiel', pro: 'Pro', sur_mesure: 'Sur mesure' }[me.workspace.offre] ?? me.workspace.offre}</p>
-          <p><span className="text-neutral-500">Échéance :</span> {me.workspace.expire_le ? new Date(me.workspace.expire_le).toLocaleDateString('fr-FR') : '—'}</p>
+          <p><span className="text-neutral-500">Formule :</span> {{ essai: 'Essai gratuit', essentiel: 'Essentiel', pro: 'Pro', sur_mesure: 'Sur mesure' }[me.workspace.offre] ?? me.workspace.offre}</p>
+          {me.essai
+            ? <p><span className="text-neutral-500">Fin de l'essai :</span> {new Date(me.essai.fin).toLocaleDateString('fr-FR')}</p>
+            : me.workspace.expire_le ? <p><span className="text-neutral-500">Échéance :</span> {new Date(me.workspace.expire_le).toLocaleDateString('fr-FR')}</p> : null}
         </div>
         <textarea value={texte} onChange={(e) => { setTexte(e.target.value); setEtat(''); }} rows={16} readOnly={!proprietaire}
           className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-sm outline-none focus:border-neutral-900 focus:bg-white" />

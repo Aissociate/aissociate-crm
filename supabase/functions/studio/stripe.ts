@@ -19,8 +19,10 @@ import { journaliser } from "./journal.ts";
 const API = "https://api.stripe.com/v1";
 export const TVA_POURCENT = 8.5; // La Réunion
 /** Abonnement mensuel HT, en centimes, du 1er au 5e agent (et au-delà : dernier palier). */
-export const PALIERS_AGENTS = [9900, 8700, 7400, 6200, 4950];
-export const CLE_AGENTS = "studio_agents_v1";
+// 149 € HT le premier agent, puis −12 %, −25 %, −37,5 % et −50 % (arrondis à l'euro, sauf le dernier palier).
+// Changer un montant impose une nouvelle clé (un prix Stripe ne se modifie pas) : v1 = 99 €, v2 = 149 €.
+export const PALIERS_AGENTS = [14900, 13100, 11200, 9300, 7450];
+export const CLE_AGENTS = "studio_agents_v2";
 export const cleConnecteur = (centimes: number) => `studio_connecteur_${centimes}`;
 const TOLERANCE_S = 300;
 /** Statuts où l'abonnement existe encore chez Stripe (pas de nouvelle souscription). */

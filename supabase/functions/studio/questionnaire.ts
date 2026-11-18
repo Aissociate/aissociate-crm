@@ -26,13 +26,14 @@ export const SECTIONS: Section[] = [
     intro: "Choisissez les agents dont vous avez besoin : vous pourrez en ajouter plus tard.",
     questions: [
       { id: "agents", libelle: "Agents souhaités", type: "multi", requis: true, options: AGENTS_CATALOGUE.map((a) => a.id) },
-      { id: "echeance", libelle: "Date de mise en service souhaitée", type: "date" },
     ],
   },
   {
     id: "A", titre: "Identité de l'entreprise",
     questions: [
-      { id: "A1", libelle: "Raison sociale, forme juridique, SIRET", type: "texte", requis: true },
+      // A1 devient le nom de l'espace, de l'e-mail d'accueil et du papier à en-tête : le nom seul.
+      { id: "A1", libelle: "Nom de votre entreprise", type: "texte", requis: true },
+      { id: "A1b", libelle: "Forme juridique et SIRET", type: "texte" },
       { id: "A2", libelle: "Secteur d'activité (et code NAF si connu)", type: "texte", requis: true },
       { id: "A3", libelle: "Effectif total (équivalents temps plein)", type: "nombre", requis: true },
       { id: "A4", libelle: "Chiffre d'affaires des 12 derniers mois", type: "choix", options: ["< 50 k€", "50–250 k€", "250 k€–1 M€", "> 1 M€"] },
@@ -42,7 +43,7 @@ export const SECTIONS: Section[] = [
   },
   {
     id: "B", titre: "Activité",
-    intro: "La question B7 est la plus importante : le plan de démarrage se construit sur vos réponses.",
+    intro: "La question sur les tâches qui vous coûtent le plus de temps est la plus importante : vos agents commencent par là.",
     questions: [
       { id: "B1", libelle: "En quelques lignes : ce que vous vendez, et à qui", type: "long", requis: true },
       { id: "B2", libelle: "Vos 3 offres les plus vendues (avec leurs prix si possible)", type: "long" },
@@ -157,6 +158,7 @@ export function scorer(r: Reponses): Score {
 export function ficheEntreprise(r: Reponses): string {
   const lignes: [string, string][] = [
     ["Entreprise", texte(r, "A1")],
+    ["Forme juridique et SIRET", texte(r, "A1b")],
     ["Activité", texte(r, "A2")],
     ["Effectif", texte(r, "A3") && `${texte(r, "A3")} ETP`],
     ["Ce que nous vendons, et à qui", texte(r, "B1")],

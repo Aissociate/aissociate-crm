@@ -70,6 +70,21 @@ export async function verifierSmtp(sb: SupabaseClient): Promise<{ compte: string
 
 const echapper = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/** E-mail « mot de passe oublié » : lien à usage unique, valable une heure. */
+export function mailReinitialisation(p: { prenom: string | null; lien: string }) {
+  const bonjour = `Bonjour${p.prenom ? ` ${p.prenom}` : ""},`;
+  const lignes = [
+    "Vous avez demandé à choisir un nouveau mot de passe pour votre Studio IA. Ce lien est valable une heure et ne sert qu'une fois.",
+    "Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail : votre mot de passe actuel reste valable.",
+  ];
+  const texte = [bonjour, "", lignes[0], "", p.lien, "", lignes[1], "", "L'équipe Aissociate"].join("\n");
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#1f2937;max-width:560px">
+<p>${echapper(bonjour)}</p><p>${echapper(lignes[0])}</p>
+<p><a href="${echapper(p.lien)}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px">Choisir un nouveau mot de passe</a></p>
+<p style="color:#6b7280;font-size:13px">${echapper(lignes[1])}</p><p>L'équipe Aissociate</p></div>`;
+  return { objet: "Studio IA : choisissez un nouveau mot de passe", html, texte };
+}
+
 /** E-mail d'accueil de l'essai : adresse de connexion, identifiant, mot de passe provisoire. */
 export function mailIdentifiants(p: { prenom: string | null; entreprise: string; email: string; motDePasse: string; site: string; finEssai: string; jours: number }) {
   const url = `${p.site.replace(/\/$/, "")}/studio/connexion`;

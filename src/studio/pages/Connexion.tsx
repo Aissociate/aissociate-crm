@@ -16,6 +16,16 @@ export default function Connexion() {
   const [password, setPassword] = useState('');
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  // Mot de passe oublié : même réponse que le compte existe ou non.
+  const [oubli, setOubli] = useState<'' | 'saisie' | 'envoye'>('');
+
+  const demanderLien = async (e: FormEvent) => {
+    e.preventDefault();
+    setErreur(''); setEnvoi(true);
+    try { await appel('mdp_oublie', { email }); setOubli('envoye'); }
+    catch (err) { setErreur(err instanceof Error ? err.message : 'Envoi impossible'); }
+    finally { setEnvoi(false); }
+  };
 
   if (me) return <Navigate to="/studio" replace />;
 
@@ -53,10 +63,36 @@ export default function Connexion() {
       </section>
 
       <section className="flex items-center justify-center bg-white px-4 py-12">
+        {oubli ? (
+          <form onSubmit={demanderLien} className="w-full max-w-sm space-y-5">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold text-neutral-900">Mot de passe oublié</h2>
+              <p className="mt-2 text-sm text-neutral-500">
+                {oubli === 'envoye'
+                  ? 'Si un compte existe pour cette adresse, un e-mail vient de partir avec un lien valable une heure. Pensez à vérifier les indésirables.'
+                  : 'Indiquez votre adresse e-mail : vous recevrez un lien pour choisir un nouveau mot de passe.'}
+              </p>
+            </div>
+            {oubli === 'saisie' && (
+              <>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-neutral-700">Adresse e-mail</span>
+                  <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none focus:border-neutral-900 focus:bg-white" />
+                </label>
+                {erreur && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
+                <Bouton type="submit" disabled={envoi} className="w-full py-2.5">{envoi ? 'Envoi…' : 'Recevoir le lien'}</Bouton>
+              </>
+            )}
+            <p className="text-center text-xs text-neutral-500">
+              <button type="button" className="underline" onClick={() => { setOubli(''); setErreur(''); }}>Retour à la connexion</button>
+            </p>
+          </form>
+        ) : (
         <form onSubmit={soumettre} className="w-full max-w-sm space-y-5">
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-neutral-900">Bienvenue sur votre Studio</h2>
-            <p className="mt-2 text-sm text-neutral-500">Connectez-vous avec les identifiants transmis par Aissociate.</p>
+            <p className="mt-2 text-sm text-neutral-500">Connectez-vous avec les identifiants reçus par e-mail.</p>
           </div>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-neutral-700">Adresse e-mail</span>
@@ -71,9 +107,13 @@ export default function Connexion() {
           {erreur && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
           <Bouton type="submit" disabled={envoi} className="w-full py-2.5">{envoi ? 'Connexion…' : 'Se connecter'}</Bouton>
           <p className="text-center text-xs text-neutral-500">
-            Mot de passe oublié ? Écrivez à <a className="underline" href="mailto:contact@aissociate.re">contact@aissociate.re</a>
+            <button type="button" className="underline" onClick={() => { setOubli('saisie'); setErreur(''); }}>Mot de passe oublié ?</button>
+          </p>
+          <p className="border-t border-neutral-100 pt-4 text-center text-sm text-neutral-600">
+            Pas encore de compte ? <a className="font-medium text-orange-600 underline" href="/studio/demarrer">Essayer gratuitement 7 jours</a>
           </p>
         </form>
+        )}
       </section>
     </div>
   );

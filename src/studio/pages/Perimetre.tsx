@@ -1,7 +1,7 @@
 // « Mon périmètre » : ce que couvre la formule, consommation du mois, plafond
 // IA du jour et interrupteur d'urgence (suspendre / relancer les agents).
 import { useCallback, useEffect, useState } from 'react';
-import { BatteryCharging, CreditCard, Lock, PauseCircle, PlayCircle } from 'lucide-react';
+import { BatteryCharging, CreditCard, Lock, PauseCircle, PlayCircle, Plus } from 'lucide-react';
 import { appel } from '../api';
 import { Avatar, Bouton, Carte, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
@@ -22,13 +22,15 @@ type Abonnement = {
   factures: { agents: number | null; connecteurs: number | null };
   actuels: { agents: number; connecteurs: number | null };
   prix_connecteur: number; tva_pourcent: number | null; test: boolean; estimation_ht: number;
+  agent_suivant_ht?: number; premier_agent_ht?: number; dernier_palier_ht?: number;
 };
+const OFFRES: Record<string, string> = { essai: 'Essai gratuit', essentiel: 'Essentiel', pro: 'Pro', sur_mesure: 'Sur mesure' };
 const STATUTS: Record<string, string> = {
   active: 'Actif', trialing: 'Essai', past_due: 'Paiement en retard', unpaid: 'Impayé', incomplete: 'Paiement à finaliser',
   paused: 'En pause', canceled: 'Résilié', incomplete_expired: 'Non finalisé',
 };
 const EN_COURS = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
-const tvaTexte = (t: number | null) => t != null ? `TVA ${String(t).replace('.', ',')} % en sus` : 'TVA en sus selon votre adresse (20 % en métropole)';
+const tvaTexte = (t: number | null) => t != null ? `TVA ${String(t).replace('.', ',')} % en sus` : 'TVA en sus selon votre adresse de facturation (8,5 % à La Réunion, 20 % en métropole)';
 type Recharges = {
   solde: number; consommes_mois: number; achat_libre: boolean; paiement_en_ligne?: boolean;
   packs: { prix: number; credits: number }[];
@@ -53,7 +55,9 @@ function Jauge({ label, q }: { label: string; q: Quota }) {
 }
 
 export default function PagePerimetre() {
-  const { me, gerer } = useStudio();
+  const { me, gerer, rafraichir } = useStudio();
+  const essaiFini = Boolean(me.essai?.termine);
+  const [ajout, setAjout] = useState<string | null>(null);
   const [p, setP] = useState<Perimetre | null>(null);
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
@@ -110,6 +114,15 @@ export default function PagePerimetre() {
     } catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); setAchat(null); }
   };
 
+  const ajouterAgent = async () => {
+    if (!ajout) return;
+    setEnvoi(true); setErreur('');
+    try {
+      await appel('agent_ajouter', { agent_id: ajout });
+      await Promise.all([charger(), rafraichir()]);
+    } catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); setAjout(null); }
+  };
+
   const basculer = () => {
     if (!p) return;
     // Suspension = geste à risque : on demande confirmation. Reprise = direct.
@@ -118,14 +131,67 @@ export default function PagePerimetre() {
   };
 
   if (!p) return erreur ? <p className="text-sm text-red-700">{erreur}</p> : <Chargement />;
+  const carteAbonnement = p.abonnement && (() => {
+        const a = p.abonnement;
+        const enCours = a.statut != null && EN_COURS.includes(a.statut);
+        const ecart = enCours && a.actuels.connecteurs != null
+          && (a.factures.agents !== a.actuels.agents || a.factures.connecteurs !== a.actuels.connecteurs);
+        return (
+          <Carte>
+            <div className="flex flex-wrap items-start gap-6">
+              <div className="min-w-[12rem]">
+                <p className="flex items-center gap-2 font-semibold"><CreditCard className="h-5 w-5 text-neutral-500" />Abonnement mensuel
+                  {a.test && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700">mode test</span>}</p>
+                <p className="mt-2 text-3xl font-semibold">{eur(enCours && a.mensuel_ht != null ? Number(a.mensuel_ht) : a.estimation_ht)}<span className="text-base font-normal text-neutral-400"> HT / mois</span></p>
+                <p className="mt-1 text-xs text-neutral-500">
+                  {a.statut ? STATUTS[a.statut] ?? a.statut : 'Aucun abonnement en cours'}
+                  {enCours && a.fin ? ` · prochaine échéance le ${new Date(a.fin).toLocaleDateString('fr-FR')}` : ''}
+                </p>
+              </div>
+              <div className="min-w-0 flex-1 text-sm text-neutral-600">
+                <p>
+                  {enCours ? `Facturé : ${a.factures.agents ?? 0} agent${(a.factures.agents ?? 0) > 1 ? 's' : ''}` : `${a.actuels.agents} agent${a.actuels.agents > 1 ? 's' : ''}`}
+                  {(enCours ? a.factures.connecteurs : a.actuels.connecteurs) ? ` + ${enCours ? a.factures.connecteurs : a.actuels.connecteurs} connecteur(s) supplémentaire(s) à ${eur(a.prix_connecteur)}` : ''}
+                  {` · ${tvaTexte(a.tva_pourcent)}.`}
+                </p>
+                <p className="mt-1 text-neutral-500">{eur(a.premier_agent_ht ?? 149)} HT le premier agent, puis dégressif jusqu'à {eur(a.dernier_palier_ht ?? 74.5)} à partir du cinquième. Sans frais de mise en place, sans engagement : paiement par carte chaque mois, factures et résiliation depuis votre espace de paiement.</p>
+                {ecart && (
+                  <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
+                    Votre équipe a changé : {a.actuels.agents} agent{a.actuels.agents > 1 ? 's' : ''}{a.actuels.connecteurs ? ` et ${a.actuels.connecteurs} connecteur(s) supplémentaire(s)` : ''} aujourd'hui.
+                  </p>
+                )}
+                {proprietaire ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {enCours ? (
+                      <>
+                        {ecart && <Bouton variante="noir" disabled={envoi} onClick={() => setMajAbo(true)}>Mettre à jour mon abonnement</Bouton>}
+                        <Bouton variante="clair" disabled={envoi} onClick={() => versStripe('abonnement_gerer')}>Gérer mon abonnement</Bouton>
+                      </>
+                    ) : (
+                      <Bouton variante="noir" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire')}>
+                        S'abonner par carte · {eur(a.estimation_ht)} HT / mois
+                      </Bouton>
+                    )}
+                  </div>
+                ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace gère l'abonnement.</p>}
+              </div>
+            </div>
+          </Carte>
+        );
+      })();
+
   return (
     <div className="space-y-6">
-      <Titre sous="Ce que couvre votre formule, ce que vous avez consommé ce mois-ci, et l'arrêt d'urgence de vos agents.">Mon périmètre</Titre>
+      <Titre sous={essaiFini ? 'Choisissez votre abonnement pour retrouver vos agents. Tout ce que vous avez créé est conservé.' : "Ce que couvre votre formule, ce que vous avez consommé ce mois-ci, et l'arrêt d'urgence de vos agents."}>
+        {essaiFini ? 'Mon abonnement' : 'Mon périmètre'}
+      </Titre>
+      {merci && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{merci}</p>}
+      {essaiFini && carteAbonnement}
 
-      <Carte className={cx(p.suspendu && 'border-red-200 bg-red-50')}>
+      {!essaiFini && <Carte className={cx(p.suspendu && 'border-red-200 bg-red-50')}>
         <div className="flex flex-wrap items-center gap-4">
-          {p.suspendu ? <PauseCircle className="h-8 w-8 text-red-600" /> : <PlayCircle className="h-8 w-8 text-emerald-600" />}
-          <div className="min-w-0 flex-1">
+          {p.suspendu ? <PauseCircle className="h-8 w-8 shrink-0 text-red-600" /> : <PlayCircle className="h-8 w-8 shrink-0 text-emerald-600" />}
+          <div className="min-w-[12rem] flex-1">
             <p className="font-semibold">{p.suspendu ? 'Vos agents sont suspendus' : 'Vos agents sont actifs'}</p>
             <p className="text-sm text-neutral-600">
               {p.suspendu
@@ -140,7 +206,7 @@ export default function PagePerimetre() {
             </Bouton>
           )}
         </div>
-      </Carte>
+      </Carte>}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Carte>
@@ -162,77 +228,36 @@ export default function PagePerimetre() {
         <Carte>
           <p className="mb-1 font-semibold">Votre équipe</p>
           <p className="mb-4 text-sm text-neutral-500">
-            Formule {p.offre.replace('_', ' ')}{p.expire_le ? ` — jusqu'au ${new Date(p.expire_le).toLocaleDateString('fr-FR')}` : ''}
+            {me.essai
+              ? (essaiFini ? 'Essai gratuit terminé' : `Essai gratuit jusqu'au ${new Date(me.essai.fin).toLocaleDateString('fr-FR')}`)
+              : `Formule ${OFFRES[p.offre] ?? p.offre}${p.expire_le ? ` — jusqu'au ${new Date(p.expire_le).toLocaleDateString('fr-FR')}` : ''}`}
             {p.quotas.utilisateurs.max ? ` · ${p.quotas.utilisateurs.max} accès inclus` : ''}
           </p>
           <ul className="space-y-2">
             {p.agents.map((a) => (
-              <li key={a.id} className={cx('flex items-center gap-3 rounded-xl p-2', !a.ouvert && 'opacity-50')}>
-                <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={36} />
-                <div className="min-w-0 flex-1">
+              <li key={a.id} className="flex items-center gap-3 rounded-xl p-2">
+                <span className={cx(!a.ouvert && 'opacity-50')}><Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={36} /></span>
+                <div className={cx('min-w-0 flex-1', !a.ouvert && 'opacity-60')}>
                   <p className="text-sm font-medium">{a.prenom}</p>
                   <p className="truncate text-xs text-neutral-500">{a.metier}</p>
                 </div>
                 {a.ouvert
-                  ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Inclus</span>
-                  : <span className="flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500"><Lock className="h-3 w-3" /> Hors formule</span>}
+                  ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Dans votre équipe</span>
+                  : proprietaire
+                    ? <button type="button" disabled={envoi} onClick={() => { setMerci(''); setAjout(a.id); }}
+                        className="flex items-center gap-1 rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 opacity-100 hover:border-neutral-900"><Plus className="h-3 w-3" /> Ajouter</button>
+                    : <span className="flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500"><Lock className="h-3 w-3" /> Non ouvert</span>}
               </li>
             ))}
           </ul>
           <p className="mt-4 text-xs text-neutral-500">
-            Un agent de plus ? Écrivez à <a className="underline" href="mailto:contact@aissociate.re">contact@aissociate.re</a>.
+            {proprietaire ? 'Ajoutez un agent en un clic. Pour en retirer un, écrivez à ' : 'Le propriétaire de l\'espace peut ajouter un agent. Une question ? Écrivez à '}
+            <a className="underline" href="mailto:contact@aissociate.re">contact@aissociate.re</a>.
           </p>
         </Carte>
       </div>
-      {p.abonnement && (() => {
-        const a = p.abonnement;
-        const enCours = a.statut != null && EN_COURS.includes(a.statut);
-        const ecart = enCours && a.actuels.connecteurs != null
-          && (a.factures.agents !== a.actuels.agents || a.factures.connecteurs !== a.actuels.connecteurs);
-        return (
-          <Carte>
-            <div className="flex flex-wrap items-start gap-6">
-              <div className="min-w-[12rem]">
-                <p className="flex items-center gap-2 font-semibold"><CreditCard className="h-5 w-5 text-neutral-500" />Abonnement mensuel
-                  {a.test && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700">mode test</span>}</p>
-                <p className="mt-2 text-3xl font-semibold">{eur(enCours && a.mensuel_ht != null ? Number(a.mensuel_ht) : a.estimation_ht)}<span className="text-base font-normal text-neutral-400"> HT / mois</span></p>
-                <p className="mt-1 text-xs text-neutral-500">
-                  {a.statut ? STATUTS[a.statut] ?? a.statut : 'Pas encore de prélèvement en ligne'}
-                  {enCours && a.fin ? ` · prochaine échéance le ${new Date(a.fin).toLocaleDateString('fr-FR')}` : ''}
-                </p>
-              </div>
-              <div className="min-w-0 flex-1 text-sm text-neutral-600">
-                <p>
-                  {enCours ? `Facturé : ${a.factures.agents ?? 0} agent${(a.factures.agents ?? 0) > 1 ? 's' : ''}` : `${a.actuels.agents} agent${a.actuels.agents > 1 ? 's' : ''}`}
-                  {(enCours ? a.factures.connecteurs : a.actuels.connecteurs) ? ` + ${enCours ? a.factures.connecteurs : a.actuels.connecteurs} connecteur(s) supplémentaire(s) à ${eur(a.prix_connecteur)}` : ''}
-                  {` · ${tvaTexte(a.tva_pourcent)}.`}
-                </p>
-                <p className="mt-1 text-neutral-500">99 € HT le premier agent, puis dégressif jusqu'à 49,50 € à partir du cinquième. Prélèvement automatique, factures et résiliation depuis votre espace de paiement.</p>
-                {ecart && (
-                  <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
-                    Votre équipe a changé : {a.actuels.agents} agent{a.actuels.agents > 1 ? 's' : ''}{a.actuels.connecteurs ? ` et ${a.actuels.connecteurs} connecteur(s) supplémentaire(s)` : ''} aujourd'hui.
-                  </p>
-                )}
-                {proprietaire ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {enCours ? (
-                      <>
-                        {ecart && <Bouton variante="noir" disabled={envoi} onClick={() => setMajAbo(true)}>Mettre à jour mon abonnement</Bouton>}
-                        <Bouton variante="clair" disabled={envoi} onClick={() => versStripe('abonnement_gerer')}>Gérer mon abonnement</Bouton>
-                      </>
-                    ) : (
-                      <Bouton variante="noir" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire')}>
-                        Activer le prélèvement · {eur(a.estimation_ht)} HT / mois
-                      </Bouton>
-                    )}
-                  </div>
-                ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace gère l'abonnement.</p>}
-              </div>
-            </div>
-          </Carte>
-        );
-      })()}
-      {p.recharges && (() => {
+      {!essaiFini && carteAbonnement}
+      {!essaiFini && p.recharges && (() => {
         const r = p.recharges;
         return (
           <Carte>
@@ -258,7 +283,6 @@ export default function PagePerimetre() {
                     {r.achat_libre ? "Le propriétaire de l'espace peut ajouter des crédits." : <>Pour ajouter des crédits, écrivez à <a className="underline" href="mailto:contact@aissociate.re">contact@aissociate.re</a>.</>}
                   </p>
                 )}
-                {merci && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{merci}</p>}
               </div>
             </div>
             {r.historique.length > 0 && (
@@ -283,6 +307,20 @@ export default function PagePerimetre() {
           : `${eur(p.recharges.packs[achat].prix)} HT, ajoutés à votre prochaine facture. Les crédits sont disponibles tout de suite et se reportent de mois en mois.`) : ''}
         confirmer={{ label: p.recharges?.paiement_en_ligne ? 'Payer' : 'Ajouter les crédits', onClick: acheter }}
         annuler={{ onClick: () => setAchat(null) }}
+        enCours={envoi}
+      />
+      <Confirmation
+        ouvert={ajout !== null}
+        titre={ajout ? `Ajouter ${p.agents.find((x) => x.id === ajout)?.prenom ?? 'cet agent'} à votre équipe ?` : ''}
+        message={(() => {
+          const a = p.abonnement;
+          const plus = a?.agent_suivant_ht != null ? eur(a.agent_suivant_ht) : null;
+          if (a?.statut && EN_COURS.includes(a.statut)) return `Votre abonnement augmente${plus ? ` de ${plus} HT par mois` : ''} ; la différence pour le mois en cours est calculée au prorata sur votre prochaine facture.`;
+          if (me.essai && !essaiFini) return `L'agent est disponible tout de suite, sans frais pendant l'essai.${plus ? ` Il ajoutera ${plus} HT par mois à votre abonnement si vous vous abonnez.` : ''}`;
+          return `L'agent rejoint votre équipe.${plus ? ` Il ajoute ${plus} HT par mois à votre abonnement.` : ''}`;
+        })()}
+        confirmer={{ label: 'Ajouter', onClick: ajouterAgent }}
+        annuler={{ onClick: () => setAjout(null) }}
         enCours={envoi}
       />
       <Confirmation

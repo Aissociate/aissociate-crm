@@ -23,17 +23,16 @@ import SamDemo from '../components/SamDemo';
 
 // ── L'offre ─────────────────────────────────────────────────────────────────
 const OFFRE = {
-  socle: 499,                 // initialisation de l'espace, HT, une fois
-  parAgent: 199,              // mise en place de chaque agent, HT, une fois
-  // Abonnement mensuel HT : prix du 1er, 2e, … 5e agent (dégressif jusqu'à -50 %).
-  mensuelParRang: [99, 87, 74, 62, 49.5],
+  // Abonnement mensuel HT : prix du 1er, 2e, … 5e agent (dégressif jusqu'à -50 %). Aucuns frais de mise en place.
+  // Mêmes montants que PALIERS_AGENTS (supabase/functions/studio/stripe.ts) et OFFRE (studio-demo).
+  mensuelParRang: [149, 131, 112, 93, 74.5],
   delaiJours: 15,
-  // Kap Numérik (Région Réunion) — indicatif, sous réserve : voir mention sous le calculateur.
-  kap: { taux: 0.8, plafond: 3200 },
+  essaiJours: 7,              // essai gratuit ouvert à la fin du questionnaire (studio_config essai_jours)
   // Connecteurs inclus et prix des autres : réglés dans CRM › Studio IA › Paramètres,
   // lus en direct (useTarifConnecteurs, repli sur TARIF_DEFAUT de src/lib/tarifConnecteurs.ts).
 };
 const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
+const LIEN_ESSAI = '/studio/demarrer?depuis=agents-ia';
 const mensuelRang = (i: number) => OFFRE.mensuelParRang[Math.min(i, OFFRE.mensuelParRang.length - 1)];
 
 // ── L'équipe (miroir du catalogue du Studio : super-pouvoirs réels) ─────────
@@ -100,10 +99,10 @@ const AGENTS: Agent[] = [
 
 const faqAgents = (t: TarifConnecteurs) => [
   { question: 'Est-ce un chatbot de plus ?', answer: "Non. Chaque agent est un spécialiste avec des missions cadrées (ses « super-pouvoirs »). Il connaît votre entreprise : votre fiche, vos tarifs, votre charte, les contenus que vous avez déjà validés. Si une demande sort de son métier, il ne bricole pas : il la confie au bon collègue." },
-  { question: 'Combien ça coûte vraiment ?', answer: `Une mise en place unique de ${OFFRE.socle} € HT, plus ${OFFRE.parAgent} € HT par agent. Puis un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Le calculateur de la page vous donne votre montant exact.` },
-  { question: 'Puis-je le financer avec le Kap Numérik ?', answer: "La mise en place est éligible au dispositif Kap Numérik 2026 de la Région Réunion, sous réserve de l'éligibilité de votre entreprise et de l'ouverture des dépôts. Nous vérifions votre situation et montons le dossier avec vous." },
+  { question: 'Combien ça coûte vraiment ?', answer: `Un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Aucuns frais de mise en place, sans engagement : vous résiliez quand vous voulez. Le calculateur de la page vous donne votre montant exact.` },
+  { question: 'Puis-je essayer avant de payer ?', answer: `Oui : ${OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt avec les agents choisis et vos identifiants arrivent par e-mail. À la fin de l'essai, vous choisissez votre abonnement ou vous arrêtez là : rien n'est facturé automatiquement.` },
   { question: 'Les connecteurs sont-ils compris ?', answer: `${t.inclus.length ? `Oui pour ${enumerer(t.inclus.map((x) => libelle(x)))} (un compte de chaque). Tout autre connecteur actif` : 'Chaque connecteur actif'} (autre messagerie, serveur MCP, autre application${t.inclus.length ? ', compte supplémentaire' : ''}) coûte ${eur(t.prix)} HT par mois, uniquement tant qu'il est connecté.` },
-  { question: 'En combien de temps est-ce opérationnel ?', answer: `${OFFRE.delaiJours} jours : audit et onboarding, configuration de votre espace (fiche entreprise, ressources, connecteurs), tests et prise en main avec vous.` },
+  { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Pour aller plus loin, notre équipe vous accompagne pendant ${OFFRE.delaiJours} jours : fiche entreprise, ressources, connecteurs et prise en main.` },
   { question: 'Les agents envoient-ils des messages à ma place ?', answer: "Ils préparent, vous validez. Rien ne part vers vos clients sans votre accord. Les connecteurs (Google Workspace, Outlook, Facebook, Instagram, LinkedIn, TikTok…) permettent de préparer du contenu directement adapté à vos outils." },
   { question: 'Et mes données ?', answer: "Votre espace est cloisonné : vos données ne sont visibles que de vous et de votre équipe. Hébergement en Union européenne, mots de passe et secrets chiffrés, conformité RGPD." },
 ];
@@ -135,11 +134,9 @@ export default function AgentsIA() {
 
   const calcul = useMemo(() => {
     const n = choisis.length;
-    const miseEnPlace = n ? OFFRE.socle + OFFRE.parAgent * n : 0;
     const mensuel = Array.from({ length: n }, (_, i) => mensuelRang(i)).reduce((a, b) => a + b, 0);
-    const aide = Math.min(miseEnPlace * OFFRE.kap.taux, OFFRE.kap.plafond);
     const minutesSemaine = AGENTS.filter((a) => choisis.includes(a.id)).reduce((s, a) => s + a.minutes * 5, 0);
-    return { n, miseEnPlace, mensuel, aide, reste: miseEnPlace - aide, heuresMois: Math.round((minutesSemaine * 4.3) / 60) };
+    return { n, mensuel, heuresMois: Math.round((minutesSemaine * 4.3) / 60) };
   }, [choisis]);
 
   const basculer = (id: string) => setChoisis((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
@@ -161,7 +158,7 @@ export default function AgentsIA() {
       email: email || null, phone: tel, company: societe || null,
       request_type: 'Studio IA (agents IA)',
       message: `Demande d'appel de 20 min — Studio IA. Entreprise : ${societe}. Agents envisagés : ${equipe}. `
-        + `Estimation affichée : mise en place ${eur(calcul.miseEnPlace)} HT, ${eur(calcul.mensuel)} HT/mois.`,
+        + `Estimation affichée : ${eur(calcul.mensuel)} HT/mois.`,
       source: window.location.pathname, status: 'new',
     }]);
     if (error) { setErreur(error.message); setEtat('erreur'); return; }
@@ -175,12 +172,19 @@ export default function AgentsIA() {
     </button>
   );
 
+  const Essai = ({ texte = `Essayer gratuitement ${OFFRE.essaiJours} jours`, plein = false }: { texte?: string; plein?: boolean }) => (
+    <a href={LIEN_ESSAI}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 ${plein ? 'w-full' : ''}`}>
+      {texte} <ArrowRight className="h-4 w-4" />
+    </a>
+  );
+
   return (
     <>
       <SEO
-        title={`Studio IA : votre équipe d'agents IA en ${OFFRE.delaiJours} jours — dès ${OFFRE.mensuelParRang[0]} €/mois | Aissociate`}
-        description={`Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Mise en place en ${OFFRE.delaiJours} jours à La Réunion, éligible Kap Numérik 2026. Dès ${OFFRE.mensuelParRang[0]} € HT/mois.`}
-        keywords="agent IA PME, agents IA La Réunion, Kap Numérik 2026, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion"
+        title={`Studio IA : votre équipe d'agents IA — essai gratuit, dès ${OFFRE.mensuelParRang[0]} €/mois | Aissociate`}
+        description={`Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Essai gratuit de ${OFFRE.essaiJours} jours, sans frais de mise en place, accompagnement à La Réunion. Dès ${OFFRE.mensuelParRang[0]} € HT/mois.`}
+        keywords="agent IA PME, agents IA La Réunion, essai gratuit agent IA, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion"
         url={`${SITE_URL}/agents-ia`}
         image={`${SITE_URL}/agents-ia/studio/equipe-og.jpg`}
         imageAlt="Studio IA Aissociate : l'équipe d'agents IA"
@@ -204,15 +208,15 @@ export default function AgentsIA() {
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-neutral-300">
               Six spécialistes qui connaissent vos prix, votre ton et vos clients : posts, prospection, e-mails, articles,
-              courriers, recrutement. Vous décidez, ils préparent. Opérationnels en <b className="text-white">{OFFRE.delaiJours} jours</b>.
+              courriers, recrutement. Vous décidez, ils préparent. Essayez-les <b className="text-white">gratuitement pendant {OFFRE.essaiJours} jours</b>, sans carte bancaire.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Cta />
+              <Essai />
               <button type="button" onClick={() => allerA('sam')} className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold hover:bg-white/10">
                 <MessageSquare className="h-4 w-4" /> Parler à Sam, notre agent IA
               </button>
               <button type="button" onClick={() => allerA('offre')} className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-neutral-300 hover:text-white">
-                Calculer mon offre
+                Voir les prix
               </button>
             </div>
             {/* L'équipe au complet (Nano Banana) : Léa au premier plan, puis Sam et Hugo, puis Inès, Maël et Nora. */}
@@ -230,8 +234,8 @@ export default function AgentsIA() {
             </figure>
             <ul className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-sm text-neutral-300">
               {[
-                [BadgeCheck, 'Mise en place éligible Kap Numérik 2026*'],
-                [Clock, `Opérationnel en ${OFFRE.delaiJours} jours`],
+                [BadgeCheck, `Essai gratuit de ${OFFRE.essaiJours} jours, sans carte bancaire`],
+                [Clock, 'Sans frais de mise en place, sans engagement'],
                 [Lock, 'Données hébergées en Europe, RGPD'],
                 [ShieldCheck, 'Aissociate, organisme certifié Qualiopi'],
               ].map(([Icone, t]) => {
@@ -364,8 +368,8 @@ export default function AgentsIA() {
 
         {/* ── 6. Mise en place ── */}
         <section className="mx-auto max-w-6xl px-4 py-20 sm:px-8">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">{OFFRE.delaiJours} jours, et votre équipe est au travail.</h2>
-          <p className="mt-3 max-w-2xl text-neutral-600">Vous n'avez rien à paramétrer seul : une équipe humaine, à La Réunion, installe tout avec vous.</p>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Vos agents travaillent dès aujourd'hui. Nous vous accompagnons {OFFRE.delaiJours} jours.</h2>
+          <p className="mt-3 max-w-2xl text-neutral-600">Votre espace s'ouvre à la fin du questionnaire. Ensuite, vous n'êtes pas seul : une équipe humaine, à La Réunion, affine tout avec vous. C'est compris dans l'abonnement.</p>
           <ol className="mt-10 grid gap-5 md:grid-cols-3">
             {PAS_A_PAS.map((p, i) => (
               <li key={p.t} className="rounded-2xl border border-neutral-200 bg-white p-6">
@@ -392,8 +396,8 @@ export default function AgentsIA() {
                   ['Votre base de connaissances', 'Tarifs, plaquettes, charte, FAQ : lus par les agents avant chaque mission.'],
                   ['Visuels et vidéos IA', 'Générés à la demande, rangés dans votre galerie, prêts à publier.'],
                   ['Les connecteurs', `${inclusCourt ? `${inclusCourt} inclus ; les autres` : 'Chaque connecteur'} à ${eur(tarif.prix)} HT / mois (détail ci-dessous).`],
-                  ['L\'accompagnement humain', `Mise en place en ${OFFRE.delaiJours} jours, prise en main avec vous, support à La Réunion.`],
-                  ['Le montage du dossier Kap Numérik', 'Nous vérifions votre éligibilité et préparons le dossier.'],
+                  ['L\'accompagnement humain', `Mise en place et prise en main avec vous pendant ${OFFRE.delaiJours} jours, sans frais, support à La Réunion.`],
+                  [`${OFFRE.essaiJours} jours d'essai gratuit`, 'Sans carte bancaire. Rien n\'est facturé automatiquement à la fin de l\'essai.'],
                 ].map(([t, d]) => (
                   <li key={t} className="flex gap-3 rounded-xl border border-neutral-200 p-4">
                     <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
@@ -418,14 +422,10 @@ export default function AgentsIA() {
                   </div>
                   {calcul.n === 0 ? <p className="mt-6 text-sm text-neutral-500">Choisissez au moins un agent.</p> : (
                     <dl className="mt-6 space-y-3 text-sm">
-                      <div className="flex justify-between"><dt>Initialisation de l'espace</dt><dd>{eur(OFFRE.socle)}</dd></div>
-                      <div className="flex justify-between"><dt>Mise en place : {calcul.n} agent{calcul.n > 1 ? 's' : ''} × {OFFRE.parAgent} €</dt><dd>{eur(OFFRE.parAgent * calcul.n)}</dd></div>
-                      <div className="flex justify-between border-t border-neutral-200 pt-3 font-semibold"><dt>Mise en place, une seule fois</dt><dd>{eur(calcul.miseEnPlace)} HT</dd></div>
                       <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800">
-                        <dt>Kap Numérik, estimation*</dt><dd>− {eur(calcul.aide)}</dd>
+                        <dt>Mise en place et accompagnement</dt><dd>Offerts</dd>
                       </div>
-                      <div className="flex justify-between font-semibold"><dt>Votre reste à charge estimé</dt><dd>{eur(calcul.reste)} HT</dd></div>
-                      <div className="border-t border-neutral-200 pt-3">
+                      <div>
                         {Array.from({ length: calcul.n }, (_, i) => (
                           <div key={i} className="flex justify-between text-neutral-600">
                             <dt>{i + 1}{i ? 'e' : 'er'} agent{i > 0 && mensuelRang(i) < OFFRE.mensuelParRang[0] ? ` (−${Math.round((1 - mensuelRang(i) / OFFRE.mensuelParRang[0]) * 100)} %)` : ''}</dt>
@@ -445,14 +445,11 @@ export default function AgentsIA() {
                       </p>
                     </dl>
                   )}
-                  <button type="button" onClick={() => allerA('capture')} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white hover:bg-orange-600">
-                    Je veux cette équipe <ArrowRight className="h-4 w-4" />
-                  </button>
+                  <div className="mt-6"><Essai texte={`Essayer gratuitement ${OFFRE.essaiJours} jours`} plein /></div>
+                  <p className="mt-2 text-center text-xs text-neutral-500">Sans carte bancaire. Vous choisissez vos agents dans le questionnaire.</p>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-neutral-500">
-                  * Kap Numérik 2026 (Région Réunion) : aide indicative calculée sur la mise en place uniquement (jusqu'à {Math.round(OFFRE.kap.taux * 100)} % des
-                  dépenses HT pour les entreprises de 0 à 9 salariés, plafonnée à {eur(OFFRE.kap.plafond)} ; taux plus faible de 10 à 19 salariés).
-                  Sous réserve de l'éligibilité de l'entreprise, de l'ouverture des dépôts et de la validation du dossier par la Région. Montants HT.
+                  Montants HT. Abonnement mensuel sans engagement, résiliable à tout moment depuis votre espace.
                 </p>
               </div>
             </div>
@@ -500,11 +497,12 @@ export default function AgentsIA() {
         {/* ── 8. Garantie ── */}
         <section className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-8">
           <ShieldCheck className="mx-auto h-12 w-12 text-orange-500" />
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight">Notre engagement : {OFFRE.delaiJours} jours.</h2>
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight">Notre engagement : vous essayez avant de payer.</h2>
           <p className="mt-4 text-lg text-neutral-700">
-            Votre équipe est opérationnelle en {OFFRE.delaiJours} jours, ou nous vous remboursons la mise en place. Et si, après l'appel de découverte,
-            le Studio n'est pas le bon outil pour vous, nous vous le dirons franchement.
+            {OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire et sans frais de mise en place. Ensuite, un abonnement mensuel sans engagement,
+            que vous arrêtez quand vous voulez. Et si le Studio n'est pas le bon outil pour vous, nous vous le dirons franchement.
           </p>
+          <div className="mt-6"><Essai /></div>
         </section>
 
         {/* ── 9. Pour qui ── */}
@@ -547,8 +545,8 @@ export default function AgentsIA() {
             <div>
               <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Vingt minutes pour voir si votre équipe vous attend.</h2>
               <p className="mt-4 text-neutral-300">
-                Un conseiller Aissociate vous rappelle sous 24 h ouvrées. On regarde votre activité, on choisit les bons agents,
-                on vérifie votre éligibilité au Kap Numérik. Sans engagement.
+                Un conseiller Aissociate vous rappelle sous 24 h ouvrées. On regarde votre activité et on choisit les bons agents
+                avec vous. Sans engagement.
               </p>
               <p className="mt-3 text-sm text-neutral-400">
                 Vous préférez discuter ? <button type="button" onClick={() => allerA('sam')} className="underline hover:text-white">Sam peut prendre votre demande</button>.
@@ -591,7 +589,7 @@ export default function AgentsIA() {
                   {etat === 'erreur' && <p className="text-sm text-red-600" role="alert">Une erreur est survenue{erreur ? ` (${erreur})` : ''}. Réessayez, ou appelez-nous au 06 92 24 68 60.</p>}
                   <p className="text-center text-xs text-neutral-500">Sans engagement · données hébergées en Union européenne · RGPD</p>
                   <p className="border-t border-neutral-200 pt-3 text-center text-sm text-neutral-600">
-                    Prêt à démarrer ? <a href="/studio/demarrer?depuis=agents-ia" className="font-semibold text-orange-600 underline">Décrivez votre entreprise en 10 minutes</a> : nous préparons votre espace sur vos réponses.
+                    Vous préférez essayer tout de suite ? <a href={LIEN_ESSAI} className="font-semibold text-orange-600 underline">Ouvrez votre essai gratuit de {OFFRE.essaiJours} jours</a> : votre espace est prêt dès la fin du questionnaire.
                   </p>
                 </form>
               )}
@@ -599,7 +597,7 @@ export default function AgentsIA() {
           </div>
           <div className="mx-auto mt-14 max-w-3xl px-4 text-neutral-300 sm:px-8">
             <p><b className="text-white">P.-S.</b> Dans un an, vous aurez soit passé encore 300 soirées sur vos mails, vos posts et vos relances, soit une équipe qui les prépare pour vous. Les deux coûtent quelque chose. Une seule vous rend votre temps.</p>
-            <div className="mt-6"><Cta texte="Je réserve mon appel" clair /></div>
+            <div className="mt-6 flex flex-wrap gap-3"><Essai /><Cta texte="Je réserve mon appel" clair /></div>
           </div>
         </section>
       </main>

@@ -12,7 +12,7 @@ const ACCUEIL: Msg = {
   role: 'assistant',
   content: "Bonjour, je suis Sam, l'agent commercial d'Aissociate — et un agent IA du Studio, vous êtes donc en pleine démonstration. Quelle est votre activité, et qu'est-ce qui vous prend le plus de temps en ce moment ?",
 };
-const SUGGESTIONS = ['Je suis artisan, je n\'ai pas le temps pour mes réseaux', 'Combien coûtent deux agents ?', 'Suis-je éligible au Kap Numérik ?'];
+const SUGGESTIONS = ['Je suis artisan, je n\'ai pas le temps pour mes réseaux', 'Combien coûtent deux agents ?', 'Puis-je essayer gratuitement ?'];
 
 type Etat = { conversation: string; messages: Msg[]; enregistre: boolean };
 function charger(): Etat {

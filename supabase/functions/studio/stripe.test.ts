@@ -13,9 +13,9 @@ describe('paiement Stripe du Studio', () => {
   });
   it('calcule l\'abonnement dégressif des agents', () => {
     expect(montantAgents(0)).toBe(0);
-    expect(montantAgents(1)).toBe(99);
-    expect(montantAgents(3)).toBe(99 + 87 + 74);
-    expect(montantAgents(6)).toBe(99 + 87 + 74 + 62 + 49.5 + 49.5);
+    expect(montantAgents(1)).toBe(149);
+    expect(montantAgents(3)).toBe(149 + 131 + 112);
+    expect(montantAgents(6)).toBe(149 + 131 + 112 + 93 + 74.5 + 74.5);
   });
   it('n\'accepte que les webhooks signés et récents', async () => {
     const corps = '{"id":"evt_1"}', t = 1_800_000_000;
@@ -30,11 +30,11 @@ describe('paiement Stripe du Studio', () => {
     const a = lireAbonnement({
       id: 'sub_1', status: 'active', customer: 'cus_1',
       items: { data: [
-        { id: 'si_a', quantity: 2, price: { lookup_key: 'studio_agents_v1', unit_amount: null }, current_period_end: 1_800_000_000 },
+        { id: 'si_a', quantity: 2, price: { lookup_key: 'studio_agents_v2', unit_amount: null }, current_period_end: 1_800_000_000 },
         { id: 'si_c', quantity: 3, price: { lookup_key: 'studio_connecteur_999', unit_amount: 999 } },
       ] },
     });
-    expect(a).toMatchObject({ agents: 2, connecteurs: 3, articleAgents: 'si_a', articleConnecteurs: 'si_c', montant_ht: 215.97 });
+    expect(a).toMatchObject({ agents: 2, connecteurs: 3, articleAgents: 'si_a', articleConnecteurs: 'si_c', montant_ht: 309.97 });
     expect(a.fin).toBe(new Date(1_800_000_000_000).toISOString());
   });
 });

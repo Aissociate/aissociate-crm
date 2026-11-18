@@ -29,6 +29,7 @@ const Veille = lazy(() => import('./pages/Veille'));
 const Contacts = lazy(() => import('./pages/Contacts'));
 const Desinscription = lazy(() => import('./pages/Desinscription'));
 const AccepterCgv = lazy(() => import('./pages/AccepterCgv'));
+const Reinitialiser = lazy(() => import('./pages/Reinitialiser'));
 
 type Ctx = {
   me: Me | null;
@@ -105,17 +106,29 @@ function Lien({ to, label, icon: Icon, end, pastille }: { to: string; label: str
 function Coquille() {
   const { me, deconnexion } = useStudio();
   const [ouvert, setOuvert] = useState(false);
+  // Essai terminé : seul l'abonnement (et le compte) reste accessible, le menu le dit.
+  const essaiFini = Boolean(me.essai?.termine);
   const nav = (
     <nav className="flex h-full flex-col gap-1 p-4" onClick={() => setOuvert(false)}>
       <div className="mb-6 px-2">
         <p className="text-lg font-bold tracking-tight text-neutral-900">A(I)ssociate <span className="text-orange-500">Studio</span></p>
         <p className="truncate text-xs text-neutral-500">{me.workspace.nom}</p>
       </div>
-      {MENU.map((m) => <Lien key={m.to} {...m} />)}
-      <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mes créations</p>
-      {MENU_CREATIONS.map((m) => <Lien key={m.to} {...m} pastille={m.to === '/studio/livrables' ? me.stats.livrables_a_valider : undefined} />)}
-      <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mon espace</p>
-      {MENU_ESPACE.map((m) => <Lien key={m.to} {...m} />)}
+      {essaiFini ? (
+        <>
+          <Lien to="/studio/perimetre" label="Mon abonnement" icon={Gauge} />
+          <Lien to="/studio/compte" label="Mon compte" icon={KeyRound} />
+          <p className="mt-4 px-3 text-xs text-neutral-500">Vos agents, ressources et contenus vous attendent : ils reviennent dès l'abonnement activé.</p>
+        </>
+      ) : (
+        <>
+          {MENU.map((m) => <Lien key={m.to} {...m} />)}
+          <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mes créations</p>
+          {MENU_CREATIONS.map((m) => <Lien key={m.to} {...m} pastille={m.to === '/studio/livrables' ? me.stats.livrables_a_valider : undefined} />)}
+          <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mon espace</p>
+          {MENU_ESPACE.map((m) => <Lien key={m.to} {...m} />)}
+        </>
+      )}
       <div className="mt-auto border-t border-neutral-200 pt-4">
         <p className="truncate px-3 text-sm font-medium text-neutral-800">{[me.user.prenom, me.user.nom].filter(Boolean).join(' ') || me.user.email}</p>
         <p className="truncate px-3 text-xs text-neutral-500">{me.user.email}</p>
@@ -145,7 +158,7 @@ function Coquille() {
           {me.essai && (me.essai.termine ? (
             <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm text-orange-900">
               <p className="font-semibold">Votre essai gratuit est terminé.</p>
-              <p className="mt-1">Vos agents, ressources et créations sont conservés. Choisissez votre abonnement ci-dessous pour retrouver l'accès complet.</p>
+              <p className="mt-1">Vos agents, ressources et contenus sont conservés. Activez votre abonnement ci-dessous pour les retrouver tout de suite.</p>
             </div>
           ) : (
             <NavLink to="/studio/perimetre" className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
@@ -159,7 +172,7 @@ function Coquille() {
               <span>Vos agents sont suspendus : aucune mission n'est traitée. <span className="underline">Voir mon périmètre</span></span>
             </NavLink>
           )}
-          <Suspense fallback={<Chargement />}>{me.essai?.termine ? <Perimetre /> : <Outlet />}</Suspense>
+          <Suspense fallback={<Chargement />}>{essaiFini ? (window.location.pathname.endsWith('/compte') ? <Compte /> : <Perimetre />) : <Outlet />}</Suspense>
         </div>
       </main>
     </div>
@@ -196,6 +209,7 @@ export default function StudioApp() {
       <Suspense fallback={<div className="min-h-screen bg-[#f6f6f4]"><Chargement /></div>}>
         <Routes>
           <Route path="connexion" element={<Connexion />} />
+          <Route path="mot-de-passe/:jeton" element={<Reinitialiser />} />
           {/* Lien public d'invitation à connecter une application (sans session) */}
           <Route path="connecter/:jeton" element={<ConnecterInvitation />} />
           {/* Questionnaire d'onboarding public (nouveaux clients) */}
