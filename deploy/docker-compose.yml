@@ -1,7 +1,7 @@
 # Site aissociate.re sur le VPS, derrière Traefik (deploy/traefik).
 # Lancé par deploy/deploy.sh avec : -p aissociate --env-file /opt/aissociate/.env
 # Variables (/opt/aissociate/.env) :
-#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  (publiques, injectées au build)
+#   VITE_SUPABASE_URL (https://api.aissociate.re), VITE_SUPABASE_ANON_KEY  (publiques, injectées au build)
 #   SITE_HOSTS = Host(`aissociate.re`) || Host(`www.aissociate.re`) || Host(`preprod.aissociate.re`)
 services:
   web:
@@ -11,6 +11,8 @@ services:
       args:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        # Hôte qui sert /sitemap-blog.xml : l'API maison.
+        API_HOST: ${API_HOST:-api.aissociate.re}
     image: aissociate-web:latest
     container_name: aissociate-web
     restart: unless-stopped

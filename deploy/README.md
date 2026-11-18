@@ -1,8 +1,9 @@
 # Hébergement — VPS Docker + Traefik
 
 Le site public et le CRM (SPA Vite) sont servis depuis le VPS par Nginx dans Docker,
-derrière Traefik (HTTPS Let's Encrypt). La base, l'auth et les Edge Functions restent
-sur **Supabase** (`vkirutbpxzybucuiyjnb`) : rien à migrer côté données.
+derrière Traefik (HTTPS Let's Encrypt). Depuis le 18/11/2026, la base (Postgres 17), l'API
+(données, auth, stockage, temps réel) et les fonctions tournent aussi sur le VPS, sans
+Supabase : voir `docs/migration-postgres.md`, `deploy/data`, `deploy/api`, `deploy/functions`.
 
 | Fichier | Rôle |
 |---|---|
