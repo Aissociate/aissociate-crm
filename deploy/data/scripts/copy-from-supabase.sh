@@ -57,11 +57,11 @@ echo "4/6 Chargement auth.users et storage.buckets"
 pg "psql $DST -c '\copy auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, banned_until, deleted_at, created_at, updated_at) from users.csv csv' \
   -c '\copy storage.buckets (id, name, public, file_size_limit, allowed_mime_types, created_at, updated_at) from buckets.csv csv'"
 
-echo "5/6 Restauration du schéma public"
+echo "5/6 Restauration du schéma public, correctifs et statistiques (ANALYZE)"
 pg "pg_restore -h aissociate-db -U postgres -d aissociate --no-owner public.dump 2> restore-errors.log || true
     grep -v 'schema \"public\" already exists' restore-errors.log | grep -E 'error|ERROR' > restore-errors-real.log || true
     psql $DST -c '\copy storage.objects (id, bucket_id, name, owner, metadata, created_at, updated_at, last_accessed_at) from objects.csv csv' \
-              -f /sql/20-after-restore.sql"
+              -f /sql/20-after-restore.sql -f /sql/21-securite-roles-profils.sql -f /sql/22-realtime.sql -f /sql/23-page-views-policy.sql -c 'analyze'"
 
 echo "6/6 Comparaison des comptes de lignes"
 pg 'while read -r t; do echo "$t $(psql -h aissociate-db -U postgres -d aissociate -At -c "select count(*) from public.\"$t\"")"; done < tables.txt > counts-local.txt

@@ -65,6 +65,14 @@ const json = (status: number, body: unknown) =>
 realServe({ port: PORT, hostname: "0.0.0.0", onListen: () => console.log(`[runtime] ${available.size} fonctions disponibles, port ${PORT}`) }, async (req, info) => {
   const url = new URL(req.url);
   if (url.pathname === "/_health") return json(200, { ok: true, functions: available.size, loaded: handlers.size });
+  // Contrôle après déploiement : charge toutes les fonctions et liste celles qui échouent.
+  if (url.pathname === "/_preload") {
+    const failed: Record<string, string> = {};
+    for (const n of [...available].sort()) {
+      try { await load(n); } catch (e) { failed[n] = String((e as Error)?.message ?? e).slice(0, 200); }
+    }
+    return json(Object.keys(failed).length ? 500 : 200, { loaded: available.size - Object.keys(failed).length, failed });
+  }
   const name = url.pathname.split("/")[1] ?? "";
   if (!available.has(name)) return json(404, { code: "NOT_FOUND", message: "Requested function was not found" });
   try {
