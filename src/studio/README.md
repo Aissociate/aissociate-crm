@@ -93,9 +93,11 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `update studio_workspaces set stripe_client = null, stripe_abonnement = null, abonnement_statut = null;`.
   Produits, prix, taux de TVA et configuration du portail sont recréés automatiquement.
 
-- TVA : code postal 974… dans « Mon entreprise » → taux fixe 8,5 % (Stripe Tax ne gère pas La Réunion) ;
-  sinon `automatic_tax` (20 % en métropole), adresse et n° de TVA demandés sur la page Stripe. Stripe Tax exige
-  une adresse de siège et un enregistrement TVA France sur le compte (fait dans le bac à sable, à faire en réel).
+- TVA : taux fixe de 8,5 % pour tous les clients (`TAXE_AUTOMATIQUE = false` dans `stripe.ts`, décision du 18/11/2026).
+  Le calcul automatique (8,5 % à La Réunion, Stripe Tax ailleurs) reste codé : le réactiver exige une immatriculation
+  TVA France sur le compte Stripe réel, qui n'en a pas.
+- Libellé bancaire des abonnements : « AISSOCIATE STUDIO IA », posé sur les produits Stripe du Studio (le libellé par
+  défaut du compte partagé est celui d'un autre produit). Les recharges portent le suffixe « STUDIO IA ».
 
 ## Essai gratuit, identifiants et CGV (`essai.ts`, `courriel.ts`, `cgv.ts`)
 - Fin du questionnaire (`essai_auto` = true) : espace `offre = 'essai'` créé avec les agents demandés,

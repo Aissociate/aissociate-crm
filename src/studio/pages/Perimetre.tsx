@@ -30,7 +30,7 @@ const STATUTS: Record<string, string> = {
   paused: 'En pause', canceled: 'Résilié', incomplete_expired: 'Non finalisé',
 };
 const EN_COURS = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
-const tvaTexte = (t: number | null) => t != null ? `TVA ${String(t).replace('.', ',')} % en sus` : 'TVA en sus selon votre adresse de facturation (8,5 % à La Réunion, 20 % en métropole)';
+const tvaTexte = (t: number | null) => t != null ? `TVA ${String(t).replace('.', ',')} % en sus` : 'TVA en sus';
 type Recharges = {
   solde: number; consommes_mois: number; achat_libre: boolean; paiement_en_ligne?: boolean;
   packs: { prix: number; credits: number }[];

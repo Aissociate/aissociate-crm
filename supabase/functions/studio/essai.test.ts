@@ -26,7 +26,7 @@ describe('essai gratuit', () => {
 });
 
 describe('TVA et conditions générales', () => {
-  it('applique 8,5 % à La Réunion et Stripe Tax ailleurs', () => {
+  it('sait appliquer 8,5 % fixe ou Stripe Tax selon le réglage', () => {
     expect(tvaReunion('97417')).toBe(true);
     expect(tvaReunion('974 00')).toBe(true);
     expect(tvaReunion('75011')).toBe(false);

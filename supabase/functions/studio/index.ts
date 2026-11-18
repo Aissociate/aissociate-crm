@@ -526,7 +526,7 @@ async function etatAbonnement(sb: SupabaseClient, wsId: string, nbAgents: number
     actuels: { agents: nbAgents, connecteurs: conn.erreur ? null : conn.nb_factures },
     prix_connecteur: conn.tarif.prix, test: stripe.modeTest(),
     // La Réunion : 8,5 % fixe ; ailleurs : TVA calculée par Stripe selon l'adresse (null).
-    tva_pourcent: stripe.tvaReunion((w?.entete as Record<string, string> | null)?.code_postal) ? stripe.TVA_POURCENT : null,
+    tva_pourcent: !stripe.TAXE_AUTOMATIQUE || stripe.tvaReunion((w?.entete as Record<string, string> | null)?.code_postal) ? stripe.TVA_POURCENT : null,
     estimation_ht: Math.round((stripe.montantAgents(nbAgents) + (conn.erreur ? 0 : conn.nb_factures * conn.tarif.prix)) * 100) / 100,
     // Ce qu'un agent de plus ajoute à l'abonnement (tarif dégressif).
     agent_suivant_ht: Math.round((stripe.montantAgents(nbAgents + 1) - stripe.montantAgents(nbAgents)) * 100) / 100,

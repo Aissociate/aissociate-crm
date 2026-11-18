@@ -7,9 +7,9 @@
 // client sont retrouvés ou créés à la volée : passer du bac à sable au réel = changer
 // STRIPE_SECRET_KEY et STRIPE_WEBHOOK_SECRET, puis vider les colonnes stripe_* des espaces.
 //
-// TVA : La Réunion (code postal 974…, non gérée par Stripe Tax) → taux fixe de 8,5 % ;
-// ailleurs → Stripe Tax (automatic_tax, 20 % en métropole), adresse et n° de TVA demandés au
-// paiement. Stripe Tax exige une adresse de siège et un enregistrement TVA France sur le compte.
+// TVA : taux fixe de 8,5 % pour tous les clients (décision du 18/11/2026, TAXE_AUTOMATIQUE = false).
+// Le calcul automatique par Stripe Tax (20 % en métropole, adresse et n° de TVA demandés au paiement)
+// reste codé : il exige une immatriculation TVA France sur le compte Stripe, absente en réel.
 //
 // Les crédits d'une recharge ne sont ajoutés qu'à réception du paiement confirmé (webhook),
 // une seule fois par session Stripe (index unique sur studio_recharges.stripe_ref).
@@ -18,6 +18,10 @@ import { journaliser } from "./journal.ts";
 
 const API = "https://api.stripe.com/v1";
 export const TVA_POURCENT = 8.5; // La Réunion
+/** false : 8,5 % pour tous ; true : 8,5 % à La Réunion (974…), Stripe Tax ailleurs. */
+export const TAXE_AUTOMATIQUE = false;
+/** Libellé du relevé bancaire des abonnements (le compte Stripe est partagé avec d'autres produits). */
+const LIBELLE_BANCAIRE = "AISSOCIATE STUDIO IA";
 /** Abonnement mensuel HT, en centimes, du 1er au 5e agent (et au-delà : dernier palier). */
 // 149 € HT le premier agent, puis −12 %, −25 %, −37,5 % et −50 % (arrondis à l'euro, sauf le dernier palier).
 // Changer un montant impose une nouvelle clé (un prix Stripe ne se modifie pas) : v1 = 99 €, v2 = 149 €.
@@ -128,7 +132,7 @@ async function tauxTva(): Promise<string> {
   const t = l.data.find((x) => x.metadata?.studio === "tva" && Number(x.percentage) === TVA_POURCENT && !x.inclusive);
   if (t) return t.id;
   return (await appel<{ id: string }>("POST", "/tax_rates", {
-    display_name: "TVA", description: "TVA La Réunion (Studio IA)", percentage: TVA_POURCENT, inclusive: false,
+    display_name: "TVA", description: "TVA 8,5 % (Studio IA)", percentage: TVA_POURCENT, inclusive: false,
     country: "FR", jurisdiction: "La Réunion", metadata: { studio: "tva", app: "studio" },
   })).id;
 }
@@ -137,7 +141,7 @@ async function tauxTva(): Promise<string> {
 async function prix(lookup: string, nomProduit: string, def: Record<string, unknown>): Promise<string> {
   const l = await appel<{ data: { id: string }[] }>("GET", "/prices", { lookup_keys: [lookup], active: true, limit: 1 });
   if (l.data[0]) return l.data[0].id;
-  const produit = await appel<{ id: string }>("POST", "/products", { name: nomProduit, metadata: { app: "studio" } }, `studio-produit-${lookup}`);
+  const produit = await appel<{ id: string }>("POST", "/products", { name: nomProduit, statement_descriptor: LIBELLE_BANCAIRE, metadata: { app: "studio" } }, `studio-produit-${lookup}-libelle`);
   return (await appel<{ id: string }>("POST", "/prices", {
     product: produit.id, currency: "eur", lookup_key: lookup, recurring: { interval: "month" }, tax_behavior: "exclusive", metadata: { app: "studio" }, ...def,
   }, `studio-prix-${lookup}`)).id;
@@ -167,7 +171,8 @@ async function clientStripe(sb: SupabaseClient, wsId: string, email: string): Pr
 /** Page de paiement Stripe d'un pack de recharge. */
 export async function sessionRecharge(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; pack: { prix: number; credits: number } }) {
   const client = await clientStripe(sb, p.wsId, p.email);
-  const taxe = parametresTaxe(client.reunion, client.reunion ? await tauxTva() : null);
+  const fixe = !TAXE_AUTOMATIQUE || client.reunion;
+  const taxe = parametresTaxe(fixe, fixe ? await tauxTva() : null);
   const meta = { app: "studio", workspace_id: p.wsId };
   const s = await appel<{ url: string }>("POST", "/checkout/sessions", {
     mode: "payment", customer: client.id, locale: "fr", ...taxe.session,
@@ -190,12 +195,13 @@ export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; e
   const [client, pa, pc] = await Promise.all([
     clientStripe(sb, p.wsId, p.email), prixAgents(), p.connecteurs > 0 ? prixConnecteur(centimes) : Promise.resolve(""),
   ]);
-  const taxe = parametresTaxe(client.reunion, client.reunion ? await tauxTva() : null);
+  const fixe = !TAXE_AUTOMATIQUE || client.reunion;
+  const taxe = parametresTaxe(fixe, fixe ? await tauxTva() : null);
   const meta = { app: "studio", workspace_id: p.wsId };
   const s = await appel<{ url: string }>("POST", "/checkout/sessions", {
     mode: "subscription", customer: client.id, locale: "fr", ...taxe.session,
     line_items: [{ price: pa, quantity: p.agents }, ...(p.connecteurs > 0 ? [{ price: pc, quantity: p.connecteurs }] : [])],
-    subscription_data: { metadata: meta, ...(client.reunion ? { default_tax_rates: taxe.lignes.tax_rates } : {}), description: "Studio IA — Aissociate" },
+    subscription_data: { metadata: meta, ...(fixe ? { default_tax_rates: taxe.lignes.tax_rates } : {}), description: "Studio IA — Aissociate" },
     metadata: { ...meta, nature: "abonnement" },
     success_url: `${p.origine}/studio/perimetre?paiement=abonnement`,
     cancel_url: `${p.origine}/studio/perimetre?paiement=annule`,
