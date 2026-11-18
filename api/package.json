@@ -6,7 +6,7 @@
   "description": "API maison qui remplace Supabase (accès aux données, RPC ; auth, stockage et fonctions à venir)",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test \"test/unit/*.test.js\""
+    "test": "node --test \"test/unit/*.unit.mjs\""
   },
   "engines": { "node": ">=22" },
   "dependencies": {
