@@ -1,0 +1,16 @@
+{
+  "name": "aissociate-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "API maison qui remplace Supabase (accès aux données, RPC ; auth, stockage et fonctions à venir)",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/unit/*.test.js\""
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "fastify": "^5.1.0",
+    "pg": "^8.13.1"
+  }
+}

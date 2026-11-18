@@ -1,0 +1,22 @@
+# API maison (ex-Supabase) — /opt/aissociate-api
+# Pour l'instant sur le réseau interne uniquement : elle sera exposée sur
+# api.aissociate.re (Traefik) quand l'authentification sera en place.
+# Variables (/opt/aissociate-api/.env) : JWT_SECRET, AUTHENTICATOR_PASSWORD
+services:
+  api:
+    build: ./app
+    image: aissociate-api:latest
+    container_name: aissociate-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PGHOST: aissociate-db
+      PGDATABASE: aissociate
+    mem_limit: 384m
+    networks:
+      - aissociate-internal
+
+networks:
+  aissociate-internal:
+    name: aissociate-internal
+    external: true
