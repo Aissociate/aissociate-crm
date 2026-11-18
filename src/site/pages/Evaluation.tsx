@@ -148,7 +148,7 @@ export default function Evaluation() {
       <Coquille>
         <div className="card p-8 text-center">
           <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-500" />
-          <h1 className="text-lg font-bold text-fg">Lien indisponible</h1>
+          <h1 className="tracking-tight text-lg font-semibold text-fg">Lien indisponible</h1>
           <p className="mt-2 text-sm text-muted">{erreur ?? 'Ce lien est invalide ou a expiré.'}</p>
           <p className="mt-4 text-sm text-muted">
             Contactez votre formateur ou écrivez à <strong>contact@aissociate.re</strong> pour en recevoir un nouveau.
@@ -163,7 +163,7 @@ export default function Evaluation() {
       <Coquille>
         <div className="card p-8 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-emerald-500" />
-          <h1 className="text-lg font-bold text-fg">{fini ? 'Merci pour votre retour !' : 'Questionnaire déjà complété'}</h1>
+          <h1 className="tracking-tight text-lg font-semibold text-fg">{fini ? 'Merci pour votre retour !' : 'Questionnaire déjà complété'}</h1>
           <p className="mt-2 text-sm text-muted">
             {fini
               ? "Vos réponses ont bien été transmises. Elles contribuent directement à l'amélioration de nos formations."
@@ -194,7 +194,7 @@ export default function Evaluation() {
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
         <header className="mb-8">
           <div className="mb-4"><Logo size="md" tagline /></div>
-          <h1 className="text-2xl font-bold tracking-tight text-fg sm:text-3xl">{ctx.libelle}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-3xl">{ctx.libelle}</h1>
           {ctx.formation && <p className="mt-1 text-sm font-medium text-brand-600 dark:text-brand-400">{ctx.formation}</p>}
           <p className="mt-3 max-w-[64ch] text-sm leading-relaxed text-muted">
             {chaud
@@ -221,7 +221,7 @@ export default function Evaluation() {
         <EvaluationForm type={ctx.type} valeur={reponses} onChange={setReponses} />
 
         <section className="card mt-6 p-5 sm:p-6">
-          <h2 className="text-xl font-bold tracking-tight text-fg">Traitement de vos réponses</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-fg">Traitement de vos réponses</h2>
           <p className="mt-3 max-w-[64ch] text-sm leading-relaxed text-muted">
             Vos réponses sont utilisées par l'organisme de formation pour mesurer la qualité de ses
             actions et les améliorer. Elles sont conservées pendant la durée de l'action de formation et
@@ -229,7 +229,7 @@ export default function Evaluation() {
             Qualiopi, puis supprimées. Vous disposez d'un droit d'accès, de rectification et
             d'effacement en écrivant à l'organisme.
           </p>
-          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-line px-3 py-3 transition-colors hover:border-brand-500/50">
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-line px-3 py-3 transition-colors hover:border-brand-500/50">
             <input type="checkbox" checked={rgpd} onChange={(e) => setRgpd(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="text-sm text-fg">
               J'ai pris connaissance de ces informations et j'accepte que mes réponses soient utilisées

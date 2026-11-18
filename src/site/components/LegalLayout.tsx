@@ -16,10 +16,10 @@ export default function LegalLayout({ title, description, path, updated, childre
       <Header />
       <main id="contenu">
 
-      <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-16">
+      <section className="bg-neutral-950 text-white py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl sm:text-4xl font-bold">{title}</h1>
-          {updated && <p className="mt-2 text-slate-300 text-sm">Dernière mise à jour : {updated}</p>}
+          <h1 className="tracking-tight text-3xl sm:text-4xl font-semibold">{title}</h1>
+          {updated && <p className="mt-2 text-neutral-300 text-sm">Dernière mise à jour : {updated}</p>}
         </div>
       </section>
 
@@ -37,11 +37,11 @@ export default function LegalLayout({ title, description, path, updated, childre
 
 // Helpers de mise en forme (typographie cohérente sans plugin prose).
 export function H2({ children }) {
-  return <h2 className="text-2xl font-bold text-slate-900 mt-10 mb-3">{children}</h2>;
+  return <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mt-10 mb-3">{children}</h2>;
 }
 export function P({ children }) {
-  return <p className="text-slate-600 mb-4 leading-relaxed">{children}</p>;
+  return <p className="text-neutral-600 mb-4 leading-relaxed">{children}</p>;
 }
 export function UL({ children }) {
-  return <ul className="list-disc pl-6 space-y-2 text-slate-600 mb-4">{children}</ul>;
+  return <ul className="list-disc pl-6 space-y-2 text-neutral-600 mb-4">{children}</ul>;
 }

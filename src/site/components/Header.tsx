@@ -1,195 +1,129 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { GraduationCap, Menu, X, Phone, PhoneCall, Code, BookOpen, Euro, MessageCircle, Bot } from 'lucide-react';
+import { Link, NavLink } from 'react-router-dom';
+import { ArrowRight, Menu, MessageCircle, PhoneCall, X } from 'lucide-react';
 import AdminLogo from './AdminLogo';
 import { trackClick } from '@/lib/track';
 
+// Même langage visuel que la page /agents-ia : neutres, orange plein, angles doux.
+const LIENS = [
+  { to: '/formations', label: 'Formations' },
+  { to: '/aides-formation', label: 'Financements' },
+  { to: '/agents-ia', label: 'Agents IA', nouveau: true },
+  { to: '/assistance', label: 'Assistance' },
+  { to: '/developpement', label: 'Développement' },
+  { to: '/blog', label: 'Blog' },
+];
+
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const fermer = () => setIsMenuOpen(false);
 
   return (
-    <header className="bg-white shadow-sm sticky top-0 z-50">
+    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/90 font-sans backdrop-blur">
       {/* Lien d'évitement : premier élément focalisable, visible uniquement au clavier */}
       <a
         href="#contenu"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[60] focus:bg-slate-900 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[60] focus:rounded-xl focus:bg-neutral-950 focus:px-4 focus:py-2 focus:text-white"
       >
         Aller au contenu
       </a>
-      <nav aria-label="Navigation principale" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
-          <Link to="/" className="flex items-center gap-3 group">
+      <nav aria-label="Navigation principale" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between gap-4">
+          <Link to="/" className="flex shrink-0 items-center gap-2.5" onClick={fermer}>
             <AdminLogo
               src="https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg"
               alt="AIssociate Logo"
-              className="h-12 w-12 object-contain rounded-xl group-hover:scale-105 transition-transform"
+              className="h-10 w-10 rounded-xl object-contain"
             />
-            <div>
-              <div className="text-xl font-bold text-slate-900">AIssociate</div>
-              <div className="text-xs text-slate-600">Organisme de formation</div>
+            <div className="leading-tight">
+              <div className="text-lg font-semibold tracking-tight text-neutral-950">AIssociate</div>
+              <div className="text-[11px] text-neutral-500">Formation &amp; agents IA · La Réunion</div>
             </div>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8">
-            <Link
-              to="/formations"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
-            >
-              <GraduationCap className="w-4 h-4" />
-              Formations
-            </Link>
+          <div className="hidden items-center gap-1 lg:flex">
+            {LIENS.map((l) => (
+              <NavLink
+                key={l.to}
+                to={l.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`
+                }
+              >
+                {l.label}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Essai gratuit</span>}
+              </NavLink>
+            ))}
+          </div>
 
-            <Link
-              to="/assistance"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
-            >
-              <Phone className="w-4 h-4" />
-              Assistance
-            </Link>
-
-            <Link
-              to="/developpement"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
-            >
-              <Code className="w-4 h-4" />
-              Développement
-            </Link>
-
-            <Link
-              to="/agents-ia"
-              className="flex items-center gap-2 whitespace-nowrap text-slate-700 hover:text-orange-600 font-medium transition-colors"
-            >
-              <Bot className="w-4 h-4" />
-              Agents IA
-            </Link>
-
-            <Link
-              to="/blog"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-600 font-medium transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              Blog
-            </Link>
-
-            <Link
-              to="/aides-formation"
-              className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800 font-semibold transition-colors"
-            >
-              <Euro className="w-4 h-4" />
-              Aides
-            </Link>
-
+          <div className="hidden items-center gap-3 lg:flex">
             <a
               href="tel:+262692246860"
-              className="flex items-center gap-2 text-slate-700 hover:text-orange-700 font-semibold transition-colors"
+              className="hidden items-center gap-2 whitespace-nowrap text-sm font-semibold text-neutral-700 transition-colors hover:text-orange-600 xl:flex"
               aria-label="Appeler Aissociate au 06 92 24 68 60"
               onClick={() => trackClick('tel')}
             >
-              <PhoneCall className="w-4 h-4" aria-hidden="true" />
+              <PhoneCall className="h-4 w-4" aria-hidden="true" />
               0692 24 68 60
             </a>
-
             <Link
               to="/formulaire"
-              className="bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-6 py-2.5 rounded-lg font-semibold transition-all"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
             >
-              Nous contacter
+              Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
 
           <button
-            className="md:hidden text-slate-700"
+            className="rounded-lg p-2 text-neutral-700 hover:bg-neutral-100 lg:hidden"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             aria-label={isMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
             aria-expanded={isMenuOpen}
             aria-controls="menu-mobile"
           >
-            {isMenuOpen ? <X className="w-6 h-6" aria-hidden="true" /> : <Menu className="w-6 h-6" aria-hidden="true" />}
+            {isMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
           </button>
         </div>
 
         {isMenuOpen && (
-          <div id="menu-mobile" className="md:hidden border-t border-slate-200 py-4 space-y-2">
-            <Link
-              to="/formations"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <GraduationCap className="w-4 h-4" />
-              Formations
-            </Link>
-
-            <Link
-              to="/assistance"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Phone className="w-4 h-4" />
-              Assistance
-            </Link>
-
-            <Link
-              to="/developpement"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Code className="w-4 h-4" />
-              Développement
-            </Link>
-
-            <Link
-              to="/agents-ia"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Bot className="w-4 h-4" />
-              Agents IA
-            </Link>
-
-            <Link
-              to="/blog"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <BookOpen className="w-4 h-4" />
-              Blog
-            </Link>
-
-            <Link
-              to="/aides-formation"
-              className="flex items-center gap-2 px-4 py-2 text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Euro className="w-4 h-4" />
-              Aides à la formation
-            </Link>
-
+          <div id="menu-mobile" className="space-y-1 border-t border-neutral-200 py-4 lg:hidden">
+            {LIENS.map((l) => (
+              <NavLink
+                key={l.to}
+                to={l.to}
+                onClick={fermer}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-xl px-4 py-2.5 font-medium ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-700 hover:bg-neutral-50'}`
+                }
+              >
+                {l.label}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Essai gratuit</span>}
+              </NavLink>
+            ))}
             <a
               href="tel:+262692246860"
-              className="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50 rounded-lg font-semibold"
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 font-semibold text-neutral-700 hover:bg-neutral-50"
               onClick={() => trackClick('tel')}
             >
-              <PhoneCall className="w-4 h-4" aria-hidden="true" />
+              <PhoneCall className="h-4 w-4" aria-hidden="true" />
               Appeler : 0692 24 68 60
             </a>
-
             <a
               href="https://wa.me/262692246860?text=Bonjour%2C%20je%20souhaite%20des%20informations%20sur%20vos%20formations%20IA."
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold"
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 font-semibold text-emerald-700 hover:bg-emerald-50"
               onClick={() => trackClick('whatsapp')}
             >
-              <MessageCircle className="w-4 h-4" aria-hidden="true" />
+              <MessageCircle className="h-4 w-4" aria-hidden="true" />
               WhatsApp
             </a>
-
             <Link
               to="/formulaire"
-              className="block mx-4 mt-4 text-center bg-gradient-to-r from-orange-600 to-amber-700 text-white px-6 py-2.5 rounded-lg font-semibold"
-              onClick={() => setIsMenuOpen(false)}
+              className="mx-4 !mt-4 flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-semibold text-white"
+              onClick={fermer}
             >
-              Nous contacter
+              Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         )}

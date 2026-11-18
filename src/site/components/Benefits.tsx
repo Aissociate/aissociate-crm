@@ -31,13 +31,13 @@ export default function Benefits() {
   ];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-gray-900 via-gray-800 to-slate-900 text-white">
+    <section className="py-20 bg-neutral-950 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold mb-4">
             Pourquoi choisir cette formation ?
           </h2>
-          <p className="text-xl text-gray-200">
+          <p className="text-xl text-neutral-200">
             Une formation pensée pour votre réussite professionnelle
           </p>
         </div>
@@ -48,13 +48,13 @@ export default function Benefits() {
             return (
               <div
                 key={index}
-                className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all hover:-translate-y-1"
+                className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all "
               >
-                <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-amber-500 rounded-lg flex items-center justify-center mb-4">
+                <div className="w-14 h-14 bg-orange-500 rounded-xl flex items-center justify-center mb-4">
                   <Icon className="w-7 h-7 text-white" />
                 </div>
-                <h3 className="text-xl font-bold mb-3">{benefit.title}</h3>
-                <p className="text-gray-200 leading-relaxed">{benefit.description}</p>
+                <h3 className="text-xl font-semibold mb-3">{benefit.title}</h3>
+                <p className="text-neutral-200 leading-relaxed">{benefit.description}</p>
               </div>
             );
           })}

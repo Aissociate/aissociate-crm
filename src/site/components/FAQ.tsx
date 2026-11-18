@@ -67,7 +67,7 @@ export default function FAQ() {
     <section className="py-20 bg-white" itemScope itemType="https://schema.org/FAQPage">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+          <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
             Questions fréquentes
           </h2>
         </div>
@@ -76,7 +76,7 @@ export default function FAQ() {
           {faqs.map((faq, index) => (
             <div
               key={index}
-              className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border border-blue-100 overflow-hidden hover:shadow-lg transition-all"
+              className="bg-[#f6f6f4] rounded-xl border border-blue-100 overflow-hidden hover:shadow-lg transition-all"
               itemScope
               itemProp="mainEntity"
               itemType="https://schema.org/Question"
@@ -87,7 +87,7 @@ export default function FAQ() {
                 aria-expanded={openIndex === index}
                 aria-controls={`faq-reponse-${index}`}
               >
-                <span className="font-bold text-slate-900 text-lg pr-4" itemProp="name">{faq.question}</span>
+                <span className="font-semibold text-neutral-950 text-lg pr-4" itemProp="name">{faq.question}</span>
                 {openIndex === index ? (
                   <ChevronUp className="w-6 h-6 text-blue-600 flex-shrink-0" aria-hidden="true" />
                 ) : (
@@ -96,7 +96,7 @@ export default function FAQ() {
               </button>
               {openIndex === index && (
                 <div id={`faq-reponse-${index}`} className="px-6 pb-5" itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
-                  <p className="text-slate-700 leading-relaxed" itemProp="text">{faq.answer}</p>
+                  <p className="text-neutral-700 leading-relaxed" itemProp="text">{faq.answer}</p>
                 </div>
               )}
             </div>

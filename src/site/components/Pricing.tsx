@@ -4,20 +4,20 @@ import { Link } from 'react-router-dom';
 
 export default function Pricing() {
   return (
-    <section className="py-24 bg-gradient-to-b from-white via-slate-50/50 to-white">
+    <section className="py-24 bg-gradient-to-b from-white via-neutral-50/50 to-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-500 rounded-2xl mb-6">
             <Euro className="w-7 h-7 text-white" />
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
+          <h2 className="tracking-tight text-3xl sm:text-4xl lg:text-5xl font-semibold text-neutral-950 mb-6">
             Tarif de la formation
           </h2>
-          <div className="w-20 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full"></div>
+          <div className="w-20 h-1 bg-orange-500 mx-auto rounded-full"></div>
         </div>
 
         <div className="max-w-2xl mx-auto">
-          <div className="bg-gradient-to-br from-orange-600 to-amber-700 rounded-3xl p-10 sm:p-12 text-white shadow-2xl relative overflow-hidden">
+          <div className="bg-orange-500 rounded-3xl p-10 sm:p-12 text-white shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -ml-24 -mb-24"></div>
 
@@ -29,7 +29,7 @@ export default function Pricing() {
               </div>
 
               <div className="text-center mb-10">
-                <div className="text-7xl font-bold mb-3">1 600 €</div>
+                <div className="text-7xl font-semibold mb-3">1 600 €</div>
                 <p className="text-orange-100 text-xl">Formation complète de 3 jours</p>
               </div>
 
@@ -56,7 +56,7 @@ export default function Pricing() {
 
               <Link
                 to="/formulaire"
-                className="block w-full bg-white text-orange-600 py-5 rounded-xl font-bold text-xl hover:bg-orange-50 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl text-center"
+                className="block w-full bg-white text-orange-600 py-5 rounded-xl font-semibold text-xl hover:bg-orange-50 transition-all  shadow-sm hover:shadow-sm text-center"
               >
                 S'inscrire à la formation
               </Link>

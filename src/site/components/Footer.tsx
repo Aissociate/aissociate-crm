@@ -1,104 +1,95 @@
-// @ts-nocheck
 import { Link } from 'react-router-dom';
-import { MapPin, Phone, Mail, FileText, Shield, Accessibility, MessageSquare } from 'lucide-react';
+import { ArrowRight, Mail, MapPin, Phone } from 'lucide-react';
 import AdminLogo from './AdminLogo';
 
-export default function Footer() {
-  const links = [
-    { icon: FileText, label: 'Mentions légales', to: '/mentions-legales' },
-    { icon: Shield, label: 'Politique de confidentialité', to: '/confidentialite' },
-    { icon: Accessibility, label: 'Accessibilité', to: '/accessibilite' },
-    { icon: MessageSquare, label: 'Réclamations', to: '/reclamations' }
-  ];
+// Même langage visuel que la page /agents-ia : fond neutral-950, orange plein, angles doux.
+const SERVICES = [
+  { to: '/formations', label: 'Formations IA' },
+  { to: '/aides-formation', label: 'Financer ma formation (CPF, OPCO)' },
+  { to: '/agents-ia', label: 'Studio IA : votre équipe d\'agents IA' },
+  { to: '/assistance', label: 'Assistance & chatbots IA' },
+  { to: '/developpement', label: 'Développement d\'agents IA' },
+  { to: '/blog', label: 'Blog IA' },
+  { to: '/contact', label: 'Contact' },
+];
+const LEGAL = [
+  { to: '/mentions-legales', label: 'Mentions légales' },
+  { to: '/confidentialite', label: 'Politique de confidentialité' },
+  { to: '/accessibilite', label: 'Accessibilité' },
+  { to: '/reclamations', label: 'Réclamations' },
+];
 
+export default function Footer() {
   return (
-    <footer className="bg-slate-900 text-white py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-3 gap-8 mb-8">
+    <footer className="bg-neutral-950 font-sans text-white">
+      <div className="mx-auto max-w-7xl px-4 pb-28 pt-14 sm:px-6 sm:pb-12 lg:px-8">
+        <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
-            <div className="flex items-center gap-3 mb-4">
+            <p className="text-xl font-semibold tracking-tight">Un projet, une question ?</p>
+            <p className="mt-1 text-sm text-neutral-400">Un conseiller vous répond sous 24 h ouvrées. Essai gratuit de 7 jours pour le Studio IA.</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <a href="/studio/demarrer?depuis=pied" className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600">
+              Essayer le Studio IA <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <Link to="/formulaire" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-white/10">
+              Nous contacter
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-12 grid gap-10 md:grid-cols-[1.3fr_1fr_1fr]">
+          <div>
+            <div className="flex items-center gap-3">
               <AdminLogo
                 src="https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg"
                 alt="AIssociate Logo"
-                className="h-12 w-12 object-contain rounded-lg"
+                className="h-11 w-11 rounded-xl object-contain"
               />
-              <h3 className="text-2xl font-bold">Aissociate</h3>
+              <p className="text-xl font-semibold tracking-tight">Aissociate</p>
             </div>
-            <div className="space-y-2 text-slate-300">
-              <p>SARL – Capital 100 €</p>
-              <div className="flex items-start gap-2">
-                <MapPin className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <p>36 chemin de l'État Major, 97417 Saint-Denis</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="w-5 h-5 flex-shrink-0" />
-                <a href="tel:+262692246860" className="hover:text-orange-400 transition-colors">06 92 24 68 60</a>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="w-5 h-5 flex-shrink-0" />
-                <a href="mailto:contact@aissociate.re" className="hover:text-orange-400 transition-colors">contact@aissociate.re</a>
-              </div>
-              <p>SIRET : 995 220 407 00010</p>
-              <p>RCS Saint-Denis de La Réunion</p>
-              <p>NDA : 04 97 37547 97</p>
-              <p className="inline-flex items-center gap-2 mt-2">
-                <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></span>
-                <span className="font-semibold text-orange-400">Actif</span>
-              </p>
-            </div>
+            <ul className="mt-5 space-y-2.5 text-sm text-neutral-300">
+              <li className="flex items-start gap-2.5"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" aria-hidden="true" /> 36 chemin de l'État Major, 97417 Saint-Denis</li>
+              <li className="flex items-center gap-2.5"><Phone className="h-4 w-4 shrink-0 text-orange-400" aria-hidden="true" /> <a href="tel:+262692246860" className="transition-colors hover:text-white">06 92 24 68 60</a></li>
+              <li className="flex items-center gap-2.5"><Mail className="h-4 w-4 shrink-0 text-orange-400" aria-hidden="true" /> <a href="mailto:contact@aissociate.re" className="transition-colors hover:text-white">contact@aissociate.re</a></li>
+            </ul>
+            <p className="mt-5 text-xs leading-relaxed text-neutral-500">
+              SARL – Capital 100 € · SIRET : 995 220 407 00010<br />
+              RCS Saint-Denis de La Réunion · NDA : 04 97 37547 97
+            </p>
           </div>
 
           <div>
-            <h4 className="text-lg font-bold mb-4">Navigation</h4>
-            <ul className="space-y-3 text-slate-300">
-              <li><Link to="/formations" className="hover:text-orange-400 transition-colors">Formations IA</Link></li>
-              <li><Link to="/aides-formation" className="hover:text-orange-400 transition-colors">Financer ma formation (CPF, OPCO)</Link></li>
-              <li><Link to="/assistance" className="hover:text-orange-400 transition-colors">Assistance &amp; chatbots IA</Link></li>
-              <li><Link to="/developpement" className="hover:text-orange-400 transition-colors">Développement d'agents IA</Link></li>
-              <li><Link to="/blog" className="hover:text-orange-400 transition-colors">Blog IA</Link></li>
-              <li><Link to="/contact" className="hover:text-orange-400 transition-colors">Contact</Link></li>
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Navigation</p>
+            <ul className="mt-4 space-y-2.5 text-sm text-neutral-300">
+              {SERVICES.map((l) => <li key={l.to}><Link to={l.to} className="transition-colors hover:text-white">{l.label}</Link></li>)}
             </ul>
           </div>
 
           <div>
-            <h4 className="text-lg font-bold mb-4">Liens utiles</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {links.map((link, index) => {
-                const Icon = link.icon;
-                return (
-                  <Link
-                    key={index}
-                    to={link.to}
-                    className="flex items-center gap-3 text-slate-300 hover:text-white transition-colors group"
-                  >
-                    <Icon className="w-5 h-5 text-orange-400 group-hover:text-orange-300" />
-                    <span>{link.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-700 pt-8">
-          <div className="flex flex-col items-center gap-6">
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Liens utiles</p>
+            <ul className="mt-4 space-y-2.5 text-sm text-neutral-300">
+              {LEGAL.map((l) => <li key={l.to}><Link to={l.to} className="transition-colors hover:text-white">{l.label}</Link></li>)}
+            </ul>
             <a
               href="https://certifopac.fr/qualiopi/certification/verification/?siren=995220407#webApp"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-white rounded-lg p-4 hover:shadow-lg transition-shadow"
+              className="mt-6 inline-block rounded-xl bg-white p-3"
             >
               <img
                 src="https://certifopac.fr/wp-content/uploads/2021/09/LogoQualiopi-300dpi-Avec-Marianne.png"
                 alt="Certification Qualiopi - Vérifier le certificat"
-                className="h-20 w-auto"
+                className="h-16 w-auto"
+                loading="lazy"
               />
             </a>
-            <div className="text-center text-slate-400">
-              <p>© {new Date().getFullYear()} Aissociate. Tous droits réservés.</p>
-              <p className="mt-2 text-sm">Organisme de formation professionnelle</p>
-            </div>
           </div>
+        </div>
+
+        <div className="mt-12 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
+          <p>© {new Date().getFullYear()} Aissociate. Tous droits réservés. Organisme de formation professionnelle.</p>
+          <Link to="/login" className="transition-colors hover:text-neutral-300" title="Accès à l'espace Admin (CRM)">Espace Admin</Link>
         </div>
       </div>
     </footer>

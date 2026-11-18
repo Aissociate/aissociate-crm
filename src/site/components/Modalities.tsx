@@ -55,7 +55,7 @@ export default function Modalities() {
         'Les délais d\'accès sont de 4 mois à 2 semaines avant le début de la formation, sous réserve de places disponibles.',
         'Lieu de formation communiqué dans la convocation'
       ],
-      color: 'from-slate-500 to-slate-600'
+      color: 'from-neutral-500 to-neutral-600'
     },
     {
       icon: TrendingUp,
@@ -68,10 +68,10 @@ export default function Modalities() {
   ];
 
   return (
-    <section className="py-20 bg-gradient-to-br from-slate-50 to-blue-50">
+    <section className="py-20 bg-[#f6f6f4]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+          <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
             Modalités pratiques
           </h2>
         </div>
@@ -82,15 +82,15 @@ export default function Modalities() {
             return (
               <div
                 key={index}
-                className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all border border-slate-100"
+                className="bg-white rounded-xl p-6 shadow-lg hover:shadow-sm transition-all border border-neutral-100"
               >
-                <div className={`w-14 h-14 bg-gradient-to-br ${modality.color} rounded-lg flex items-center justify-center mb-4`}>
+                <div className={`w-14 h-14 bg-gradient-to-br ${modality.color} rounded-xl flex items-center justify-center mb-4`}>
                   <Icon className="w-7 h-7 text-white" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">{modality.title}</h3>
+                <h3 className="text-xl font-semibold text-neutral-950 mb-3">{modality.title}</h3>
                 <ul className="space-y-2">
                   {modality.items.map((item, itemIndex) => (
-                    <li key={itemIndex} className="text-slate-700 leading-relaxed">
+                    <li key={itemIndex} className="text-neutral-700 leading-relaxed">
                       {item}
                     </li>
                   ))}

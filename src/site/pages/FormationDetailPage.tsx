@@ -44,11 +44,11 @@ function CrmFormationDetail({ f }) {
       />
       <Header />
       <main id="contenu">
-      <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-16">
+      <section className="bg-neutral-950 text-white py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Link to="/formations" className="inline-flex items-center gap-2 text-slate-300 hover:text-white mb-6"><ArrowLeft className="w-4 h-4" /> Retour aux formations</Link>
-          <h1 className="text-4xl font-bold mb-4">{f.intitule}</h1>
-          <div className="flex flex-wrap gap-4 text-slate-300">
+          <Link to="/formations" className="inline-flex items-center gap-2 text-neutral-300 hover:text-white mb-6"><ArrowLeft className="w-4 h-4" /> Retour aux formations</Link>
+          <h1 className="tracking-tight text-4xl font-semibold mb-4">{f.intitule}</h1>
+          <div className="flex flex-wrap gap-4 text-neutral-300">
             {f.duree_heures ? <span className="inline-flex items-center gap-2"><Clock className="w-5 h-5" /> {f.duree_heures}h</span> : null}
             {f.modalite ? <span className="inline-flex items-center gap-2"><Users className="w-5 h-5" /> {f.modalite}</span> : null}
             {f.prix ? <span className="inline-flex items-center gap-2"><Euro className="w-5 h-5" /> {Number(f.prix).toLocaleString('fr-FR')} €</span> : null}
@@ -57,25 +57,25 @@ function CrmFormationDetail({ f }) {
       </section>
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-          {f.public_vise ? (<div><h2 className="text-2xl font-bold text-slate-900 mb-2 flex items-center gap-2"><Target className="w-6 h-6 text-orange-600" /> Public visé</h2><p className="text-slate-600">{f.public_vise}</p></div>) : null}
-          {f.prerequis ? (<div><h2 className="text-2xl font-bold text-slate-900 mb-2">Prérequis</h2><p className="text-slate-600">{f.prerequis}</p></div>) : null}
+          {f.public_vise ? (<div><h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-2 flex items-center gap-2"><Target className="w-6 h-6 text-orange-600" /> Public visé</h2><p className="text-neutral-600">{f.public_vise}</p></div>) : null}
+          {f.prerequis ? (<div><h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-2">Prérequis</h2><p className="text-neutral-600">{f.prerequis}</p></div>) : null}
           {objectives.length > 0 && (
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2"><CheckCircle className="w-6 h-6 text-orange-600" /> Objectifs</h2>
-              <ul className="space-y-3">{objectives.map((o, i) => (<li key={i} className="flex items-start gap-3"><CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" /><span className="text-slate-700">{o}</span></li>))}</ul>
+              <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-4 flex items-center gap-2"><CheckCircle className="w-6 h-6 text-orange-600" /> Objectifs</h2>
+              <ul className="space-y-3">{objectives.map((o, i) => (<li key={i} className="flex items-start gap-3"><CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" /><span className="text-neutral-700">{o}</span></li>))}</ul>
             </div>
           )}
           {program.length > 0 && (
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2"><BookOpen className="w-6 h-6 text-orange-600" /> Programme</h2>
-              <ul className="space-y-3">{program.map((p, i) => (<li key={i} className="flex items-start gap-3"><span className="font-bold text-orange-600">{i + 1}.</span><span className="text-slate-700">{p}</span></li>))}</ul>
+              <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-4 flex items-center gap-2"><BookOpen className="w-6 h-6 text-orange-600" /> Programme</h2>
+              <ul className="space-y-3">{program.map((p, i) => (<li key={i} className="flex items-start gap-3"><span className="font-semibold text-orange-600">{i + 1}.</span><span className="text-neutral-700">{p}</span></li>))}</ul>
             </div>
           )}
-          <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border border-orange-200 text-center">
-            <h2 className="text-2xl font-bold text-slate-900 mb-3">Intéressé par cette formation ?</h2>
-            <p className="text-slate-600 mb-6">Demandez un devis personnalisé, finançable (CPF / OPCO / AGEFICE).</p>
-            <Link to={`/formulaire?formation=${encodeURIComponent(f.intitule)}`} className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg">Demander un devis</Link>
-            <p className="text-sm text-slate-500 mt-3">Réponse sous 24 h ouvrées</p>
+          <div className="bg-orange-50 rounded-2xl p-8 border border-orange-200 text-center">
+            <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-3">Intéressé par cette formation ?</h2>
+            <p className="text-neutral-600 mb-6">Demandez un devis personnalisé, finançable (CPF / OPCO / AGEFICE).</p>
+            <Link to={`/formulaire?formation=${encodeURIComponent(f.intitule)}`} className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all shadow-lg">Demander un devis</Link>
+            <p className="text-sm text-neutral-500 mt-3">Réponse sous 24 h ouvrées</p>
           </div>
         </div>
       </section>
@@ -705,7 +705,7 @@ export default function FormationDetailPage() {
     return (
       <div className="min-h-screen bg-white">
         <Header />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center text-slate-500">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center text-neutral-500">
           Chargement de la formation…
         </div>
         <Footer />
@@ -722,7 +722,7 @@ export default function FormationDetailPage() {
       <div className="min-h-screen bg-white">
         <Header />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">Formation non trouvée</h1>
+          <h1 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-4">Formation non trouvée</h1>
           <Link to="/formations" className="text-orange-600 hover:text-orange-700">
             Retour aux formations
           </Link>
@@ -779,7 +779,7 @@ export default function FormationDetailPage() {
           alt={formation.title}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/70 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/70 to-transparent"></div>
         <div className="absolute inset-0 flex items-center">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <Link
@@ -793,25 +793,25 @@ export default function FormationDetailPage() {
               <div className="flex flex-wrap gap-2 mb-4">
                 {formation.isCertifying && (
                   <>
-                    <span className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-bold">
+                    <span className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-semibold">
                       Formation certifiante
                     </span>
-                    <span className="bg-emerald-500 text-white px-4 py-2 rounded-full text-sm font-bold">
+                    <span className="bg-emerald-500 text-white px-4 py-2 rounded-full text-sm font-semibold">
                       Éligible CPF
                     </span>
-                    <span className="bg-blue-500 text-white px-4 py-2 rounded-full text-sm font-bold">
+                    <span className="bg-blue-500 text-white px-4 py-2 rounded-full text-sm font-semibold">
                       {formation.rs}
                     </span>
                   </>
                 )}
                 {formation.isEligibleOPCO && (
-                  <span className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold">
+                  <span className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold">
                     Financement OPCO
                   </span>
                 )}
               </div>
             )}
-            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4 max-w-4xl">
+            <h1 className="tracking-tight text-4xl sm:text-5xl font-semibold text-white mb-4 max-w-4xl">
               {formation.title}
             </h1>
             <div className="flex items-center gap-2 text-white/90">
@@ -830,17 +830,17 @@ export default function FormationDetailPage() {
           <div className="grid lg:grid-cols-3 gap-12">
             <div className="lg:col-span-2 space-y-12">
               <div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                <h2 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-6 flex items-center gap-3">
                   <Target className="w-8 h-8 text-orange-600" />
                   Objectifs de la formation
                 </h2>
-                <div className="bg-gradient-to-br from-slate-50 to-orange-50 rounded-2xl p-8 border border-slate-200">
-                  <p className="text-slate-600 mb-6">À l’issue de la formation, le participant sera capable de :</p>
+                <div className="bg-[#f6f6f4] rounded-2xl p-8 border border-neutral-200">
+                  <p className="text-neutral-600 mb-6">À l’issue de la formation, le participant sera capable de :</p>
                   <ul className="space-y-3">
                     {formation.objectives.map((obj: string, index: number) => (
                       <li key={index} className="flex items-start gap-3">
                         <CheckCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-slate-700">{obj}</span>
+                        <span className="text-neutral-700">{obj}</span>
                       </li>
                     ))}
                   </ul>
@@ -848,19 +848,19 @@ export default function FormationDetailPage() {
               </div>
 
               <div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                <h2 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-6 flex items-center gap-3">
                   <BookOpen className="w-8 h-8 text-orange-600" />
                   Programme de la formation
                 </h2>
                 <div className="space-y-6">
                   {formation.program.map((module: any, index: number) => (
-                    <div key={index} className="bg-white border-2 border-slate-200 rounded-2xl p-8 hover:border-orange-300 transition-colors">
-                      <h3 className="text-xl font-bold text-slate-900 mb-4">{module.title}</h3>
+                    <div key={index} className="bg-white border-2 border-neutral-200 rounded-2xl p-8 hover:border-orange-300 transition-colors">
+                      <h3 className="text-xl font-semibold text-neutral-950 mb-4">{module.title}</h3>
                       <ul className="space-y-3">
                         {module.content.map((item: string, itemIndex: number) => (
                           <li key={itemIndex} className="flex items-start gap-3">
                             <div className="w-2 h-2 bg-orange-600 rounded-full mt-2 flex-shrink-0"></div>
-                            <span className="text-slate-600">{item}</span>
+                            <span className="text-neutral-600">{item}</span>
                           </li>
                         ))}
                       </ul>
@@ -871,21 +871,21 @@ export default function FormationDetailPage() {
 
               {formation.formats?.length > 0 && (
                 <div>
-                  <h2 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                  <h2 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-6 flex items-center gap-3">
                     <Users className="w-8 h-8 text-orange-600" />
                     Deux formats au choix
                   </h2>
                   <div className="grid sm:grid-cols-2 gap-6">
                     {formation.formats.map((fmt: any) => (
-                      <div key={fmt.name} className="bg-white border-2 border-slate-200 rounded-2xl p-8 flex flex-col hover:border-orange-300 transition-colors">
-                        <h3 className="text-xl font-bold text-slate-900 mb-1">{fmt.name}</h3>
-                        <div className="text-3xl font-bold text-orange-600 mb-1">{fmt.price}</div>
-                        <p className="text-sm text-slate-600 mb-5">{fmt.duration}</p>
+                      <div key={fmt.name} className="bg-white border-2 border-neutral-200 rounded-2xl p-8 flex flex-col hover:border-orange-300 transition-colors">
+                        <h3 className="text-xl font-semibold text-neutral-950 mb-1">{fmt.name}</h3>
+                        <div className="text-3xl font-semibold text-orange-600 mb-1">{fmt.price}</div>
+                        <p className="text-sm text-neutral-600 mb-5">{fmt.duration}</p>
                         <ul className="space-y-3 mb-6 flex-1">
                           {fmt.details.map((detail: string, i: number) => (
                             <li key={i} className="flex items-start gap-3">
                               <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                              <span className="text-sm text-slate-600">{detail}</span>
+                              <span className="text-sm text-neutral-600">{detail}</span>
                             </li>
                           ))}
                         </ul>
@@ -894,7 +894,7 @@ export default function FormationDetailPage() {
                             href={fmt.cpfUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
+                            className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-sm"
                           >
                             S'inscrire via Mon Compte Formation
                           </a>
@@ -902,14 +902,14 @@ export default function FormationDetailPage() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-sm text-slate-500 mt-4">
+                  <p className="text-sm text-neutral-500 mt-4">
                     Tarifs par participant, passage de la certification RS 6776 inclus. Formation éligible au CPF ; financement OPCO, AGEFICE ou France Travail possible selon votre situation.
                   </p>
                 </div>
               )}
 
               <div>
-                <h2 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-3">
+                <h2 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-6 flex items-center gap-3">
                   <Award className="w-8 h-8 text-orange-600" />
                   Points forts de la formation
                 </h2>
@@ -917,7 +917,7 @@ export default function FormationDetailPage() {
                   {formation.strengths.map((strength: string, index: number) => (
                     <div key={index} className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-200">
                       <CheckCircle className="w-6 h-6 text-emerald-600 mb-3" />
-                      <p className="text-slate-700">{strength}</p>
+                      <p className="text-neutral-700">{strength}</p>
                     </div>
                   ))}
                 </div>
@@ -926,71 +926,71 @@ export default function FormationDetailPage() {
 
             <div className="lg:col-span-1">
               <div className="sticky top-8 space-y-6">
-                <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border-2 border-orange-200">
+                <div className="bg-orange-50 rounded-2xl p-8 border-2 border-orange-200">
                   <div className="text-center mb-6">
-                    <div className="text-5xl font-bold text-slate-900 mb-2">{formation.price}</div>
-                    <div className="text-sm text-slate-600">{formation.priceNote || 'Par participant'}</div>
+                    <div className="text-5xl font-semibold text-neutral-950 mb-2">{formation.price}</div>
+                    <div className="text-sm text-neutral-600">{formation.priceNote || 'Par participant'}</div>
                   </div>
 
                   <div className="space-y-4 mb-6">
                     <div className="flex items-center gap-3 p-4 bg-white rounded-xl">
-                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                         <Clock className="w-5 h-5 text-orange-600" />
                       </div>
                       <div>
-                        <div className="text-sm text-slate-600">Durée</div>
-                        <div className="font-semibold text-slate-900">{formation.duration}</div>
+                        <div className="text-sm text-neutral-600">Durée</div>
+                        <div className="font-semibold text-neutral-950">{formation.duration}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 p-4 bg-white rounded-xl">
-                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                         <Users className="w-5 h-5 text-orange-600" />
                       </div>
                       <div>
-                        <div className="text-sm text-slate-600">Public</div>
-                        <div className="font-semibold text-slate-900">{formation.participants}</div>
+                        <div className="text-sm text-neutral-600">Public</div>
+                        <div className="font-semibold text-neutral-950">{formation.participants}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 p-4 bg-white rounded-xl">
-                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                         <GraduationCap className="w-5 h-5 text-orange-600" />
                       </div>
                       <div>
-                        <div className="text-sm text-slate-600">Niveau</div>
-                        <div className="font-semibold text-slate-900">{formation.level}</div>
+                        <div className="text-sm text-neutral-600">Niveau</div>
+                        <div className="font-semibold text-neutral-950">{formation.level}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 p-4 bg-white rounded-xl">
-                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                         <FileText className="w-5 h-5 text-orange-600" />
                       </div>
                       <div>
-                        <div className="text-sm text-slate-600">Format</div>
-                        <div className="font-semibold text-slate-900">{formation.format}</div>
+                        <div className="text-sm text-neutral-600">Format</div>
+                        <div className="font-semibold text-neutral-950">{formation.format}</div>
                       </div>
                     </div>
                   </div>
 
                   <Link
                     to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
-                    className="block w-full text-center bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl"
+                    className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold transition-all shadow-lg hover:shadow-sm"
                   >
                     Demander un devis
                   </Link>
-                  <p className="text-center text-sm text-slate-500 mt-3">Réponse sous 24 h ouvrées</p>
+                  <p className="text-center text-sm text-neutral-500 mt-3">Réponse sous 24 h ouvrées</p>
                 </div>
 
-                <div className="bg-white border-2 border-slate-200 rounded-2xl p-6">
-                  <h3 className="font-bold text-slate-900 mb-4">Prérequis</h3>
-                  <p className="text-slate-600 text-sm">{formation.prerequisites}</p>
+                <div className="bg-white border-2 border-neutral-200 rounded-2xl p-6">
+                  <h3 className="font-semibold text-neutral-950 mb-4">Prérequis</h3>
+                  <p className="text-neutral-600 text-sm">{formation.prerequisites}</p>
                 </div>
 
-                <div className="bg-white border-2 border-slate-200 rounded-2xl p-6">
-                  <h3 className="font-bold text-slate-900 mb-4">Référence</h3>
-                  <p className="text-slate-600 font-mono">{formation.ref}</p>
+                <div className="bg-white border-2 border-neutral-200 rounded-2xl p-6">
+                  <h3 className="font-semibold text-neutral-950 mb-4">Référence</h3>
+                  <p className="text-neutral-600 font-mono">{formation.ref}</p>
                 </div>
 
                 {formation.isCertifying && (
@@ -998,7 +998,7 @@ export default function FormationDetailPage() {
                     <div className="flex items-start gap-3">
                       <Award className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold text-emerald-900 mb-2">Formation certifiante</div>
+                        <div className="font-semibold text-emerald-900 mb-2">Formation certifiante</div>
                         <p className="text-sm text-emerald-800">
                           Cette formation est éligible au CPF et délivre une certification reconnue {formation.rs}
                         </p>
@@ -1012,7 +1012,7 @@ export default function FormationDetailPage() {
                     <div className="flex items-start gap-3">
                       <Award className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold text-blue-900 mb-2">Financement professionnel</div>
+                        <div className="font-semibold text-blue-900 mb-2">Financement professionnel</div>
                         <p className="text-sm text-blue-800 mb-2">
                           Cette formation peut être financée par votre OPCO, AGEFICE, ou tout autre organisme de financement professionnel.
                         </p>

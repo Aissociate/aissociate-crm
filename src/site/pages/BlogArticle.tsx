@@ -81,12 +81,12 @@ export default function BlogArticle() {
       <div className="min-h-screen bg-white">
         <Header />
         <div className="text-center py-40 max-w-lg mx-auto px-4">
-          <BookOpen className="w-16 h-16 text-slate-300 mx-auto mb-6" />
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">Article introuvable</h1>
-          <p className="text-slate-500 mb-8">Cet article n'existe pas ou n'est plus disponible.</p>
+          <BookOpen className="w-16 h-16 text-neutral-300 mx-auto mb-6" />
+          <h1 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-4">Article introuvable</h1>
+          <p className="text-neutral-500 mb-8">Cet article n'existe pas ou n'est plus disponible.</p>
           <Link
             to="/blog"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-600 to-amber-700 text-white px-6 py-3 rounded-xl font-bold hover:from-orange-700 hover:to-amber-800 transition-all"
+            className="inline-flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour au blog
@@ -127,11 +127,11 @@ export default function BlogArticle() {
       <Header />
       <main id="contenu">
 
-      <div className="bg-slate-50 border-b border-slate-200 py-4">
+      <div className="bg-neutral-50 border-b border-neutral-200 py-4">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link
             to="/blog"
-            className="flex items-center gap-2 text-slate-600 hover:text-orange-600 font-medium transition-colors"
+            className="flex items-center gap-2 text-neutral-600 hover:text-orange-600 font-medium transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour au blog
@@ -143,16 +143,16 @@ export default function BlogArticle() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
             {article.blog_categories && (
-              <span className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 text-white px-4 py-1 rounded-full text-sm font-semibold mb-4">
+              <span className="inline-block bg-orange-500 text-white px-4 py-1 rounded-full text-sm font-semibold mb-4">
                 {article.blog_categories.name}
               </span>
             )}
 
-            <h1 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-6 leading-tight">
+            <h1 className="tracking-tight text-4xl sm:text-5xl font-semibold text-neutral-950 mb-6 leading-tight">
               {article.title}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-6 text-slate-600">
+            <div className="flex flex-wrap items-center gap-6 text-neutral-600">
               <div className="flex items-center gap-2">
                 <User className="w-5 h-5" />
                 <span>{article.author}</span>
@@ -179,49 +179,49 @@ export default function BlogArticle() {
           )}
 
           <div
-            className="blog-content text-slate-800"
+            className="blog-content text-neutral-800"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
-          <div className="mt-12 pt-8 border-t border-slate-200">
-            <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 border border-orange-200">
-              <h3 className="text-xl font-bold text-slate-900 mb-3">
+          <div className="mt-12 pt-8 border-t border-neutral-200">
+            <div className="bg-orange-50 rounded-2xl p-8 border border-orange-200">
+              <h3 className="text-xl font-semibold text-neutral-950 mb-3">
                 Envie de passer à la pratique ?
               </h3>
-              <p className="text-slate-700 mb-6">
+              <p className="text-neutral-700 mb-6">
                 Formez-vous ou formez vos équipes à l'IA avec un organisme certifié Qualiopi à La Réunion —
                 formations finançables <strong>CPF, OPCO et France Travail</strong>.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link
                   to="/formulaire"
-                  className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                  className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
                 >
                   Demander un devis gratuit
                 </Link>
                 <Link
                   to="/formations"
-                  className="inline-block bg-white hover:bg-slate-50 text-slate-900 px-8 py-3 rounded-xl font-bold transition-all border-2 border-slate-200 hover:border-orange-300"
+                  className="inline-block bg-white hover:bg-neutral-50 text-neutral-950 px-8 py-3 rounded-xl font-semibold transition-all border-2 border-neutral-200 hover:border-orange-300"
                 >
                   Voir nos formations
                 </Link>
               </div>
-              <p className="text-sm text-slate-500 mt-4">Réponse sous 24 h ouvrées — sans engagement.</p>
+              <p className="text-sm text-neutral-500 mt-4">Réponse sous 24 h ouvrées — sans engagement.</p>
             </div>
           </div>
         </div>
       </article>
 
       {related.length > 0 && (
-        <section className="py-12 bg-slate-50">
+        <section className="py-12 bg-neutral-50">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold text-slate-900 mb-8">Articles similaires</h2>
+            <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-8">Articles similaires</h2>
             <div className="grid md:grid-cols-2 gap-8">
               {related.map((rel) => (
                 <Link
                   key={rel.id}
                   to={`/blog/${rel.slug}`}
-                  className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow group"
+                  className="bg-white rounded-xl shadow-lg border border-neutral-200 overflow-hidden hover:shadow-sm transition-shadow group"
                 >
                   <div className="relative h-48 overflow-hidden">
                     {rel.image_url ? (
@@ -231,16 +231,16 @@ export default function BlogArticle() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-orange-600 to-amber-700 flex items-center justify-center">
+                      <div className="w-full h-full bg-orange-500 flex items-center justify-center">
                         <BookOpen className="w-10 h-10 text-white/60" />
                       </div>
                     )}
                   </div>
                   <div className="p-6">
-                    <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-orange-600 transition-colors">
+                    <h3 className="text-lg font-semibold text-neutral-950 mb-2 group-hover:text-orange-600 transition-colors">
                       {rel.title}
                     </h3>
-                    <p className="text-sm text-slate-600">{rel.read_time} min de lecture</p>
+                    <p className="text-sm text-neutral-600">{rel.read_time} min de lecture</p>
                   </div>
                 </Link>
               ))}

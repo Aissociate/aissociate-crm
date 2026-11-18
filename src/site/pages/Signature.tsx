@@ -85,7 +85,7 @@ export default function Signature() {
   };
 
   if (loading) {
-    return <Cadre><p className="text-slate-500">Chargement…</p></Cadre>;
+    return <Cadre><p className="text-neutral-500">Chargement…</p></Cadre>;
   }
   if (erreur && !etat) {
     return <Cadre><p className="text-red-600">{erreur}</p></Cadre>;
@@ -94,8 +94,8 @@ export default function Signature() {
     return (
       <Cadre>
         <div className="mb-4 text-4xl">✓</div>
-        <h1 className="mb-2 text-xl font-semibold text-slate-900">Document signé</h1>
-        <p className="text-slate-600">
+        <h1 className="tracking-tight mb-2 text-xl font-semibold text-neutral-950">Document signé</h1>
+        <p className="text-neutral-600">
           Merci. Votre signature de «&nbsp;<strong>{etat?.libelle}</strong>&nbsp;» a bien été enregistrée.
           Une copie signée est conservée par l'organisme de formation.
         </p>
@@ -105,48 +105,48 @@ export default function Signature() {
 
   return (
     <Cadre>
-      <h1 className="mb-1 text-xl font-semibold text-slate-900">Signature électronique</h1>
-      <p className="mb-5 text-slate-600">{etat?.libelle}</p>
+      <h1 className="tracking-tight mb-1 text-xl font-semibold text-neutral-950">Signature électronique</h1>
+      <p className="mb-5 text-neutral-600">{etat?.libelle}</p>
 
-      <ol className="mb-5 space-y-3 text-sm text-slate-600">
-        <li><strong className="text-slate-900">1.</strong> Recevez un code à 6 chiffres sur {etat?.email_masque}.</li>
-        <li><strong className="text-slate-900">2.</strong> Saisissez vos nom et prénom, puis le code.</li>
-        <li><strong className="text-slate-900">3.</strong> Validez : le document est signé et archivé.</li>
+      <ol className="mb-5 space-y-3 text-sm text-neutral-600">
+        <li><strong className="text-neutral-950">1.</strong> Recevez un code à 6 chiffres sur {etat?.email_masque}.</li>
+        <li><strong className="text-neutral-950">2.</strong> Saisissez vos nom et prénom, puis le code.</li>
+        <li><strong className="text-neutral-950">3.</strong> Validez : le document est signé et archivé.</li>
       </ol>
 
       {!etat?.code_envoye ? (
         <button onClick={demanderCode} disabled={busy}
-          className="w-full rounded-lg bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
+          className="w-full rounded-xl bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
           {busy ? 'Envoi…' : 'Recevoir mon code par e-mail'}
         </button>
       ) : (
         <div className="space-y-4">
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Vos nom et prénom</span>
+            <span className="mb-1 block text-sm font-medium text-neutral-700">Vos nom et prénom</span>
             <input value={nom} onChange={(e) => setNom(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-orange-500" />
+              className="w-full rounded-xl border border-neutral-300 px-3 py-2 outline-none focus:border-orange-500" />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Code reçu par e-mail</span>
+            <span className="mb-1 block text-sm font-medium text-neutral-700">Code reçu par e-mail</span>
             <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               inputMode="numeric" placeholder="000000" autoComplete="one-time-code"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-center text-2xl tracking-[0.4em] outline-none focus:border-orange-500" />
+              className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-center text-2xl tracking-[0.4em] outline-none focus:border-orange-500" />
           </label>
           <button onClick={signer} disabled={busy || code.length < 6 || nom.trim().length < 3}
-            className="w-full rounded-lg bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
+            className="w-full rounded-xl bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
             {busy ? 'Signature…' : 'Signer le document'}
           </button>
           <button onClick={demanderCode} disabled={busy}
-            className="w-full text-sm text-slate-500 underline hover:text-slate-800">
+            className="w-full text-sm text-neutral-500 underline hover:text-neutral-800">
             Je n'ai pas reçu le code — le renvoyer
           </button>
         </div>
       )}
 
-      {info && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{info}</p>}
-      {erreur && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{erreur}</p>}
+      {info && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{info}</p>}
+      {erreur && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{erreur}</p>}
 
-      <p className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-400">
+      <p className="mt-6 border-t border-neutral-200 pt-4 text-xs text-neutral-400">
         Signature électronique simple au sens du règlement (UE) n° 910/2014 (eIDAS).
         La date, l'heure, votre adresse IP et la validation du code sont enregistrées
         et jointes au document comme preuve de signature.
@@ -157,7 +157,7 @@ export default function Signature() {
 
 function Cadre({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm sm:p-8">{children}</div>
     </div>
   );

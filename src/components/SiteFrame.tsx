@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { ShieldCheck, MessageCircle } from 'lucide-react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { MessageCircle } from 'lucide-react';
+import SamWidget from '@/site/components/SamWidget';
 import { trackPageView, trackClick } from '@/lib/track';
 
 /**
- * Layout du site vitrine public : rend les pages publiques et ajoute un bouton
- * d'accès à l'espace Admin (CRM Aissociate) relié au login.
+ * Layout du site vitrine public : rend les pages publiques, le bouton WhatsApp
+ * et la bulle de Sam (agent IA). L'accès à l'espace Admin est dans le pied de page.
  *
  * L'auth est désormais gérée par l'unique AuthProvider du CRM (monté dans main.tsx) ;
  * la vitrine n'a plus son propre contexte d'auth.
@@ -48,13 +49,8 @@ export default function SiteFrame() {
       >
         <MessageCircle className="h-4 w-4" aria-hidden="true" /> WhatsApp
       </a>
-      <Link
-        to="/login"
-        className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg ring-1 ring-white/10 transition hover:bg-slate-800"
-        title="Accès à l'espace Admin (CRM)"
-      >
-        <ShieldCheck className="h-4 w-4" /> Espace Admin
-      </Link>
+{/* Sam, l'agent IA du site : même conversation sur toutes les pages. L'accès Admin est dans le pied de page. */}
+      <SamWidget />
     </>
   );
 }

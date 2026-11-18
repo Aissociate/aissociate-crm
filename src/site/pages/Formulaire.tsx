@@ -95,20 +95,20 @@ const Formulaire = () => {
           title="Demande envoyée - Aissociate"
           description="Votre demande a été envoyée avec succès"
         />
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center px-4 py-12">
-          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="min-h-screen bg-[#f6f6f4] flex items-center justify-center px-4 py-12">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-sm p-8 text-center">
+            <div className="w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-12 h-12 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-4">
+            <h1 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-4">
               Demande envoyée !
             </h1>
-            <p className="text-lg text-slate-600 mb-8">
+            <p className="text-lg text-neutral-600 mb-8">
               Merci pour votre intérêt. Notre équipe vous contactera dans les plus brefs délais.
             </p>
             <a
               href="/"
-              className="inline-block bg-gradient-to-r from-amber-500 to-orange-500 text-white px-8 py-3 rounded-xl font-semibold hover:from-amber-600 hover:to-orange-600 transition-all"
+              className="inline-block bg-orange-500 text-white px-8 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-all"
             >
               Retour à l'accueil
             </a>
@@ -124,14 +124,14 @@ const Formulaire = () => {
         title="Demande de contact - Aissociate"
         description="Contactez-nous pour vos besoins en formation IA, assistance ou développement"
       />
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
+      <div className="min-h-screen bg-[#f6f6f4] py-12 px-4">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12">
+          <div className="bg-white rounded-2xl shadow-sm p-8 md:p-12">
             <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+              <h1 className="tracking-tight text-3xl md:text-4xl font-semibold text-neutral-950 mb-4">
                 Parlez-nous de votre projet
               </h1>
-              <p className="text-lg text-slate-600">
+              <p className="text-lg text-neutral-600">
                 Remplissez ce formulaire et nous vous recontacterons rapidement pour discuter de vos besoins.
               </p>
             </div>
@@ -144,7 +144,7 @@ const Formulaire = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label htmlFor="firstName" className="block text-sm font-semibold text-slate-700 mb-2">
+                  <label htmlFor="firstName" className="block text-sm font-semibold text-neutral-700 mb-2">
                     Prénom *
                   </label>
                   <input
@@ -154,13 +154,13 @@ const Formulaire = () => {
                     required
                     value={formData.firstName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
+                    className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-neutral-950 placeholder:text-neutral-400"
                     placeholder="Jean"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="lastName" className="block text-sm font-semibold text-slate-700 mb-2">
+                  <label htmlFor="lastName" className="block text-sm font-semibold text-neutral-700 mb-2">
                     Nom *
                   </label>
                   <input
@@ -170,14 +170,14 @@ const Formulaire = () => {
                     required
                     value={formData.lastName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
+                    className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-neutral-950 placeholder:text-neutral-400"
                     placeholder="Dupont"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-semibold text-neutral-700 mb-2">
                   Email *
                 </label>
                 <input
@@ -187,13 +187,13 @@ const Formulaire = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-neutral-950 placeholder:text-neutral-400"
                   placeholder="jean.dupont@example.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="phone" className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="phone" className="block text-sm font-semibold text-neutral-700 mb-2">
                   Téléphone *
                 </label>
                 <input
@@ -203,13 +203,13 @@ const Formulaire = () => {
                   required
                   value={formData.phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-neutral-950 placeholder:text-neutral-400"
                   placeholder="06 12 34 56 78"
                 />
               </div>
 
               <div>
-                <label htmlFor="company" className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="company" className="block text-sm font-semibold text-neutral-700 mb-2">
                   Entreprise
                 </label>
                 <input
@@ -218,13 +218,13 @@ const Formulaire = () => {
                   name="company"
                   value={formData.company}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-slate-900 placeholder:text-slate-400"
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-neutral-950 placeholder:text-neutral-400"
                   placeholder="Nom de votre entreprise (optionnel)"
                 />
               </div>
 
               <div>
-                <label htmlFor="requestType" className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="requestType" className="block text-sm font-semibold text-neutral-700 mb-2">
                   Type de demande *
                 </label>
                 <select
@@ -233,7 +233,7 @@ const Formulaire = () => {
                   required
                   value={formData.requestType}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white text-slate-900"
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white text-neutral-950"
                 >
                   <option value="">Sélectionnez une formation ou un service</option>
                   <optgroup label="Formations CPF">
@@ -273,7 +273,7 @@ const Formulaire = () => {
               </div>
 
               <div>
-                <label htmlFor="message" className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="message" className="block text-sm font-semibold text-neutral-700 mb-2">
                   Message
                 </label>
                 <textarea
@@ -282,7 +282,7 @@ const Formulaire = () => {
                   rows={5}
                   value={formData.message}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all resize-none text-slate-900 placeholder:text-slate-400"
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all resize-none text-neutral-950 placeholder:text-neutral-400"
                   placeholder="Décrivez-nous votre projet ou vos besoins..."
                 />
               </div>
@@ -296,7 +296,7 @@ const Formulaire = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-8 py-4 rounded-xl font-semibold hover:from-amber-600 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                className="w-full bg-orange-500 text-white px-8 py-4 rounded-xl font-semibold hover:bg-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-sm"
               >
                 {loading ? (
                   <>
@@ -316,10 +316,10 @@ const Formulaire = () => {
               <ShieldCheck className="w-5 h-5" aria-hidden="true" />
               Réponse sous 24 h ouvrées
             </div>
-            <p className="text-sm text-slate-600 text-center mt-2">
+            <p className="text-sm text-neutral-600 text-center mt-2">
               Organisme certifié Qualiopi — formations finançables CPF, OPCO et France Travail. Sans engagement.
             </p>
-            <p className="text-sm text-slate-500 text-center mt-4">
+            <p className="text-sm text-neutral-500 text-center mt-4">
               En soumettant ce formulaire, vous acceptez d'être contacté par notre équipe concernant votre demande.
             </p>
           </div>

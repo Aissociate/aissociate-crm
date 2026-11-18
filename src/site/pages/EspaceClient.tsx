@@ -72,17 +72,17 @@ export default function EspaceClient() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-lg font-semibold text-slate-900">Lien invalide ou désactivé</p>
-          <p className="mt-2 text-sm text-slate-500">Contactez votre conseiller Aissociate pour recevoir un nouveau lien d'accès.</p>
+      <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-6">
+        <div className="max-w-md rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-lg font-semibold text-neutral-950">Lien invalide ou désactivé</p>
+          <p className="mt-2 text-sm text-neutral-500">Contactez votre conseiller Aissociate pour recevoir un nouveau lien d'accès.</p>
         </div>
       </div>
     );
   }
   if (!espace) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen items-center justify-center bg-neutral-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-orange-600 border-t-transparent" />
       </div>
     );
@@ -94,8 +94,8 @@ export default function EspaceClient() {
 
   const Section = ({ icon: Icon, titre, children, vide }: { icon: typeof FileText; titre: string; children?: React.ReactNode; vide?: boolean }) => (
     vide ? null : (
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-slate-900">
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+        <h2 className="tracking-tight mb-3 flex items-center gap-2 text-base font-semibold text-neutral-950">
           <Icon className="h-5 w-5 text-orange-600" /> {titre}
         </h2>
         {children}
@@ -107,7 +107,7 @@ export default function EspaceClient() {
     path ? (
       <button
         onClick={() => telecharger(bucket, path)}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-orange-300 hover:text-orange-700"
+        className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:border-orange-300 hover:text-orange-700"
       >
         {downloading === `${bucket}/${path}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} PDF
       </button>
@@ -115,12 +115,12 @@ export default function EspaceClient() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-16">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-neutral-50 pb-16">
+      <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <p className="text-sm font-semibold uppercase tracking-wider text-orange-600">Aissociate — Organisme de formation</p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">Bonjour {espace.prenom ?? ''} 👋</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="tracking-tight mt-1 text-2xl font-semibold text-neutral-950">Bonjour {espace.prenom ?? ''} 👋</h1>
+          <p className="mt-1 text-sm text-neutral-500">
             Votre espace personnel : formations, documents et démarches en cours.
             {aFaire > 0 && <span className="ml-1 font-medium text-orange-700">{aFaire} action(s) attendue(s) de votre part.</span>}
           </p>
@@ -130,50 +130,50 @@ export default function EspaceClient() {
       <main className="mx-auto mt-6 max-w-3xl space-y-5 px-4">
         {/* Actions attendues en premier */}
         <Section icon={ClipboardList} titre="Questionnaires à compléter" vide={questionnaires.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {questionnaires.map((q) => (
               <li key={q.token} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800">{q.titre}</p>
-                  {q.sent_at && <p className="text-xs text-slate-500">Envoyé le {frDate(q.sent_at)}</p>}
+                  <p className="truncate text-sm font-medium text-neutral-800">{q.titre}</p>
+                  {q.sent_at && <p className="text-xs text-neutral-500">Envoyé le {frDate(q.sent_at)}</p>}
                 </div>
-                <a href={q.url} className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Répondre</a>
+                <a href={q.url} className="rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Répondre</a>
               </li>
             ))}
           </ul>
         </Section>
 
         <Section icon={PenLine} titre="Documents à signer" vide={espace.signatures.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {espace.signatures.map((s) => (
               <li key={s.token} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800">{s.libelle}</p>
-                  <p className="text-xs text-slate-500">Demandé le {frDate(s.created_at)}</p>
+                  <p className="truncate text-sm font-medium text-neutral-800">{s.libelle}</p>
+                  <p className="text-xs text-neutral-500">Demandé le {frDate(s.created_at)}</p>
                 </div>
-                <a href={`/signature/${s.token}`} className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Signer</a>
+                <a href={`/signature/${s.token}`} className="rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Signer</a>
               </li>
             ))}
           </ul>
         </Section>
 
         <Section icon={CalendarCheck} titre="Émargement" vide={espace.emargements.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {espace.emargements.map((e) => (
               <li key={e.token} className="flex items-center justify-between gap-3 py-2.5">
-                <p className="text-sm text-slate-800">Feuille d'émargement de votre session</p>
-                <a href={`/emargement/${e.token}`} className="rounded-lg border border-orange-600 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50">Émarger</a>
+                <p className="text-sm text-neutral-800">Feuille d'émargement de votre session</p>
+                <a href={`/emargement/${e.token}`} className="rounded-xl border border-orange-600 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50">Émarger</a>
               </li>
             ))}
           </ul>
         </Section>
 
         <Section icon={CalendarDays} titre="Mes sessions de formation" vide={espace.sessions.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {espace.sessions.map((s) => (
               <li key={s.id} className="py-2.5">
-                <p className="text-sm font-medium text-slate-800">{s.titre}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-medium text-neutral-800">{s.titre}</p>
+                <p className="text-xs text-neutral-500">
                   Du {frDateHeure(s.date_debut)}{s.date_fin ? ` au ${frDateHeure(s.date_fin)}` : ''}
                   {s.lieu ? ` · ${s.lieu}` : ''} · {s.modalite}{s.formateur ? ` · Formateur : ${s.formateur}` : ''}
                 </p>
@@ -183,12 +183,12 @@ export default function EspaceClient() {
         </Section>
 
         <Section icon={ReceiptText} titre="Mes devis" vide={espace.devis.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {espace.devis.map((d) => (
               <li key={d.numero} className="flex items-center justify-between gap-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{d.numero} — {eur(d.total_ht)}</p>
-                  <p className="text-xs text-slate-500">Émis le {frDate(d.date_emission)} · {d.statut}</p>
+                  <p className="text-sm font-medium text-neutral-800">{d.numero} — {eur(d.total_ht)}</p>
+                  <p className="text-xs text-neutral-500">Émis le {frDate(d.date_emission)} · {d.statut}</p>
                 </div>
                 <BoutonPdf bucket="devis" path={d.fichier_url} />
               </li>
@@ -197,12 +197,12 @@ export default function EspaceClient() {
         </Section>
 
         <Section icon={FileText} titre="Mes factures" vide={espace.factures.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {espace.factures.map((f) => (
               <li key={f.numero} className="flex items-center justify-between gap-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{f.numero} — {eur(f.total_ttc)}</p>
-                  <p className="text-xs text-slate-500">Émise le {frDate(f.date_emission)} · échéance {frDate(f.date_echeance)} · {f.statut === 'payee' ? 'réglée' : f.statut}</p>
+                  <p className="text-sm font-medium text-neutral-800">{f.numero} — {eur(f.total_ttc)}</p>
+                  <p className="text-xs text-neutral-500">Émise le {frDate(f.date_emission)} · échéance {frDate(f.date_echeance)} · {f.statut === 'payee' ? 'réglée' : f.statut}</p>
                 </div>
                 <BoutonPdf bucket="factures" path={f.fichier_url} />
               </li>
@@ -211,12 +211,12 @@ export default function EspaceClient() {
         </Section>
 
         <Section icon={FolderArchive} titre="Mes documents" vide={espace.documents.length === 0}>
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-neutral-100">
             {espace.documents.map((d, i) => (
               <li key={i} className="flex items-center justify-between gap-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{d.titre}</p>
-                  <p className="text-xs text-slate-500">Ajouté le {frDate(d.created_at)}</p>
+                  <p className="text-sm font-medium text-neutral-800">{d.titre}</p>
+                  <p className="text-xs text-neutral-500">Ajouté le {frDate(d.created_at)}</p>
                 </div>
                 <BoutonPdf bucket="coffre" path={d.fichier_url} />
               </li>
@@ -225,12 +225,12 @@ export default function EspaceClient() {
         </Section>
 
         {espace.sessions.length + espace.devis.length + espace.factures.length + espace.documents.length + aFaire + espace.emargements.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm text-neutral-500">
             Rien à afficher pour le moment. Votre conseiller alimentera cet espace au fil de votre parcours.
           </div>
         )}
 
-        <p className="pt-2 text-center text-xs text-slate-400">
+        <p className="pt-2 text-center text-xs text-neutral-400">
           Espace confidentiel — ne partagez pas ce lien. Aissociate · <a className="underline" href="/confidentialite">Politique de confidentialité</a>
         </p>
       </main>

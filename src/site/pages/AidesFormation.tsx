@@ -78,8 +78,8 @@ export default function AidesFormation() {
           <div className="lg:col-span-7">
             <div className="flex items-center gap-4 mb-8">
               <div className="flex flex-col items-center border-2 border-[#161616] px-3 py-2 leading-none">
-                <span className="text-[11px] font-bold tracking-tighter text-[#161616]">RÉPUBLIQUE</span>
-                <span className="text-[11px] font-bold tracking-tighter text-[#161616]">FRANÇAISE</span>
+                <span className="text-[11px] font-semibold tracking-tighter text-[#161616]">RÉPUBLIQUE</span>
+                <span className="text-[11px] font-semibold tracking-tighter text-[#161616]">FRANÇAISE</span>
                 <span className="text-[10px] italic text-[#3A3A3A] mt-1">Liberté</span>
                 <span className="text-[10px] italic text-[#3A3A3A]">Égalité</span>
                 <span className="text-[10px] italic text-[#3A3A3A]">Fraternité</span>
@@ -91,11 +91,11 @@ export default function AidesFormation() {
               </span>
             </div>
 
-            <p className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: BLEU_FRANCE }}>
+            <p className="text-sm font-semibold uppercase tracking-wider mb-4" style={{ color: BLEU_FRANCE }}>
               Dispositif public — Transformation IA des PME
             </p>
 
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6 leading-tight text-[#161616]">
+            <h1 className="tracking-tight text-3xl sm:text-4xl lg:text-5xl font-semibold mb-6 leading-tight text-[#161616]">
               L'État finance jusqu'à <span style={{ color: BLEU_FRANCE }}>90 000 €</span> pour intégrer l'intelligence artificielle dans votre entreprise à La Réunion.
             </h1>
 
@@ -154,7 +154,7 @@ export default function AidesFormation() {
             { value: '-42 %', label: 'Coûts opérationnels (moy.)' },
           ].map((s, i) => (
             <div key={i} className="bg-white p-6">
-              <div className="text-3xl sm:text-4xl font-bold mb-1" style={{ color: BLEU_FRANCE }}>{s.value}</div>
+              <div className="text-3xl sm:text-4xl font-semibold mb-1" style={{ color: BLEU_FRANCE }}>{s.value}</div>
               <div className="text-sm text-[#3A3A3A]">{s.label}</div>
             </div>
           ))}
@@ -165,8 +165,8 @@ export default function AidesFormation() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Contexte économique</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-5 leading-tight">
+            <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Contexte économique</p>
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
               Un plan national, une urgence locale.
             </h2>
             <p className="text-lg text-[#3A3A3A] leading-relaxed">
@@ -182,7 +182,7 @@ export default function AidesFormation() {
               { title: 'Calendrier des aides', description: "Les enveloppes 2026 sont plafonnées. Les dossiers sont instruits selon un principe de premier arrivé, premier servi, jusqu'à épuisement des crédits ouverts." },
             ].map((f, i) => (
               <div key={i} className="bg-white p-8">
-                <h3 className="text-xl font-bold text-[#161616] mb-3">{f.title}</h3>
+                <h3 className="text-xl font-semibold text-[#161616] mb-3">{f.title}</h3>
                 <p className="text-[#3A3A3A] leading-relaxed">{f.description}</p>
               </div>
             ))}
@@ -194,8 +194,8 @@ export default function AidesFormation() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Dispositifs publics mobilisables</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-5 leading-tight">
+            <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Dispositifs publics mobilisables</p>
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
               Six dispositifs cumulables pour financer votre transformation IA.
             </h2>
             <p className="text-lg text-[#3A3A3A] leading-relaxed">
@@ -212,9 +212,9 @@ export default function AidesFormation() {
                     <div className="w-11 h-11 flex items-center justify-center" style={{ backgroundColor: BLEU_FRANCE }}>
                       <Icon className="w-5 h-5 text-white" />
                     </div>
-                    <div className="text-lg font-bold" style={{ color: BLEU_FRANCE }}>{init.amount}</div>
+                    <div className="text-lg font-semibold" style={{ color: BLEU_FRANCE }}>{init.amount}</div>
                   </div>
-                  <h3 className="text-lg font-bold text-[#161616] mb-2 leading-snug">{init.title}</h3>
+                  <h3 className="text-lg font-semibold text-[#161616] mb-2 leading-snug">{init.title}</h3>
                   <p className="text-sm text-[#3A3A3A] leading-relaxed">{init.description}</p>
                 </article>
               );
@@ -224,8 +224,8 @@ export default function AidesFormation() {
           <div className="mt-14">
             <div className="max-w-3xl mb-10">
               <div className="w-12 h-1 mb-5" style={{ backgroundColor: ROUGE_MARIANNE }}></div>
-              <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: ROUGE_MARIANNE }}>En complément de France 2030</p>
-              <h3 className="text-2xl sm:text-3xl font-bold text-[#161616] mb-4 leading-tight">
+              <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: ROUGE_MARIANNE }}>En complément de France 2030</p>
+              <h3 className="text-2xl sm:text-3xl font-semibold text-[#161616] mb-4 leading-tight">
                 Quatre dispositifs supplémentaires cumulables selon votre statut.
               </h3>
               <p className="text-base text-[#3A3A3A] leading-relaxed">
@@ -273,7 +273,7 @@ export default function AidesFormation() {
                       </div>
                       <div className="flex-1">
                         <div className="flex items-baseline gap-2 mb-2">
-                          <span className="text-sm font-bold" style={{ color: ROUGE_MARIANNE }}>{item.name}</span>
+                          <span className="text-sm font-semibold" style={{ color: ROUGE_MARIANNE }}>{item.name}</span>
                           <span className="text-xs text-[#666666]">·</span>
                           <span className="text-sm font-semibold text-[#161616]">{item.title}</span>
                         </div>
@@ -292,7 +292,7 @@ export default function AidesFormation() {
 
           <div className="mt-10 bg-white border-l-4 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-6" style={{ borderColor: BLEU_FRANCE }}>
             <div className="flex-1">
-              <h3 className="text-xl font-bold text-[#161616] mb-2">Simulation gratuite de vos droits</h3>
+              <h3 className="text-xl font-semibold text-[#161616] mb-2">Simulation gratuite de vos droits</h3>
               <p className="text-[#3A3A3A]">En moyenne, les dirigeants accompagnés activent 2,4 dispositifs simultanément et obtiennent 5 693 € de financement public.</p>
             </div>
             <Link
@@ -311,8 +311,8 @@ export default function AidesFormation() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Acteurs économiques engagés</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-5 leading-tight">
+            <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Acteurs économiques engagés</p>
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
               Les entreprises de référence du territoire ont intégré l'IA.
             </h2>
             <p className="text-lg text-[#3A3A3A] leading-relaxed">
@@ -334,15 +334,15 @@ export default function AidesFormation() {
 
           <div className="grid md:grid-cols-3 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
             <div className="bg-[#F6F6F6] p-8">
-              <div className="text-4xl font-bold mb-2" style={{ color: BLEU_FRANCE }}>68 %</div>
+              <div className="text-4xl font-semibold mb-2" style={{ color: BLEU_FRANCE }}>68 %</div>
               <div className="text-sm text-[#3A3A3A]">des PME du top 100 réunionnais ont lancé un projet IA en 2025.</div>
             </div>
             <div className="bg-[#F6F6F6] p-8">
-              <div className="text-4xl font-bold mb-2" style={{ color: BLEU_FRANCE }}>+ 34 %</div>
+              <div className="text-4xl font-semibold mb-2" style={{ color: BLEU_FRANCE }}>+ 34 %</div>
               <div className="text-sm text-[#3A3A3A]">de productivité moyenne constatée après 6 mois d'accompagnement.</div>
             </div>
             <div className="bg-[#F6F6F6] p-8">
-              <div className="text-4xl font-bold mb-2" style={{ color: BLEU_FRANCE }}>12 mois</div>
+              <div className="text-4xl font-semibold mb-2" style={{ color: BLEU_FRANCE }}>12 mois</div>
               <div className="text-sm text-[#3A3A3A]">de retard cumulé pour les entreprises qui n'ont pas encore initié leur projet.</div>
             </div>
           </div>
@@ -353,8 +353,8 @@ export default function AidesFormation() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-10">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Organisme de formation de référence</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-5 leading-tight">
+            <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Organisme de formation de référence</p>
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
               Plus qu'une formation, un accompagnement dans la durée.
             </h2>
             <p className="text-lg text-[#3A3A3A] leading-relaxed">
@@ -365,7 +365,7 @@ export default function AidesFormation() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
             <div className="bg-white p-6">
               <GraduationCap className="w-8 h-8 mb-3" style={{ color: BLEU_FRANCE }} />
-              <div className="text-3xl font-bold text-[#161616] mb-1">+ 300</div>
+              <div className="text-3xl font-semibold text-[#161616] mb-1">+ 300</div>
               <div className="text-sm text-[#3A3A3A]">stagiaires formés à La Réunion</div>
             </div>
             <div className="bg-white p-6">
@@ -374,17 +374,17 @@ export default function AidesFormation() {
                   <Star key={i} className={`w-4 h-4 ${i < 4 ? 'fill-[#FFC107] text-[#FFC107]' : 'fill-[#FFC107]/40 text-[#FFC107]/40'}`} />
                 ))}
               </div>
-              <div className="text-3xl font-bold text-[#161616] mb-1">4,5 / 5</div>
+              <div className="text-3xl font-semibold text-[#161616] mb-1">4,5 / 5</div>
               <div className="text-sm text-[#3A3A3A]">note moyenne des stagiaires</div>
             </div>
             <div className="bg-white p-6">
               <MessageCircle className="w-8 h-8 mb-3" style={{ color: BLEU_FRANCE }} />
-              <div className="text-xl font-bold text-[#161616] mb-1">Groupe WhatsApp</div>
+              <div className="text-xl font-semibold text-[#161616] mb-1">Groupe WhatsApp</div>
               <div className="text-sm text-[#3A3A3A]">entraide entre stagiaires, 7 j/7</div>
             </div>
             <div className="bg-white p-6">
               <LifeBuoy className="w-8 h-8 mb-3" style={{ color: BLEU_FRANCE }} />
-              <div className="text-xl font-bold text-[#161616] mb-1">Suivi à vie</div>
+              <div className="text-xl font-semibold text-[#161616] mb-1">Suivi à vie</div>
               <div className="text-sm text-[#3A3A3A]">accompagnement au-delà de la formation</div>
             </div>
           </div>
@@ -395,8 +395,8 @@ export default function AidesFormation() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Retours d'expérience</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-5 leading-tight">
+            <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Retours d'expérience</p>
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
               Dix dirigeants réunionnais témoignent.
             </h2>
             <p className="text-lg text-[#3A3A3A] leading-relaxed">
@@ -423,7 +423,7 @@ export default function AidesFormation() {
                 <div className="flex items-center gap-3 pt-4 border-t border-[#DDDDDD]">
                   <img src={t.avatar} alt={t.name} className="w-11 h-11 rounded-full object-cover" />
                   <div>
-                    <div className="font-bold text-[#161616] text-sm">{t.name}</div>
+                    <div className="font-semibold text-[#161616] text-sm">{t.name}</div>
                     <div className="text-xs text-[#3A3A3A]">{t.role}</div>
                     <div className="text-xs text-[#666666]">{t.company}</div>
                   </div>
@@ -438,8 +438,8 @@ export default function AidesFormation() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-10">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Résultats attendus</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-5 leading-tight">
+            <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Résultats attendus</p>
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
               Ce que nos clients constatent à 90 jours.
             </h2>
           </div>
@@ -459,8 +459,8 @@ export default function AidesFormation() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="border-2 border-[#161616]">
             <div className="p-8 sm:p-10 text-white" style={{ backgroundColor: BLEU_FRANCE }}>
-              <p className="text-sm font-bold uppercase tracking-wider mb-3 text-white/80">Prise de rendez-vous</p>
-              <h2 className="text-2xl sm:text-3xl font-bold mb-4 leading-tight">
+              <p className="text-sm font-semibold uppercase tracking-wider mb-3 text-white/80">Prise de rendez-vous</p>
+              <h2 className="tracking-tight text-2xl sm:text-3xl font-semibold mb-4 leading-tight">
                 Audit IA et simulation personnalisée de vos aides
               </h2>
               <p className="text-white/90 leading-relaxed">
@@ -517,7 +517,7 @@ export default function AidesFormation() {
       {/* FAQ financement — FAQPage JSON-LD */}
       <section className="bg-white border-t border-[#DDDDDD]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-[#161616] mb-8">Financement de votre formation IA : questions fréquentes</h2>
+          <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-8">Financement de votre formation IA : questions fréquentes</h2>
           <div className="space-y-4">
             {FAQ_AIDES.map((item, i) => (
               <details key={i} className="group border border-[#DDDDDD] p-6">

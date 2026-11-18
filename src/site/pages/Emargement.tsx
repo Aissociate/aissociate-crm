@@ -91,7 +91,7 @@ export default function Emargement() {
     } finally { setBusy(false); }
   };
 
-  if (loading) return <Cadre><p className="text-slate-500">Chargement…</p></Cadre>;
+  if (loading) return <Cadre><p className="text-neutral-500">Chargement…</p></Cadre>;
   if (erreur && !etat) return <Cadre><p className="text-red-600">{erreur}</p></Cadre>;
 
   const aFaire = (etat?.creneaux ?? []).filter((c) => c.echu && !c.signature);
@@ -103,67 +103,67 @@ export default function Emargement() {
 
   return (
     <Cadre>
-      <h1 className="mb-1 text-xl font-semibold text-slate-900">Feuille d'émargement</h1>
-      <p className="text-slate-600">{etat?.session?.titre}</p>
-      <p className="mb-5 text-sm text-slate-500">
+      <h1 className="tracking-tight mb-1 text-xl font-semibold text-neutral-950">Feuille d'émargement</h1>
+      <p className="text-neutral-600">{etat?.session?.titre}</p>
+      <p className="mb-5 text-sm text-neutral-500">
         {etat?.participant.prenom} {etat?.participant.nom}
         {etat?.session?.lieu ? ` · ${etat.session.lieu}` : ''}
       </p>
 
       {aFaire.length > 0 ? (
         <>
-          <p className="mb-2 text-sm font-medium text-slate-700">Demi-journées à émarger</p>
+          <p className="mb-2 text-sm font-medium text-neutral-700">Demi-journées à émarger</p>
           <div className="mb-4 space-y-2">
             {aFaire.map((c) => (
               <label key={c.id}
-                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition ${coches.has(c.id) ? 'border-orange-400 bg-orange-50' : 'border-slate-200'}`}>
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${coches.has(c.id) ? 'border-orange-400 bg-orange-50' : 'border-neutral-200'}`}>
                 <input type="checkbox" checked={coches.has(c.id)} onChange={() => bascule(c.id)} className="h-4 w-4" />
-                <span className="flex-1 text-sm text-slate-800">{c.libelle}</span>
-                <span className="text-xs text-slate-400">{c.heures} h</span>
+                <span className="flex-1 text-sm text-neutral-800">{c.libelle}</span>
+                <span className="text-xs text-neutral-400">{c.heures} h</span>
               </label>
             ))}
           </div>
-          <p className="mb-4 text-xs text-slate-500">
+          <p className="mb-4 text-xs text-neutral-500">
             Décochez les demi-journées auxquelles vous n'étiez pas présent.
           </p>
 
           {!etat?.code_actif ? (
             <button onClick={demanderCode} disabled={busy}
-              className="w-full rounded-lg bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
+              className="w-full rounded-xl bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
               {busy ? 'Envoi…' : 'Recevoir mon code par e-mail'}
             </button>
           ) : (
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">Votre code d'émargement</span>
+                <span className="mb-1 block text-sm font-medium text-neutral-700">Votre code d'émargement</span>
                 <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   inputMode="numeric" placeholder="000000" autoComplete="one-time-code"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-center text-2xl tracking-[0.4em] outline-none focus:border-orange-500" />
+                  className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-center text-2xl tracking-[0.4em] outline-none focus:border-orange-500" />
               </label>
               <button onClick={valider} disabled={busy || code.length < 6 || coches.size === 0}
-                className="w-full rounded-lg bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
+                className="w-full rounded-xl bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
                 {busy ? 'Enregistrement…' : `Émarger ${coches.size} demi-journée(s)`}
               </button>
               <button onClick={demanderCode} disabled={busy}
-                className="w-full text-sm text-slate-500 underline hover:text-slate-800">
+                className="w-full text-sm text-neutral-500 underline hover:text-neutral-800">
                 Renvoyer le code
               </button>
             </div>
           )}
         </>
       ) : (
-        <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+        <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
           {faits.length > 0 ? 'Toutes les demi-journées écoulées sont émargées.' : 'Aucune demi-journée à émarger pour le moment.'}
         </p>
       )}
 
-      {info && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{info}</p>}
-      {erreur && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{erreur}</p>}
+      {info && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{info}</p>}
+      {erreur && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{erreur}</p>}
 
       {faits.length > 0 && (
-        <div className="mt-6 border-t border-slate-200 pt-4">
-          <p className="mb-2 text-sm font-medium text-slate-700">Déjà émargé</p>
-          <ul className="space-y-1 text-sm text-slate-500">
+        <div className="mt-6 border-t border-neutral-200 pt-4">
+          <p className="mb-2 text-sm font-medium text-neutral-700">Déjà émargé</p>
+          <ul className="space-y-1 text-sm text-neutral-500">
             {faits.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-2">
                 <span>{c.libelle}</span>
@@ -178,12 +178,12 @@ export default function Emargement() {
       )}
 
       {aVenir.length > 0 && (
-        <p className="mt-4 text-xs text-slate-400">
+        <p className="mt-4 text-xs text-neutral-400">
           {aVenir.length} demi-journée(s) à venir : elles pourront être émargées une fois passées.
         </p>
       )}
 
-      <p className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-400">
+      <p className="mt-6 border-t border-neutral-200 pt-4 text-xs text-neutral-400">
         Émargement électronique horodaté. La date, l'heure, votre adresse IP et la validation
         du code sont enregistrées comme preuve de présence.
       </p>
@@ -193,7 +193,7 @@ export default function Emargement() {
 
 function Cadre({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm sm:p-8">{children}</div>
     </div>
   );

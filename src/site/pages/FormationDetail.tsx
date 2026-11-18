@@ -31,11 +31,11 @@ export default function FormationDetail() {
       <Header />
       <main id="contenu">
 
-      <div className="bg-slate-50 border-b border-slate-200 py-4">
+      <div className="bg-neutral-50 border-b border-neutral-200 py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <button
             onClick={() => navigate('/formations')}
-            className="flex items-center gap-2 text-slate-600 hover:text-orange-600 font-medium transition-colors"
+            className="flex items-center gap-2 text-neutral-600 hover:text-orange-600 font-medium transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour aux formations

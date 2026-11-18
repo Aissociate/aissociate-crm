@@ -251,14 +251,14 @@ export default function FormationsList() {
       <Header />
       <main id="contenu">
 
-      <section className="bg-gradient-to-br from-slate-900 to-slate-800 text-white py-20">
+      <section className="bg-neutral-950 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-500 rounded-2xl mb-6">
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold mb-6">Formations en intelligence artificielle à La Réunion</h1>
-            <p className="text-xl text-slate-300">
+            <h1 className="tracking-tight text-4xl sm:text-5xl font-semibold mb-6">Formations en intelligence artificielle à La Réunion</h1>
+            <p className="text-xl text-neutral-300">
               Le catalogue de nos formations IA à La Réunion : création de contenus, IA pour PME, prospection, marketing, RH et management.
               Formations certifiées <strong className="text-white">Qualiopi</strong>, finançables <strong className="text-white">CPF, OPCO et France Travail</strong>, en présentiel ou à distance.
             </p>
@@ -266,39 +266,39 @@ export default function FormationsList() {
         </div>
       </section>
 
-      <section className="py-20 bg-gradient-to-b from-white via-slate-50/50 to-white">
+      <section className="py-20 bg-gradient-to-b from-white via-neutral-50/50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div className="bg-white border-2 border-orange-300 rounded-xl p-6 text-center">
               <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <MapPin className="w-6 h-6 text-orange-600" />
               </div>
-              <div className="font-bold text-slate-900 mb-1">Présentiel à La Réunion</div>
-              <div className="text-sm text-slate-600">Ou à distance, au choix</div>
+              <div className="font-semibold text-neutral-950 mb-1">Présentiel à La Réunion</div>
+              <div className="text-sm text-neutral-600">Ou à distance, au choix</div>
             </div>
 
-            <div className="bg-white border-2 border-slate-200 rounded-xl p-6 text-center">
+            <div className="bg-white border-2 border-neutral-200 rounded-xl p-6 text-center">
               <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <Award className="w-6 h-6 text-orange-600" />
               </div>
-              <div className="font-bold text-slate-900 mb-1">Formation certifiante</div>
-              <div className="text-sm text-slate-600">RS 6776 éligible CPF</div>
+              <div className="font-semibold text-neutral-950 mb-1">Formation certifiante</div>
+              <div className="text-sm text-neutral-600">RS 6776 éligible CPF</div>
             </div>
 
-            <div className="bg-white border-2 border-slate-200 rounded-xl p-6 text-center">
+            <div className="bg-white border-2 border-neutral-200 rounded-xl p-6 text-center">
               <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <Users className="w-6 h-6 text-emerald-600" />
               </div>
-              <div className="font-bold text-slate-900 mb-1">Groupes restreints</div>
-              <div className="text-sm text-slate-600">Pour un apprentissage optimal</div>
+              <div className="font-semibold text-neutral-950 mb-1">Groupes restreints</div>
+              <div className="text-sm text-neutral-600">Pour un apprentissage optimal</div>
             </div>
 
-            <div className="bg-white border-2 border-slate-200 rounded-xl p-6 text-center">
+            <div className="bg-white border-2 border-neutral-200 rounded-xl p-6 text-center">
               <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <TrendingUp className="w-6 h-6 text-blue-600" />
               </div>
-              <div className="font-bold text-slate-900 mb-1">Résultats garantis</div>
-              <div className="text-sm text-slate-600">95% de taux de satisfaction</div>
+              <div className="font-semibold text-neutral-950 mb-1">Résultats garantis</div>
+              <div className="text-sm text-neutral-600">95% de taux de satisfaction</div>
             </div>
           </div>
 
@@ -316,7 +316,7 @@ export default function FormationsList() {
               ];
 
               return (
-              <div key={formation.id} className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden hover:shadow-2xl transition-shadow">
+              <div key={formation.id} className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden hover:shadow-sm transition-shadow">
                 <div className={`h-2 bg-gradient-to-r ${formation.color}`}></div>
 
                 <div className="relative h-64 overflow-hidden">
@@ -325,7 +325,7 @@ export default function FormationsList() {
                     alt={formation.title}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/40 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/80 via-neutral-950/40 to-transparent"></div>
                 </div>
 
                 <div className="p-8 sm:p-10">
@@ -340,18 +340,18 @@ export default function FormationsList() {
                             {cert}
                           </span>
                         ))}
-                        <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-semibold">
+                        <span className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-sm font-semibold">
                           {formation.level}
                         </span>
                       </div>
 
-                      <h2 className="text-3xl font-bold text-slate-900 mb-2">{formation.title}</h2>
+                      <h2 className="tracking-tight text-3xl font-semibold text-neutral-950 mb-2">{formation.title}</h2>
                       {formation.subtitle ? <p className="text-lg text-orange-600 font-semibold mb-4">{formation.subtitle}</p> : null}
-                      {formation.description ? <p className="text-slate-600 mb-6 leading-relaxed">{formation.description}</p> : null}
+                      {formation.description ? <p className="text-neutral-600 mb-6 leading-relaxed">{formation.description}</p> : null}
 
                       {formation.objectives.length > 0 && (
-                      <div className="bg-slate-50 rounded-xl p-6 mb-6">
-                        <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                      <div className="bg-neutral-50 rounded-xl p-6 mb-6">
+                        <h3 className="font-semibold text-neutral-950 mb-4 flex items-center gap-2">
                           <CheckCircle className="w-5 h-5 text-orange-600" />
                           Objectifs de la formation
                         </h3>
@@ -359,7 +359,7 @@ export default function FormationsList() {
                           {formation.objectives.map((objective, index) => (
                             <li key={index} className="flex items-start gap-3">
                               <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                              <span className="text-slate-700">{objective}</span>
+                              <span className="text-neutral-700">{objective}</span>
                             </li>
                           ))}
                         </ul>
@@ -368,47 +368,47 @@ export default function FormationsList() {
 
                       <Link
                         to={`/formations/${formation.id}`}
-                        className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                        className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
                       >
                         Découvrir la formation
                       </Link>
                     </div>
 
                     <div className="space-y-4">
-                      <div className="bg-gradient-to-br from-slate-50 to-orange-50 rounded-xl p-6 border border-slate-200">
+                      <div className="bg-[#f6f6f4] rounded-xl p-6 border border-neutral-200">
                         <div className="text-center mb-6">
-                          <div className="text-4xl font-bold text-slate-900 mb-1">{formation.price}</div>
-                          <div className="text-sm text-slate-600">{formation.priceNote || 'Par participant'}</div>
+                          <div className="text-4xl font-semibold text-neutral-950 mb-1">{formation.price}</div>
+                          <div className="text-sm text-neutral-600">{formation.priceNote || 'Par participant'}</div>
                         </div>
 
                         <div className="space-y-4 mb-6">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
                               <Clock className="w-5 h-5 text-orange-600" />
                             </div>
                             <div>
-                              <div className="text-sm text-slate-600">Durée</div>
-                              <div className="font-semibold text-slate-900">{formation.duration}</div>
+                              <div className="text-sm text-neutral-600">Durée</div>
+                              <div className="font-semibold text-neutral-950">{formation.duration}</div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
                               <Users className="w-5 h-5 text-orange-600" />
                             </div>
                             <div>
-                              <div className="text-sm text-slate-600">Participants</div>
-                              <div className="font-semibold text-slate-900">{formation.participants}</div>
+                              <div className="text-sm text-neutral-600">Participants</div>
+                              <div className="font-semibold text-neutral-950">{formation.participants}</div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
                               <Euro className="w-5 h-5 text-orange-600" />
                             </div>
                             <div>
-                              <div className="text-sm text-slate-600">Financement</div>
-                              <div className="font-semibold text-slate-900">
+                              <div className="text-sm text-neutral-600">Financement</div>
+                              <div className="font-semibold text-neutral-950">
                                 {formation.certifications.includes('CPF') ? 'CPF disponible' : 'OPCO / AGEFICE'}
                               </div>
                             </div>
@@ -417,7 +417,7 @@ export default function FormationsList() {
 
                         <Link
                           to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
-                          className="block w-full text-center bg-white hover:bg-slate-50 text-slate-900 px-6 py-3 rounded-lg font-bold transition-all border-2 border-slate-200 hover:border-orange-300"
+                          className="block w-full text-center bg-white hover:bg-neutral-50 text-neutral-950 px-6 py-3 rounded-xl font-semibold transition-all border-2 border-neutral-200 hover:border-orange-300"
                         >
                           Demander un devis
                         </Link>
@@ -446,17 +446,17 @@ export default function FormationsList() {
             })}
           </div>
 
-          <div className="mt-16 bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-8 sm:p-10 border border-orange-200">
+          <div className="mt-16 bg-orange-50 rounded-2xl p-8 sm:p-10 border border-orange-200">
             <div className="text-center max-w-2xl mx-auto">
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">
+              <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-4">
                 Vous ne trouvez pas la formation qui vous convient ?
               </h2>
-              <p className="text-slate-600 mb-6">
+              <p className="text-neutral-600 mb-6">
                 Nous pouvons créer des formations sur mesure adaptées à vos besoins spécifiques
               </p>
               <Link
                 to="/formulaire"
-                className="inline-block bg-gradient-to-r from-orange-600 to-amber-700 hover:from-orange-700 hover:to-amber-800 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg"
+                className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
               >
                 Contactez-nous
               </Link>

@@ -89,14 +89,14 @@ export default function Program() {
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-orange-600 to-amber-700 rounded-2xl mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-500 rounded-2xl mb-6">
             <BookOpen className="w-7 h-7 text-white" />
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
+          <h2 className="tracking-tight text-3xl sm:text-4xl lg:text-5xl font-semibold text-neutral-950 mb-6">
             Programme de formation
           </h2>
-          <div className="w-20 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full mb-6"></div>
-          <p className="text-xl text-slate-600">3 jours intensifs pour maîtriser l'IA</p>
+          <div className="w-20 h-1 bg-orange-500 mx-auto rounded-full mb-6"></div>
+          <p className="text-xl text-neutral-600">3 jours intensifs pour maîtriser l'IA</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
@@ -105,19 +105,19 @@ export default function Program() {
             return (
               <div
                 key={index}
-                className="group bg-white rounded-2xl border border-slate-200 p-7 hover:shadow-2xl hover:border-orange-200 transition-all duration-300 hover:-translate-y-1"
+                className="group bg-white rounded-2xl border border-neutral-200 p-7 hover:shadow-sm hover:border-orange-200 transition-all duration-300 "
               >
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="w-11 h-11 bg-gradient-to-br from-orange-600 to-amber-700 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+                  <div className="w-11 h-11 bg-orange-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
                     <Icon className="w-6 h-6 text-white" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900">{info.title}</h3>
+                  <h3 className="text-lg font-semibold text-neutral-950">{info.title}</h3>
                 </div>
-                <p className="text-slate-700 text-sm sm:text-base leading-relaxed">{info.content}</p>
+                <p className="text-neutral-700 text-sm sm:text-base leading-relaxed">{info.content}</p>
                 {info.list && (
                   <ul className="mt-5 space-y-2.5">
                     {info.list.map((item, itemIndex) => (
-                      <li key={itemIndex} className="flex items-start gap-2.5 text-sm text-slate-700">
+                      <li key={itemIndex} className="flex items-start gap-2.5 text-sm text-neutral-700">
                         <CheckCircle2 className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
                         <span>{item}</span>
                       </li>
@@ -130,27 +130,27 @@ export default function Program() {
         </div>
 
         <div className="text-center mb-16">
-          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 mb-4">
+          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-neutral-950 mb-4">
             Déroulé de la formation
           </h3>
-          <div className="w-16 h-1 bg-gradient-to-r from-orange-600 to-amber-700 mx-auto rounded-full mb-4"></div>
-          <p className="text-lg text-slate-600">Programme détaillé sur 3 jours</p>
+          <div className="w-16 h-1 bg-orange-500 mx-auto rounded-full mb-4"></div>
+          <p className="text-lg text-neutral-600">Programme détaillé sur 3 jours</p>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
           {days.map((day, index) => (
             <div
               key={index}
-              className="group bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden hover:shadow-2xl transition-all duration-300 hover:-translate-y-3"
+              className="group bg-white rounded-3xl shadow-sm border border-neutral-200 overflow-hidden hover:shadow-sm transition-all duration-300 hover:-translate-y-3"
             >
               <div className={`relative bg-gradient-to-r ${day.color} p-8 text-white overflow-hidden`}>
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-3">
                     <Calendar className="w-7 h-7" />
-                    <span className="text-lg font-bold">{day.day}</span>
+                    <span className="text-lg font-semibold">{day.day}</span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-bold leading-tight">{day.title}</h3>
+                  <h3 className="text-xl sm:text-2xl font-semibold leading-tight">{day.title}</h3>
                 </div>
               </div>
               <div className="p-8">
@@ -158,7 +158,7 @@ export default function Program() {
                   {day.topics.map((topic, topicIndex) => (
                     <li key={topicIndex} className="flex items-start gap-3">
                       <CheckCircle2 className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-slate-700 text-sm sm:text-base leading-relaxed">{topic}</span>
+                      <span className="text-neutral-700 text-sm sm:text-base leading-relaxed">{topic}</span>
                     </li>
                   ))}
                 </ul>

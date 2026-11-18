@@ -160,7 +160,7 @@ export default function Positionnement() {
       <Coquille>
         <div className="card p-8 text-center">
           <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-500" />
-          <h1 className="text-lg font-bold text-fg">Lien indisponible</h1>
+          <h1 className="tracking-tight text-lg font-semibold text-fg">Lien indisponible</h1>
           <p className="mt-2 text-sm text-muted">{erreur ?? 'Ce lien est invalide ou a expiré.'}</p>
           <p className="mt-4 text-sm text-muted">
             Contactez votre formateur ou écrivez à <strong>contact@aissociate.re</strong> pour en recevoir un nouveau.
@@ -190,7 +190,7 @@ export default function Positionnement() {
       <Coquille>
         <div className="card p-8 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-8 w-8 text-emerald-500" />
-          <h1 className="text-lg font-bold text-fg">Questionnaire déjà complété</h1>
+          <h1 className="tracking-tight text-lg font-semibold text-fg">Questionnaire déjà complété</h1>
           <p className="mt-2 text-sm text-muted">
             Ce positionnement nous est déjà parvenu. Si vous pensez qu'il s'agit d'une erreur,
             signalez-le à votre formateur.
@@ -222,7 +222,7 @@ export default function Positionnement() {
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
         <header className="mb-8">
           <div className="mb-4"><Logo size="md" tagline /></div>
-          <h1 className="text-2xl font-bold tracking-tight text-fg sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-3xl">
             Test de positionnement — l'IA dans votre métier
           </h1>
           <p className="mt-3 max-w-[64ch] text-sm leading-relaxed text-muted">
@@ -254,7 +254,7 @@ export default function Positionnement() {
           <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600 dark:text-brand-400">
             Section 11
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-fg">Traitement de vos réponses</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-fg">Traitement de vos réponses</h2>
           <p className="mt-3 max-w-[64ch] text-sm leading-relaxed text-muted">
             Les informations recueillies sont utilisées par l'organisme de formation aux seules fins
             d'adapter le parcours pédagogique, d'établir votre positionnement d'entrée et de mesurer
@@ -263,7 +263,7 @@ export default function Positionnement() {
             Qualiopi, puis supprimées. Vous disposez d'un droit d'accès, de rectification et
             d'effacement en écrivant à l'organisme.
           </p>
-          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-line px-3 py-3 transition-colors hover:border-brand-500/50">
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-line px-3 py-3 transition-colors hover:border-brand-500/50">
             <input type="checkbox" checked={rgpd} onChange={(e) => setRgpd(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="text-sm text-fg">
               J'ai pris connaissance de ces informations et j'accepte que mes réponses soient
