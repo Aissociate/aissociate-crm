@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # Copie la base Supabase vers aissociate-db (VPS). Rejouable : écrase les données locales.
-#   L'URL de connexion Supabase est lue dans /root/.supabase-db-url (chmod 600),
-#   jamais affichée. Format « Session pooler » :
-#   postgresql://postgres.<ref>:<mot de passe>@aws-0-<région>.pooler.supabase.com:5432/postgres
+#   La connexion Supabase est lue dans /root/.supabase-db-url (chmod 600), jamais
+#   affichée. Format libpq par paramètres (évite les soucis d'encodage d'URL).
+#   Compte utilisé : rôle temporaire en lecture seule, sans le mot de passe postgres.
+#     1. sur le VPS : générer un mot de passe, en calculer l'empreinte SCRAM avec
+#        aissociate-db (rôle jetable), écrire le fichier de connexion ;
+#     2. sur Supabase : create role migration_reader login bypassrls
+#        valid until <+24 h> password '<empreinte SCRAM>'; grant pg_read_all_data;
+#        grant usage/select sur les schémas auth et storage ;
+#     3. après la copie : drop role migration_reader.
+#   Hôte : pooler partagé IPv4, session (l'hôte direct est en IPv6 et bannit
+#   l'IP après quelques échecs d'authentification) :
+#   host=aws-1-eu-north-1.pooler.supabase.com port=5432
+#   user=migration_reader.<ref> password=… dbname=postgres sslmode=require
 set -euo pipefail
 
 DATA=/opt/aissociate-data
@@ -14,22 +24,24 @@ mkdir -p "$WORK"
 # Client Postgres 17 éphémère : branché au réseau interne pour joindre aissociate-db.
 # Les secrets sont montés en lecture seule et lus dans le conteneur : ils
 # n'apparaissent ni dans la ligne de commande ni dans `docker inspect`.
-pg() {
-  docker run --rm -i --network aissociate-internal \
+run() {   # $1 = réseau, $2 = commandes
+  docker run --rm -i --network "$1" \
     -v "$SRC_FILE:/run/src:ro" -v "$DATA/.env:/run/env:ro" \
     -v "$WORK:/work" -v "$DATA/sql:/sql:ro" -w /work \
     postgres:17-bookworm bash -c 'set -euo pipefail
       export SRC="$(cat /run/src)"
       export PGPASSWORD="$(grep "^POSTGRES_PASSWORD=" /run/env | cut -d= -f2-)"
-      '"$1"
+      '"$2"
 }
+src() { run host "$1"; }                  # lecture Supabase (IPv6)
+pg()  { run aissociate-internal "$1"; }   # écriture aissociate-db
 DST='-h aissociate-db -U postgres -d aissociate -v ON_ERROR_STOP=1 -q'
 
 echo "1/6 Dump du schéma public (structure + données)"
-pg 'pg_dump "$SRC" --schema=public --format=custom --no-owner --no-publications --no-subscriptions -f public.dump'
+src 'pg_dump "$SRC" --schema=public --format=custom --no-owner --no-publications --no-subscriptions -f public.dump'
 
 echo "2/6 Export auth.users, storage.buckets, storage.objects"
-pg 'psql "$SRC" -q -c "\copy (select id, aud, role, email, encrypted_password, email_confirmed_at, last_sign_in_at, coalesce(raw_app_meta_data, '"'"'{}'"'"'), coalesce(raw_user_meta_data, '"'"'{}'"'"'), banned_until, deleted_at, created_at, updated_at from auth.users) to users.csv csv"
+src 'psql "$SRC" -q -c "\copy (select id, aud, role, email, encrypted_password, email_confirmed_at, last_sign_in_at, coalesce(raw_app_meta_data, '"'"'{}'"'"'), coalesce(raw_user_meta_data, '"'"'{}'"'"'), banned_until, deleted_at, created_at, updated_at from auth.users) to users.csv csv"
     psql "$SRC" -q -c "\copy (select id, name, public, file_size_limit, allowed_mime_types, created_at, updated_at from storage.buckets) to buckets.csv csv"
     psql "$SRC" -q -c "\copy (select id, bucket_id, name, owner, coalesce(metadata, '"'"'{}'"'"'), created_at, updated_at, last_accessed_at from storage.objects) to objects.csv csv"
     psql "$SRC" -At -c "select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = '"'"'public'"'"' and c.relkind = '"'"'r'"'"' order by 1" > tables.txt
