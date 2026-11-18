@@ -1,0 +1,4 @@
+# Fichiers exécutés sur le VPS (Linux) : toujours en LF
+*.sh text eol=lf
+Dockerfile text eol=lf
+deploy/** text eol=lf
