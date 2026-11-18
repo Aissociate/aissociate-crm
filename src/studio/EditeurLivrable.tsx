@@ -14,7 +14,9 @@ export type ActionLivrable =
   | { type: 'reseaux_publier'; texte: string; comptes: { id: string; reseau: string; nom: string }[]; medias?: string[]; programme?: string | null }
   | { type: 'reseaux_repondre_commentaire'; texte: string; compte: { nom: string }; cite?: string | null }
   | { type: 'reseaux_envoyer_message'; texte: string; compte: { nom: string }; destinataire: string }
-  | { type: 'mailing_envoyer'; objet: string; contenu: string; liste: string | null; destinataires: number };
+  | { type: 'mailing_envoyer'; objet: string; contenu: string; liste: string | null; destinataires: number }
+  // Applications reliées en un clic : titre et texte modifiables (le compte et la cible sont fixés à la proposition).
+  | { type: 'app_blog_article' | 'app_crm_contact' | 'app_crm_note' | 'app_youtube_video' | 'app_message'; titre: string; contenu: string };
 
 /** Champs du formulaire à partir d'un livrable (ou d'une ancienne version). */
 export function champsDepuis(titre: string, contenu: string, action: ActionLivrable | null | undefined): Record<string, string> {
@@ -27,7 +29,7 @@ export function champsDepuis(titre: string, contenu: string, action: ActionLivra
   }
   if (action?.type === 'reseaux_publier') return { texte: action.texte, medias: (action.medias ?? []).join('\n'), programme: action.programme ?? '' };
   if (action?.type === 'reseaux_repondre_commentaire' || action?.type === 'reseaux_envoyer_message') return { texte: action.texte };
-  if (action?.type === 'drive_creer_document') return { titre: action.titre, contenu: action.contenu };
+  if (action?.type === 'drive_creer_document' || action?.type.startsWith('app_')) return { titre: (action as { titre: string }).titre, contenu: (action as { contenu: string }).contenu };
   if (action?.type === 'mailing_envoyer') return { objet: action.objet, contenu: action.contenu };
   return { titre, contenu };
 }
@@ -46,7 +48,7 @@ export default function EditeurLivrable<L>({ id, titre, contenu, action, onSaved
   const [brut, setBrut] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState('');
-  const texteLibre = !action || action.type === 'drive_creer_document';
+  const texteLibre = !action || action.type === 'drive_creer_document' || action.type.startsWith('app_');
 
   const enregistrer = async () => {
     setEnvoi(true); setErreur('');

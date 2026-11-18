@@ -11,6 +11,7 @@ import { chiffrer } from "./securite.ts";
 import * as bureau from "./bureau.ts";
 import * as zernio from "./zernio.ts";
 import { APPLICATIONS, estApplication } from "./applications.ts";
+import { APPS_OUTILLEES } from "./applications_outils.ts";
 
 type Def = {
   libelle: string;
@@ -70,8 +71,8 @@ export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promi
       }];
     }
     if (estApplication(a.platform)) {
-      // Connectée par le client, mais sans outil d'action pour l'instant : l'agent ne doit pas prétendre y agir.
-      return [{ type: `zernio:${a.platform}`, libelle: APPLICATIONS[a.platform].nom, detail: `${String(a.displayName || a.username || "compte relié")} · reliée par le client ; tu n'as pas d'outil pour y lire ni y agir : dis-le si on te le demande` }];
+      // Outils dans applications_outils.ts ; sans outil, l'agent ne doit pas prétendre y agir.
+      return [{ type: `zernio:${a.platform}`, libelle: APPLICATIONS[a.platform].nom, detail: `${String(a.displayName || a.username || "compte relié")} · ${APPS_OUTILLEES.includes(a.platform) ? "reliée par le client : utilise les outils app_* indiqués plus bas" : "reliée par le client ; tu n'as pas d'outil pour y lire ni y agir : dis-le si on te le demande"}` }];
     }
     if (!zernio.estReseau(a.platform)) return [];
     return [{ type: `zernio:${a.platform}`, libelle: zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "connecté par le client") }];

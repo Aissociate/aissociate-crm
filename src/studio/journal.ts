@@ -17,6 +17,7 @@ const LIBELLES: Record<string, string> = {
   fichiers_recherche: 'Recherche de fichiers',
   fichiers_lecture: "Lecture d'un document",
   reseaux_lecture: 'Lecture des réseaux sociaux',
+  application_lecture: "Lecture d'une application reliée",
   tache_executee: 'Tâche planifiée exécutée',
   tache_enregistree: 'Tâche planifiée enregistrée',
   tache_supprimee: 'Tâche planifiée supprimée',

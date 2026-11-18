@@ -200,8 +200,9 @@ export default function Connecteurs() {
         <h2 className="text-lg font-semibold">Toutes les autres applications, en un clic</h2>
         <p className="mb-4 text-sm text-neutral-500">
           Cliquez sur « Connecter » et autorisez l'accès depuis votre compte : l'application est reliée à votre espace aussitôt.
-          Chaque application connectée compte comme un connecteur supplémentaire. Les actions de vos agents dans ces applications
-          sont activées avec vous par l'équipe Aissociate.
+          Chaque application connectée compte comme un connecteur supplémentaire. Vos agents y lisent vos chiffres (audience du site,
+          boutique, publicité, CRM, WhatsApp) et préparent articles de blog, contacts, vidéos YouTube et réponses, toujours soumis à votre validation.
+          Slack, Discord, Reddit et Stripe sont reliés sans action pour l'instant.
         </p>
         {apps.etat === null ? <Chargement /> : (
           <>

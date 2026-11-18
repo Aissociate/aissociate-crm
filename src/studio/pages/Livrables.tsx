@@ -35,6 +35,11 @@ const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   reseaux_repondre_commentaire: { avant: 'Réponse publiée sous le commentaire au « VALIDÉ »', fait: 'Réponse publiée.', lien: 'Voir' },
   reseaux_envoyer_message: { avant: 'Message privé envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
   mailing_envoyer: { avant: 'Envoi depuis votre messagerie aux abonnés au « VALIDÉ » (un e-mail chacun, 45 par heure au plus ; suivi dans Contacts)', fait: 'Mailing mis en file : les envois partent par lots depuis votre messagerie (suivi dans Contacts).', lien: 'Voir' },
+  app_blog_article: { avant: 'Article déposé sur votre site au « VALIDÉ » (brouillon ou en ligne, selon la proposition)', fait: 'Article déposé sur votre site.', lien: 'Voir l\'article' },
+  app_crm_contact: { avant: 'Contact créé dans votre CRM au « VALIDÉ »', fait: 'Contact créé dans votre CRM.', lien: 'Ouvrir la fiche' },
+  app_crm_note: { avant: 'Note ajoutée à la fiche du contact au « VALIDÉ »', fait: 'Note ajoutée dans votre CRM.', lien: 'Voir' },
+  app_youtube_video: { avant: 'Vidéo mise en ligne sur votre chaîne YouTube au « VALIDÉ »', fait: 'Vidéo envoyée à YouTube.', lien: 'Voir la vidéo' },
+  app_message: { avant: 'Message WhatsApp envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
   agenda_creer: { avant: 'Création dans votre agenda (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
 };
 

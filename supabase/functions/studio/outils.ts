@@ -20,6 +20,8 @@ import * as veille from "./veille.ts";
 import * as mailing from "./mailing.ts";
 import * as dossiers from "./dossiers.ts";
 import { CONSIGNE_DOCUMENT, nettoyerHtml, titreDuHtml } from "./html.ts";
+import { comptesApplications, type CompteApplication } from "./applications.ts";
+import * as apps from "./applications_outils.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -32,7 +34,9 @@ export type ActionLivrable =
   | { type: "reseaux_publier"; texte: string; comptes: { id: string; reseau: zernio.Reseau; nom: string }[]; medias?: string[]; programme?: string | null }
   | { type: "reseaux_repondre_commentaire"; compte: { id: string; reseau: zernio.Reseau; nom: string }; publication_id: string; commentaire_id?: string | null; cite?: string | null; texte: string }
   | { type: "reseaux_envoyer_message"; compte: { id: string; reseau: zernio.Reseau; nom: string }; conversation_id: string; destinataire: string; texte: string }
-  | { type: "mailing_envoyer"; objet: string; contenu: string; liste: string | null; destinataires: number };
+  | { type: "mailing_envoyer"; objet: string; contenu: string; liste: string | null; destinataires: number }
+  // Applications reliées en un clic (applications_outils.ts) : blog, CRM, YouTube, WhatsApp.
+  | apps.ActionApp;
 
 const lisibleReunion = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
 
@@ -40,6 +44,7 @@ const libelleCompte = (c: { reseau: zernio.Reseau; nom: string }) => `${zernio.N
 
 /** Titre affiché d'un livrable porteur d'une action. */
 export function titreAction(a: ActionLivrable): string {
+  if (apps.estActionApp(a)) return apps.titreActionApp(a);
   if (a.type === "mailing_envoyer") return `Mailing — ${a.objet}`;
   if (a.type === "gmail_envoyer") return `E-mail — ${a.objet}`;
   if (a.type === "agenda_creer") return `Rendez-vous — ${a.titre}`;
@@ -54,6 +59,7 @@ export function titreAction(a: ActionLivrable): string {
 
 /** Contenu affiché d'un livrable porteur d'une action (régénéré après chaque modification). */
 export function apercuAction(a: ActionLivrable): string {
+  if (apps.estActionApp(a)) return apps.apercuActionApp(a);
   if (a.type === "mailing_envoyer") {
     return `**Destinataires :** ${a.liste ? `liste « ${a.liste} »` : "tous les abonnés"} (${a.destinataires} au moment de la proposition), un e-mail chacun depuis votre messagerie (45 par heure au plus), avec lien de désinscription  \n**Objet :** ${a.objet}\n\n---\n\n${a.contenu}`;
   }
@@ -91,6 +97,7 @@ export function apercuAction(a: ActionLivrable): string {
  */
 export function modifierAction(a: ActionLivrable, champs: Record<string, unknown>): ActionLivrable | { erreur: string } {
   const txt = (k: string, max: number) => String(champs[k] ?? "").trim().slice(0, max);
+  if (apps.estActionApp(a)) return apps.modifierActionApp(a, champs);
   if (a.type === "mailing_envoyer") {
     const objet = txt("objet", 200), contenu = txt("contenu", 50_000);
     return objet && contenu ? { ...a, objet, contenu } : { erreur: "Objet et contenu du mailing requis." };
@@ -591,12 +598,13 @@ async function enAttente(sb: SupabaseClient, wsId: string, type: string, champ: 
 
 export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const zernioOk = zernio.zernioConfigure();
-  const [boites, { data: docs }, comptesReseaux, { count: nbFlux }] = await Promise.all([
+  const [boites, { data: docs }, comptesReseaux, { count: nbFlux }, comptesApps] = await Promise.all([
     zernioOk ? bureau.boitesEspace(ctx.wsId).catch(() => [] as bureau.Boite[]) : Promise.resolve([] as bureau.Boite[]),
     ctx.sb.from("studio_documents").select("titre, dossier_id").eq("workspace_id", ctx.wsId).eq("actif", true)
       .order("created_at", { ascending: false }).limit(80),
     zernioOk ? zernio.comptesEspace(ctx.wsId).catch(() => [] as zernio.CompteReseau[]) : Promise.resolve([] as zernio.CompteReseau[]),
     ctx.sb.from("studio_flux").select("id", { count: "exact", head: true }).eq("workspace_id", ctx.wsId).eq("actif", true),
+    zernioOk ? comptesApplications(ctx.wsId).catch(() => [] as CompteApplication[]) : Promise.resolve([] as CompteApplication[]),
   ]);
   const aVeille = (nbFlux ?? 0) > 0;
   const reseaux = comptesReseaux.length > 0;
@@ -633,10 +641,11 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
     definitions: [
       ...DEFINITIONS_BASE, ...DEFINITIONS_DOCUMENT, DEFINITION_ARTICLE, DEFINITION_WEB, DEFINITION_AJOUT_FLUX, ...(aVeille ? DEFINITIONS_VEILLE : []), ...(fichiers ? DEFINITIONS_FICHIERS : []),
       ...(mail ? [...DEFINITIONS_MAIL, ...DEFINITIONS_MAILING] : []), ...(cal ? DEFINITIONS_AGENDA : []), ...(reseaux ? DEFINITIONS_RESEAUX : []),
+      ...apps.definitionsApps(comptesApps),
     ],
     consigne: [
       consigneBase(index, arbre), CONSIGNE_DOCUMENT, CONSIGNE_ARTICLE, CONSIGNE_WEB, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
-      cal && CONSIGNE_AGENDA, reseaux && consigneReseaux(comptesReseaux),
+      cal && CONSIGNE_AGENDA, reseaux && consigneReseaux(comptesReseaux), apps.consigneApps(comptesApps),
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
       let a: Record<string, string> = {};
@@ -843,6 +852,13 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           return await proposer(titreAction(action), apercuAction(action), action, `Le mailing « ${objet} » (${destinataires} destinataires)`);
         }
 
+        if (nom.startsWith("app_")) {
+          const r = await apps.executerOutilApp(nom, a, comptesApps);
+          if ("proposer" in r) return await proposer(titreAction(r.proposer), apercuAction(r.proposer), r.proposer, r.quoi);
+          await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "application_lecture", detail: { outil: nom, quoi: r.libelle } });
+          return r;
+        }
+
         if (nom === "reseaux_proposer_publication") {
           if (!reseaux) return { resultat: "Aucun réseau social n'est connecté à cet espace.", libelle: "Réseaux non connectés" };
           const ids = String(a.comptes ?? "").split(/[\s,]+/).filter(Boolean);
@@ -992,6 +1008,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         if (nom.startsWith("reseaux_")) return { resultat: `Erreur : ${message}`, libelle: "Réseaux sociaux indisponibles" };
+        if (nom.startsWith("app_")) return { resultat: `Erreur : ${bureau.messageErreur(e)}`, libelle: "Application indisponible" };
         const zone = nom.startsWith("mail_") ? "Messagerie" : nom.startsWith("agenda_") ? "Agenda" : nom.startsWith("fichiers_") ? "Fichiers" : null;
         return { resultat: `Erreur : ${zone ? bureau.messageErreur(e) : message}`, libelle: zone ? `${zone} indisponible` : "Outil indisponible" };
       }
@@ -1028,6 +1045,10 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       } catch (e) {
         return { ok: false, erreur: bureau.messageErreur(e) };
       }
+    }
+    if (apps.estActionApp(action)) {
+      try { return { ok: true, ...(await apps.executerActionApp(wsId, action)) }; }
+      catch (e) { return { ok: false, erreur: bureau.messageErreur(e) }; }
     }
     if (action.type === "reseaux_publier") {
       const r = await zernio.publier(wsId, { comptes: action.comptes.map((c) => c.id), texte: action.texte, medias: action.medias ?? [], programme: action.programme ?? null });
