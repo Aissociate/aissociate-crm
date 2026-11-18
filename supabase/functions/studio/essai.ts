@@ -10,7 +10,7 @@ export const CONNECTEURS_ESSAI = 1;
 /** Actions encore permises une fois l'essai terminé. */
 export const ACTIONS_APRES_ESSAI = new Set([
   "me", "logout", "change_password", "cgv", "cgv_accepter", "perimetre", "abonnement_souscrire", "abonnement_gerer", "agent_ajouter",
-  "entete", "entete_update",
+  "entete", "entete_update", "bug_signaler",
 ]);
 
 type EspaceEssai = { essai_fin?: string | null; abonnement_statut?: string | null };

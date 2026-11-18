@@ -4,9 +4,10 @@ import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { CircleHelp, Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
+import { Bug, CircleHelp, Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
 import { appel, jeton, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
+import SignalerBug, { ouvrirSignalement } from './composants/SignalerBug';
 
 const Connexion = lazy(() => import('./pages/Connexion'));
 const Accueil = lazy(() => import('./pages/Accueil'));
@@ -156,6 +157,10 @@ function Coquille() {
             <CircleHelp className="h-3.5 w-3.5" /> Revoir le guide
           </button>
         )}
+        <button onClick={() => { setOuvert(false); ouvrirSignalement(); }} title="Capture la page et l'envoie à l'équipe Aissociate (Ctrl + Maj + B)"
+          className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">
+          <Bug className="h-3.5 w-3.5" /> Signaler un problème
+        </button>
       </div>
     </nav>
   );
@@ -175,6 +180,7 @@ function Coquille() {
         </div>
       )}
       {guide && <Suspense fallback={null}><Tutoriel onFermer={fermerGuide} /></Suspense>}
+      <SignalerBug />
       <main className="lg:pl-60">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
           {me.essai && (me.essai.termine ? (

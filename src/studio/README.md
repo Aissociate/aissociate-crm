@@ -10,7 +10,7 @@ active ou désactive, et des demandes prêtes à l'emploi.
 
 | Couche | Emplacement | Contact avec le CRM |
 |---|---|---|
-| Front client | `src/studio/` (pages, api, composants) | aucun import `@/…` |
+| Front client | `src/studio/` (pages, api, composants) | aucun import `@/…` ; seule exception : les modules autonomes du signalement de bug (`src/lib/captureEcran.ts`, `bugContext.ts`, `AnnotateurCapture.tsx`), sans Supabase ni auth CRM |
 | Admin CRM | `src/studio/admin/StudioAdmin.tsx` | `@/lib/supabase`, `@/components/ui` |
 | Routes | `src/App.tsx` | `/studio/*` (lazy) et `/studio-admin` (managers) |
 | Menu | `src/components/Layout.tsx` | 1 entrée « Studio IA clients » |

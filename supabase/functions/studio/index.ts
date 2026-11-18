@@ -10,6 +10,7 @@
 // Actions (POST JSON { action, ... }) :
 //   login {email, password}                       → {token, ...me}
 //   logout | me | change_password {ancien, nouveau}
+//   bug_signaler {description, titre?, priorite?, contexte?, capture? (PNG base64)} → ticket dans le CRM (onglet Développement)
 //   conversations {agent_id?} | messages {conversation_id} | conversation_delete {conversation_id}
 //   chat {agent_id, message, conversation_id?}    → flux SSE (meta, delta, done, error)
 //   retour {message_id, valeur: 1|-1|0} | epingler {message_id, epingle} | creations
@@ -1367,7 +1368,7 @@ Deno.serve(async (req: Request) => {
 
     // CGV non acceptées (ou modifiées depuis) : rien d'autre que les accepter.
     const textesCgv = await cgv.chargerCgv(sb);
-    if (textesCgv && s.user.cgv_version !== textesCgv.version && !["me", "logout", "change_password", "cgv", "cgv_accepter"].includes(action)) {
+    if (textesCgv && s.user.cgv_version !== textesCgv.version && !["me", "logout", "change_password", "cgv", "cgv_accepter", "bug_signaler"].includes(action)) {
       return json({ error: "Acceptez les conditions générales pour accéder à votre Studio.", cgv: true }, 403);
     }
     if (essai.essaiTermine(s.ws) && !essai.ACTIONS_APRES_ESSAI.has(action)) {
@@ -1403,6 +1404,51 @@ Deno.serve(async (req: Request) => {
       case "logout":
         await sb.from("studio_sessions").delete().eq("id", s.sessionId);
         return json({ ok: true });
+
+      // Bug signalé depuis le Studio : même liste que les bugs du CRM (onglet Développement).
+      // Les clients n'ont pas de profil CRM : le ticket est rattaché au premier administrateur,
+      // l'espace et l'auteur réels figurent dans le titre et la description.
+      case "bug_signaler": {
+        const description = String(body.description ?? "").trim().slice(0, 4000);
+        if (!description) return json({ error: "Décrivez le problème en quelques mots." }, 400);
+        const priorites = ["faible", "normale", "haute", "critique"];
+        const priorite = priorites.includes(String(body.priorite)) ? String(body.priorite) : "normale";
+        const contexte = String(body.contexte ?? "").slice(0, 4000);
+        const { data: admin } = await sb.from("profiles").select("id").eq("is_admin", true)
+          .order("created_at", { ascending: true }).limit(1).maybeSingle();
+        if (!admin) return json({ error: "Signalement indisponible pour le moment." }, 503);
+
+        let captureUrl: string | null = null;
+        let captureEchouee = false;
+        if (body.capture) {
+          try {
+            const octets = Uint8Array.from(atob(String(body.capture)), (c) => c.charCodeAt(0));
+            const png = octets.length > 8 && octets[0] === 0x89 && octets[1] === 0x50 && octets[2] === 0x4e && octets[3] === 0x47;
+            if (!png || octets.length > 6_000_000) throw new Error("capture refusée");
+            // Chemin imprévisible : le bucket `screenshots` est public, comme pour les bugs du CRM.
+            const chemin = `studio/${s.ws.id}/${crypto.randomUUID()}.png`;
+            const { error } = await sb.storage.from("screenshots").upload(chemin, octets, { contentType: "image/png" });
+            if (error) throw new Error(error.message);
+            captureUrl = sb.storage.from("screenshots").getPublicUrl(chemin).data.publicUrl;
+          } catch (e) {
+            captureEchouee = true;
+            console.error("[studio] capture du bug :", e instanceof Error ? e.message : String(e));
+          }
+        }
+        const titreSaisi = String(body.titre ?? "").trim() || description.split("\n")[0];
+        const auteur = [[s.user.prenom, s.user.nom].filter(Boolean).join(" "), s.user.email].filter(Boolean).join(" · ");
+        const { error } = await sb.from("tickets").insert({
+          type: "bug",
+          titre: `[Studio · ${s.ws.nom}] ${titreSaisi}`.slice(0, 200),
+          description: `${description}\n\n— Studio —\nEspace : ${s.ws.nom}\nSignalé par : ${auteur}${contexte ? `\n${contexte}` : ""}`,
+          priorite,
+          created_by: admin.id,
+          screenshot_url: captureUrl,
+        });
+        if (error) return json({ error: `Envoi impossible : ${error.message}` }, 500);
+        await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), action: "bug_signale", detail: { titre: titreSaisi.slice(0, 120) } });
+        return json({ ok: true, capture_echouee: captureEchouee });
+      }
 
       case "change_password": {
         const nouveau = String(body.nouveau ?? "");
