@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -28,3 +28,34 @@ jobs:
 
       - name: Build (tsc + vite)
         run: npm run build
+
+  deploy:
+    name: Déploiement VPS
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-vps
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://aissociate.re
+    steps:
+      # La clé VPS_DEPLOY_KEY n'autorise qu'une commande sur le serveur
+      # (commande forcée : /usr/local/bin/aissociate-deploy).
+      - name: Déployer
+        env:
+          KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes root@"$HOST" deploy
+
+      - name: Vérifier le site
+        run: |
+          for u in https://aissociate.re/ https://aissociate.re/formations/ https://aissociate.re/blog/; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$u"); echo "$u -> $code"; [ "$code" = 200 ]
+          done
