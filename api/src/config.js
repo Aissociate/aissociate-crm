@@ -20,6 +20,12 @@ export const config = {
   // Mêmes délais que Supabase par rôle (ms).
   statementTimeout: { anon: 3000, authenticated: 8000, service_role: 120000 },
   bodyLimit: 20 * 1024 * 1024,
+  storage: {
+    dir: process.env.STORAGE_DIR ?? '/data/storage',
+    // Plafond global par fichier ; chaque bucket peut imposer plus petit.
+    maxFileSize: Number(process.env.STORAGE_MAX_FILE_SIZE ?? 110 * 1024 * 1024),
+    maxSignedUrlSeconds: 365 * 24 * 3600,
+  },
   auth: {
     // Rôle Postgres limité au schéma auth (et à la lecture de la config SMTP).
     db: {

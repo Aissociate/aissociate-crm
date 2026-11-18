@@ -13,8 +13,14 @@ services:
       PGHOST: aissociate-db
       PGDATABASE: aissociate
     mem_limit: 384m
+    volumes:
+      - storage:/data/storage
     networks:
       - aissociate-internal
+
+volumes:
+  storage:
+    name: aissociate-storage
 
 networks:
   aissociate-internal:

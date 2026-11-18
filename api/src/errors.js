@@ -26,6 +26,16 @@ export function fromPgError(err, role) {
   return new ApiError(status, code, err.message, err.detail ?? null, err.hint ?? null);
 }
 
+/** Erreur au format du stockage Supabase : { statusCode, error, message }. */
+export class StorageError extends ApiError {
+  constructor(status, error, message) {
+    super(status, error, message);
+  }
+  toJSON() {
+    return { statusCode: String(this.status), error: this.code, message: this.message };
+  }
+}
+
 /** Erreur au format GoTrue (auth) : { code, error_code, msg }. */
 export class AuthError extends ApiError {
   constructor(status, errorCode, msg) {

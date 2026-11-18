@@ -5,6 +5,7 @@ import { ApiError, fromPgError } from './errors.js';
 import { verifyJwt } from './jwt.js';
 import { authRoutes } from './auth/routes.js';
 import { restRoutes } from './rest/routes.js';
+import { storageRoutes } from './storage/routes.js';
 import { loadSchema } from './schema.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: config.bodyLimit, trustProxy: true });
@@ -13,8 +14,8 @@ const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLi
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS',
-  'access-control-allow-headers': 'authorization, apikey, content-type, prefer, accept, accept-profile, content-profile, range, x-client-info, x-supabase-api-version',
-  'access-control-expose-headers': 'content-range, content-profile',
+  'access-control-allow-headers': 'authorization, apikey, content-type, prefer, accept, accept-profile, content-profile, range, x-client-info, x-supabase-api-version, x-upsert, cache-control',
+  'access-control-expose-headers': 'content-range, content-profile, content-length, accept-ranges, etag',
   'access-control-max-age': '3600',
 };
 app.addHook('onRequest', async (req, reply) => {
@@ -55,6 +56,7 @@ app.options('/*', (req, reply) => reply.code(204).send());
 
 restRoutes(app);
 authRoutes(app);
+await app.register(storageRoutes);
 
 await loadSchema();
 await app.listen({ port: config.port, host: '0.0.0.0' });
