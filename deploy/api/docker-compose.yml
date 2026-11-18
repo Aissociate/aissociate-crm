@@ -1,0 +1,42 @@
+# API maison (ex-Supabase) — /opt/aissociate-api
+# Exposée sur https://api.aissociate.re par Traefik ; joint la base, les
+# fonctions et le stockage par le réseau interne.
+# Variables (/opt/aissociate-api/.env) : JWT_SECRET, AUTHENTICATOR_PASSWORD
+services:
+  api:
+    build: ./app
+    image: aissociate-api:latest
+    container_name: aissociate-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PGHOST: aissociate-db
+      PGDATABASE: aissociate
+    mem_limit: 384m
+    volumes:
+      - storage:/data/storage
+    networks:
+      - aissociate-internal
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.aissociate-api.rule=Host(`api.aissociate.re`)
+      - traefik.http.routers.aissociate-api.entrypoints=websecure
+      - traefik.http.routers.aissociate-api.tls.certresolver=ledns
+      - traefik.http.routers.aissociate-api.middlewares=aissociate-api-headers
+      - traefik.http.services.aissociate-api.loadbalancer.server.port=3000
+      - traefik.http.middlewares.aissociate-api-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.aissociate-api-headers.headers.contentTypeNosniff=true
+
+volumes:
+  storage:
+    name: aissociate-storage
+
+networks:
+  aissociate-internal:
+    name: aissociate-internal
+    external: true
+  proxy:
+    name: proxy
+    external: true

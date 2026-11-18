@@ -1,0 +1,31 @@
+# Fonctions serveur (ex-Edge Functions) — /opt/aissociate-functions
+# Réseau interne uniquement : l'API les expose sur /functions/v1/<nom> après
+# avoir vérifié le jeton quand la fonction l'exige.
+# Variables (/opt/aissociate-functions/.env) : SUPABASE_URL (URL publique de l'API),
+# SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, APP_URL, puis les secrets métier.
+services:
+  functions:
+    build:
+      context: ./src
+      dockerfile: functions-runtime/Dockerfile
+    image: aissociate-functions:latest
+    container_name: aissociate-functions
+    restart: unless-stopped
+    env_file: .env
+    mem_limit: 640m
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    networks:
+      - aissociate-internal
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const r = await fetch('http://127.0.0.1:8000/_health'); Deno.exit(r.ok ? 0 : 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+networks:
+  aissociate-internal:
+    name: aissociate-internal
+    external: true
