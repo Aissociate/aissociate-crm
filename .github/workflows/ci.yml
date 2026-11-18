@@ -65,3 +65,12 @@ jobs:
             done
             echo "$u -> $code"; [ "$code" = 200 ]
           done
+
+      # Le Studio sans session doit répondre 401 (fonction chargée), jamais 5xx.
+      - name: Vérifier les fonctions serveur
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+              -d '{"action":"me"}' https://api.aissociate.re/functions/v1/studio); [ "$code" = 401 ] && break; sleep 5
+          done
+          echo "studio -> $code"; [ "$code" = 401 ]

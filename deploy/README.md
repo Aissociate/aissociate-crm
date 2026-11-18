@@ -21,6 +21,17 @@ ajoutée dans `deploy/nginx.conf`.
 Automatique à chaque push sur `main` (job `deploy` de `.github/workflows/ci.yml`, après
 tests + build). À la main : `ssh root@VPS aissociate-deploy`.
 
+`deploy.sh` :
+- se réinstalle lui-même en `/usr/local/bin/aissociate-deploy` quand sa version du repo change ;
+- reconstruit `aissociate-web` à chaque fois ;
+- reconstruit `aissociate-functions` (image depuis `/opt/aissociate/src`, compose et `.env` de
+  `/opt/aissociate-functions`) **seulement si** `supabase/functions` ou `functions-runtime` ont changé
+  (empreinte dans `/opt/aissociate-functions/.deployed-tree`) ; en cas d'échec de santé, retour à
+  l'image `aissociate-functions:precedente` et déploiement en erreur.
+
+Forcer une reconstruction des fonctions : `rm /opt/aissociate-functions/.deployed-tree && aissociate-deploy`.
+L'API et la base (`/opt/aissociate-api`, `/opt/aissociate-data`) restent déployées à la main.
+
 ## Sur le VPS
 
 - `/opt/aissociate/.env` : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SITE_HOSTS`
