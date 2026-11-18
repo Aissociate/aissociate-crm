@@ -20,9 +20,16 @@ const stamp = Date.now();
 const email = `e2e-${stamp}@example.invalid`;
 const a = client();
 
-// Inscription : le rôle demandé dans les métadonnées ne doit donner aucun droit.
-const up = await a.auth.signUp({ email, password: 'premier-mdp', options: { data: { nom: 'E2E', prenom: 'Test', role: 'admin' } } });
-check('inscription', !up.error && up.data.session?.access_token && up.data.user?.email === email, up.error?.message);
+// Inscription publique fermée : seul un appel avec la clé de service crée un compte.
+const refuse = await client().auth.signUp({ email, password: 'premier-mdp' });
+check('inscription publique refusée', Boolean(refuse.error) && !refuse.data.session, refuse.error?.message);
+check('compte non créé par une inscription publique', Boolean((await a.auth.signInWithPassword({ email, password: 'premier-mdp' })).error));
+check('création de compte refusée sans clé de service', Boolean((await client().auth.admin.createUser({ email, password: 'premier-mdp' })).error));
+// Le rôle demandé dans les métadonnées ne doit donner aucun droit.
+const created = await admin.auth.admin.createUser({ email, password: 'premier-mdp', email_confirm: true, user_metadata: { nom: 'E2E', prenom: 'Test', role: 'admin' } });
+check('création de compte par la clé de service', !created.error && created.data.user?.email === email, created.error?.message);
+const up = await a.auth.signInWithPassword({ email, password: 'premier-mdp' });
+check('première connexion', !up.error && up.data.session?.access_token, up.error?.message);
 const uid = up.data.user?.id;
 const prof = await a.from('profiles').select('role, approved').eq('id', uid).single();
 check('profil créé en conseiller', prof.data?.role === 'conseiller', JSON.stringify(prof.data ?? prof.error));
@@ -33,8 +40,8 @@ check('getUser', me.data.user?.id === uid, me.error?.message);
 const contacts = await a.from('contacts').select('id', { count: 'exact', head: true });
 check('RLS appliquée au nouveau compte', !contacts.error, contacts.error?.message);
 
-check('inscription en double refusée', (await client().auth.signUp({ email, password: 'autre-mdp-123' })).error?.message === 'User already registered');
-check('mot de passe trop court refusé', Boolean((await client().auth.signUp({ email: `x-${stamp}@example.invalid`, password: '123' })).error));
+check('compte en double refusé', Boolean((await admin.auth.admin.createUser({ email, password: 'autre-mdp-123' })).error));
+check('mot de passe trop court refusé', Boolean((await admin.auth.admin.createUser({ email: `x-${stamp}@example.invalid`, password: '123' })).error));
 
 // Changement de mot de passe, puis connexion.
 check('changement de mot de passe', !(await a.auth.updateUser({ password: 'second-mdp-456' })).error);

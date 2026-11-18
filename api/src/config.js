@@ -61,7 +61,8 @@ export const config = {
     redirectOrigins: (process.env.REDIRECT_ORIGINS ?? 'https://aissociate.re,https://preprod.aissociate.re').split(',').map((s) => s.trim()).filter(Boolean),
     // URL publique de l'API, utilisée dans les liens envoyés par e-mail.
     externalUrl: process.env.API_EXTERNAL_URL ?? 'https://api.aissociate.re',
-    allowSignup: (process.env.ALLOW_SIGNUP ?? 'true') === 'true',
+    // Inscription publique fermée par défaut : les comptes sont créés avec la clé de service.
+    allowSignup: (process.env.ALLOW_SIGNUP ?? 'false') === 'true',
     passwordMinLength: Number(process.env.PASSWORD_MIN_LENGTH ?? 6),
     accessTokenTtl: 3600,
     refreshTokenTtlDays: 60,

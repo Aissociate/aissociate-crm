@@ -20,8 +20,9 @@ const fn = (path, init = {}) => fetch(`${API_URL}/functions/v1/${path}`, init);
 
 const stamp = Date.now();
 const a = mk(), b = mk();
-const ua = await a.auth.signUp({ email: `e2e-rt-a-${stamp}@example.invalid`, password: 'mot-de-passe-e2e' });
-const ub = await b.auth.signUp({ email: `e2e-rt-b-${stamp}@example.invalid`, password: 'mot-de-passe-e2e' });
+for (const who of ['a', 'b']) await admin.auth.admin.createUser({ email: `e2e-rt-${who}-${stamp}@example.invalid`, password: 'mot-de-passe-e2e', email_confirm: true });
+const ua = await a.auth.signInWithPassword({ email: `e2e-rt-a-${stamp}@example.invalid`, password: 'mot-de-passe-e2e' });
+const ub = await b.auth.signInWithPassword({ email: `e2e-rt-b-${stamp}@example.invalid`, password: 'mot-de-passe-e2e' });
 check('comptes de test', Boolean(ua.data.session && ub.data.session), ua.error?.message ?? ub.error?.message);
 const idA = ua.data.user.id, idB = ub.data.user.id;
 

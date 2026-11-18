@@ -20,7 +20,8 @@ const raw = (path, init = {}) => fetch(`${API_URL}/storage/v1${path}`, init);
 
 const stamp = Date.now();
 const dir = `e2e/${stamp}`;
-const up = await user.auth.signUp({ email: `e2e-st-${stamp}@example.invalid`, password: 'mot-de-passe-e2e' });
+await admin.auth.admin.createUser({ email: `e2e-st-${stamp}@example.invalid`, password: 'mot-de-passe-e2e', email_confirm: true });
+const up = await user.auth.signInWithPassword({ email: `e2e-st-${stamp}@example.invalid`, password: 'mot-de-passe-e2e' });
 check('compte de test (conseiller)', Boolean(up.data.session), up.error?.message);
 
 // Envoi : formulaire (navigateur) et corps brut (fonctions serveur).

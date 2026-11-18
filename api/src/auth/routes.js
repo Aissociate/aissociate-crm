@@ -245,6 +245,22 @@ export function authRoutes(app) {
   });
 
   // ── Administration : clé service_role uniquement (fonctions serveur) ──
+  app.post('/auth/v1/admin/users', async (req) => {
+    requireServiceRole(req);
+    const body = req.body ?? {};
+    const email = checkEmail(body.email);
+    checkPassword(body.password);
+    const data = body.user_metadata && typeof body.user_metadata === 'object' && !Array.isArray(body.user_metadata) ? body.user_metadata : {};
+    if (JSON.stringify(data).length > 4000) throw new AuthError(400, 'validation_failed', 'Métadonnées trop volumineuses');
+    if (await store.findUserByEmail(email)) throw new AuthError(422, 'email_exists', 'A user with this email address has already been registered');
+    try {
+      return publicUser(await store.createUser(email, await bcrypt.hash(body.password, BCRYPT_COST), data));
+    } catch (err) {
+      if (err.code === '23505') throw new AuthError(422, 'email_exists', 'A user with this email address has already been registered');
+      throw err;
+    }
+  });
+
   app.get('/auth/v1/admin/users/:id', async (req) => {
     requireServiceRole(req);
     const user = UUID_RE.test(req.params.id) ? await store.findUserById(req.params.id) : null;
