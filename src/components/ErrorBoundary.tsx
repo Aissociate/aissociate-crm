@@ -1,8 +1,9 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { estErreurDeVersion, rechargerUneFois } from '@/lib/versionPerimee';
 
 interface Props { children: ReactNode }
-interface State { error: Error | null }
+interface State { error: Error | null; rechargement?: boolean }
 
 /**
  * Capture toute erreur de rendu pour ne JAMAIS laisser un écran blanc :
@@ -16,6 +17,12 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    // Onglet resté ouvert pendant un déploiement : les fichiers de l'ancienne
+    // version n'existent plus. On recharge une fois au lieu d'afficher l'erreur.
+    if (estErreurDeVersion(error) && rechargerUneFois()) {
+      this.setState({ rechargement: true });
+      return;
+    }
     // Visible dans la console du navigateur pour le diagnostic
     console.error('Erreur applicative capturée :', error, info.componentStack);
     // Remontée en base (Administration › Santé des jobs) — best effort :
@@ -36,6 +43,17 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   render() {
+    if (this.state.rechargement) {
+      return (
+        <div style={{
+          minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24, background: '#0b1120', color: '#94a3b8', fontSize: 14,
+          fontFamily: 'Inter, system-ui, sans-serif',
+        }}>
+          Mise à jour de l'application…
+        </div>
+      );
+    }
     if (this.state.error) {
       return (
         <div style={{

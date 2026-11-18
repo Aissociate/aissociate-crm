@@ -5,7 +5,14 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { rechargerUneFois } from './lib/versionPerimee';
 import './index.css';
+
+// Fichier d'un écran introuvable après un déploiement (onglet périmé) :
+// Vite émet cet événement avant de lever l'erreur ; on recharge une fois.
+window.addEventListener('vite:preloadError', (event) => {
+  if (rechargerUneFois()) event.preventDefault();
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
