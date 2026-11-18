@@ -1,0 +1,59 @@
+# Base de données aissociate (ex-Supabase) — /opt/aissociate-data
+# Jamais exposée sur Internet : réseau interne "aissociate-internal" uniquement.
+# Variables (/opt/aissociate-data/.env) : POSTGRES_PASSWORD, AUTHENTICATOR_PASSWORD
+services:
+  db:
+    build: .
+    image: aissociate-db:17
+    container_name: aissociate-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aissociate
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTHENTICATOR_PASSWORD: ${AUTHENTICATOR_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_cron,pg_stat_statements
+      - -c
+      - cron.database_name=aissociate
+      - -c
+      - cron.timezone=Indian/Reunion
+      # Réglages pour 1 vCPU / ~1 Go alloués à la base
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=60
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers_per_gather=0
+      - -c
+      - log_min_duration_statement=1000
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    shm_size: 256mb
+    mem_limit: 1g
+    networks:
+      - aissociate-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aissociate"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  pgdata:
+    name: aissociate-pgdata
+
+networks:
+  aissociate-internal:
+    name: aissociate-internal
