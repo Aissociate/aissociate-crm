@@ -20,4 +20,27 @@ export const config = {
   // Mêmes délais que Supabase par rôle (ms).
   statementTimeout: { anon: 3000, authenticated: 8000, service_role: 120000 },
   bodyLimit: 20 * 1024 * 1024,
+  auth: {
+    // Rôle Postgres limité au schéma auth (et à la lecture de la config SMTP).
+    db: {
+      host: process.env.PGHOST ?? 'aissociate-db',
+      port: Number(process.env.PGPORT ?? 5432),
+      database: process.env.PGDATABASE ?? 'aissociate',
+      user: 'auth_admin',
+      password: required('AUTH_ADMIN_PASSWORD'),
+      max: 4,
+    },
+    siteUrl: process.env.SITE_URL ?? 'https://aissociate.re',
+    // Origines autorisées pour les redirections (liens de réinitialisation).
+    redirectOrigins: (process.env.REDIRECT_ORIGINS ?? 'https://aissociate.re,https://preprod.aissociate.re').split(',').map((s) => s.trim()).filter(Boolean),
+    // URL publique de l'API, utilisée dans les liens envoyés par e-mail.
+    externalUrl: process.env.API_EXTERNAL_URL ?? 'https://api.aissociate.re',
+    allowSignup: (process.env.ALLOW_SIGNUP ?? 'true') === 'true',
+    passwordMinLength: Number(process.env.PASSWORD_MIN_LENGTH ?? 6),
+    accessTokenTtl: 3600,
+    refreshTokenTtlDays: 60,
+    oneTimeTokenTtlMinutes: 60,
+    // Tolérance de réutilisation d'un jeton de rafraîchissement (onglets concurrents).
+    refreshReuseSeconds: 10,
+  },
 };

@@ -25,3 +25,13 @@ export function fromPgError(err, role) {
   else if (/^(22|23|42|44|P0|2D|38|39|3B|40|54|0A|21|25|28|2F|34|3D|3F)/.test(code)) status = 400;
   return new ApiError(status, code, err.message, err.detail ?? null, err.hint ?? null);
 }
+
+/** Erreur au format GoTrue (auth) : { code, error_code, msg }. */
+export class AuthError extends ApiError {
+  constructor(status, errorCode, msg) {
+    super(status, errorCode, msg);
+  }
+  toJSON() {
+    return { code: this.status, error_code: this.code, msg: this.message };
+  }
+}

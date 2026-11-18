@@ -30,6 +30,9 @@ create policy plans_storage_rw on storage.objects as permissive for all to authe
 create policy qualiopi_storage_rw on storage.objects as permissive for all to authenticated using ((bucket_id = 'qualiopi'::text)) with check ((bucket_id = 'qualiopi'::text));
 create policy recrutement_rw on storage.objects as permissive for all to authenticated using (((bucket_id = 'recrutement'::text) and is_manager())) with check (((bucket_id = 'recrutement'::text) and is_manager()));
 
+-- Lecture de la configuration SMTP par le module d'authentification.
+grant select on public.parametres to auth_admin;
+
 -- Les tâches pg_cron ne sont PAS recréées ici : tant que la prod tourne sur
 -- Supabase, les relancer ici enverrait les e-mails et newsletters en double.
 -- Elles sont activées à la bascule (deploy/data/sql/30-cron.sql).

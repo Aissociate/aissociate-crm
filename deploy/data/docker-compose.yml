@@ -1,6 +1,6 @@
 # Base de données aissociate (ex-Supabase) — /opt/aissociate-data
 # Jamais exposée sur Internet : réseau interne "aissociate-internal" uniquement.
-# Variables (/opt/aissociate-data/.env) : POSTGRES_PASSWORD, AUTHENTICATOR_PASSWORD
+# Variables (/opt/aissociate-data/.env) : POSTGRES_PASSWORD, AUTHENTICATOR_PASSWORD, AUTH_ADMIN_PASSWORD
 services:
   db:
     build: .
@@ -12,6 +12,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       AUTHENTICATOR_PASSWORD: ${AUTHENTICATOR_PASSWORD}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD}
     command:
       - postgres
       - -c

@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { pool } from './db.js';
 import { ApiError, fromPgError } from './errors.js';
 import { verifyJwt } from './jwt.js';
+import { authRoutes } from './auth/routes.js';
 import { restRoutes } from './rest/routes.js';
 import { loadSchema } from './schema.js';
 
@@ -53,6 +54,7 @@ app.get('/health', async () => {
 app.options('/*', (req, reply) => reply.code(204).send());
 
 restRoutes(app);
+authRoutes(app);
 
 await loadSchema();
 await app.listen({ port: config.port, host: '0.0.0.0' });

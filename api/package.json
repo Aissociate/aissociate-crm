@@ -8,9 +8,16 @@
     "start": "node src/server.js",
     "test": "node --test \"test/unit/*.unit.mjs\""
   },
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "fastify": "^5.1.0",
+    "nodemailer": "^7.0.13",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.47.10"
   }
 }
