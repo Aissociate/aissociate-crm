@@ -13,6 +13,9 @@ RUN npm run build
 # ── Runtime : Nginx statique (les règles Netlify _redirects sont dans nginx.conf) ──
 FROM nginx:1.27-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+# Hôte de l'API qui sert /sitemap-blog.xml (Supabase par défaut ; api.aissociate.re après la bascule).
+ARG API_HOST=vkirutbpxzybucuiyjnb.supabase.co
+RUN sed -i "s/vkirutbpxzybucuiyjnb\.supabase\.co/${API_HOST}/g" /etc/nginx/conf.d/default.conf && nginx -t
 COPY --from=build /app/dist /usr/share/nginx/html
 RUN rm -f /usr/share/nginx/html/_redirects /usr/share/nginx/html/_headers
 EXPOSE 80
