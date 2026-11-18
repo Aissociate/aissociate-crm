@@ -121,6 +121,13 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
 - **Fin d'essai** : le menu se réduit à « Mon abonnement » et « Mon compte » ; la carte d'abonnement passe en tête, sans suspension ni recharges.
 - **CRM** : la liste des espaces affiche l'essai (jours restants, terminé) et l'abonnement Stripe ; les demandes signalent les identifiants non envoyés.
 
+## Guide de prise en main (`Tutoriel.tsx`)
+- Surimpression en 10 étapes, affichée toute seule à la première connexion (après le mot de passe et les CGV), jamais après la fin de l'essai.
+- Chaque étape éclaire un élément réel repéré par `data-tuto` (les liens du menu portent leur adresse, la zone de mission `mission`,
+  le bouton du guide `guide`). Si l'élément n'est pas visible (menu replié sur mobile), la carte s'affiche au centre.
+- « Vu » est mémorisé dans `studio_users.tutoriel_vu_le` (action `tutoriel_vu`), avec un repli dans le navigateur tant que la colonne manque.
+- Le bouton « Revoir le guide », en bas de la colonne de gauche, le relance à la demande. Pour ajouter une étape : `ETAPES_TUTORIEL`.
+
 ## Contrôle quotidien du parcours client (`controle.ts`, `controle_rapport.ts`)
 - pg_cron `studio-controle`, chaque jour à 02:00 UTC (06:00 à La Réunion), appelle l'action `controle_cron` (clé `studio_cron_cle`).
   Il est aussi lancé à la demande depuis CRM › Studio IA clients › Contrôle (action `admin_controle`).

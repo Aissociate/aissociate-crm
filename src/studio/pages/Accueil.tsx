@@ -36,7 +36,7 @@ export default function Accueil() {
         <p className="mt-2 text-neutral-500">Décrivez la mission, choisissez l'agent : il s'en occupe.</p>
       </div>
 
-      <form onSubmit={lancer} className="mx-auto max-w-3xl rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
+      <form onSubmit={lancer} data-tuto="mission" className="mx-auto max-w-3xl rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
         <textarea
           value={demande} onChange={(e) => setDemande(e.target.value)} rows={3}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); lancer(e); } }}

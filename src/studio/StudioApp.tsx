@@ -4,7 +4,7 @@ import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
+import { CircleHelp, Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
 import { appel, jeton, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 
@@ -30,6 +30,11 @@ const Contacts = lazy(() => import('./pages/Contacts'));
 const Desinscription = lazy(() => import('./pages/Desinscription'));
 const AccepterCgv = lazy(() => import('./pages/AccepterCgv'));
 const Reinitialiser = lazy(() => import('./pages/Reinitialiser'));
+const Tutoriel = lazy(() => import('./Tutoriel'));
+
+/** Repli local quand le serveur ne sait pas encore si le guide a été vu (colonne absente). */
+const cleTuto = (id: string) => `studio.tutoriel.${id}`;
+const tutoVuIci = (id: string) => { try { return localStorage.getItem(cleTuto(id)) === '1'; } catch { return true; } };
 
 type Ctx = {
   me: Me | null;
@@ -91,7 +96,7 @@ const MENU_ESPACE = [
 function Lien({ to, label, icon: Icon, end, pastille }: { to: string; label: string; icon: typeof Home; end?: boolean; pastille?: number }) {
   return (
     <NavLink
-      to={to} end={end}
+      to={to} end={end} data-tuto={to}
       className={({ isActive }) => cx(
         'flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors',
         isActive ? 'bg-neutral-200/70 font-medium text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
@@ -105,11 +110,21 @@ function Lien({ to, label, icon: Icon, end, pastille }: { to: string; label: str
 
 function Coquille() {
   const { me, deconnexion } = useStudio();
+  const navigate = useNavigate();
   const [ouvert, setOuvert] = useState(false);
+  // Guide de prise en main : tout seul à la première connexion, ensuite seulement à la demande.
+  const [guide, setGuide] = useState(() => !me.essai?.termine
+    && (me.user.tutoriel_vu === false || (me.user.tutoriel_vu == null && !tutoVuIci(me.user.id))));
+  useEffect(() => { if (guide) navigate('/studio'); }, [guide, navigate]);
+  const fermerGuide = useCallback(() => {
+    setGuide(false);
+    try { localStorage.setItem(cleTuto(me.user.id), '1'); } catch { /* stockage bloqué */ }
+    appel('tutoriel_vu').catch(() => { /* sans gravité : le repli local suffit */ });
+  }, [me.user.id]);
   // Essai terminé : seul l'abonnement (et le compte) reste accessible, le menu le dit.
   const essaiFini = Boolean(me.essai?.termine);
   const nav = (
-    <nav className="flex h-full flex-col gap-1 p-4" onClick={() => setOuvert(false)}>
+    <nav className="flex min-h-full flex-col gap-1 p-4" onClick={() => setOuvert(false)}>
       <div className="mb-6 px-2">
         <p className="text-lg font-bold tracking-tight text-neutral-900">A(I)ssociate <span className="text-orange-500">Studio</span></p>
         <p className="truncate text-xs text-neutral-500">{me.workspace.nom}</p>
@@ -135,24 +150,31 @@ function Coquille() {
         <button onClick={deconnexion} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-100">
           <LogOut className="h-4 w-4" /> Se déconnecter
         </button>
+        {!essaiFini && (
+          <button onClick={() => setGuide(true)} data-tuto="guide"
+            className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">
+            <CircleHelp className="h-3.5 w-3.5" /> Revoir le guide
+          </button>
+        )}
       </div>
     </nav>
   );
   return (
     <div className="min-h-screen bg-[#f6f6f4] font-sans text-neutral-900">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-neutral-200 bg-[#f1f1ee] lg:block">{nav}</aside>
+      <aside className="fixed inset-y-0 left-0 hidden w-60 overflow-y-auto border-r border-neutral-200 bg-[#f1f1ee] lg:block">{nav}</aside>
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200 bg-[#f6f6f4]/90 px-4 py-3 backdrop-blur lg:hidden">
         <p className="font-bold">A(I)ssociate <span className="text-orange-500">Studio</span></p>
         <button onClick={() => setOuvert(true)} aria-label="Ouvrir le menu"><Menu className="h-5 w-5" /></button>
       </header>
       {ouvert && (
         <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOuvert(false)}>
-          <aside className="h-full w-64 bg-[#f1f1ee]" onClick={(e) => e.stopPropagation()}>
+          <aside className="h-full w-64 overflow-y-auto bg-[#f1f1ee]" onClick={(e) => e.stopPropagation()}>
             <button className="absolute left-52 top-4" onClick={() => setOuvert(false)} aria-label="Fermer le menu"><X className="h-5 w-5" /></button>
             {nav}
           </aside>
         </div>
       )}
+      {guide && <Suspense fallback={null}><Tutoriel onFermer={fermerGuide} /></Suspense>}
       <main className="lg:pl-60">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
           {me.essai && (me.essai.termine ? (

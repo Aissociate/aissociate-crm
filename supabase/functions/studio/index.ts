@@ -581,6 +581,8 @@ async function construireMe(sb: SupabaseClient, s: Session) {
     etatEspace(sb, s.ws.id),
     sb.from("studio_livrables").select("id", { count: "exact", head: true }).eq("workspace_id", s.ws.id).eq("statut", "a_valider"),
   ]);
+  // Guide de prise en main : lu à part, pour ne rien casser tant que la colonne n'existe pas (null = inconnu).
+  const { data: tuto, error: eTuto } = await sb.from("studio_users").select("tutoriel_vu_le").eq("id", s.user.id).maybeSingle();
   const mois = debutMois();
   let minutesTotal = 0, minutesMois = 0, reponsesMois = 0;
   for (const r of reponses ?? []) {
@@ -592,6 +594,7 @@ async function construireMe(sb: SupabaseClient, s: Session) {
     user: {
       ...s.user, doit_changer: credentials?.doit_changer ?? false,
       cgv_a_accepter: await cgv.chargerCgv(sb).then((c) => Boolean(c && c.version !== s.user.cgv_version)),
+      tutoriel_vu: eTuto ? null : Boolean((tuto as { tutoriel_vu_le?: string | null } | null)?.tutoriel_vu_le),
     },
     essai: essai.enEssai(s.ws) ? { fin: s.ws.essai_fin, jours_restants: essai.joursRestants(s.ws), termine: essai.essaiTermine(s.ws) } : null,
     workspace: { ...s.ws, suspendu: etat.suspendu },
@@ -1390,6 +1393,11 @@ Deno.serve(async (req: Request) => {
         await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "cgv_acceptees", detail: { version: c.version, documents: c.documents.map((d) => d.titre) } });
         return json({ ok: true });
       }
+
+      // Guide de prise en main vu (ou passé) : il ne s'affiche plus tout seul.
+      case "tutoriel_vu":
+        await sb.from("studio_users").update({ tutoriel_vu_le: new Date().toISOString() }).eq("id", s.user.id);
+        return json({ ok: true });
 
       case "logout":
         await sb.from("studio_sessions").delete().eq("id", s.sessionId);
