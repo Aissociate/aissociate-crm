@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests différentiels de l'API contre PostgREST (référence, lancée le temps du test
 # sur le réseau interne puis supprimée). À lancer en root sur le VPS.
-# ⚠ Écrit puis supprime quelques lignes de test (parametres, contact_requests) :
+# ⚠ Écrit puis supprime quelques lignes de test (parametres, contact_requests et les
+#   contacts que le trigger lead_to_contact en tire) :
 #   à utiliser sur la base de préprod, pas après la bascule en production.
 set -euo pipefail
 API=/opt/aissociate-api
@@ -32,5 +33,5 @@ docker run --rm --network aissociate-internal --env-file "$ENVF" \
 code=$?
 rm -f "$ENVF"
 # Filet de sécurité : aucune ligne de test ne doit rester.
-docker exec aissociate-db psql -U postgres -d aissociate -Atc "delete from parametres where cle like '\_\_t\_%'; delete from contact_requests where message like '__test_contrat_%'; select 'restes: ' || (select count(*) from parametres where cle like '\_\_t\_%')"
+docker exec aissociate-db psql -U postgres -d aissociate -Atc "delete from parametres where cle like '\_\_t\_%'; delete from contact_requests where message like '__test_contrat_%'; delete from contact_actions where contact_id in (select id from contacts where email like '%@example.invalid'); delete from contacts where email like '%@example.invalid'; select 'restes: ' || (select count(*) from parametres where cle like '\_\_t\_%')"
 exit $code

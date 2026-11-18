@@ -20,7 +20,7 @@ services:
       - -c
       - cron.database_name=aissociate
       - -c
-      - cron.timezone=Indian/Reunion
+      - cron.timezone=GMT   # comme Supabase : les horaires des tâches sont en UTC
       # Réglages pour 1 vCPU / ~1 Go alloués à la base
       - -c
       - shared_buffers=256MB

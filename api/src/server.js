@@ -4,6 +4,9 @@ import { pool } from './db.js';
 import { ApiError, fromPgError } from './errors.js';
 import { verifyJwt } from './jwt.js';
 import { authRoutes } from './auth/routes.js';
+import { functionsRoutes } from './functions/routes.js';
+import { startNetWorker } from './net/worker.js';
+import { startRealtime } from './realtime/server.js';
 import { restRoutes } from './rest/routes.js';
 import { storageRoutes } from './storage/routes.js';
 import { loadSchema } from './schema.js';
@@ -20,7 +23,7 @@ const CORS = {
 };
 app.addHook('onRequest', async (req, reply) => {
   reply.headers(CORS);
-  if (req.method === 'OPTIONS') return reply.code(204).send();
+  if (req.method === 'OPTIONS' && !req.url.startsWith('/functions/v1/')) return reply.code(204).send();
 });
 
 // DELETE et POST sans corps arrivent parfois avec content-type JSON et un corps vide.
@@ -57,9 +60,12 @@ app.options('/*', (req, reply) => reply.code(204).send());
 restRoutes(app);
 authRoutes(app);
 await app.register(storageRoutes);
+await app.register(functionsRoutes);
 
 await loadSchema();
+await startRealtime(app);
 await app.listen({ port: config.port, host: '0.0.0.0' });
+await startNetWorker(app.log);
 
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => { await app.close(); await pool.end(); process.exit(0); });

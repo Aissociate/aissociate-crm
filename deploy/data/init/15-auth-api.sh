@@ -18,6 +18,20 @@ alter table auth.one_time_tokens add constraint one_time_tokens_kind_check check
 grant usage on schema auth to auth_admin;
 grant select, insert, update, delete on auth.users, auth.refresh_tokens, auth.one_time_tokens to auth_admin;
 grant usage on schema public to auth_admin;
+
+-- File des appels HTTP (net.http_post) traitée par l'API.
+grant usage on schema net to auth_admin;
+grant select, update, delete on net.http_request_queue to auth_admin;
+
+-- Temps réel : signale un changement (sans le contenu de la ligne) à l'API,
+-- qui prévient les navigateurs abonnés ; ils rechargent alors par l'API, sous RLS.
+create schema if not exists realtime;
+create or replace function realtime.notify_change() returns trigger language plpgsql as $fn$
+declare j jsonb := to_jsonb(coalesce(new, old));
+begin
+  perform pg_notify('table_changes', json_build_object('t', tg_table_name, 'op', tg_op, 'id', j->>'id', 'user_id', j->>'user_id')::text);
+  return null;
+end $fn$;
 SQL
 # La table parametres n'existe qu'après la restauration des données.
 psql -U postgres -d aissociate -c "do \$\$ begin if to_regclass('public.parametres') is not null then grant select on public.parametres to auth_admin; end if; end \$\$"
