@@ -18,6 +18,7 @@ export const AGENTS_CATALOGUE = [
   { id: "ines", libelle: "Inès — SEO & contenus web" },
   { id: "mael", libelle: "Maël — administratif & juridique" },
   { id: "nora", libelle: "Nora — RH & formation" },
+  { id: "theo", libelle: "Théo — comptabilité & gestion" },
 ];
 
 export const SECTIONS: Section[] = [

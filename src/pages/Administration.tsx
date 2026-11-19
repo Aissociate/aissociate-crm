@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX, Activity } from 'lucide-react';
+import { Users, Building, ScrollText, Plus, Pencil, Trash2, UserCheck, UserX, Activity, ClipboardCheck, ExternalLink } from 'lucide-react';
 import SanteJobs from '@/components/SanteJobs';
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
@@ -95,7 +95,17 @@ export default function Administration() {
 
   return (
     <div>
-      <PageHeader title="Administration" subtitle="Gestion des utilisateurs, financeurs et traçabilité (4.9)" />
+      <PageHeader title="Administration" subtitle="Gestion des utilisateurs, financeurs et traçabilité (4.9)"
+        actions={<>
+          {/* Test de recrutement « Commercial indépendant – Agents IA » (public/recrutement/index.html) :
+              les candidats le passent sur /recrutement/, la direction colle leur code dossier dans l'espace recruteur. */}
+          <a href="/recrutement/#recruteur" target="_blank" rel="noopener" className="btn-secondary inline-flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4" /> Candidats : espace recruteur
+          </a>
+          <a href="/recrutement/" target="_blank" rel="noopener" className="btn-secondary inline-flex items-center gap-2">
+            <ExternalLink className="h-4 w-4" /> Test commercial
+          </a>
+        </>} />
 
       <div className="mb-5 flex gap-1 border-b border-line">
         {TABS.map((t) => (

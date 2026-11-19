@@ -7,6 +7,7 @@ import { useStudioBrut } from '../StudioApp';
 const EQUIPE = [
   { id: 'lea', p: 'Léa', c: '#f97316' }, { id: 'hugo', p: 'Hugo', c: '#ec4899' }, { id: 'sam', p: 'Sam', c: '#3b82f6' },
   { id: 'ines', p: 'Inès', c: '#10b981' }, { id: 'mael', p: 'Maël', c: '#8b5cf6' }, { id: 'nora', p: 'Nora', c: '#eab308' },
+  { id: 'theo', p: 'Théo', c: '#0891b2' },
 ];
 
 export default function Connexion() {

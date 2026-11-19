@@ -95,6 +95,15 @@ const AGENTS: Agent[] = [
       { titre: 'Monter en compétences', texte: 'Les financements mobilisables pour vous ou vos salariés, et le plan d\'action.' },
     ],
   },
+  {
+    id: 'theo', prenom: 'Théo', metier: 'Comptabilité & gestion', couleur: '#0891b2', minutes: 30,
+    accroche: 'Vos chiffres à jour, sans y passer vos soirées.',
+    pouvoirs: ['Facture ou devis conforme, TVA DOM comprise', 'Prévisionnel de trésorerie mois par mois', 'Prix de revient, marge et seuil de rentabilité'],
+    cas: [
+      { titre: 'Le mois qui coince', texte: 'Le prévisionnel qui montre le creux de trésorerie avant qu\'il arrive, et les actions pour l\'éviter.' },
+      { titre: 'La boîte à chaussures', texte: 'Les dépenses classées par compte, prêtes pour votre expert-comptable, justificatifs manquants signalés.' },
+    ],
+  },
 ];
 
 const faqAgents = (t: TarifConnecteurs) => [
@@ -183,7 +192,7 @@ export default function AgentsIA() {
     <>
       <SEO
         title={`Studio IA : votre équipe d'agents IA — essai gratuit, dès ${OFFRE.mensuelParRang[0]} €/mois | Aissociate`}
-        description={`Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Essai gratuit de ${OFFRE.essaiJours} jours, sans frais de mise en place, accompagnement à La Réunion. Dès ${OFFRE.mensuelParRang[0]} € HT/mois.`}
+        description={`Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Essai gratuit de ${OFFRE.essaiJours} jours, sans frais de mise en place, accompagnement à La Réunion. Dès ${OFFRE.mensuelParRang[0]} € HT/mois.`}
         keywords="agent IA PME, agents IA La Réunion, essai gratuit agent IA, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion"
         url={`${SITE_URL}/agents-ia`}
         image={`${SITE_URL}/agents-ia/studio/equipe-og.jpg`}
@@ -207,7 +216,7 @@ export default function AgentsIA() {
               <span className="text-orange-400">Votre équipe d'agents IA</span> s'en charge.
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-neutral-300">
-              Six spécialistes qui connaissent vos prix, votre ton et vos clients : posts, prospection, e-mails, articles,
+              Sept spécialistes qui connaissent vos prix, votre ton et vos clients : posts, prospection, e-mails, articles,
               courriers, recrutement. Vous décidez, ils préparent. Essayez-les <b className="text-white">gratuitement pendant {OFFRE.essaiJours} jours</b>, sans carte bancaire.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -300,7 +309,7 @@ export default function AgentsIA() {
         {/* ── 4. L'équipe ── */}
         <section id="equipe" className="mx-auto max-w-6xl px-4 py-20 sm:px-8">
           <p className="text-sm font-semibold uppercase tracking-wider text-orange-600">L'équipe</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Six agents. Six métiers. Choisissez ceux dont vous avez besoin.</h2>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Sept agents. Sept métiers. Choisissez ceux dont vous avez besoin.</h2>
           <div className="mt-10 grid gap-5 md:grid-cols-2">
             {AGENTS.map((a) => (
               <article key={a.id} className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white">

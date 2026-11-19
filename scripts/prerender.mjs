@@ -134,7 +134,7 @@ const routes = [
     // Page « Agents IA » (employés virtuels) : aligné sur le <SEO> de src/site/pages/AgentsIA.tsx.
     path: '/agents-ia',
     title: "Studio IA : votre équipe d'agents IA — essai gratuit, dès 149 €/mois | Aissociate",
-    description: "Six agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH) qui connaissent votre entreprise. Essai gratuit de 7 jours, sans frais de mise en place, accompagnement à La Réunion. Dès 149 € HT/mois.",
+    description: "Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Essai gratuit de 7 jours, sans frais de mise en place, accompagnement à La Réunion. Dès 149 € HT/mois.",
     keywords: 'agent IA PME, agents IA La Réunion, essai gratuit agent IA, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
     schemas: [
       {
