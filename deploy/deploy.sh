@@ -62,7 +62,9 @@ else
   echo "Fonctions : code modifié, reconstruction."
   docker image inspect aissociate-functions:latest >/dev/null 2>&1 \
     && docker tag aissociate-functions:latest aissociate-functions:precedente
-  docker build -q -t aissociate-functions:latest -f "$SRC/functions-runtime/Dockerfile" "$SRC"
+  # Le Dockerfile démarre le serveur pour le contrôler : en cas d'échec, la fin
+  # de la sortie du build s'affiche dans la CI et le conteneur en place n'est pas touché.
+  docker build --progress=plain -t aissociate-functions:latest -f "$SRC/functions-runtime/Dockerfile" "$SRC" 2>&1 | tail -n 40
   # Même nom de projet compose que le conteneur en place (sinon conflit de container_name).
   projet=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' aissociate-functions 2>/dev/null || true)
   projet=${projet:-aissociate-functions}
