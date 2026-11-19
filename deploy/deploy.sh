@@ -71,6 +71,12 @@ else
     echo "$arbre" > "$FN_STAMP"
   else
     echo "Fonctions en échec : retour à l'image précédente." >&2
+    # Diagnostic visible dans la CI : journaux du conteneur et derniers contrôles de santé.
+    echo "── Journaux de aissociate-functions ──" >&2
+    docker logs --tail 60 aissociate-functions >&2 2>&1 || true
+    echo "── Contrôles de santé ──" >&2
+    docker inspect -f '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' aissociate-functions >&2 || true
+    docker inspect -f 'État : {{.State.Status}}, redémarrages : {{.RestartCount}}' aissociate-functions >&2 || true
     if docker image inspect aissociate-functions:precedente >/dev/null 2>&1; then
       docker tag aissociate-functions:precedente aissociate-functions:latest
       docker compose -p "$projet" -f "$FN_DIR/docker-compose.yml" up -d --no-build --force-recreate
