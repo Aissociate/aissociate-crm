@@ -154,6 +154,22 @@ supabase secrets set SHEET_CANDIDATS_ID=… SHEET_PROSPECTS_ID=…
 
 Les IDs des deux feuilles fournies sont les valeurs par défaut intégrées à la fonction.
 
+## Prospects des formulaires Meta (import direct)
+
+`supabase/functions/meta-leads/index.ts` lit les formulaires Lead Ads de la page Facebook
+(Graph API `/{page}/leadgen_forms` puis `/{form}/leads`) et crée les contacts *prospect*, sans Google Sheet.
+
+- Toutes les 5 min (tâche `meta-leads`, `deploy/data/sql/30-cron.sql`) et à la demande :
+  Paramètres › Publicité Meta › « Importer maintenant ».
+- Réglages dans `parametres.meta_ads` : `leads_page_token` (jeton de page, permission `leads_retrieval`),
+  `leads_page_id` (défaut : page Aissociate), `leads_form_ids` (défaut : tous les formulaires sauf le recrutement).
+  Sans jeton de page, le jeton du compte publicitaire sert à obtenir celui de la page (utilisateur système).
+- Même clé de déduplication que l'import du Sheet (`pros:<email|tél|nom>`) : aucun doublon entre les deux.
+  Contacts supprimés jamais recréés (`import_exclusions`), nouvelle soumission = note « relead » + tag.
+- Tags posés : « nouveau prospect » et `meta: <nom du formulaire>` ; répartition tour à tour entre conseillers.
+- Premier passage : 30 jours d'historique ; ensuite depuis la dernière synchro (`parametres.meta_leads_etat`)
+  avec une heure de recouvrement. Journal des passages utiles dans `job_runs` (`meta-leads`).
+
 ## Facturation & rapprochement Qonto
 
 Module **Factures** (`/factures`) : création libre ou depuis un devis, PDF conforme

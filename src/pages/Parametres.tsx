@@ -39,7 +39,11 @@ type Blog = {
 const KIE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
 type LinkedinCfg = { enabled?: boolean; client_id?: string; client_secret?: string; access_token?: string; org_urn?: string; org_name?: string; expires_at?: string; refresh_token?: string; refresh_expires_at?: string; connected_at?: string };
 const LINKEDIN_REDIRECT_URI = `${import.meta.env.VITE_SUPABASE_URL ?? ''}/functions/v1/linkedin-oauth`;
-type MetaAds = { enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string };
+type MetaAds = {
+  enabled?: boolean; ad_account_id?: string; access_token?: string; api_version?: string;
+  // Import direct des prospects des formulaires (Edge Function meta-leads)
+  leads_page_id?: string; leads_page_token?: string; leads_form_ids?: string;
+};
 type NewsletterCfg = { auto_send?: boolean; rgpd_only?: boolean; sender_name?: string; intro?: string };
 type BrevoCfg = { api_key?: string; sender_email?: string; sender_name?: string; daily_limit?: number };
 // SignatureCfg importé depuis @/lib/signature
@@ -91,6 +95,7 @@ export default function Parametres() {
   const [newsletter, setNewsletter] = useState<NewsletterCfg>({ rgpd_only: true, sender_name: 'Aissociate' });
   const [brevo, setBrevo] = useState<BrevoCfg>({ sender_name: 'Aissociate' });
   const [brevoTest, setBrevoTest] = useState<{ loading: boolean; ok?: boolean; text?: string }>({ loading: false });
+  const [leadsMeta, setLeadsMeta] = useState<{ loading: boolean; ok?: boolean; text?: string }>({ loading: false });
   const [signature, setSignature] = useState<SignatureCfg>({ mode: 'auto', include_sender: true });
   const [templates, setTemplates] = useState<MessageTemplate[]>(DEFAULT_TEMPLATES);
   const { profile } = useAuth();
@@ -181,6 +186,24 @@ export default function Parametres() {
       .filter((t) => t.nom.trim() && t.corps.trim())
       .map((t) => ({ ...t, nom: t.nom.trim(), sujet: t.canal === 'whatsapp' ? undefined : (t.sujet?.trim() || undefined) })),
   });
+
+  // Import immédiat des prospects des formulaires Meta (sinon toutes les 5 min par le cron).
+  const importerLeadsMeta = async () => {
+    setLeadsMeta({ loading: true });
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-leads', { body: {} });
+      if (error) throw new Error(await functionErrorMessage(error));
+      const r = data as { ok?: boolean; configured?: boolean; message?: string; error?: string; formulaires?: number; lus?: number; crees?: number; releads?: number };
+      if (r?.configured === false) throw new Error(r.message ?? 'Jeton Meta absent.');
+      if (!r?.ok) throw new Error(r?.error ?? 'Import impossible.');
+      setLeadsMeta({
+        loading: false, ok: true,
+        text: `${r.formulaires} formulaire(s) lu(s), ${r.lus} prospect(s) sur la période : ${r.crees} créé(s), ${r.releads} relead(s).`,
+      });
+    } catch (err) {
+      setLeadsMeta({ loading: false, ok: false, text: err instanceof Error ? err.message : String(err) });
+    }
+  };
 
   // Teste la connexion Brevo (clé valide + expéditeur vérifié), côté serveur.
   const testBrevo = async () => {
@@ -333,6 +356,35 @@ export default function Parametres() {
               Pour une sécurité maximale, définissez plutôt le secret Supabase
               <code> META_ACCESS_TOKEN</code> (prioritaire sur ce formulaire).
             </p>
+
+            <div className="border-t border-line pt-4">
+              <h3 className="mb-1 text-sm font-semibold text-fg">Prospects des formulaires (Lead Ads)</h3>
+              <p className="mb-3 text-xs text-muted">
+                Les prospects des formulaires de la page arrivent dans Contacts toutes les 5 minutes (tag « nouveau prospect »
+                et nom du formulaire, répartis entre les conseillers). Les formulaires de recrutement sont ignorés.
+              </p>
+              <div className="space-y-4">
+                <Field label="Jeton de page" hint="Jeton de la page Facebook avec la permission leads_retrieval. Vide : le jeton ci-dessus est utilisé (utilisateur système avec accès à la page).">
+                  <input className="input" type="password" value={metaAds.leads_page_token ?? ''} onChange={(e) => setMetaAds({ ...metaAds, leads_page_token: e.target.value })} placeholder="••••••••" />
+                </Field>
+                <Field label="ID de la page" hint="Vide : page Aissociate (112479281807858)">
+                  <input className="input" value={metaAds.leads_page_id ?? ''} onChange={(e) => setMetaAds({ ...metaAds, leads_page_id: e.target.value })} placeholder="112479281807858" />
+                </Field>
+                <Field label="Formulaires à importer" hint="IDs séparés par des virgules. Vide : tous les formulaires de la page sauf le recrutement.">
+                  <input className="input" value={metaAds.leads_form_ids ?? ''} onChange={(e) => setMetaAds({ ...metaAds, leads_form_ids: e.target.value })} placeholder="Tous" />
+                </Field>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="secondary" onClick={importerLeadsMeta} disabled={leadsMeta.loading}>
+                    <Megaphone className="h-4 w-4" /> {leadsMeta.loading ? 'Import…' : 'Importer maintenant'}
+                  </Button>
+                  {leadsMeta.text && (
+                    <span className={`text-sm ${leadsMeta.ok ? 'text-emerald-600' : 'text-red-600'}`}>{leadsMeta.text}</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted">Enregistrez d'abord le jeton, puis lancez l'import pour vérifier.</p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3">
               <Button onClick={() => persist('meta_ads', metaAds)} disabled={saving === 'meta_ads'}>
                 <Save className="h-4 w-4" /> {saving === 'meta_ads' ? 'Enregistrement…' : 'Enregistrer'}

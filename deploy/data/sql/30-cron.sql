@@ -37,6 +37,8 @@ select cron.schedule('observabilite-purge', '15 1 * * *',   $c$delete from publi
 select cron.schedule('blog-generate',       '0 8 * * 2,5',  $c$select public.cron_appeler_fonction('generate-article')$c$);
 select cron.schedule('imap-sync',           '*/5 * * * *',  $c$select public.cron_appeler_fonction('fetch-emails', '{}', 90000)$c$);
 select cron.schedule('sheets-import',       '*/5 * * * *',  $c$select public.cron_appeler_fonction('import-sheets', '{"source":"prospects"}')$c$);
+-- Ajoutée le 19/11/2026 (après la bascule) : prospects des formulaires Meta, lus directement.
+select cron.schedule('meta-leads',          '*/5 * * * *',  $c$select public.cron_appeler_fonction('meta-leads', '{}', 60000)$c$);
 select cron.schedule('newsletter-drain',    '0 7 * * *',    $c$select public.cron_appeler_fonction('generate-newsletter', '{"action":"process_queue","source":"cron"}', 120000)$c$);
 select cron.schedule('newsletter-weekly',   '0 9 * * 1',    $c$select public.cron_appeler_fonction('generate-newsletter', '{"source":"cron"}', 150000)$c$);
 select cron.schedule('notifications-cron',  '0 3 * * *',    $c$select public.cron_appeler_fonction('notifications-cron', '{}', 120000)$c$);
