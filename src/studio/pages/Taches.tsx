@@ -152,7 +152,7 @@ function Formulaire({ b, setB, occupe, agents, onAnnuler, onEnregistrer }: {
         <label className="block text-sm">
           <span className="text-neutral-600">Titre</span>
           <input value={b.titre} maxLength={120} onChange={(e) => setB({ ...b, titre: e.target.value })}
-            className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2" />
+            className="mt-1 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-neutral-900 outline-none focus:border-neutral-900" />
         </label>
         <label className="block text-sm">
           <span className="text-neutral-600">Agent</span>
@@ -165,7 +165,7 @@ function Formulaire({ b, setB, occupe, agents, onAnnuler, onEnregistrer }: {
       <label className="mt-4 block text-sm">
         <span className="text-neutral-600">Consigne</span>
         <textarea value={b.consigne} maxLength={4000} rows={4} onChange={(e) => setB({ ...b, consigne: e.target.value })}
-          className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2" />
+          className="mt-1 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-neutral-900 outline-none focus:border-neutral-900" />
       </label>
       <p className="mt-4 text-sm text-neutral-600">Jours</p>
       <div className="mt-1 flex flex-wrap gap-1.5">
