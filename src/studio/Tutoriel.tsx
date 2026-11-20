@@ -13,49 +13,39 @@ export const ETAPES_TUTORIEL: EtapeTuto[] = [
     texte: "Voici votre équipe d'agents IA. Ce guide vous montre en une minute où trouver chaque chose. Vous pouvez le fermer à tout moment et le revoir plus tard.",
   },
   {
-    cible: 'mission',
-    titre: 'Confiez une mission',
-    texte: "Décrivez ce que vous voulez avec vos mots, choisissez l'agent, envoyez. C'est le point de départ de tout : un e-mail, un post, un courrier, une synthèse.",
-  },
-  {
-    cible: '/studio/assistants',
-    titre: 'Vos assistants',
-    texte: "Chaque agent a son métier et ses « super-pouvoirs » : des missions prêtes à lancer en remplissant un petit formulaire. Hors de son domaine, il passe la main au bon collègue.",
-  },
-  {
-    cible: '/studio/entreprise',
-    titre: 'Présentez votre entreprise',
-    texte: "Cette fiche est lue par tous vos agents avant chaque mission. Plus elle est précise (offres, prix, ton), plus leurs réponses vous ressemblent. Votre papier à en-tête se règle ici aussi.",
-  },
-  {
-    cible: '/studio/ressources',
-    titre: 'Vos ressources',
-    texte: 'Déposez votre plaquette, vos tarifs, votre charte : vos agents les consultent pour répondre avec vos vraies informations.',
-  },
-  {
-    cible: '/studio/connecteurs',
-    titre: 'Reliez vos outils',
-    texte: "Messagerie, agenda, réseaux sociaux : une fois connectés, vos agents préparent directement dans vos outils. Rien ne part sans votre validation.",
-  },
-  {
-    cible: '/studio/livrables',
+    cible: '/studio',
     titre: 'Vous gardez la main',
-    texte: "Les livrables sont ce que vos agents ont préparé et qui attend votre accord : vous validez, refusez ou corrigez. « Contenus » rassemble les réponses que vous avez choisi de garder.",
+    texte: "« Aujourd'hui » rassemble ce qui attend votre accord : vous validez, modifiez ou refusez. Rien n'est envoyé ni publié sans vous. La pastille indique le nombre de décisions en attente.",
   },
   {
-    cible: '/studio/taches',
-    titre: 'Pour aller plus loin',
-    texte: "Les tâches planifiées font travailler vos agents seuls aux heures choisies. La veille suit l'actualité de votre secteur, et Contacts sert à vos newsletters.",
+    cible: 'mission',
+    titre: 'Demandez à Léa',
+    texte: "Décrivez ce que vous voulez avec vos mots, ou dictez-le. Léa confie la demande au bon spécialiste : un e-mail, un post, un courrier, une synthèse.",
   },
   {
-    cible: '/studio/perimetre',
-    titre: 'Mon périmètre',
-    texte: "Votre consommation du mois, votre équipe (ajoutez un agent en un clic), votre abonnement, et l'arrêt d'urgence des agents.",
+    cible: '/studio/equipe',
+    titre: 'Votre équipe',
+    texte: "Chaque agent a son métier et ses « super-pouvoirs » : des missions prêtes à lancer. Hors de son domaine, il passe la main au bon collègue.",
+  },
+  {
+    cible: '/studio/routines',
+    titre: 'Les routines',
+    texte: "Les tâches planifiées font travailler vos agents seuls aux heures choisies. Vous y trouvez aussi la veille de votre secteur et les demandes par e-mail.",
+  },
+  {
+    cible: '/studio/documents',
+    titre: 'Vos documents',
+    texte: 'Déposez votre plaquette, vos tarifs, votre charte : vos agents les consultent pour répondre avec vos vraies informations. Vos contenus gardés et vos contacts sont ici aussi.',
+  },
+  {
+    cible: '/studio/reglages',
+    titre: 'Réglages et connecteurs',
+    texte: "Reliez votre messagerie, votre agenda et vos réseaux sociaux, présentez votre entreprise (la fiche lue par tous vos agents), et retrouvez votre consommation, votre abonnement et l'arrêt d'urgence.",
   },
   {
     cible: 'guide',
     titre: "C'est à vous",
-    texte: 'Ce guide reste disponible ici, en bas de la colonne. Commencez par présenter votre entreprise, puis confiez une première mission.',
+    texte: 'Ce guide reste disponible ici, en bas de la colonne. Commencez par présenter votre entreprise, puis confiez une première demande à Léa.',
   },
 ];
 
