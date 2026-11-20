@@ -100,4 +100,11 @@ export const MODELES_TACHES = [
     consigne: "Fais le bilan de la semaine sur mes réseaux sociaux : abonnés, publications qui ont le mieux marché, commentaires et messages reçus. Termine par 3 idées de publications pour la semaine prochaine.",
     heures: [8], jours: [1],
   },
+  {
+    id: "point_comptable_hebdo",
+    titre: "Point comptable hebdomadaire",
+    agent: "theo",
+    consigne: "Fais le point comptable de la semaine écoulée : notes de frais du mois (« Notes de frais — AAAA-MM »), factures reçues et envoyées, relances et avis d'échéance trouvés dans la messagerie, rendez-vous de l'agenda. N'invente aucun montant : écris « à compléter » quand une donnée manque. Parties : dépenses et justificatifs manquants ; factures émises, encaissements et retards à relancer ; factures fournisseurs à payer ; échéances des 30 prochains jours (TVA, URSSAF, impôts, loyers, emprunts) ; trésorerie ; 3 actions prioritaires et ce qu'il faut transmettre à l'expert-comptable. Enregistre-le avec note_enregistrer, titre « Point comptable — semaine du JJ/MM/AAAA » (lundi de la semaine écoulée), dossier « Comptabilité/Points hebdomadaires ». Prépare un e-mail de relance pour chaque facture client en retard (il attendra la validation).",
+    heures: [8], jours: [1],
+  },
 ] as const;

@@ -14,7 +14,7 @@ type Tache = {
   prochaine_execution: string | null; derniere_execution: string | null; dernier_statut: 'ok' | 'erreur' | null;
   dernier_compte_rendu: string | null; conversation_id: string | null; planning: string; en_cours: boolean;
 };
-type Modele = { id: string; titre: string; consigne: string; heures: readonly number[]; jours: readonly number[] };
+type Modele = { id: string; titre: string; consigne: string; heures: readonly number[]; jours: readonly number[]; agent?: string };
 type Reponse = { taches: Tache[]; modeles: Modele[] };
 type Brouillon = { id?: string; titre: string; agent_id: string; consigne: string; heures: number[]; jours: number[]; actif: boolean };
 
@@ -52,7 +52,9 @@ export default function Taches() {
   };
 
   const nouveau = (m?: Modele) => setBrouillon({
-    titre: m?.titre ?? '', consigne: m?.consigne ?? '', agent_id: me.agents[0]?.id ?? '',
+    titre: m?.titre ?? '', consigne: m?.consigne ?? '',
+    // Modèle propre à un agent (ex. point comptable → Théo) : présélectionné s'il fait partie de l'équipe.
+    agent_id: (m?.agent && me.agents.some((a) => a.id === m.agent) ? m.agent : me.agents[0]?.id) ?? '',
     heures: [...(m?.heures ?? [9])], jours: [...(m?.jours ?? [1, 2, 3, 4, 5])], actif: true,
   });
 
