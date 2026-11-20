@@ -546,7 +546,8 @@ async function agentsDuWorkspace(sb: SupabaseClient, ws: Session["ws"]) {
   // L'essai gratuit donne les agents de la formule Essentiel (aucun agent ne liste « essai » dans ses offres).
   const offre = ws.offre === "essai" ? "essentiel" : ws.offre;
   return (agents ?? [])
-    .filter((a) => (a.offres as string[]).includes(offre) && parAgent.get(a.id)?.actif !== false)
+    // L'orchestratrice (Léa) est le point d'entrée de tous les espaces : toujours présente, jamais facturée.
+    .filter((a) => equipe.estOrchestrateur(a.id) || ((a.offres as string[]).includes(offre) && parAgent.get(a.id)?.actif !== false))
     .map((a) => ({
       ...a,
       consignes: parAgent.get(a.id)?.consignes ?? "",
@@ -786,12 +787,19 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     conversationId: conversationId as string, apiKey,
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const systemeBase = construirePrompt({ agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo });
-  // Missions d'équipe : l'agent peut consulter les collègues ouverts dans l'espace.
   const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, prenom: a.prenom, metier: a.metier }));
-  if (outils && collegues.length) outils.definitions.push(equipe.definition(collegues));
+  // Léa orchestre : elle confie des missions aux spécialistes (qui travaillent avec leurs outils),
+  // relit, renvoie pour correction, puis répond. Un spécialiste joint directement garde la
+  // consultation simple d'un collègue (consulter_collegue).
+  const orchestre = equipe.estOrchestrateur(agent.id);
+  const missions = orchestre && Boolean(outils) && collegues.length > 0;
+  const systemeBase = construirePrompt({
+    agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo,
+    perimetre: orchestre ? equipe.perimetreOrchestrateur(outils ? collegues : []) : undefined,
+  });
+  if (outils && collegues.length) outils.definitions.push(missions ? equipe.definitionMission(collegues) : equipe.definition(collegues));
   const systeme = outils
-    ? `${systemeBase}\n\n${outils.consigne}${collegues.length ? `\n\n${equipe.consigne(collegues)}` : ""}`
+    ? `${systemeBase}\n\n${outils.consigne}${collegues.length && !missions ? `\n\n${equipe.consigne(collegues)}` : ""}`
     : systemeBase;
   const messages: Record<string, unknown>[] = [
     { role: "system", content: systeme },
@@ -879,8 +887,84 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           });
           return { resultat: `Réponse de ${collegue.prenom} (${collegue.metier}) :\n${texte}`, libelle: `Contribution de ${collegue.prenom}` };
         };
-        for (let tour = 0; tour < 7; tour++) {
-          const dernier = tour === 6;
+        // ── Orchestration : missions confiées par Léa aux spécialistes ──
+        // Un fil par spécialiste, gardé le temps de la demande : le rappeler reprend sa mission.
+        type FilMission = { messages: Record<string, unknown>[]; outils: Awaited<ReturnType<typeof outilsEspace>> | null; appels: number };
+        const fils = new Map<string, FilMission>();
+        let nbMissions = 0;
+        const confier = async (argsJson: string): Promise<{ resultat: string; libelle: string }> => {
+          let a: Record<string, unknown> = {};
+          try { a = JSON.parse(argsJson || "{}"); } catch { /* arguments illisibles */ }
+          const collegue = agents.find((x) => x.id === String(a.agent_id ?? "") && x.id !== agent.id);
+          const consigne = String(a.consigne ?? "").trim().slice(0, 12_000);
+          if (!collegue || !consigne) return { resultat: "Spécialiste inconnu ou consigne vide.", libelle: "Mission impossible" };
+          const refus = equipe.refusMission(nbMissions, fils.get(collegue.id)?.appels ?? 0);
+          if (refus) return { resultat: refus, libelle: "Limite d'allers-retours atteinte" };
+          nbMissions++;
+          let fil = fils.get(collegue.id);
+          const reprise = Boolean(fil);
+          emit("outil", { libelle: reprise ? `${collegue.prenom} reprend son travail…` : `${collegue.prenom} (${collegue.metier}) travaille…` });
+          if (!fil) {
+            // Le spécialiste a ses propres outils : ce qu'il prépare (notes, brouillons) lui est attribué.
+            const sesOutils = await outilsEspace({
+              sb, wsId: s.ws.id, acteur: acteurDe(s), agentId: collegue.id, agentPrenom: collegue.prenom,
+              userId: s.sessionId === "mail" ? null : s.user.id, conversationId: conversationId as string, apiKey,
+            }).catch(() => null);
+            const sys = construirePrompt({
+              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
+              savoirs: await chargerSavoirs(sb, collegue.id, consigne),
+            }) + (sesOutils ? `\n\n${sesOutils.consigne}` : "") + "\n\n" + equipe.consigneMission(agent);
+            fil = { messages: [{ role: "system", content: sys }], outils: sesOutils, appels: 0 };
+            fils.set(collegue.id, fil);
+          }
+          fil.appels++;
+          fil.messages.push({ role: "user", content: reprise ? `Corrections demandées par ${agent.prenom} :\n${consigne}` : consigne });
+          const modeleCollegue = collegue.modele_effectif ?? autorise(ai.model_studio) ?? MODELE_DEFAUT;
+          let texte = "";
+          let outilsOk = Boolean(fil.outils);
+          for (let t = 0; t < equipe.TOURS_MISSION; t++) {
+            const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: 6000, usage: { include: true } };
+            if (outilsOk && fil.outils) { corps.tools = fil.outils.definitions; corps.tool_choice = t === equipe.TOURS_MISSION - 1 ? "none" : "auto"; }
+            const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST", signal: stop.signal, headers: entetesOR, body: JSON.stringify(corps),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+              if (outilsOk && refusOutils(r.status, String(j?.error?.message ?? ""))) { outilsOk = false; t--; continue; }
+              break;
+            }
+            if (j?.usage) { total = cumulerUsage(total, j.usage); usageVu = true; }
+            const m = j?.choices?.[0]?.message;
+            const contenu = String(m?.content ?? "");
+            const appelsM = appelsValides((Array.isArray(m?.tool_calls) ? m.tool_calls : []) as AppelOutil[]);
+            if (!appelsM.length || !fil.outils) { texte = contenu; fil.messages.push({ role: "assistant", content: contenu }); break; }
+            fil.messages.push({ role: "assistant", content: contenu, tool_calls: appelsM });
+            for (const ap of appelsM.slice(0, 5)) {
+              const res = await fil.outils.executer(ap.function.name, ap.function.arguments);
+              emit("outil", { libelle: `${collegue.prenom} : ${res.libelle}` });
+              if (res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
+              if (res.document) emit("document", res.document);
+              fil.messages.push({ role: "tool", tool_call_id: ap.id, content: res.resultat.slice(0, 40_000) });
+            }
+          }
+          texte = equipe.nettoyer(texte);
+          if (!texte) {
+            return { resultat: `${collegue.prenom} n'a pas pu rendre son travail. Termine sans sa contribution et dis au client ce qui manque.`, libelle: `${collegue.prenom} n'a pas pu répondre` };
+          }
+          aides.push(`${collegue.prenom} (${collegue.metier})`);
+          await journaliser(sb, {
+            wsId: s.ws.id, acteur: acteurDe(s), agentId: agent.id, action: "consultation",
+            detail: { collegue: collegue.id, prenom: collegue.prenom, conversation: conversationId, question: consigne.slice(0, 300), mission: true, reprise },
+          });
+          return {
+            resultat: `Travail rendu par ${collegue.prenom} (${collegue.metier})${reprise ? ", version corrigée" : ""} :\n${texte}\n\n(Relis-le avant de répondre au client : complet, exact, cohérent ? Sinon renvoie-le avec tes corrections.)`,
+            libelle: reprise ? `${collegue.prenom} a rendu sa version corrigée` : `${collegue.prenom} a rendu son travail, ${agent.prenom} relit`,
+          };
+        };
+        // Léa enchaîne missions, relectures et reprises : il lui faut plus de tours qu'à un spécialiste.
+        const TOURS = missions ? 10 : 7;
+        for (let tour = 0; tour < TOURS; tour++) {
+          const dernier = tour === TOURS - 1;
           const corps: Record<string, unknown> = { model, messages, stream: true, temperature: 0.5, usage: { include: true } };
           if (avecOutils && outils) { corps.tools = outils.definitions; corps.tool_choice = dernier ? "none" : "auto"; }
           const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -926,9 +1010,11 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           if (!complets.length || !outils) break;
           messages.push({ role: "assistant", content: texteTour, tool_calls: complets });
           for (const a of complets.slice(0, 5)) {
-            const res = a.function.name === equipe.NOM_OUTIL
-              ? await consulter(a.function.arguments)
-              : await outils.executer(a.function.name, a.function.arguments);
+            const res = a.function.name === equipe.NOM_MISSION && missions
+              ? await confier(a.function.arguments)
+              : a.function.name === equipe.NOM_OUTIL
+                ? await consulter(a.function.arguments)
+                : await outils.executer(a.function.name, a.function.arguments);
             emit("outil", { libelle: res.libelle });
             // Outil payant (recherche web) : son coût rejoint celui de la réponse.
             if ("usage" in res && res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
@@ -1763,7 +1849,7 @@ Deno.serve(async (req: Request) => {
         return json({
           ...etat, offre: s.ws.offre, expire_le: s.ws.expire_le,
           budget_utilise_pct: etat.budget_ia_jour_eur ? Math.min(100, Math.round((depense / etat.budget_ia_jour_eur) * 100)) : null,
-          agents: (catalogue ?? []).map((a) => ({ ...a, ouvert: ouverts.has(a.id) })),
+          agents: (catalogue ?? []).map((a) => ({ ...a, ouvert: ouverts.has(a.id), incluse: equipe.estOrchestrateur(a.id) })),
           quotas: {
             demandes: { utilise: demandes, max: s.ws.quota_messages_mois },
             images: { utilise: (medias ?? []).filter((m) => m.type === "image").length, max: w?.quota_images_mois ?? null },
@@ -1771,7 +1857,7 @@ Deno.serve(async (req: Request) => {
             utilisateurs: { max: w?.max_utilisateurs ?? null },
           },
           recharges: { ...credits, paiement_en_ligne: stripe.stripeConfigure() },
-          abonnement: stripe.stripeConfigure() ? await etatAbonnement(sb, s.ws.id, agents.length) : null,
+          abonnement: stripe.stripeConfigure() ? await etatAbonnement(sb, s.ws.id, equipe.nbFactures(agents)) : null,
         });
       }
 
@@ -1803,9 +1889,9 @@ Deno.serve(async (req: Request) => {
         if (action === "abonnement_gerer") return json({ url: await stripe.sessionPortail(sb, { wsId: s.ws.id, email: s.user.email, origine }) });
         const [agents, conn] = await Promise.all([agentsDuWorkspace(sb, s.ws), facturationEspace(sb, s.ws.id)]);
         if (conn.erreur) return json({ error: "Vos connecteurs n'ont pas pu être vérifiés : réessayez dans un instant." }, 503);
-        if (!agents.length) return json({ error: "Aucun agent n'est ouvert pour cet espace." }, 400);
+        if (!equipe.nbFactures(agents)) return json({ error: "Ajoutez au moins un agent spécialiste à votre équipe avant de vous abonner (Léa, votre assistante, est incluse)." }, 400);
         if (action === "abonnement_synchroniser") {
-          const a = await stripe.synchroniser(sb, s.ws.id, agents.length, conn.nb_factures, conn.tarif.prix);
+          const a = await stripe.synchroniser(sb, s.ws.id, equipe.nbFactures(agents), conn.nb_factures, conn.tarif.prix);
           await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "abonnement_mis_a_jour", detail: { agents: a.agents, connecteurs: a.connecteurs, montant_ht: a.montant_ht } });
           return json({ ok: true });
         }
@@ -1813,7 +1899,7 @@ Deno.serve(async (req: Request) => {
         if (w?.abonnement_statut && stripe.STATUTS_EN_COURS.includes(String(w.abonnement_statut)) && w.abonnement_statut !== "incomplete") {
           return json({ error: "Un abonnement est déjà en place : gérez-le depuis « Gérer mon abonnement »." }, 409);
         }
-        return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: agents.length, connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix }) });
+        return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: equipe.nbFactures(agents), connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix }) });
       }
 
       // Le propriétaire ouvre lui-même un agent de plus ; l'abonnement en cours suit (prorata).
@@ -1832,7 +1918,7 @@ Deno.serve(async (req: Request) => {
           try {
             const [agents, conn] = await Promise.all([agentsDuWorkspace(sb, s.ws), facturationEspace(sb, s.ws.id)]);
             if (!conn.erreur) {
-              const ab = await stripe.synchroniser(sb, s.ws.id, agents.length, conn.nb_factures, conn.tarif.prix);
+              const ab = await stripe.synchroniser(sb, s.ws.id, equipe.nbFactures(agents), conn.nb_factures, conn.tarif.prix);
               await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "abonnement_mis_a_jour", detail: { agents: ab.agents, connecteurs: ab.connecteurs, montant_ht: ab.montant_ht } });
               abonnementMisAJour = true;
             }

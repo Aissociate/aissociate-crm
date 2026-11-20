@@ -3,12 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUp, CheckCircle2, Circle, Clock, MessageSquare, FolderOpen } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { Avatar, Carte, cx } from '../composants';
-import { minutesEnTexte } from '../api';
+import { minutesEnTexte, ORCHESTRATEUR } from '../api';
 
 export default function Accueil() {
   const { me } = useStudio();
   const navigate = useNavigate();
-  const [agentId, setAgentId] = useState(me.agents[0]?.id ?? '');
+  const [agentId, setAgentId] = useState((me.agents.find((a) => a.id === ORCHESTRATEUR) ?? me.agents[0])?.id ?? '');
   const [demande, setDemande] = useState('');
   const agent = me.agents.find((a) => a.id === agentId);
   const s = me.stats;
@@ -33,7 +33,7 @@ export default function Accueil() {
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
           Bonjour {me.user.prenom ?? ''}, que fait-on aujourd'hui&nbsp;?
         </h1>
-        <p className="mt-2 text-neutral-500">Décrivez la mission, choisissez l'agent : il s'en occupe.</p>
+        <p className="mt-2 text-neutral-500">Décrivez la mission à Léa : elle fait travailler les bons spécialistes, relit leur travail et vous répond.</p>
       </div>
 
       <form onSubmit={lancer} data-tuto="mission" className="mx-auto max-w-3xl rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">

@@ -4,6 +4,9 @@ const URL_FN = `${import.meta.env.VITE_SUPABASE_URL ?? ''}/functions/v1/studio`;
 const ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '';
 const CLE_JETON = 'studio.jeton';
 
+/** Léa : point d'entrée de l'espace, elle fait travailler les spécialistes (voir equipe.ts côté serveur). */
+export const ORCHESTRATEUR = 'lea';
+
 export type Champ = { nom: string; label: string; type: 'texte' | 'long' | 'choix'; options?: string[]; requis?: boolean; aide?: string };
 export type SuperPouvoir = { id: string; titre: string; description?: string; champs: Champ[]; media?: 'image' | 'video' };
 export type Media = {

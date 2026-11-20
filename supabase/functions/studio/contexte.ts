@@ -120,11 +120,13 @@ export function construirePrompt(p: {
   ressources: Ressource[]; creations?: Creation[]; connecteurs?: ConnecteurActif[]; savoirs?: Savoir[];
   harness?: Harness; aujourdhui?: string;
   entete?: EnteteEntreprise | null; logo?: boolean;
+  /** Remplace la règle de périmètre du spécialiste (orchestratrice : voir equipe.ts). */
+  perimetre?: string;
 }): string {
   const { agent, ws } = p;
   const parts = [
     agent.prompt_systeme || `Tu es ${agent.prenom}, ${agent.metier}.`,
-    reglePerimetre(agent, p.equipe, p.harness?.perimetre),
+    p.perimetre ?? reglePerimetre(agent, p.equipe, p.harness?.perimetre),
     p.harness?.regles?.trim() || HARNESS_REGLES_DEFAUT,
   ];
   const savoirs = p.savoirs ?? [];

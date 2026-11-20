@@ -2,12 +2,13 @@ import { Link } from 'react-router-dom';
 import { Clock, Zap } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { Avatar, Titre } from '../composants';
+import { ORCHESTRATEUR } from '../api';
 
 export default function Assistants() {
   const { me } = useStudio();
   return (
     <>
-      <Titre sous="Chaque agent est spécialisé et connaît votre entreprise. Cliquez pour lui confier une mission.">Mes assistants</Titre>
+      <Titre sous="Adressez-vous à Léa : elle confie chaque demande aux bons spécialistes, relit leur travail et vous répond. Vous pouvez aussi écrire directement à un spécialiste.">Mes assistants</Titre>
       <div className="grid gap-4 md:grid-cols-2">
         {me.agents.map((a) => (
           <div key={a.id} className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white">
@@ -24,9 +25,13 @@ export default function Assistants() {
                 <p className="text-lg font-semibold">{a.prenom}</p>
                 <p className="text-sm text-neutral-500">{a.metier}</p>
               </div>
-              <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> disponible
-              </span>
+              {a.id === ORCHESTRATEUR && me.agents.length > 1
+                ? <span className="ml-auto rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">Coordonne l'équipe</span>
+                : (
+                  <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> disponible
+                  </span>
+                )}
             </div>
             <p className="mt-4 text-sm italic text-neutral-700">« {a.accroche} »</p>
             <p className="mt-2 text-sm text-neutral-500">{a.description}</p>

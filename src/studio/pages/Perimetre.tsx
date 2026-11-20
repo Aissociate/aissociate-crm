@@ -12,7 +12,7 @@ type Perimetre = {
   suspendu: boolean; suspendu_le: string | null; suspendu_par: string | null;
   budget_ia_jour_eur: number | null; budget_utilise_pct: number | null;
   offre: string; expire_le: string | null;
-  agents: { id: string; prenom: string; metier: string; photo: string | null; couleur: string; ouvert: boolean }[];
+  agents: { id: string; prenom: string; metier: string; photo: string | null; couleur: string; ouvert: boolean; incluse?: boolean }[];
   quotas: { demandes: Quota; images: Quota; videos: Quota; utilisateurs: Quota };
   recharges?: Recharges;
   abonnement?: Abonnement | null;
@@ -241,7 +241,9 @@ export default function PagePerimetre() {
                   <p className="text-sm font-medium">{a.prenom}</p>
                   <p className="truncate text-xs text-neutral-500">{a.metier}</p>
                 </div>
-                {a.ouvert
+                {a.incluse
+                  ? <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs text-orange-700">Incluse, sans supplément</span>
+                  : a.ouvert
                   ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Dans votre équipe</span>
                   : proprietaire
                     ? <button type="button" disabled={envoi} onClick={() => { setMerci(''); setAjout(a.id); }}
