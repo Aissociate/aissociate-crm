@@ -11,7 +11,7 @@
 //   portant l'action à exécuter. Le dépôt a lieu au « VALIDÉ » du propriétaire.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
-import { refLivrable } from "./liaison.ts";
+import { nomDocument, refLivrable } from "./liaison.ts";
 import * as agenda from "./agenda.ts";
 import { adressesValides } from "./agenda.ts";
 import * as bureau from "./bureau.ts";
@@ -1095,6 +1095,16 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
 }
 
 /** Exécute l'action d'un livrable validé. Renvoie le résultat à enregistrer. */
+/** Nom du fichier déposé dans Drive / OneDrive : Agent-Titre-Réf-vN quand le livrable est connu, sinon le titre. */
+async function nomDepot(sb: SupabaseClient, wsId: string, titre: string, livrableId?: string): Promise<string> {
+  if (!livrableId) return titre;
+  try {
+    const { data: l } = await sb.from("studio_livrables").select("agent_id, versions").eq("id", livrableId).eq("workspace_id", wsId).maybeSingle();
+    const { data: a } = l?.agent_id ? await sb.from("studio_agents").select("prenom").eq("id", l.agent_id).maybeSingle() : { data: null };
+    return nomDocument({ titre, agent: (a?.prenom as string | undefined) ?? null, id: livrableId, version: (Array.isArray(l?.versions) ? l.versions.length : 0) + 1 });
+  } catch { return titre; } // nom de secours : le dépôt ne doit pas échouer pour un nom
+}
+
 export async function executerAction(sb: SupabaseClient, wsId: string, action: ActionLivrable, livrableId?: string): Promise<{ ok: true; lien: string | null; id: string } | { ok: false; erreur: string }> {
   try {
     if (action.type === "routine_activer") {
@@ -1118,7 +1128,7 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       if (!compteId) return { ok: false, erreur: `Aucune connexion ${bureau.NOMS_ZONES[zone]} : connectez votre messagerie dans Connecteurs.` };
       try {
         if (action.type === "drive_creer_document") {
-          const f = await bureau.creerDocument(sb, wsId, compteId, { titre: action.titre, contenu: action.contenu, dossierId: action.dossier_id });
+          const f = await bureau.creerDocument(sb, wsId, compteId, { titre: await nomDepot(sb, wsId, action.titre, livrableId), contenu: action.contenu, dossierId: action.dossier_id });
           return { ok: true, id: f.id, lien: f.lien };
         }
         if (action.type === "gmail_envoyer") {

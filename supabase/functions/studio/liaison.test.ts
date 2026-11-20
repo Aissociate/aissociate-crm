@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  adresse, authentificationDouteuse, automatique, choisirAgent, corpsUtile, decisions, refLivrable,
+  adresse, authentificationDouteuse, automatique, choisirAgent, corpsUtile, decisions, nomDocument, refLivrable,
   signauxFraude, signerSvix, sujetPropre, typer, verifierSvix,
 } from './liaison';
 
@@ -40,6 +40,12 @@ describe('lecture des messages', () => {
     expect(typer('Re: livrable', `Validé ${ref}, merci`)).toBe('VALIDATION');
     expect(decisions(`VALIDÉ ${ref}\nrefusé L-99aa00bb`)).toEqual([{ statut: 'valide', ref }, { statut: 'refuse', ref: 'L-99aa00bb' }]);
     expect(typer('Posts de la semaine', 'Prépare 3 posts LinkedIn')).toBe('ORDRE');
+  });
+
+  it('nomme un document déposé Agent-Titre-Réf-vN, comme les exports du navigateur', () => {
+    expect(nomDocument({ agent: 'Hugo', titre: 'Posts réseaux sociaux — 3 actualités IA', id: '88e7c4db-dfeb-4dc7-9d5b-d3b24ba113a9', version: 2 }))
+      .toBe('Hugo-Posts-reseaux-sociaux-3-actualites-IA-L-88e7c4db-v2');
+    expect(nomDocument({ titre: '', id: '11112222-0000-0000-0000-000000000000' })).toBe('Document-L-11112222-v1');
   });
 
   it("choisit l'agent par l'objet ou le début du message", () => {

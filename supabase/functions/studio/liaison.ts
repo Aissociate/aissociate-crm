@@ -63,6 +63,17 @@ export type Decision = { statut: "valide" | "refuse"; ref: string };
 /** Référence courte d'un livrable, citée dans les e-mails : « L-1a2b3c4d ». */
 export const refLivrable = (id: string) => `L-${id.replace(/-/g, "").slice(0, 8)}`;
 
+/**
+ * Nom d'un document produit, sans extension : Agent-Titre-Réf-vN (« Hugo-Posts-reseaux-sociaux-L-88e7c4db-v2 »).
+ * Même règle que les exports du navigateur (src/studio/exportDoc.ts › nomFichier).
+ */
+export function nomDocument(p: { titre: string; agent?: string | null; id: string; version?: number | null }): string {
+  const segment = (t: string, max: number) => t.normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, max).replace(/-+$/, "");
+  return [p.agent ? segment(p.agent, 20) : "", segment(p.titre, 60) || "Document", refLivrable(p.id), `v${Math.max(1, p.version ?? 1)}`]
+    .filter(Boolean).join("-");
+}
+
 /** Corps utile : sans la citation du message précédent (« Le … a écrit : », lignes « > »). */
 export function corpsUtile(texte: string): string {
   const lignes: string[] = [];

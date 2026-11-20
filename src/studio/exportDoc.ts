@@ -101,10 +101,23 @@ export function lignesEntete(e: Entete, nomEspace: string) {
   return { nom, adresse, contacts, pied };
 }
 
-export function nomFichier(titre: string, ext: 'docx' | 'pdf' | 'doc'): string {
-  const base = titre.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'document';
-  return `${base}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+/** Ce qui nomme un document produit : son auteur, son titre, et pour un livrable sa référence et sa version. */
+export type Nommage = { titre: string; agent?: string | null; id?: string | null; version?: number | null; date?: Date };
+
+/** Segment de nom de fichier : sans accents ni ponctuation, mots reliés par des tirets, casse conservée. */
+const segment = (t: string, max: number) => t.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
+
+/**
+ * Nom d'un document produit : Agent-Titre-Réf-vN (« Hugo-Posts-reseaux-sociaux-L-88e7c4db-v2.pdf »).
+ * Sans livrable derrière (réponse, rapport), la date remplace la référence et la version.
+ */
+export function nomFichier(n: Nommage | string, ext: 'docx' | 'pdf' | 'doc'): string {
+  const { titre, agent, id, version, date } = typeof n === 'string' ? { titre: n } as Nommage : n;
+  const parties = [agent ? segment(agent, 20) : '', segment(titre, 60) || 'Document'];
+  if (id) parties.push(`L-${id.replace(/-/g, '').slice(0, 8).toLowerCase()}`, `v${Math.max(1, version ?? 1)}`);
+  else parties.push((date ?? new Date()).toISOString().slice(0, 10));
+  return `${parties.filter(Boolean).join('-')}.${ext}`;
 }
 
 // ── PDF : document HTML imprimable (le navigateur produit le PDF) ──────────

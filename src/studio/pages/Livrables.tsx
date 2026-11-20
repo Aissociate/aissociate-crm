@@ -215,7 +215,7 @@ export default function PageLivrables() {
                           <History className="h-3.5 w-3.5" /> {l.versions.length} version{l.versions.length > 1 ? 's' : ''} précédente{l.versions.length > 1 ? 's' : ''}
                         </button>
                       ) : null}
-                      {l.format !== 'html' && <BoutonsExport source={{ titre: l.titre, contenu: l.contenu, agent: a?.prenom ?? 'Agent', date: l.created_at, nomEspace: me.workspace.nom }} />}
+                      {l.format !== 'html' && <BoutonsExport source={{ titre: l.titre, contenu: l.contenu, agent: a?.prenom ?? 'Agent', date: l.created_at, nomEspace: me.workspace.nom, id: l.id, version: (l.versions?.length ?? 0) + 1 }} />}
                       {l.conversation_id && a && (
                         <Link to={`/studio/assistants/${a.id}?c=${l.conversation_id}`} className="flex items-center gap-1 rounded-lg p-1.5 text-xs text-neutral-500 hover:bg-neutral-100">
                           <ExternalLink className="h-3.5 w-3.5" /> Conversation
