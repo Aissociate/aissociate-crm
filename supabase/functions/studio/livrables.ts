@@ -24,6 +24,40 @@ export function raisonRefus(v: unknown): RaisonRefus | null {
   return typeof v === "string" && Object.hasOwn(RAISONS_REFUS, v) ? (v as RaisonRefus) : null;
 }
 
+/**
+ * Mission guidée (pouvoir spécial lancé depuis « Mon équipe ») : son résultat doit arriver
+ * dans « Aujourd'hui ». La réponse est soumise d'office comme livrable « à valider », sauf
+ * si elle est vide, si l'agent a passé la main à un collègue, ou s'il a déjà déposé une
+ * proposition pendant la mission (e-mail, publication, document) : c'est alors elle, la décision.
+ */
+export function soumettreMission(m: { mission: boolean; texte: string; propositions: number }): boolean {
+  return m.mission && m.texte.trim().length > 0 && !m.texte.includes("[[RELAIS:") && m.propositions === 0;
+}
+
+/** Une réponse ou une routine démarrée depuis moins longtemps que `fraicheurMs` est considérée en cours. */
+export function enCours(depuis: unknown, fraicheurMs: number, maintenant = Date.now()): boolean {
+  const t = typeof depuis === "string" ? Date.parse(depuis) : NaN;
+  return Number.isFinite(t) && maintenant - t < fraicheurMs && t <= maintenant + 60_000;
+}
+
+export type EtatAgent = { decisions: number; au_travail: boolean };
+
+/** État de chaque agent pour « Mon équipe » : décisions en attente et travail en cours. */
+export function etatsAgents(
+  aValider: { agent_id: string | null }[],
+  conversations: { agent_id: string | null; generation_depuis: unknown }[],
+  taches: { agent_id: string | null; en_cours_depuis: unknown }[],
+  maintenant = Date.now(),
+): Record<string, EtatAgent> {
+  const etats: Record<string, EtatAgent> = {};
+  const de = (id: string) => (etats[id] ??= { decisions: 0, au_travail: false });
+  for (const l of aValider) if (l.agent_id) de(l.agent_id).decisions++;
+  // Mêmes fenêtres que l'affichage « rédige… » d'une conversation (3 min) et « en cours » d'une tâche (15 min).
+  for (const c of conversations) if (c.agent_id && enCours(c.generation_depuis, 180_000, maintenant)) de(c.agent_id).au_travail = true;
+  for (const t of taches) if (t.agent_id && enCours(t.en_cours_depuis, 15 * 60_000, maintenant)) de(t.agent_id).au_travail = true;
+  return etats;
+}
+
 type Erreur = { message: string } | null;
 type Filtre<T> = PromiseLike<{ data: T[] | null; error: Erreur }> & {
   eq: (colonne: string, valeur: unknown) => Filtre<T>;
