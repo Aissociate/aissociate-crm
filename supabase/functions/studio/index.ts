@@ -46,6 +46,7 @@
 //   client  taches | tache_enregistrer {id?, titre, agent_id, consigne, heures[], jours[], actif} | tache_supprimer {id}
 //           tache_lancer {id}                       (écriture : propriétaire)
 //   cron    controle_cron {cle} (pg_cron quotidien) → contrôle du parcours client, alerte e-mail si problème (controle.ts)
+//   cron    ameliorations_cron {cle} (pg_cron quotidien) → propositions d'amélioration tirées des conversations, déposées dans CRM › Développement (ameliorations.ts)
 //   cron    taches_cron {cle} (pg_cron horaire) → tache_executer {cle, id} par tâche échue, chacune dans sa propre instance
 // Veille, contacts et mailings (veille.ts, mailing.ts) :
 //   client  flux | flux_ajouter {url} | flux_basculer {id, actif} | flux_supprimer {id} | flux_actualiser
@@ -97,6 +98,7 @@ import * as applications from "./applications.ts";
 import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
 import * as stripe from "./stripe.ts";
 import * as controle from "./controle.ts";
+import * as ameliorations from "./ameliorations.ts";
 import * as courriel from "./courriel.ts";
 import * as essai from "./essai.ts";
 import * as cgv from "./cgv.ts";
@@ -1331,7 +1333,7 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Tâches planifiées (pg_cron, puis une instance par tâche) : clé du déclencheur obligatoire ──
-    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter" || action === "controle_cron") {
+    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter" || action === "controle_cron" || action === "ameliorations_cron") {
       const cle = await cleCron(sb);
       if (!cle || typeof body.cle !== "string" || body.cle.length !== cle.length || !(await egaliteSure(body.cle, cle))) {
         return json({ error: "Non autorisé" }, 401);
@@ -1339,6 +1341,11 @@ Deno.serve(async (req: Request) => {
       if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle), campagnes: await relancerEnvois(sb) });
       if (action === "controle_cron") {
         const travail = controle.executer(sb).catch((e) => console.error("[studio] contrôle du parcours :", e instanceof Error ? e.message : String(e)));
+        (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+        return json({ ok: true });
+      }
+      if (action === "ameliorations_cron") {
+        const travail = ameliorations.executer(sb);
         (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
         return json({ ok: true });
       }

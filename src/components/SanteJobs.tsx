@@ -19,6 +19,7 @@ const ATTENDUS: Record<string, { label: string; maxHeures: number }> = {
   'rgpd-purge': { label: 'Purge RGPD (hebdomadaire)', maxHeures: 24 * 8 },
   'qonto-sync': { label: 'Rapprochement Qonto', maxHeures: 30 },
   'qualiopi-cron': { label: 'Envoi des évaluations (Qualiopi)', maxHeures: 30 },
+  'studio-ameliorations': { label: 'Studio — propositions tirées des conversations', maxHeures: 30 },
 };
 
 export default function SanteJobs() {

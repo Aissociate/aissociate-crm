@@ -47,5 +47,7 @@ select cron.schedule('qualiopi-auto-envoi', '0 7 * * *',    $c$select public.cro
 select cron.schedule('rgpd-purge',          '0 2 * * 0',    $c$select public.cron_appeler_fonction('rgpd-purge', '{}', 120000)$c$);
 select cron.schedule('studio-controle',     '0 2 * * *',    $c$select public.cron_appeler_studio('controle_cron', 10000)$c$);
 select cron.schedule('studio-taches',       '1 * * * *',    $c$select public.cron_appeler_studio('taches_cron', 30000)$c$);
+-- Ajoutée le 21/11/2026 : propositions d'amélioration tirées des conversations du Studio.
+select cron.schedule('studio-ameliorations', '0 3 * * *', $c$select public.cron_appeler_studio('ameliorations_cron', 10000)$c$);
 
 select jobname, schedule, active from cron.job order by jobname;
