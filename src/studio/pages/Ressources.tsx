@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Plus, Search, StickyNote, Trash2, Upload, X } from 'lucide-react';
+import { FileText, Plus, Search, ShieldAlert, StickyNote, Trash2, Upload, X } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel, type Ressource } from '../api';
 import { Bouton, Chargement, Interrupteur, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
 import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
+
+type Ajout = { id: string; sensible: { type: string; message: string } | null };
+const NATURES: Record<NonNullable<Ressource['sensible']>, string> = {
+  rib: 'des coordonnées bancaires (RIB / IBAN)', identite: "une pièce d'identité",
+  paie: 'un bulletin de paie', securite_sociale: 'un numéro de sécurité sociale',
+};
 
 const taille = (o: number | null) => (o == null ? '' : o > 1e6 ? `${(o / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(o / 1e3))} Ko`);
 
@@ -19,6 +25,9 @@ export default function Ressources() {
   const [note, setNote] = useState<{ titre: string; contenu: string } | null>(null);
   const [suppression, setSuppression] = useState<Ressource | null>(null);
   const [envoiSuppr, setEnvoiSuppr] = useState(false);
+  /** Ressources reconnues sensibles au dernier ajout : rangées désactivées, on dit pourquoi. */
+  const [avis, setAvis] = useState<string[]>([]);
+  const [activation, setActivation] = useState<Ressource | null>(null);
   const fichier = useRef<HTMLInputElement>(null);
   const dossiers = useDossiers(gerer);
   const [filtre, setFiltre] = useState<Filtre>('tous');
@@ -36,15 +45,17 @@ export default function Ressources() {
     && r.titre.toLowerCase().includes(recherche.toLowerCase())), [liste, onglet, recherche, filtre, dossiers.dossiers]);
 
   const importer = async (fichiers: File[]) => {
-    setErreur(''); setImport(true);
-    const echecs: string[] = [];
+    setErreur(''); setAvis([]); setImport(true);
+    const echecs: string[] = [], sensibles: string[] = [];
     for (const f of fichiers) {
       try {
         const contenu = await extraireTexte(f);
-        await appel('ressource_add', { titre: f.name, contenu, type: 'fichier', format: extension(f.name), taille: f.size, dossier_id: dossierAjout });
+        const r = await appel<Ajout>('ressource_add', { titre: f.name, contenu, type: 'fichier', format: extension(f.name), taille: f.size, dossier_id: dossierAjout });
+        if (r.sensible) sensibles.push(`${f.name} — ${r.sensible.message}`);
       } catch (e) { echecs.push(gerer(e)); }
     }
     if (echecs.length) setErreur(echecs.join(' · '));
+    setAvis(sensibles);
     await charger(); rafraichir();
     setImport(false); if (fichier.current) fichier.current.value = '';
   };
@@ -52,14 +63,18 @@ export default function Ressources() {
   const enregistrerNote = async () => {
     if (!note) return;
     try {
-      await appel('ressource_add', { titre: note.titre, contenu: note.contenu, type: 'note', dossier_id: dossierAjout });
+      const r = await appel<Ajout>('ressource_add', { titre: note.titre, contenu: note.contenu, type: 'note', dossier_id: dossierAjout });
+      setAvis(r.sensible ? [`${note.titre} — ${r.sensible.message}`] : []);
       setNote(null); await charger(); rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
-  const basculer = async (r: Ressource, actif: boolean) => {
+  const basculer = async (r: Ressource, actif: boolean, confirmer = false) => {
+    // Une ressource sensible ne s'active qu'après confirmation (le serveur l'exige aussi).
+    if (actif && r.sensible && !confirmer) { setActivation(r); return; }
     setListe((l) => l?.map((x) => (x.id === r.id ? { ...x, actif } : x)) ?? null);
-    try { await appel('ressource_toggle', { id: r.id, actif }); rafraichir(); } catch (e) { setErreur(gerer(e)); }
+    try { await appel('ressource_toggle', { id: r.id, actif, confirmer }); rafraichir(); }
+    catch (e) { setErreur(gerer(e)); charger(); }
   };
 
   const supprimer = (r: Ressource) => setSuppression(r);
@@ -104,6 +119,13 @@ export default function Ressources() {
       </div>
       {onglet === 'fichier' && <p className="mb-4 text-xs text-neutral-500">Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument, CSV, texte, archive ZIP (15 Mo max). Le texte est extrait dans votre navigateur.</p>}
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
+      {avis.length > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <ul className="min-w-0 flex-1 space-y-1">{avis.map((a) => <li key={a}>{a}</li>)}</ul>
+          <button onClick={() => setAvis([])} aria-label="Fermer le message"><X className="h-4 w-4" /></button>
+        </div>
+      )}
 
       {note && (
         <div className="mb-4 space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
@@ -133,7 +155,14 @@ export default function Ressources() {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{r.titre}</p>
-                <p className="text-xs text-neutral-500">{[taille(r.taille), r.format?.toUpperCase()].filter(Boolean).join(' | ') || 'Note'}</p>
+                <p className="text-xs text-neutral-500">
+                  {[taille(r.taille), r.format?.toUpperCase()].filter(Boolean).join(' | ') || 'Note'}
+                  {r.sensible && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800">
+                      <ShieldAlert className="h-3 w-3" /> Sensible{r.actif ? '' : ' · non lue par vos agents'}
+                    </span>
+                  )}
+                </p>
               </div>
               <span className="hidden text-sm text-neutral-500 md:block">{[r.studio_users?.prenom, r.studio_users?.nom].filter(Boolean).join(' ')}</span>
               <span className="hidden w-28 text-right text-sm text-neutral-500 sm:block">{new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
@@ -152,6 +181,13 @@ export default function Ressources() {
         confirmer={{ label: 'Supprimer', danger: true, onClick: confirmerSuppression }}
         annuler={{ onClick: () => setSuppression(null) }}
         enCours={envoiSuppr}
+      />
+      <Confirmation
+        ouvert={activation !== null}
+        titre={`Rendre « ${activation?.titre ?? ''} » lisible par vos agents ?`}
+        message={`Ce document semble contenir ${activation?.sensible ? NATURES[activation.sensible] : 'des données sensibles'}. Une fois activé, vos agents peuvent le lire et s'en servir dans ce qu'ils préparent. Vous pourrez le désactiver à tout moment.`}
+        confirmer={{ label: 'Activer quand même', danger: true, onClick: async () => { const r = activation; setActivation(null); if (r) await basculer(r, true, true); } }}
+        annuler={{ onClick: () => setActivation(null) }}
       />
     </>
   );
