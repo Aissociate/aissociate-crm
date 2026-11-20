@@ -24,3 +24,6 @@ _imp/
 # Claude Code (prefs locales)
 .claude/settings.local.json
 .mcp.json
+
+# Fichiers locaux de la CLI Supabase (projet lié, URL du pooler)
+supabase/.temp/
