@@ -923,7 +923,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           let texte = "";
           let outilsOk = Boolean(fil.outils);
           for (let t = 0; t < equipe.TOURS_MISSION; t++) {
-            const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: 6000, usage: { include: true } };
+            const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: 8000, usage: { include: true } };
             if (outilsOk && fil.outils) { corps.tools = fil.outils.definitions; corps.tool_choice = t === equipe.TOURS_MISSION - 1 ? "none" : "auto"; }
             const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST", signal: stop.signal, headers: entetesOR, body: JSON.stringify(corps),
@@ -931,23 +931,31 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             const j = await r.json().catch(() => ({}));
             if (!r.ok) {
               if (outilsOk && refusOutils(r.status, String(j?.error?.message ?? ""))) { outilsOk = false; t--; continue; }
+              console.error(`[studio] mission ${collegue.id} : HTTP ${r.status} ${String(j?.error?.message ?? "").slice(0, 300)}`);
               break;
             }
             if (j?.usage) { total = cumulerUsage(total, j.usage); usageVu = true; }
             const m = j?.choices?.[0]?.message;
             const contenu = String(m?.content ?? "");
             const appelsM = appelsValides((Array.isArray(m?.tool_calls) ? m.tool_calls : []) as AppelOutil[]);
-            if (!appelsM.length || !fil.outils) { texte = contenu; fil.messages.push({ role: "assistant", content: contenu }); break; }
+            if (!appelsM.length || !fil.outils) {
+              if (!contenu.trim()) console.error(`[studio] mission ${collegue.id} : réponse vide (fin : ${j?.choices?.[0]?.finish_reason ?? "?"}, tour ${t + 1})`);
+              texte = contenu; fil.messages.push({ role: "assistant", content: contenu }); break;
+            }
             fil.messages.push({ role: "assistant", content: contenu, tool_calls: appelsM });
             for (const ap of appelsM.slice(0, 5)) {
               const res = await fil.outils.executer(ap.function.name, ap.function.arguments);
               emit("outil", { libelle: `${collegue.prenom} : ${res.libelle}` });
               if (res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
               if (res.document) emit("document", res.document);
-              fil.messages.push({ role: "tool", tool_call_id: ap.id, content: res.resultat.slice(0, 40_000) });
+              fil.messages.push({ role: "tool", tool_call_id: ap.id, content: res.resultat.slice(0, 20_000) });
             }
           }
           texte = equipe.nettoyer(texte);
+          if (!texte && reprise) {
+            // La reprise a échoué : sa version précédente reste valable, Léa termine avec.
+            return { resultat: `${collegue.prenom} n'a pas pu rendre de version corrigée. Garde sa version précédente, applique toi-même les corrections que tu peux et signale au client ce qui reste à vérifier.`, libelle: `${collegue.prenom} n'a pas pu corriger, ${agent.prenom} termine` };
+          }
           if (!texte) {
             return { resultat: `${collegue.prenom} n'a pas pu rendre son travail. Termine sans sa contribution et dis au client ce qui manque.`, libelle: `${collegue.prenom} n'a pas pu répondre` };
           }
