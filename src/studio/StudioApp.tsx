@@ -12,7 +12,8 @@ import SignalerBug, { ouvrirSignalement } from './composants/SignalerBug';
 
 const Connexion = lazy(() => import('./pages/Connexion'));
 const Aujourdhui = lazy(() => import('./pages/Aujourdhui'));
-const Assistants = lazy(() => import('./pages/Assistants'));
+const Equipe = lazy(() => import('./pages/Equipe'));
+const Specialiste = lazy(() => import('./pages/Specialiste'));
 const AgentChat = lazy(() => import('./pages/AgentChat'));
 const Ressources = lazy(() => import('./pages/Ressources'));
 const Creations = lazy(() => import('./pages/Creations'));
@@ -268,7 +269,8 @@ export default function StudioApp() {
             <Route path="aujourdhui" element={<Navigate to={BASE} replace />} />
             <Route path="aujourdhui/livrables" element={<Livrables />} />
             <Route path="aujourdhui/journal" element={<Journal />} />
-            <Route path="equipe" element={<Assistants />} />
+            <Route path="equipe" element={<Equipe />} />
+            <Route path="equipe/:agentId" element={<Specialiste />} />
             <Route path="assistants/:agentId" element={<AgentChatParAgent />} />
             <Route path="routines" element={<Taches />} />
             <Route path="routines/veille" element={<Veille />} />

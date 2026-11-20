@@ -31,6 +31,24 @@ active ou désactive, et des demandes prêtes à l'emploi.
 - Les jetons visuels de la spécification (fond `#F6F5F3`, texte `#141414`, accent `#EA6A1E`, cibles de 44 px)
   s'appliquent au menu et à « Aujourd'hui » ; les autres pages gardent leurs tailles actuelles.
 
+## « Mon équipe » et missions guidées (refonte, lot 3)
+
+- **Mon équipe** (`pages/Equipe.tsx`) : une carte compacte par agent, avec « Fait seul », « Vous demande toujours »
+  et un état seulement s'il est utile (« N décisions vous attendent », « Au travail »). L'action serveur `equipe`
+  renvoie ces états (`livrables.ts` › `etatsAgents`, testé) et les comptes branchés de l'espace, affichés une fois
+  en tête puisqu'ils sont communs à toute l'équipe.
+- **Fiche d'un spécialiste** (`pages/Specialiste.tsx`, `/studio/equipe/:agent`) : sélecteur en pastilles, tuiles de
+  pouvoirs (« Vous recevez : … »), panneau de mission.
+- **Mission guidée** (`missionGuidee.ts`, testé sur les 26 pouvoirs des migrations) : le guide est déduit des champs
+  du pouvoir, sans réécrire sa consigne. Le premier champ à choix devient la question en un clic, le premier texte
+  obligatoire devient la précision (écrite ou dictée), le reste s'affiche en dessous. Un pouvoir ajouté depuis le
+  CRM est donc guidé d'office. Le catalogue peut reformuler : `recoit` sur le pouvoir, `question` sur un champ.
+- **Résultat dans « Aujourd'hui »** : `chat {…, pouvoir, mission: true}` soumet la réponse comme livrable à valider
+  (`livrables.ts` › `soumettreMission`), sauf réponse vide, relais vers un collègue, ou proposition déjà déposée par
+  l'agent pendant la mission. Visuels et vidéos restent dans « Contenus ».
+- Les textes « Fait seul » / « Vous demande toujours » des 7 agents sont dans `missionGuidee.ts` (`AUTONOMIE`) ; un
+  agent inconnu reçoit la règle commune. La conversation libre reste à `/studio/assistants/:agent`.
+
 ## Isolation (à préserver)
 
 | Couche | Emplacement | Contact avec le CRM |

@@ -92,7 +92,11 @@ export async function appel<T = Record<string, unknown>>(action: string, donnees
 
 /** Chat en flux SSE : `onDelta` reçoit le texte au fil de l'eau. */
 export async function discuter(
-  params: { agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> }; pieces?: PieceJointe[] },
+  params: {
+    agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> }; pieces?: PieceJointe[];
+    /** Mission guidée : la réponse est soumise d'office comme livrable à valider. */
+    mission?: boolean;
+  },
   cb: {
     onMeta?: (m: { conversation_id: string; ressources: string[]; savoirs?: { titre: string; source: string | null }[] }) => void;
     onDelta: (t: string) => void;
