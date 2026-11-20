@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen, ShieldCheck, Paperclip, X, Loader2, ImageIcon, FileType } from 'lucide-react';
+import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen, ShieldCheck, Paperclip, X, Loader2, ImageIcon, FileType, CornerDownRight } from 'lucide-react';
 import { FORMATS_DOCUMENTS, FORMATS_IMAGES, estImage, extension, extraireTexte, imageReduite } from '../extraction';
 import EditeurDocument, { type DocumentHtml } from '../EditeurDocument';
 import { useStudio } from '../StudioApp';
@@ -9,7 +9,7 @@ import MediaVue from '../MediaVue';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, FournisseurReferences, Markdown, cx } from '../composants';
 import { trouverParRef } from '../references';
-import { collegueAuTravail } from '../travail';
+import { collegueAuTravail, estConsigne, PREFIXE_CONSIGNE } from '../travail';
 import EnTravail from '../EnTravail';
 
 export default function AgentChat() {
@@ -202,7 +202,25 @@ export default function AgentChat() {
 
   if (!agent) return <Navigate to="/studio/equipe" replace />;
 
-  const soumettre = (e: FormEvent) => { e.preventDefault(); envoyer(saisie); };
+  // Pendant que l'agent travaille, le champ sert à ajouter une consigne qui oriente sa réflexion.
+  const travaille = enCours || attente;
+  const [envoiConsigne, setEnvoiConsigne] = useState(false);
+  const consigner = async (texte: string) => {
+    const conv = convEnCours.current ?? convId;
+    if (!texte.trim() || !conv || envoiConsigne) return;
+    setEnvoiConsigne(true); setErreur('');
+    try {
+      await appel('chat_consigne', { conversation_id: conv, texte });
+      setSaisie('');
+      // La consigne s'affiche juste avant la réponse en préparation.
+      setMessages((m) => {
+        const der = m[m.length - 1];
+        const ligne: Message = { role: 'user', content: PREFIXE_CONSIGNE + texte.trim() };
+        return der?.role === 'assistant' && !der.id ? [...m.slice(0, -1), ligne, der] : [...m, ligne];
+      });
+    } catch (e) { setErreur(gerer(e)); } finally { setEnvoiConsigne(false); }
+  };
+  const soumettre = (e: FormEvent) => { e.preventDefault(); if (travaille) consigner(saisie); else envoyer(saisie); };
   const nouvelle = () => { setParams({}); setMessages([]); setConvId(null); };
 
   const majMessage = async (i: number, action: 'retour' | 'epingler', valeur: number | boolean) => {
@@ -312,7 +330,14 @@ export default function AgentChat() {
             </div>
           )}
 
-          {messages.map((m, i) => m.role === 'user' ? (
+          {messages.map((m, i) => m.role === 'user' && estConsigne(m.content) ? (
+            <div key={i} className="flex justify-end">
+              <p className="inline-flex max-w-[85%] items-start gap-1.5 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs text-orange-900">
+                <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span><span className="font-semibold">Consigne en cours de route :</span> {m.content.slice(PREFIXE_CONSIGNE.length)}</span>
+              </p>
+            </div>
+          ) : m.role === 'user' ? (
             <div key={i} className="flex justify-end">
               <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-neutral-900 px-4 py-2.5 text-sm text-white">
                 {m.content.startsWith('**') ? m.content.replace(/\*\*/g, '') : m.content}
@@ -342,7 +367,7 @@ export default function AgentChat() {
                     return <div className={cx(m.content && 'mt-2 border-t border-neutral-100 pt-2')}><EnTravail agent={agent} collegue={c} /></div>;
                   })()}
                 </div>
-                <Relais contenu={m.content} termine={Boolean(m.id)} demande={messages[i - 1]?.content} agentId={agent.id} />
+                <Relais contenu={m.content} termine={Boolean(m.id)} demande={messages.slice(0, i).reverse().find((x) => x.role === 'user' && !estConsigne(x.content))?.content} agentId={agent.id} />
                 {i === messages.length - 1 && ressources.length > 0 && (
                   <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-neutral-400">
                     <FileText className="h-3 w-3" /> Vos ressources consultées : {ressources.join(' · ')}
@@ -410,17 +435,28 @@ export default function AgentChat() {
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 disabled:opacity-40"><Paperclip className="h-4 w-4" /></button>
             <textarea
               value={saisie} onChange={(e) => setSaisie(e.target.value)} rows={2}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(saisie); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (travaille) consigner(saisie); else envoyer(saisie); } }}
               onPaste={(e) => {
                 const images = [...e.clipboardData.files].filter(estImage);
                 if (images.length) { e.preventDefault(); joindre(images); }
               }}
-              placeholder={`Confiez une mission à ${agent.prenom}…`}
+              placeholder={travaille ? `Ajoutez une consigne pour orienter le travail de ${agent.prenom}…` : `Confiez une mission à ${agent.prenom}…`}
+              aria-label={travaille ? 'Consigne pour orienter le travail en cours' : 'Votre demande'}
               className="max-h-48 flex-1 resize-y bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-neutral-400"
             />
-            {enCours ? (
-              <button type="button" onClick={arreter} aria-label="Arrêter"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white"><Square className="h-3.5 w-3.5" /></button>
+            {travaille ? (
+              <>
+                {saisie.trim() && (
+                  <button type="submit" disabled={envoiConsigne} title="Envoyer la consigne : elle sera prise en compte à l'étape suivante"
+                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-orange-500 px-3 text-xs font-semibold text-white disabled:bg-neutral-300">
+                    {envoiConsigne ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CornerDownRight className="h-3.5 w-3.5" aria-hidden />} Consigne
+                  </button>
+                )}
+                {enCours && (
+                  <button type="button" onClick={arreter} aria-label="Arrêter"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white"><Square className="h-3.5 w-3.5" /></button>
+                )}
+              </>
             ) : (
               <button type="submit" disabled={(!saisie.trim() && !pieces.length) || lecture || attente} aria-label="Envoyer"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>

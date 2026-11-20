@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { collegueAuTravail } from './travail';
+import { collegueAuTravail, estConsigne, PREFIXE_CONSIGNE } from './travail';
+import { PREFIXE } from '../../supabase/functions/studio/consignes';
 
 const P = ['Léa', 'Hugo', 'Théo'];
 
@@ -15,5 +16,10 @@ describe('collègue au travail', () => {
     expect(collegueAuTravail(['Hugo (Marketing) travaille…', "Hugo n'a pas pu répondre"], P)).toBeNull();
     expect(collegueAuTravail(['Recherche web'], P)).toBeNull();
     expect(collegueAuTravail(undefined, P)).toBeNull();
+  });
+  it('garde le collègue au travail quand il reçoit une consigne, et partage le préfixe avec le serveur', () => {
+    expect(collegueAuTravail(['Hugo (Marketing) travaille…', 'Hugo : Consigne prise en compte'], P)).toBe('Hugo');
+    expect(PREFIXE_CONSIGNE).toBe(PREFIXE);
+    expect(estConsigne(`${PREFIXE_CONSIGNE}Plus court`)).toBe(true);
   });
 });
