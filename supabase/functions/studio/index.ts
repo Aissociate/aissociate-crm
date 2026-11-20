@@ -2074,7 +2074,7 @@ Deno.serve(async (req: Request) => {
 
       case "livrable_decider": {
         if (s.user.role !== "proprietaire") return json({ error: "Seul le propriétaire de l'espace valide les livrables." }, 403);
-        const r = await deciderLivrable(sb, s.ws.id, `client:${s.user.email}`, body);
+        const r = await deciderLivrable(sb, s.ws.id, { acteur: `client:${s.user.email}`, proprietaire: true }, body);
         return "erreur" in r ? json({ error: r.erreur }, r.statut) : json({ ...r, ok: true, livrables: await listerLivrables(sb, s.ws.id) });
       }
 

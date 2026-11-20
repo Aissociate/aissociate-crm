@@ -10,6 +10,7 @@ import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Repons
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
 import * as courriel from "./courriel.ts";
 import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
+import { deciderLivrable as decider } from "./livrables.ts";
 
 export { journaliser };
 
@@ -295,35 +296,12 @@ export async function soumettreLivrable(sb: SupabaseClient, wsId: string, acteur
   return { ok: true, id: data.id, statut: data.statut };
 }
 
-const TRANSITIONS: Record<string, string[]> = { a_valider: ["valide", "refuse"], refuse: ["a_valider"], valide: ["publie", "a_valider"], publie: [] };
-
-export async function deciderLivrable(sb: SupabaseClient, wsId: string, acteur: string, body: Record<string, unknown>) {
-  const statut = String(body.statut ?? "");
-  const { data: l } = await sb.from("studio_livrables").select("id, statut, titre, agent_id, action")
-    .eq("id", String(body.id ?? "")).eq("workspace_id", wsId).maybeSingle();
-  if (!l) return { erreur: "Livrable introuvable", statut: 404 };
-  if (!TRANSITIONS[l.statut]?.includes(statut)) return { erreur: `Passage « ${l.statut} » → « ${statut} » impossible.`, statut: 400 };
-  const commentaire = String(body.commentaire ?? "").trim().slice(0, 1000) || null;
-  const { error } = await sb.from("studio_livrables").update({
-    statut, commentaire, decide_par: acteur, decide_le: new Date().toISOString(),
-  }).eq("id", l.id);
-  if (error) return { erreur: error.message, statut: 400 };
-  await journaliser(sb, { wsId, acteur, agentId: l.agent_id, action: `livrable_${statut}`, detail: { livrable: l.id, titre: l.titre, commentaire } });
-
-  // Livrable porteur d'une action (ex. créer un document dans le Drive) : le « VALIDÉ »
-  // déclenche l'exécution. Réussite → publié avec le lien ; échec → reste validé, erreur notée.
-  if (statut === "valide" && l.action) {
-    const r = await executerAction(sb, wsId, l.action as ActionLivrable, String(l.id));
-    if (r.ok) {
-      await sb.from("studio_livrables").update({ statut: "publie", resultat: { id: r.id, lien: r.lien } }).eq("id", l.id);
-      await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_executee", detail: { livrable: l.id, titre: l.titre, lien: r.lien } });
-      return { ok: true, execute: true, lien: r.lien };
-    }
-    await sb.from("studio_livrables").update({ resultat: { erreur: r.erreur } }).eq("id", l.id);
-    await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_echec", detail: { livrable: l.id, titre: l.titre, erreur: r.erreur } });
-    return { ok: true, execute: false, erreur_action: r.erreur };
-  }
-  return { ok: true };
+/** Décision du propriétaire (livrables.ts) : seul appel d'executerAction de tout le Studio. */
+export function deciderLivrable(sb: SupabaseClient, wsId: string, decideur: { acteur: string; proprietaire: boolean }, body: Record<string, unknown>) {
+  return decider(sb, wsId, decideur, body, {
+    executer: (action, livrableId) => executerAction(sb, wsId, action as ActionLivrable, livrableId),
+    journaliser: (e) => journaliser(sb, { wsId, ...e }),
+  });
 }
 
 const VERSIONS_MAX = 20;
