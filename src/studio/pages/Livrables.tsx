@@ -7,16 +7,21 @@ import { appel } from '../api';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, Bouton, Carte, Chargement, Markdown, Titre, cx } from '../composants';
 import EtatVide from '../composants/EtatVide';
-import Confirmation from '../composants/Confirmation';
 import { useStudio } from '../StudioApp';
 import EditeurLivrable, { champsDepuis, type ActionLivrable } from '../EditeurLivrable';
 import EditeurDocument from '../EditeurDocument';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 
+/** Mêmes clés que supabase/functions/studio/livrables.ts. */
+const RAISONS_REFUS = { trop_long: 'Trop long', mauvais_ton: 'Pas le bon ton', pas_le_moment: 'Pas le moment', autre: 'Autre raison' } as const;
+type Raison = keyof typeof RAISONS_REFUS;
+
 type Livrable = {
   id: string; titre: string; contenu: string; statut: 'a_valider' | 'valide' | 'refuse' | 'publie';
   agent_id: string | null; conversation_id: string | null; soumis_par: string | null;
   decide_par: string | null; decide_le: string | null; commentaire: string | null; created_at: string;
+  /** Raison du refus, choisie en un clic (rendue à l'agent à ses prochaines missions). */
+  refus_raison?: Raison | null;
   /** Action exécutée au « VALIDÉ » (ex. dépôt d'un document dans le Drive). */
   type_action?: string | null;
   resultat?: { lien?: string | null; erreur?: string } | null;
@@ -64,30 +69,31 @@ export default function PageLivrables() {
   const [edition, setEdition] = useState<string | null>(null);
   const [docOuvert, setDocOuvert] = useState<string | null>(null);
   const [historique, setHistorique] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<{ action: 'refuser'; id: string } | null>(null);
-  const [envoiConfirm, setEnvoiConfirm] = useState(false);
+  /** Livrable dont on choisit la raison de refus. */
+  const [refus, setRefus] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState(false);
   const proprietaire = me.user.role === 'proprietaire';
   const agents = new Map(me.agents.map((a) => [a.id, a]));
 
   const charger = useCallback(() => appel<{ livrables: Livrable[] }>('livrables').then((r) => setLivrables(r.livrables)).catch((e) => setErreur(gerer(e))), [gerer]);
   useEffect(() => { charger(); }, [charger]);
 
-  const deciderDirect = async (id: string, statut: Livrable['statut']) => {
+  const deciderDirect = async (id: string, statut: Livrable['statut'], raison?: Raison) => {
+    setEnvoi(true);
     try {
-      const r = await appel<{ livrables: Livrable[]; execute?: boolean; lien?: string | null; erreur_action?: string }>('livrable_decider', { id, statut, commentaire });
-      setLivrables(r.livrables); setCommentaire(''); setErreur(''); rafraichir();
+      const r = await appel<{ livrables: Livrable[]; execute?: boolean; lien?: string | null; erreur_action?: string }>('livrable_decider', { id, statut, commentaire, raison });
+      setLivrables(r.livrables); setCommentaire(''); setErreur(''); setRefus(null); rafraichir();
       const type = r.livrables.find((x) => x.id === id)?.type_action;
       if (r.execute) setInfo((type && ACTIONS[type]?.fait) || 'Action exécutée.');
       else if (r.erreur_action) setErreur(`Validé, mais le dépôt a échoué : ${r.erreur_action}`);
-      else setInfo('');
+      else setInfo(raison ? `Refusé (${RAISONS_REFUS[raison].toLowerCase()}) : l'agent en tiendra compte.` : '');
     } catch (e) { setErreur(gerer(e)); }
+    finally { setEnvoi(false); }
   };
 
   const decider = async (id: string, statut: Livrable['statut']) => {
-    if (statut === 'refuse' && !commentaire.trim()) {
-      setConfirmation({ action: 'refuser', id });
-      return;
-    }
+    // Un refus demande toujours sa raison, en un clic.
+    if (statut === 'refuse') { setRefus(id); return; }
     await deciderDirect(id, statut);
   };
 
@@ -133,7 +139,7 @@ export default function PageLivrables() {
           icone={<Check className="h-10 w-10" />}
           titre={filtre === 'a_valider' ? 'Aucun livrable à valider' : 'Aucun livrable dans cette vue'}
           description={filtre === 'a_valider'
-            ? 'Bravo, tout est à jour. Dans une conversation, cliquez sur « Soumettre à validation » sous une réponse d\'agent pour en ajouter.'
+            ? 'Bravo, tout est à jour. Ce que vos agents préparent d\'engageant (e-mail, publication, rendez-vous, document) arrive ici tout seul. Pour une simple réponse, « Soumettre à validation » sous le message l\'ajoute aussi.'
             : 'Changez de filtre pour voir les livrables dans d\'autres statuts.'}
         />
       ) : (
@@ -143,7 +149,7 @@ export default function PageLivrables() {
             const deplie = ouvert === l.id;
             return (
               <Carte key={l.id} className="p-0">
-                <button onClick={() => { setOuvert(deplie ? null : l.id); setCommentaire(''); setEdition(null); setHistorique(null); }} className="flex w-full items-center gap-3 p-4 text-left">
+                <button onClick={() => { setOuvert(deplie ? null : l.id); setCommentaire(''); setEdition(null); setHistorique(null); setRefus(null); }} className="flex w-full items-center gap-3 p-4 text-left">
                   {a && <Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={32} />}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{l.titre}</p>
@@ -198,6 +204,7 @@ export default function PageLivrables() {
                         </ul>
                       </div>
                     ) : null}
+                    {l.statut === 'refuse' && l.refus_raison && <p className="mt-3 text-sm text-neutral-600"><span className="font-medium">Raison du refus :</span> {RAISONS_REFUS[l.refus_raison] ?? l.refus_raison}</p>}
                     {l.commentaire && <p className="mt-3 text-sm text-neutral-600"><span className="font-medium">Commentaire :</span> {l.commentaire}</p>}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {l.statut !== 'publie' && edition !== l.id && l.format !== 'html' && (
@@ -222,10 +229,19 @@ export default function PageLivrables() {
                             className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:bg-white" />
                         )}
                         <div className="flex flex-wrap gap-2">
-                          {l.statut === 'a_valider' && <>
-                            <Bouton onClick={() => decider(l.id, 'valide')}><Check className="h-4 w-4" /> VALIDÉ</Bouton>
-                            <Bouton variante="clair" onClick={() => decider(l.id, 'refuse')}><X className="h-4 w-4" /> Refuser</Bouton>
+                          {l.statut === 'a_valider' && refus !== l.id && <>
+                            <Bouton disabled={envoi} onClick={() => decider(l.id, 'valide')}><Check className="h-4 w-4" /> VALIDÉ</Bouton>
+                            <Bouton variante="clair" disabled={envoi} onClick={() => decider(l.id, 'refuse')}><X className="h-4 w-4" /> Refuser</Bouton>
                           </>}
+                          {l.statut === 'a_valider' && refus === l.id && (
+                            <div role="group" aria-label="Raison du refus" className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-neutral-700">Pourquoi ce refus ?</span>
+                              {(Object.keys(RAISONS_REFUS) as Raison[]).map((k) => (
+                                <Bouton key={k} variante="clair" disabled={envoi} onClick={() => deciderDirect(l.id, 'refuse', k)}>{RAISONS_REFUS[k]}</Bouton>
+                              ))}
+                              <Bouton variante="fantome" disabled={envoi} onClick={() => setRefus(null)}>Annuler</Bouton>
+                            </div>
+                          )}
                           {l.statut === 'valide' && <>
                             {l.type_action
                               ? <Bouton onClick={async () => { await decider(l.id, 'a_valider'); await decider(l.id, 'valide'); }}><RotateCcw className="h-4 w-4" /> Réessayer le dépôt</Bouton>
@@ -243,22 +259,6 @@ export default function PageLivrables() {
           })}
         </div>
       )}
-      <Confirmation
-        ouvert={confirmation?.action === 'refuser'}
-        titre="Refuser sans commentaire ?"
-        message="Un mot aide l'agent à mieux faire la prochaine fois. Vous pouvez aussi ajouter un commentaire dans le champ, puis refuser à nouveau."
-        confirmer={{
-          label: 'Refuser quand même',
-          danger: true,
-          onClick: async () => {
-            if (!confirmation) return;
-            setEnvoiConfirm(true);
-            try { await deciderDirect(confirmation.id, 'refuse'); } finally { setEnvoiConfirm(false); setConfirmation(null); }
-          },
-        }}
-        annuler={{ onClick: () => setConfirmation(null) }}
-        enCours={envoiConfirm}
-      />
       {(() => {
         const d = livrables?.find((x) => x.id === docOuvert);
         return d ? (

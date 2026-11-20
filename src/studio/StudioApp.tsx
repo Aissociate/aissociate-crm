@@ -5,7 +5,7 @@ import {
 } from 'react';
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { Bug, CircleHelp, Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
-import { appel, jeton, SessionExpiree, type Me } from './api';
+import { appel, jeton, majuscule, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 import SignalerBug, { ouvrirSignalement } from './composants/SignalerBug';
 
@@ -128,7 +128,7 @@ function Coquille() {
     <nav className="flex min-h-full flex-col gap-1 p-4" onClick={() => setOuvert(false)}>
       <div className="mb-6 px-2">
         <p className="text-lg font-bold tracking-tight text-neutral-900">A(I)ssociate <span className="text-orange-500">Studio</span></p>
-        <p className="truncate text-xs text-neutral-500">{me.workspace.nom}</p>
+        <p className="line-clamp-2 break-words text-xs text-neutral-500" title={me.workspace.nom}>{me.workspace.nom}</p>
       </div>
       {essaiFini ? (
         <>
@@ -146,7 +146,7 @@ function Coquille() {
         </>
       )}
       <div className="mt-auto border-t border-neutral-200 pt-4">
-        <p className="truncate px-3 text-sm font-medium text-neutral-800">{[me.user.prenom, me.user.nom].filter(Boolean).join(' ') || me.user.email}</p>
+        <p className="truncate px-3 text-sm font-medium text-neutral-800">{[majuscule(me.user.prenom), me.user.nom].filter(Boolean).join(' ') || me.user.email}</p>
         <p className="truncate px-3 text-xs text-neutral-500">{me.user.email}</p>
         <button onClick={deconnexion} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-100">
           <LogOut className="h-4 w-4" /> Se déconnecter

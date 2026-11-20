@@ -10,7 +10,7 @@ import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Bouton, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
-import { ComptesMessagerie, useMessageries, type Quoi } from '../Messageries';
+import { ComptesMessagerie, fournisseurDe, useMessageries, type Quoi } from '../Messageries';
 import { ComptesReseau, NOMS_RESEAUX, useReseaux, type Reseau } from '../ReseauxSociaux';
 import { GrilleApplications, Logo, useApplications } from '../Applications';
 
@@ -120,8 +120,18 @@ export default function Connecteurs() {
   const enLigne = Boolean(messageries.etat?.configure);
   // Sans Zernio, les cartes en un clic retombent sur la demande assistée (sauf « Autre messagerie »).
   // Les réseaux ajoutés avec la liste complète (sans formulaire de demande) n'existent qu'en un clic.
-  const cartesUnClic = CATALOGUE.filter((d) => d.zernio && (enLigne || (d.type !== 'messagerie' && d.champs.length > 0)));
-  const directes = CATALOGUE.filter((d) => !d.zernio);
+  /** Un compte est-il branché sur cette carte ? Les cartes branchées passent en premier (ordre du catalogue conservé sinon). */
+  const branche = (d: Def): boolean => {
+    if (enLigne && d.zernio) {
+      return estReseau(d.zernio)
+        ? (reseaux.etat?.comptes ?? []).some((c) => c.reseau === d.zernio)
+        : (messageries.etat?.boites ?? []).some((b) => b.fournisseur === fournisseurDe(d.zernio as Quoi));
+    }
+    return (liste ?? []).some((c) => c.type === d.type);
+  };
+  const branchesDabord = (cartes: Def[]) => [...cartes.filter(branche), ...cartes.filter((d) => !branche(d))];
+  const cartesUnClic = branchesDabord(CATALOGUE.filter((d) => d.zernio && (enLigne || (d.type !== 'messagerie' && d.champs.length > 0))));
+  const directes = branchesDabord(CATALOGUE.filter((d) => !d.zernio));
   const demandesApps = (liste ?? []).filter((c) => c.type.startsWith('app:'));
   const retour = messageries.retour ?? reseaux.retour ?? apps.retour;
 
@@ -151,7 +161,7 @@ export default function Connecteurs() {
               ) : <span className="text-xs text-neutral-400">{d.mode === 'direct' ? 'Connexion directe' : 'Mise en place par Aissociate'}</span>}
               {proprietaire && (
                 <div className="flex items-center gap-1">
-                  {c && <button onClick={() => setSuppression({ type: d.type, nom: d.nom })} aria-label="Retirer" className="p-1.5 text-neutral-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>}
+                  {c && <button onClick={() => setSuppression({ type: d.type, nom: d.nom })} aria-label={`Retirer ${d.nom}`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /> Retirer</button>}
                   <Bouton variante={c && c.statut !== 'erreur' ? 'clair' : 'noir'} className="px-3 py-1.5" onClick={() => setOuvert(d)}>
                     {c?.statut === 'erreur' ? 'Ressaisir' : c ? 'Modifier' : d.mode === 'direct' ? 'Connecter' : 'Demander'}
                   </Bouton>

@@ -22,7 +22,8 @@
 // Public : invitation_ouvrir {jeton}                → lien Zernio pour l'espace de l'invitation
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
-//   ressource_toggle {id, actif} | ressource_delete {id}
+//   ressource_toggle {id, actif, confirmer? (requis pour activer une ressource sensible)} | ressource_delete {id}
+//   (ressource_add range désactivés RIB / IBAN, pièces d'identité et bulletins de paie : sensible.ts)
 //   contexte_update {contexte_entreprise}          (propriétaire)
 // Administration (JWT CRM d'un manager dans Authorization) :
 //   admin_create_user {workspace_id, email, prenom?, nom?, role?, password}
@@ -33,7 +34,7 @@
 // Gouvernance (gouvernance.ts) :
 //   public  onboarding_soumettre {contact_nom, email, telephone?, accord, reponses}
 //   client  perimetre | suspendre {suspendu} (propriétaire) | journal
-//           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?} (propriétaire)
+//           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?, raison (refus : trop_long | mauvais_ton | pas_le_moment | autre)} (propriétaire)
 //           livrable_modifier {id, champs} (version précédente gardée, repasse à valider)
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
@@ -86,7 +87,7 @@ async function etatConnexions(wsId: string) {
   return { configure: true, boites, comptes };
 }
 import {
-  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner,
+  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner, refusRecents,
   soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
 } from "./gouvernance.ts";
 import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
@@ -103,6 +104,7 @@ import * as courriel from "./courriel.ts";
 import * as essai from "./essai.ts";
 import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
+import { colonneSensibleAbsente, detecterSensible, DOSSIER_SENSIBLE, messageSensible } from "./sensible.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
 import * as vision from "./vision.ts";
@@ -797,6 +799,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const missions = orchestre && Boolean(outils) && collegues.length > 0;
   const systemeBase = construirePrompt({
     agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo,
+    refus: await refusRecents(sb, s.ws.id, agent.id),
     perimetre: orchestre ? equipe.perimetreOrchestrateur(outils ? collegues : []) : undefined,
   });
   if (outils && collegues.length) outils.definitions.push(missions ? equipe.definitionMission(collegues) : equipe.definition(collegues));
@@ -915,6 +918,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             const sys = construirePrompt({
               agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
               savoirs: await chargerSavoirs(sb, collegue.id, consigne),
+              refus: await refusRecents(sb, s.ws.id, collegue.id),
             }) + (sesOutils ? `\n\n${sesOutils.consigne}` : "") + "\n\n" + equipe.consigneMission(agent);
             fil = { messages: [{ role: "system", content: sys }], outils: sesOutils, appels: 0 };
             fils.set(collegue.id, fil);
@@ -1778,9 +1782,10 @@ Deno.serve(async (req: Request) => {
       }
 
       case "ressources": {
-        const { data } = await sb.from("studio_documents")
-          .select("id, titre, type, format, taille, actif, created_at, created_by, dossier_id, studio_users(prenom, nom)")
-          .eq("workspace_id", s.ws.id).order("created_at", { ascending: false });
+        const colonnes = "id, titre, type, format, taille, actif, created_at, created_by, dossier_id, studio_users(prenom, nom)";
+        const lire = (c: string) => sb.from("studio_documents").select(c).eq("workspace_id", s.ws.id).order("created_at", { ascending: false });
+        let { data, error } = await lire(`${colonnes}, sensible`);
+        if (colonneSensibleAbsente(error)) ({ data, error } = await lire(colonnes));
         return json({ ressources: data ?? [] });
       }
 
@@ -1795,15 +1800,29 @@ Deno.serve(async (req: Request) => {
         const titre = String(body.titre ?? "").trim().slice(0, 200);
         const contenu = String(body.contenu ?? "").slice(0, DOC_MAX);
         if (!titre || !contenu.trim()) return json({ error: "Titre et contenu requis" }, 400);
-        const dossierAjout = await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id);
-        const { data, error } = await sb.from("studio_documents").insert({
-          workspace_id: s.ws.id, titre, contenu, created_by: s.user.id, dossier_id: dossierAjout || null,
+        let dossierAjout = (await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id)) || null;
+        // RIB, pièce d'identité, bulletin de paie : rangé désactivé, les agents ne le lisent pas
+        // tant que le client ne l'a pas activé lui-même (sensible.ts).
+        const sensible = detecterSensible(titre, contenu);
+        if (sensible && !dossierAjout) {
+          const d = await dossiers.assurerChemin(sb, s.ws.id, DOSSIER_SENSIBLE, "Studio");
+          if (!("erreur" in d)) dossierAjout = d.id;
+        }
+        const ligne = {
+          workspace_id: s.ws.id, titre, contenu, created_by: s.user.id, dossier_id: dossierAjout,
           type: body.type === "fichier" ? "fichier" : "note",
           format: body.format ? String(body.format).slice(0, 10) : null,
           taille: Number.isFinite(Number(body.taille)) ? Number(body.taille) : null,
-        }).select("id").single();
-        if (error) return json({ error: error.message }, 400);
-        return json({ ok: true, id: data.id });
+          ...(sensible ? { actif: false } : {}),
+        };
+        const inserer = (l: Record<string, unknown>) => sb.from("studio_documents").insert(l).select("id").single();
+        let { data, error } = await inserer(sensible ? { ...ligne, sensible: sensible.type } : ligne);
+        if (colonneSensibleAbsente(error)) ({ data, error } = await inserer(ligne));
+        if (error || !data) return json({ error: error?.message ?? "Enregistrement impossible" }, 400);
+        if (sensible) {
+          await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "ressource_sensible", detail: { titre, nature: sensible.type } });
+        }
+        return json({ ok: true, id: data.id, sensible: sensible ? { type: sensible.type, message: messageSensible(sensible) } : null });
       }
 
       // ── Dossiers : ressources, livrables et médias ──
@@ -1853,6 +1872,15 @@ Deno.serve(async (req: Request) => {
       }
 
       case "ressource_toggle": {
+        if (body.actif === true) {
+          // Une ressource sensible ne s'active qu'en connaissance de cause (confirmer: true), et c'est tracé.
+          const { data: doc } = await sb.from("studio_documents").select("titre, sensible")
+            .eq("id", String(body.id)).eq("workspace_id", s.ws.id).maybeSingle();
+          if (doc?.sensible) {
+            if (body.confirmer !== true) return json({ error: "Cette ressource contient des données sensibles : confirmez pour la rendre lisible par vos agents." }, 409);
+            await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "ressource_sensible_activee", detail: { titre: doc.titre, nature: doc.sensible } });
+          }
+        }
         await sb.from("studio_documents").update({ actif: body.actif === true })
           .eq("id", String(body.id)).eq("workspace_id", s.ws.id);
         return json({ ok: true });
@@ -2074,7 +2102,7 @@ Deno.serve(async (req: Request) => {
 
       case "livrable_decider": {
         if (s.user.role !== "proprietaire") return json({ error: "Seul le propriétaire de l'espace valide les livrables." }, 403);
-        const r = await deciderLivrable(sb, s.ws.id, `client:${s.user.email}`, body);
+        const r = await deciderLivrable(sb, s.ws.id, { acteur: `client:${s.user.email}`, proprietaire: true }, body);
         return "erreur" in r ? json({ error: r.erreur }, r.statut) : json({ ...r, ok: true, livrables: await listerLivrables(sb, s.ws.id) });
       }
 

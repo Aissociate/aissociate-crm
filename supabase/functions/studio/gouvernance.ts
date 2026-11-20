@@ -10,6 +10,8 @@ import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Repons
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
 import * as courriel from "./courriel.ts";
 import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
+import { deciderLivrable as decider, raisonRefus, RAISONS_REFUS } from "./livrables.ts";
+import type { Refus } from "./contexte.ts";
 
 export { journaliser };
 
@@ -295,35 +297,12 @@ export async function soumettreLivrable(sb: SupabaseClient, wsId: string, acteur
   return { ok: true, id: data.id, statut: data.statut };
 }
 
-const TRANSITIONS: Record<string, string[]> = { a_valider: ["valide", "refuse"], refuse: ["a_valider"], valide: ["publie", "a_valider"], publie: [] };
-
-export async function deciderLivrable(sb: SupabaseClient, wsId: string, acteur: string, body: Record<string, unknown>) {
-  const statut = String(body.statut ?? "");
-  const { data: l } = await sb.from("studio_livrables").select("id, statut, titre, agent_id, action")
-    .eq("id", String(body.id ?? "")).eq("workspace_id", wsId).maybeSingle();
-  if (!l) return { erreur: "Livrable introuvable", statut: 404 };
-  if (!TRANSITIONS[l.statut]?.includes(statut)) return { erreur: `Passage « ${l.statut} » → « ${statut} » impossible.`, statut: 400 };
-  const commentaire = String(body.commentaire ?? "").trim().slice(0, 1000) || null;
-  const { error } = await sb.from("studio_livrables").update({
-    statut, commentaire, decide_par: acteur, decide_le: new Date().toISOString(),
-  }).eq("id", l.id);
-  if (error) return { erreur: error.message, statut: 400 };
-  await journaliser(sb, { wsId, acteur, agentId: l.agent_id, action: `livrable_${statut}`, detail: { livrable: l.id, titre: l.titre, commentaire } });
-
-  // Livrable porteur d'une action (ex. créer un document dans le Drive) : le « VALIDÉ »
-  // déclenche l'exécution. Réussite → publié avec le lien ; échec → reste validé, erreur notée.
-  if (statut === "valide" && l.action) {
-    const r = await executerAction(sb, wsId, l.action as ActionLivrable, String(l.id));
-    if (r.ok) {
-      await sb.from("studio_livrables").update({ statut: "publie", resultat: { id: r.id, lien: r.lien } }).eq("id", l.id);
-      await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_executee", detail: { livrable: l.id, titre: l.titre, lien: r.lien } });
-      return { ok: true, execute: true, lien: r.lien };
-    }
-    await sb.from("studio_livrables").update({ resultat: { erreur: r.erreur } }).eq("id", l.id);
-    await journaliser(sb, { wsId, acteur: "systeme", agentId: l.agent_id, action: "action_echec", detail: { livrable: l.id, titre: l.titre, erreur: r.erreur } });
-    return { ok: true, execute: false, erreur_action: r.erreur };
-  }
-  return { ok: true };
+/** Décision du propriétaire (livrables.ts) : seul appel d'executerAction de tout le Studio. */
+export function deciderLivrable(sb: SupabaseClient, wsId: string, decideur: { acteur: string; proprietaire: boolean }, body: Record<string, unknown>) {
+  return decider(sb, wsId, decideur, body, {
+    executer: (action, livrableId) => executerAction(sb, wsId, action as ActionLivrable, livrableId),
+    journaliser: (e) => journaliser(sb, { wsId, ...e }),
+  });
 }
 
 const VERSIONS_MAX = 20;
@@ -368,8 +347,25 @@ export async function modifierLivrable(sb: SupabaseClient, wsId: string, acteur:
 }
 
 export async function listerLivrables(sb: SupabaseClient, wsId: string) {
-  const { data } = await sb.from("studio_livrables")
-    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions, dossier_id, format")
-    .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
+  const colonnes = "id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions, dossier_id, format";
+  const lire = (c: string) => sb.from("studio_livrables").select(c).eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
+  const { data, error } = await lire(`${colonnes}, refus_raison`);
+  // Colonne absente (migration studio_refus_raison non appliquée) : la liste reste lisible.
+  if (error) return (await lire(colonnes)).data ?? [];
   return data ?? [];
+}
+
+/** Derniers refus du propriétaire pour cet agent (60 jours, 5 au plus), rendus à l'agent dans son contexte. */
+export async function refusRecents(sb: SupabaseClient, wsId: string, agentId: string): Promise<Refus[]> {
+  const { data, error } = await sb.from("studio_livrables").select("titre, refus_raison, commentaire, decide_le")
+    .eq("workspace_id", wsId).eq("agent_id", agentId).eq("statut", "refuse")
+    .gte("decide_le", new Date(Date.now() - 60 * 86_400_000).toISOString())
+    .order("decide_le", { ascending: false }).limit(5);
+  if (error) return [];
+  return (data ?? []).filter((r) => raisonRefus(r.refus_raison)).map((r) => ({
+    titre: String(r.titre), raison: RAISONS_REFUS[raisonRefus(r.refus_raison)!],
+    // Le commentaire automatique des décisions par e-mail n'apprend rien à l'agent.
+    commentaire: r.commentaire && r.commentaire !== "Décision reçue par e-mail" ? String(r.commentaire) : null,
+    date: String(r.decide_le).slice(0, 10),
+  }));
 }

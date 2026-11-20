@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import { appel, type Me } from '../api';
 import { Bouton } from '../composants';
 import { useStudioBrut } from '../StudioApp';
@@ -94,6 +95,9 @@ export default function Connexion() {
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-neutral-900">Bienvenue sur votre Studio</h2>
             <p className="mt-2 text-sm text-neutral-500">Connectez-vous avec les identifiants reçus par e-mail.</p>
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+              <Lock className="h-3.5 w-3.5" aria-hidden /> Rien n'est envoyé sans votre accord.
+            </p>
           </div>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-neutral-700">Adresse e-mail</span>

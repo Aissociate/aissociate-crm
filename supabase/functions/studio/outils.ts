@@ -24,6 +24,7 @@ import * as dossiers from "./dossiers.ts";
 import { CONSIGNE_DOCUMENT, nettoyerHtml, titreDuHtml } from "./html.ts";
 import { comptesApplications, type CompteApplication } from "./applications.ts";
 import * as apps from "./applications_outils.ts";
+import { colonneSensibleAbsente, detecterSensible, type Sensible } from "./sensible.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -642,6 +643,22 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
     return { id: r.id, chemin: (dossiers.segments(c) ?? []).join("/") };
   };
 
+  /** Note ou compétence écrite par l'agent ; un contenu sensible (RIB, paie…) est rangé désactivé (sensible.ts). */
+  const ecrireNote = async (existeId: string | null, titre: string, contenu: string, champs: Record<string, unknown>) => {
+    const sensible = detecterSensible(titre, contenu);
+    const ecrire = (v: Record<string, unknown>) => existeId
+      ? ctx.sb.from("studio_documents").update(v).eq("id", existeId)
+      : ctx.sb.from("studio_documents").insert({ workspace_id: ctx.wsId, titre, type: "note", created_by: ctx.userId ?? null, ...v });
+    const valeurs = { contenu, actif: !sensible, ...champs };
+    let { error } = await ecrire({ ...valeurs, sensible: sensible?.type ?? null });
+    if (colonneSensibleAbsente(error)) ({ error } = await ecrire(valeurs));
+    if (!error && sensible) {
+      await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "ressource_sensible", detail: { titre, nature: sensible.type } });
+    }
+    return { error, sensible };
+  };
+  const avisSensible = (s: Sensible) => `elle semble contenir ${s.libelle} : elle est rangée désactivée et ne sera pas relue tant que le dirigeant ne l'a pas activée dans « Mes ressources ». Ne recopie pas ces données dans tes réponses.`;
+
   /** Livrable « à valider » portant l'action à exécuter au VALIDÉ. */
   const proposer = async (titre: string, contenu: string, action: ActionLivrable, quoi: string) => {
     const { data: l, error } = await ctx.sb.from("studio_livrables").insert({
@@ -686,13 +703,12 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const d = a.dossier ? await dossierPour(a.dossier) : null;
           const { data: existe } = await ctx.sb.from("studio_documents").select("id")
             .eq("workspace_id", ctx.wsId).eq("titre", titre).limit(1).maybeSingle();
-          const { error } = existe
-            ? await ctx.sb.from("studio_documents").update({ contenu: signe, actif: true, ...(d ? { dossier_id: d.id } : {}) }).eq("id", existe.id)
-            : await ctx.sb.from("studio_documents").insert({ workspace_id: ctx.wsId, titre, contenu: signe, type: "note", created_by: ctx.userId ?? null, dossier_id: d?.id ?? null });
+          const { error, sensible } = await ecrireNote(existe?.id ?? null, titre, signe, existe ? (d ? { dossier_id: d.id } : {}) : { dossier_id: d?.id ?? null });
           if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Compétence non enregistrée" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "competence_enregistree", detail: { titre, mise_a_jour: Boolean(existe) } });
           return {
-            resultat: `Compétence « ${titre} » ${existe ? "mise à jour" : "enregistrée"} dans les Notes de l'entreprise (rubrique Mes ressources). Elle sera relue lors des prochaines missions.`,
+            resultat: sensible ? `Compétence « ${titre} » enregistrée, mais ${avisSensible(sensible)}`
+              : `Compétence « ${titre} » ${existe ? "mise à jour" : "enregistrée"} dans les Notes de l'entreprise (rubrique Mes ressources). Elle sera relue lors des prochaines missions.`,
             libelle: `${existe ? "Compétence mise à jour" : "Nouvelle compétence"} : « ${titre.slice(PREFIXE_COMPETENCE.length)} »`,
           };
         }
@@ -704,13 +720,11 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const signe = `${contenu}\n\n_Note rédigée par ${ctx.agentPrenom ?? "un agent"} le ${new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion" })}._`;
           const { data: existe } = await ctx.sb.from("studio_documents").select("id")
             .eq("workspace_id", ctx.wsId).eq("titre", titre).eq("type", "note").limit(1).maybeSingle();
-          const { error } = existe
-            ? await ctx.sb.from("studio_documents").update({ contenu: signe, actif: true, dossier_id: d.id }).eq("id", existe.id)
-            : await ctx.sb.from("studio_documents").insert({ workspace_id: ctx.wsId, titre, contenu: signe, type: "note", created_by: ctx.userId ?? null, dossier_id: d.id });
+          const { error, sensible } = await ecrireNote(existe?.id ?? null, titre, signe, { dossier_id: d.id });
           if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Note non enregistrée" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "note_enregistree", detail: { titre, dossier: d.chemin, mise_a_jour: Boolean(existe) } });
           const ou = d.chemin ? `dans le dossier « ${d.chemin} »` : "à la racine des ressources";
-          return { resultat: `Note « ${titre} » ${existe ? "mise à jour" : "enregistrée"} ${ou} (rubrique Ressources).`, libelle: `Note ${existe ? "mise à jour" : "enregistrée"} : « ${titre.slice(0, 60)} »` };
+          return { resultat: `Note « ${titre} » ${existe ? "mise à jour" : "enregistrée"} ${ou} (rubrique Ressources).${sensible ? ` Attention : ${avisSensible(sensible)}` : ""}`, libelle: `Note ${existe ? "mise à jour" : "enregistrée"} : « ${titre.slice(0, 60)} »` };
         }
         if (nom === "dossiers_lister") {
           const chemin = String(a.chemin ?? "").trim();

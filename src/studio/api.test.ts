@@ -2,7 +2,7 @@
 // formatage des minutes, extraction de la balise de relais entre agents.
 // On ne teste PAS `appel` / `discuter` (I/O réseau).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { extraireRelais, jeton, minutesEnTexte, SessionExpiree } from './api';
+import { extraireRelais, jeton, majuscule, minutesEnTexte, SessionExpiree } from './api';
 
 // Stub de localStorage pour l'environnement node par défaut de Vitest.
 function stubStockage() {
@@ -104,5 +104,19 @@ describe('SessionExpiree', () => {
     expect(e).toBeInstanceOf(Error);
     expect(e).toBeInstanceOf(SessionExpiree);
     expect(e.message).toBe('fini');
+  });
+});
+
+describe('majuscule', () => {
+  it('met une majuscule au prénom, y compris composé ou accentué', () => {
+    expect(majuscule('shanti')).toBe('Shanti');
+    expect(majuscule(' jean-pierre ')).toBe('Jean-Pierre');
+    expect(majuscule('élodie')).toBe('Élodie');
+    expect(majuscule('marie anne')).toBe('Marie Anne');
+    expect(majuscule('McKenzie')).toBe('McKenzie');
+  });
+  it('rend une chaîne vide sans prénom', () => {
+    expect(majuscule(null)).toBe('');
+    expect(majuscule(undefined)).toBe('');
   });
 });

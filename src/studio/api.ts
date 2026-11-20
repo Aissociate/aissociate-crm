@@ -34,6 +34,8 @@ export type Ressource = {
   id: string; titre: string; type: 'fichier' | 'note'; format: string | null; taille: number | null;
   actif: boolean; created_at: string; studio_users: { prenom: string | null; nom: string | null } | null;
   dossier_id?: string | null;
+  /** Nature sensible reconnue à l'ajout (RIB, pièce d'identité, paie…) : désactivée par défaut. */
+  sensible?: 'rib' | 'identite' | 'paie' | 'securite_sociale' | null;
 };
 export type Me = {
   user: { id: string; email: string; prenom: string | null; nom: string | null; role: 'proprietaire' | 'membre'; doit_changer: boolean; cgv_a_accepter?: boolean; tutoriel_vu?: boolean | null };
@@ -128,6 +130,11 @@ export async function discuter(
   }
   if (!fin) throw new Error('Réponse interrompue. Réessayez.');
   return fin;
+}
+
+/** Prénom tel qu'on l'affiche : « shanti » → « Shanti », « jean-pierre » → « Jean-Pierre » (le reste est laissé tel que saisi). */
+export function majuscule(prenom: string | null | undefined): string {
+  return (prenom ?? '').trim().replace(/(^|[\s-])(\p{L})/gu, (_, sep: string, lettre: string) => sep + lettre.toLocaleUpperCase('fr-FR'));
 }
 
 export function minutesEnTexte(min: number): string {

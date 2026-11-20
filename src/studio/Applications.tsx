@@ -7,6 +7,7 @@ import { APPLICATIONS_UN_CLIC, logoConnecteur, RESEAUX_PUBLICATION, type AppUnCl
 import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { cx } from './composants';
+import { CL_ACTION } from './Messageries';
 
 export type CompteApp = { id: string; app: string; nom: string; a_reconnecter: boolean };
 type Etat = { configure: boolean; comptes: CompteApp[] };
@@ -102,21 +103,20 @@ function Tuile({ app, apps }: { app: AppUnClic; apps: Applications }) {
         )}
       </div>
       {comptes.map((c) => (
-        <div key={c.id} className="mt-2 flex items-center gap-2 rounded-xl bg-neutral-50 px-2.5 py-1.5">
-          <p className={cx('flex min-w-0 flex-1 items-center gap-1 text-xs', c.a_reconnecter ? 'text-amber-700' : 'text-emerald-700')}>
+        <div key={c.id} className="mt-2 rounded-xl bg-neutral-50 px-2.5 py-1.5">
+          <p className={cx('flex min-w-0 items-center gap-1 text-xs', c.a_reconnecter ? 'text-amber-700' : 'text-emerald-700')}>
             {c.a_reconnecter ? <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
             <span className="truncate">{c.a_reconnecter ? `À reconnecter · ${c.nom}` : c.nom}</span>
           </p>
           {proprietaire && (
-            <>
-              <button onClick={() => apps.connecter(app.slug, c.id)} disabled={occupe} title="Reconnecter" aria-label={`Reconnecter ${c.nom}`}
-                className="rounded-lg p-1 text-neutral-400 hover:text-neutral-700">
-                {apps.enCours === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            <div className="mt-1 flex flex-wrap gap-1">
+              <button onClick={() => apps.connecter(app.slug, c.id)} disabled={occupe} aria-label={`Reconnecter ${c.nom}`} className={CL_ACTION}>
+                {apps.enCours === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Reconnecter
               </button>
-              <button onClick={() => apps.deconnecter(c)} disabled={occupe} aria-label={`Déconnecter ${c.nom}`} className="rounded-lg p-1 text-neutral-400 hover:text-red-600">
-                <Unplug className="h-3.5 w-3.5" />
+              <button onClick={() => apps.deconnecter(c)} disabled={occupe} aria-label={`Déconnecter ${c.nom}`} className={cx(CL_ACTION, 'hover:text-red-600')}>
+                <Unplug className="h-3.5 w-3.5" /> Déconnecter
               </button>
-            </>
+            </div>
           )}
         </div>
       ))}

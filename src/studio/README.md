@@ -301,8 +301,19 @@ Migration `20261116120000_studio_gouvernance.sql`, logique serveur dans
   sont refusés jusqu'au lendemain (jour de La Réunion). Coût réel OpenRouter × `taux_usd_eur`.
 - **Journal** : `studio_journal`, chaîné par SHA-256 (`journal.ts`, testé) ; missions,
   médias, livrables, connecteurs, suspension. Vérification de la chaîne dans la fiche espace (CRM).
-- **Livrables** : « Soumettre à validation » sous une réponse → `studio_livrables`
-  (`a_valider` → `valide` / `refuse` → `publie`). Seul le propriétaire décide.
+- **Livrables** : `studio_livrables` (`a_valider` → `valide` / `refuse` → `publie`). Seul le propriétaire décide.
+  - Toute écriture externe d'un agent (e-mail, publication, agenda, dépôt) est soumise d'office ;
+    « Soumettre à validation » sous une réponse ne sert qu'aux réponses texte.
+  - La décision vit dans `livrables.ts` (testé) : seul appel d'`executerAction`, écriture conditionnée au
+    statut lu (deux validations simultanées = une seule exécution), garde répétée en base
+    (migration `20261122100000`).
+  - Un refus exige une raison en un clic (`refus_raison`, migration `20261122110000`) ; les cinq derniers
+    refus d'un agent lui sont rendus dans son contexte (`contexte.ts` › `blocRefus`).
+- **Ressources sensibles** (`sensible.ts`, testé) : RIB / IBAN, pièce d'identité, bulletin de paie et numéro de
+  sécurité sociale sont reconnus à l'ajout (import ou note d'agent) et rangés désactivés, dans « Confidentiel »
+  si aucun dossier n'est choisi. L'activation demande une confirmation (`ressource_toggle {confirmer}`), tracée
+  au journal. Colonne `studio_documents.sensible` (migration `20261122120000`) ; sans elle, la ressource est
+  quand même désactivée, sans pastille.
 
 ## Canal e-mail de liaison (vague 2 du paquet)
 Migration `20261117100000_studio_liaison.sql`. Une boîte AgentMail par espace, créée
