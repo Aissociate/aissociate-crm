@@ -182,7 +182,7 @@ export default function AgentChat() {
     }
   }, [location, params, navigate, envoyer]);
 
-  if (!agent) return <Navigate to="/studio/assistants" replace />;
+  if (!agent) return <Navigate to="/studio/equipe" replace />;
 
   const soumettre = (e: FormEvent) => { e.preventDefault(); envoyer(saisie); };
   const nouvelle = () => { setParams({}); setMessages([]); setConvId(null); };
@@ -221,7 +221,7 @@ export default function AgentChat() {
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
       <aside className="hidden lg:block">
-        <Link to="/studio/assistants" className="mb-4 flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900">
+        <Link to="/studio/equipe" className="mb-4 flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900">
           <ChevronLeft className="h-4 w-4" /> Assistants
         </Link>
         <p className="mb-1 px-2 text-xs text-neutral-400">Super-pouvoirs de {agent.prenom}</p>

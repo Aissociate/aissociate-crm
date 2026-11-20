@@ -3,14 +3,15 @@
 import {
   createContext, useCallback, useContext, useEffect, useState, lazy, Suspense,
 } from 'react';
-import { NavLink, Navigate, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Bug, CircleHelp, Home, Users, FolderOpen, Sparkles, Building2, KeyRound, LogOut, Menu, X, Plug, BarChart3, ShieldCheck, Gauge, ScrollText, PauseCircle, Mail, AlarmClock, Newspaper, Contact } from 'lucide-react';
+import { Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Bug, CircleHelp, Home, Users, FolderOpen, KeyRound, LogOut, Menu, X, Gauge, PauseCircle, AlarmClock, SlidersHorizontal, Workflow } from 'lucide-react';
+import { BASE, nouvelleAdresse, ongletActif, REDIRECTIONS, sectionDe, SECTIONS, type Section } from './routes';
 import { appel, jeton, majuscule, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 import SignalerBug, { ouvrirSignalement } from './composants/SignalerBug';
 
 const Connexion = lazy(() => import('./pages/Connexion'));
-const Accueil = lazy(() => import('./pages/Accueil'));
+const Aujourdhui = lazy(() => import('./pages/Aujourdhui'));
 const Assistants = lazy(() => import('./pages/Assistants'));
 const AgentChat = lazy(() => import('./pages/AgentChat'));
 const Ressources = lazy(() => import('./pages/Ressources'));
@@ -63,7 +64,7 @@ function AgentChatParAgent() {
 
 function Garde() {
   const c = useContext(StudioContext)!;
-  if (c.chargement) return <div className="min-h-screen bg-[#f6f6f4]"><Chargement /></div>;
+  if (c.chargement) return <div className="min-h-screen bg-[#F6F5F3]"><Chargement /></div>;
   if (!c.me) return <Navigate to="/studio/connexion" replace />;
   if (c.me.user.doit_changer) return <Compte premiereConnexion />;
   if (c.me.user.cgv_a_accepter) {
@@ -72,40 +73,57 @@ function Garde() {
   return <Coquille />;
 }
 
-const MENU = [
-  { to: '/studio', label: 'Accueil', icon: Home, end: true },
-  { to: '/studio/assistants', label: 'Assistants', icon: Users },
-  { to: '/studio/ressources', label: 'Ressources', icon: FolderOpen },
-  { to: '/studio/connecteurs', label: 'Connecteurs', icon: Plug },
-  { to: '/studio/par-email', label: 'Par e-mail', icon: Mail },
-  { to: '/studio/taches', label: 'Tâches planifiées', icon: AlarmClock },
-  { to: '/studio/veille', label: 'Veille', icon: Newspaper },
-  { to: '/studio/contacts', label: 'Contacts', icon: Contact },
-];
-const MENU_CREATIONS = [
-  { to: '/studio/creations', label: 'Contenus', icon: Sparkles },
-  { to: '/studio/livrables', label: 'Livrables', icon: ShieldCheck },
-];
-const MENU_ESPACE = [
-  { to: '/studio/perimetre', label: 'Mon périmètre', icon: Gauge },
-  { to: '/studio/journal', label: 'Journal', icon: ScrollText },
-  { to: '/studio/rapport', label: 'Rapport mensuel', icon: BarChart3 },
-  { to: '/studio/entreprise', label: 'Mon entreprise', icon: Building2 },
-  { to: '/studio/compte', label: 'Mon compte', icon: KeyRound },
-];
+const ICONES: Record<Section['id'], typeof Home> = {
+  aujourdhui: Home, equipe: Users, routines: Workflow, documents: FolderOpen, reglages: SlidersHorizontal,
+};
 
-function Lien({ to, label, icon: Icon, end, pastille }: { to: string; label: string; icon: typeof Home; end?: boolean; pastille?: number }) {
+/** Entrée du menu : active pour toute adresse de sa section (ses onglets compris). */
+function Lien({ to, label, icon: Icon, actif, pastille, discret }: {
+  to: string; label: string; icon: typeof Home; actif: boolean; pastille?: number; discret?: boolean;
+}) {
   return (
-    <NavLink
-      to={to} end={end} data-tuto={to}
-      className={({ isActive }) => cx(
-        'flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors',
-        isActive ? 'bg-neutral-200/70 font-medium text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
+    <Link
+      to={to} data-tuto={to} aria-current={actif ? 'page' : undefined}
+      className={cx(
+        'flex min-h-[46px] items-center gap-3 rounded-xl px-3.5 text-base transition-colors',
+        actif ? 'bg-[#EDECEA] font-semibold text-[#141414]' : cx(discret ? 'text-[#5F5B57]' : 'text-[#141414]', 'hover:bg-[#F6F5F3]'),
       )}
     >
-      <Icon className="h-4 w-4" /> {label}
-      {pastille ? <span className="ml-auto rounded-full bg-orange-500 px-1.5 text-xs font-medium text-white">{pastille}</span> : null}
-    </NavLink>
+      <Icon className="h-5 w-5 shrink-0" aria-hidden /> <span className="flex-1">{label}</span>
+      {pastille ? (
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EA6A1E] px-1.5 text-[13px] font-bold text-[#141414]"
+          aria-label={`${pastille} décision${pastille > 1 ? 's' : ''} en attente`}>{pastille}</span>
+      ) : null}
+    </Link>
+  );
+}
+
+/** Ancienne adresse du Studio : renvoie vers son onglet, paramètres et ancre conservés. */
+function Redirection() {
+  const { pathname, search, hash } = useLocation();
+  return <Navigate to={nouvelleAdresse(pathname, search, hash) ?? BASE} replace />;
+}
+
+/** Onglets de la section courante (les pages regroupées sous une entrée du menu), puis la page. */
+function SectionOnglets() {
+  const { pathname } = useLocation();
+  const section = sectionDe(pathname);
+  const actif = section ? ongletActif(section, pathname) : null;
+  return (
+    <>
+      {section && section.onglets.length > 1 && (
+        <nav aria-label={`Rubriques de « ${section.label} »`} className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-[#E7E5E2] px-1">
+          {section.onglets.map((o) => (
+            <Link key={o.chemin} to={o.chemin} aria-current={o === actif ? 'page' : undefined}
+              className={cx('-mb-px flex min-h-[44px] shrink-0 items-center whitespace-nowrap border-b-2 px-3 text-[15px]',
+                o === actif ? 'border-[#141414] font-semibold text-[#141414]' : 'border-transparent text-[#5F5B57] hover:text-[#141414]')}>
+              {o.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+      <Outlet />
+    </>
   );
 }
 
@@ -124,28 +142,29 @@ function Coquille() {
   }, [me.user.id]);
   // Essai terminé : seul l'abonnement (et le compte) reste accessible, le menu le dit.
   const essaiFini = Boolean(me.essai?.termine);
+  const { pathname } = useLocation();
+  const courante = sectionDe(pathname)?.id;
+  const [reglages, ...principales] = [...SECTIONS].reverse();
   const nav = (
-    <nav className="flex min-h-full flex-col gap-1 p-4" onClick={() => setOuvert(false)}>
-      <div className="mb-6 px-2">
-        <p className="text-lg font-bold tracking-tight text-neutral-900">A(I)ssociate <span className="text-orange-500">Studio</span></p>
-        <p className="line-clamp-2 break-words text-xs text-neutral-500" title={me.workspace.nom}>{me.workspace.nom}</p>
+    <nav aria-label="Navigation principale" className="flex min-h-full flex-col gap-0.5 px-4 py-6" onClick={() => setOuvert(false)}>
+      <div className="mb-7 px-3">
+        <p className="text-[19px] font-bold leading-tight tracking-tight text-[#141414]">A(I)ssociate <span className="text-[#EA6A1E]">Studio</span></p>
+        <p className="mt-1 line-clamp-2 break-words text-[13px] text-[#5F5B57]" title={me.workspace.nom}>{me.workspace.nom}</p>
       </div>
       {essaiFini ? (
         <>
-          <Lien to="/studio/perimetre" label="Mon abonnement" icon={Gauge} />
-          <Lien to="/studio/compte" label="Mon compte" icon={KeyRound} />
+          <Lien to={`${BASE}/reglages/perimetre`} label="Mon abonnement" icon={Gauge} actif={!pathname.endsWith('/compte')} />
+          <Lien to={`${BASE}/reglages/compte`} label="Mon compte" icon={KeyRound} actif={pathname.endsWith('/compte')} />
           <p className="mt-4 px-3 text-xs text-neutral-500">Vos agents, ressources et contenus vous attendent : ils reviennent dès l'abonnement activé.</p>
         </>
-      ) : (
-        <>
-          {MENU.map((m) => <Lien key={m.to} {...m} />)}
-          <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mes créations</p>
-          {MENU_CREATIONS.map((m) => <Lien key={m.to} {...m} pastille={m.to === '/studio/livrables' ? me.stats.livrables_a_valider : undefined} />)}
-          <p className="mb-1 mt-6 px-3 text-xs text-neutral-400">Mon espace</p>
-          {MENU_ESPACE.map((m) => <Lien key={m.to} {...m} />)}
-        </>
-      )}
-      <div className="mt-auto border-t border-neutral-200 pt-4">
+      ) : principales.reverse().map((s) => (
+        <Lien key={s.id} to={s.to} label={s.label} icon={ICONES[s.id]} actif={courante === s.id}
+          pastille={s.id === 'aujourdhui' ? me.stats.livrables_a_valider : undefined} />
+      ))}
+      <div className="mt-auto pt-6">
+        {!essaiFini && <Lien to={reglages.to} label={reglages.label} icon={ICONES[reglages.id]} actif={courante === reglages.id} discret />}
+      </div>
+      <div className="mt-2 border-t border-[#E7E5E2] pt-4">
         <p className="truncate px-3 text-sm font-medium text-neutral-800">{[majuscule(me.user.prenom), me.user.nom].filter(Boolean).join(' ') || me.user.email}</p>
         <p className="truncate px-3 text-xs text-neutral-500">{me.user.email}</p>
         <button onClick={deconnexion} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-100">
@@ -165,15 +184,15 @@ function Coquille() {
     </nav>
   );
   return (
-    <div className="min-h-screen bg-[#f6f6f4] font-sans text-neutral-900">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 overflow-y-auto border-r border-neutral-200 bg-[#f1f1ee] lg:block">{nav}</aside>
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200 bg-[#f6f6f4]/90 px-4 py-3 backdrop-blur lg:hidden">
+    <div className="min-h-screen bg-[#F6F5F3] font-sans text-neutral-900">
+      <aside className="fixed inset-y-0 left-0 hidden w-60 overflow-y-auto border-r border-neutral-200 bg-white lg:block">{nav}</aside>
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200 bg-[#F6F5F3]/90 px-4 py-3 backdrop-blur lg:hidden">
         <p className="font-bold">A(I)ssociate <span className="text-orange-500">Studio</span></p>
         <button onClick={() => setOuvert(true)} aria-label="Ouvrir le menu"><Menu className="h-5 w-5" /></button>
       </header>
       {ouvert && (
         <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOuvert(false)}>
-          <aside className="h-full w-64 overflow-y-auto bg-[#f1f1ee]" onClick={(e) => e.stopPropagation()}>
+          <aside className="h-full w-64 overflow-y-auto bg-white" onClick={(e) => e.stopPropagation()}>
             <button className="absolute left-52 top-4" onClick={() => setOuvert(false)} aria-label="Fermer le menu"><X className="h-5 w-5" /></button>
             {nav}
           </aside>
@@ -189,18 +208,18 @@ function Coquille() {
               <p className="mt-1">Vos agents, ressources et contenus sont conservés. Activez votre abonnement ci-dessous pour les retrouver tout de suite.</p>
             </div>
           ) : (
-            <NavLink to="/studio/perimetre" className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+            <NavLink to="/studio/reglages/perimetre" className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
               <AlarmClock className="h-5 w-5 shrink-0" />
               <span>Essai gratuit : {me.essai.jours_restants > 1 ? `${me.essai.jours_restants} jours restants` : 'dernier jour'} (jusqu'au {new Date(me.essai.fin).toLocaleDateString('fr-FR')}) · un outil connectable. <span className="underline">Choisir mon abonnement</span></span>
             </NavLink>
           ))}
           {me.workspace.suspendu && (
-            <NavLink to="/studio/perimetre" className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <NavLink to="/studio/reglages/perimetre" className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <PauseCircle className="h-5 w-5 shrink-0" />
               <span>Vos agents sont suspendus : aucune mission n'est traitée. <span className="underline">Voir mon périmètre</span></span>
             </NavLink>
           )}
-          <Suspense fallback={<Chargement />}>{essaiFini ? (window.location.pathname.endsWith('/compte') ? <Compte /> : <Perimetre />) : <Outlet />}</Suspense>
+          <Suspense fallback={<Chargement />}>{essaiFini ? (pathname.endsWith('/compte') ? <Compte /> : <Perimetre />) : <SectionOnglets />}</Suspense>
         </div>
       </main>
     </div>
@@ -234,7 +253,7 @@ export default function StudioApp() {
 
   return (
     <StudioContext.Provider value={{ me, chargement, rafraichir, connecte, deconnexion, gerer }}>
-      <Suspense fallback={<div className="min-h-screen bg-[#f6f6f4]"><Chargement /></div>}>
+      <Suspense fallback={<div className="min-h-screen bg-[#F6F5F3]"><Chargement /></div>}>
         <Routes>
           <Route path="connexion" element={<Connexion />} />
           <Route path="mot-de-passe/:jeton" element={<Reinitialiser />} />
@@ -244,22 +263,26 @@ export default function StudioApp() {
           <Route path="demarrer" element={<Questionnaire />} />
           <Route path="desinscription/:jeton" element={<Desinscription />} />
           <Route element={<Garde />}>
-            <Route index element={<Accueil />} />
-            <Route path="assistants" element={<Assistants />} />
+            {/* Cinq sections (routes.ts) ; les pages regroupées sont leurs onglets. */}
+            <Route index element={<Aujourdhui />} />
+            <Route path="aujourdhui" element={<Navigate to={BASE} replace />} />
+            <Route path="aujourdhui/livrables" element={<Livrables />} />
+            <Route path="aujourdhui/journal" element={<Journal />} />
+            <Route path="equipe" element={<Assistants />} />
             <Route path="assistants/:agentId" element={<AgentChatParAgent />} />
-            <Route path="ressources" element={<Ressources />} />
-            <Route path="connecteurs" element={<Connecteurs />} />
-            <Route path="rapport" element={<Rapport />} />
-            <Route path="perimetre" element={<Perimetre />} />
-            <Route path="journal" element={<Journal />} />
-            <Route path="livrables" element={<Livrables />} />
-            <Route path="par-email" element={<ParEmail />} />
-            <Route path="taches" element={<Taches />} />
-            <Route path="veille" element={<Veille />} />
-            <Route path="contacts" element={<Contacts />} />
-            <Route path="creations" element={<Creations />} />
-            <Route path="entreprise" element={<Entreprise />} />
-            <Route path="compte" element={<Compte />} />
+            <Route path="routines" element={<Taches />} />
+            <Route path="routines/veille" element={<Veille />} />
+            <Route path="routines/par-email" element={<ParEmail />} />
+            <Route path="documents" element={<Ressources />} />
+            <Route path="documents/contenus" element={<Creations />} />
+            <Route path="documents/contacts" element={<Contacts />} />
+            <Route path="reglages" element={<Connecteurs />} />
+            <Route path="reglages/entreprise" element={<Entreprise />} />
+            <Route path="reglages/perimetre" element={<Perimetre />} />
+            <Route path="reglages/compte" element={<Compte />} />
+            <Route path="reglages/rapport" element={<Rapport />} />
+            {/* Anciennes adresses : toujours servies, par redirection. */}
+            {Object.keys(REDIRECTIONS).map((ancienne) => <Route key={ancienne} path={ancienne} element={<Redirection />} />)}
           </Route>
           <Route path="*" element={<Navigate to="/studio" replace />} />
         </Routes>

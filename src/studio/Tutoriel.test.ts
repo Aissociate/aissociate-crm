@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { ETAPES_TUTORIEL, placerCarte } from './Tutoriel';
+import { SECTIONS } from './routes';
 
 describe('guide de prise en main', () => {
   it('commence et finit par une étape sans surprise', () => {
     expect(ETAPES_TUTORIEL[0].cible).toBeUndefined();
     expect(ETAPES_TUTORIEL[ETAPES_TUTORIEL.length - 1].cible).toBe('guide');
     expect(new Set(ETAPES_TUTORIEL.map((e) => e.titre)).size).toBe(ETAPES_TUTORIEL.length);
+  });
+  it('ne désigne que des entrées du menu qui existent', () => {
+    const menu = new Set(SECTIONS.map((s) => s.to));
+    const cibles = ETAPES_TUTORIEL.map((e) => e.cible).filter((c): c is string => Boolean(c?.startsWith('/')));
+    expect(cibles).toEqual(SECTIONS.map((s) => s.to));
+    for (const c of cibles) expect(menu.has(c), c).toBe(true);
   });
   it('place la carte à droite de la cible, sinon dessous, sinon dessus, sans sortir de l\'écran', () => {
     expect(placerCarte(null, 1200, 800)).toBeNull();

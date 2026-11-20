@@ -36,6 +36,7 @@
 //   client  perimetre | suspendre {suspendu} (propriétaire) | journal
 //           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?, raison (refus : trop_long | mauvais_ton | pas_le_moment | autre)} (propriétaire)
 //           livrable_modifier {id, champs} (version précédente gardée, repasse à valider)
+//           aujourdhui → { decisions, faits, minutes_semaine, a_venir } (écran d'accueil : faits.ts)
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
 //   Toute mission (chat, média) est refusée si l'espace est suspendu ou a atteint son plafond IA du jour.
@@ -105,6 +106,7 @@ import * as essai from "./essai.ts";
 import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
 import { colonneSensibleAbsente, detecterSensible, DOSSIER_SENSIBLE, messageSensible } from "./sensible.ts";
+import { aVenir, faitsSemaine, type LigneFait } from "./faits.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
 import * as vision from "./vision.ts";
@@ -914,6 +916,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             const sesOutils = await outilsEspace({
               sb, wsId: s.ws.id, acteur: acteurDe(s), agentId: collegue.id, agentPrenom: collegue.prenom,
               userId: s.sessionId === "mail" ? null : s.user.id, conversationId: conversationId as string, apiKey,
+              // Ses propositions portent la trace de l'agent qui lui a confié la mission (studio_livrables.confie_par).
+              confiePar: agent.id,
             }).catch(() => null);
             const sys = construirePrompt({
               agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
@@ -2088,6 +2092,29 @@ Deno.serve(async (req: Request) => {
 
       case "journal":
         return json({ lignes: await lireJournal(sb, s.ws.id) });
+
+      // ── Écran « Aujourd'hui » : décisions en attente, fait cette semaine, à venir ──
+      case "aujourdhui": {
+        const depuis = new Date(Date.now() - 7 * 86_400_000).toISOString();
+        const [livrables, { data: journal }, { data: reponses }, { data: taches }, agents] = await Promise.all([
+          listerLivrables(sb, s.ws.id),
+          sb.from("studio_journal").select("agent_id, action").eq("workspace_id", s.ws.id).gte("created_at", depuis).limit(5000),
+          // Même règle que le temps gagné du mois (construireMe) : réponses utiles, hors relais.
+          sb.from("studio_messages").select("agent_id").eq("workspace_id", s.ws.id).eq("role", "assistant")
+            .or("retour.is.null,retour.eq.1").not("content", "like", "%[[RELAIS:%").gte("created_at", depuis).limit(5000),
+          sb.from("studio_taches").select("titre, agent_id, prochaine_execution").eq("workspace_id", s.ws.id).eq("actif", true)
+            .order("prochaine_execution").limit(10),
+          agentsDuWorkspace(sb, s.ws),
+        ]);
+        const minutes = new Map(agents.map((a) => [a.id, a.minutes_par_tache as number]));
+        const tous = livrables as unknown as { statut: string; titre: string; agent_id: string | null; action?: unknown }[];
+        return json({
+          decisions: tous.filter((l) => l.statut === "a_valider"),
+          faits: faitsSemaine((journal ?? []) as LigneFait[]),
+          minutes_semaine: (reponses ?? []).reduce((t, r) => t + (minutes.get(String(r.agent_id)) ?? 15), 0),
+          a_venir: aVenir(taches ?? [], tous, new Date()),
+        });
+      }
 
       case "liaison":
         return json(await etatLiaison(sb, s.ws.id, s.user.role === "proprietaire"));

@@ -595,6 +595,8 @@ type Ctx = {
   agentPrenom?: string; userId?: string | null;
   /** Clé OpenRouter : recherche web (web_rechercher). */
   apiKey?: string;
+  /** Agent qui a confié la mission en cours (orchestration par Léa) ; noté sur les livrables créés. */
+  confiePar?: string | null;
 };
 export type Outils = {
   definitions: DefinitionOutil[];
@@ -659,12 +661,21 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   };
   const avisSensible = (s: Sensible) => `elle semble contenir ${s.libelle} : elle est rangée désactivée et ne sera pas relue tant que le dirigeant ne l'a pas activée dans « Mes ressources ». Ne recopie pas ces données dans tes réponses.`;
 
+  /**
+   * Nouveau livrable « à valider » de l'agent. S'il travaille pour une mission confiée par
+   * un collègue (Léa), la trace en est gardée (confie_par) ; colonne absente → sans la trace.
+   */
+  const creerLivrable = async (champs: Record<string, unknown>) => {
+    const ligne = { workspace_id: ctx.wsId, conversation_id: ctx.conversationId, agent_id: ctx.agentId, soumis_par: ctx.acteur, ...champs };
+    const inserer = (l: Record<string, unknown>) => ctx.sb.from("studio_livrables").insert(l).select("id").single();
+    if (!ctx.confiePar) return await inserer(ligne);
+    const r = await inserer({ ...ligne, confie_par: ctx.confiePar });
+    return r.error && /confie_par/.test(r.error.message) ? await inserer(ligne) : r;
+  };
+
   /** Livrable « à valider » portant l'action à exécuter au VALIDÉ. */
   const proposer = async (titre: string, contenu: string, action: ActionLivrable, quoi: string) => {
-    const { data: l, error } = await ctx.sb.from("studio_livrables").insert({
-      workspace_id: ctx.wsId, conversation_id: ctx.conversationId, agent_id: ctx.agentId,
-      titre, contenu, soumis_par: ctx.acteur, action,
-    }).select("id").single();
+    const { data: l, error } = await creerLivrable({ titre, contenu, action });
     if (error) return { resultat: `Proposition impossible : ${error.message}`, libelle: `Proposition : ${quoi}` };
     await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre } });
     return {
@@ -780,10 +791,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const titre = String(a.titre ?? "").trim().slice(0, 200) || titreDuHtml(html) || "Document";
           if (html.replace(/<[^>]+>/g, "").trim().length < 20) return { resultat: "Document vide : fournis le HTML complet.", libelle: "Document non créé" };
           const d = await dossierPour(a.dossier);
-          const { data: l, error } = await ctx.sb.from("studio_livrables").insert({
-            workspace_id: ctx.wsId, conversation_id: ctx.conversationId, agent_id: ctx.agentId,
-            titre, contenu: html, format: "html", soumis_par: ctx.acteur, dossier_id: d.id,
-          }).select("id").single();
+          const { data: l, error } = await creerLivrable({ titre, contenu: html, format: "html", dossier_id: d.id });
           if (error) return { resultat: `Document non créé : ${error.message}`, libelle: "Document non créé" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre, format: "html" } });
           return {
@@ -819,10 +827,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
             sources.length ? `---\n\n**Sources :**\n${sources.map((u) => `- ${u}`).join("\n")}` : "",
             motsCles && `**Mots-clés :** ${motsCles}`,
           ].filter(Boolean).join("\n\n");
-          const { data: l, error } = await ctx.sb.from("studio_livrables").insert({
-            workspace_id: ctx.wsId, conversation_id: ctx.conversationId, agent_id: ctx.agentId,
-            titre: `Article — ${titre}`.slice(0, 250), contenu, soumis_par: ctx.acteur,
-          }).select("id").single();
+          const { data: l, error } = await creerLivrable({ titre: `Article — ${titre}`.slice(0, 250), contenu });
           if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Article non enregistré" };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre: `Article — ${titre}` } });
           return { resultat: `Article enregistré comme brouillon à valider, référence ${refLivrable(l.id)} (rubrique Livrables).`, libelle: `Article « ${titre.slice(0, 60)} » (à valider)` };

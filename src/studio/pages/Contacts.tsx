@@ -56,7 +56,7 @@ export default function Contacts() {
 
   return (
     <div className="space-y-6">
-      <Titre sous={<>Vos abonnés pour les newsletters et mailings. Vos agents préparent les envois ; rien ne part sans votre validation, {e.boite ? <>depuis {e.boite} (<Link to="/studio/connecteurs" className="underline">Connecteurs</Link>), {e.plafond_heure} e-mails par heure et {e.plafond_jour} par jour au plus : une boîte personnelle n'est pas faite pour les gros volumes.</> : <>depuis votre messagerie, à connecter dans <Link to="/studio/connecteurs" className="underline">Connecteurs</Link>.</>}</>}>
+      <Titre sous={<>Vos abonnés pour les newsletters et mailings. Vos agents préparent les envois ; rien ne part sans votre validation, {e.boite ? <>depuis {e.boite} (<Link to="/studio/reglages" className="underline">Connecteurs</Link>), {e.plafond_heure} e-mails par heure et {e.plafond_jour} par jour au plus : une boîte personnelle n'est pas faite pour les gros volumes.</> : <>depuis votre messagerie, à connecter dans <Link to="/studio/reglages" className="underline">Connecteurs</Link>.</>}</>}>
         Contacts
       </Titre>
       {erreur && <p className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700">{erreur}</p>}
@@ -121,7 +121,7 @@ export default function Contacts() {
               </li>
             ))}
           </ul>
-          <Link to="/studio/livrables" className="mt-2 inline-block text-xs font-medium text-orange-600 hover:underline">Valider les mailings en attente</Link>
+          <Link to="/studio" className="mt-2 inline-block text-xs font-medium text-orange-600 hover:underline">Valider les mailings en attente</Link>
         </Carte>
       )}
 

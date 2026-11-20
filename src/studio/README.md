@@ -6,6 +6,31 @@ spécialisés qui connaissent leur entreprise. Le module s'inspire de limova.ai 
 agents avec un prénom, la valeur affichée en temps gagné, une base de ressources qu'on
 active ou désactive, et des demandes prêtes à l'emploi.
 
+## Navigation et écran « Aujourd'hui » (refonte, lot 2)
+
+- **Cinq entrées** (`routes.ts`, testé) : Aujourd'hui, Mon équipe, Routines, Mes documents, Réglages et connecteurs.
+  Les anciennes pages sont devenues les onglets de leur section. Les anciennes adresses (`/studio/livrables`,
+  `/studio/connecteurs`…) redirigent en gardant paramètres et ancre : le serveur renvoie encore vers
+  `/studio/connecteurs?…` (connexion d'un compte) et `/studio/perimetre?…` (Stripe). Pour ajouter une page :
+  un onglet dans `SECTIONS`, une route dans `StudioApp.tsx`.
+- **Aujourd'hui** (`pages/Aujourdhui.tsx`, `aujourdhui/`) : la file des livrables « à valider », une seule carte
+  dépliée à la fois.
+  - Bouton nommé par l'effet et pastille de portée : `decision.ts` (testé), déduits de l'action du livrable.
+  - Valider retient l'appel 8 secondes (`useDecisions.ts`) : « Annuler » empêche l'envoi. Onglet fermé pendant ce
+    délai : rien ne part. Changement de page dans le Studio : l'envoi part tout de suite.
+  - Refuser passe par les quatre raisons du lot 1 ; « Annuler » remet le livrable « à valider ».
+  - « mission confiée par Léa » n'apparaît que si c'est vrai (`studio_livrables.confie_par`, migration
+    `20261123100000`, écrit par `outils.ts` › `creerLivrable` quand Léa missionne un spécialiste). La relecture
+    elle-même n'est pas tracée, donc pas affichée.
+  - Colonne de droite : action serveur `aujourdhui` (`faits.ts`, testé). « Fait sans vous » met en phrases le
+    journal des 7 derniers jours ; le temps gagné reprend la règle du mois ; « À venir » liste les prochains
+    passages de routines et les publications programmées.
+  - Dictée : reconnaissance vocale du navigateur (`aujourdhui/DemanderLea.tsx`), bouton masqué si elle manque.
+- **Téléphone** (moins de 640 px, `aujourdhui/DecisionsMobile.tsx`) : une décision par écran, « Plus tard » passe à
+  la suivante sans rien enregistrer, « Parler à Léa » dicte et envoie la demande.
+- Les jetons visuels de la spécification (fond `#F6F5F3`, texte `#141414`, accent `#EA6A1E`, cibles de 44 px)
+  s'appliquent au menu et à « Aujourd'hui » ; les autres pages gardent leurs tailles actuelles.
+
 ## Isolation (à préserver)
 
 | Couche | Emplacement | Contact avec le CRM |

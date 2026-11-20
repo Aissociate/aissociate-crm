@@ -349,10 +349,12 @@ export async function modifierLivrable(sb: SupabaseClient, wsId: string, acteur:
 export async function listerLivrables(sb: SupabaseClient, wsId: string) {
   const colonnes = "id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions, dossier_id, format";
   const lire = (c: string) => sb.from("studio_livrables").select(c).eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
-  const { data, error } = await lire(`${colonnes}, refus_raison`);
-  // Colonne absente (migration studio_refus_raison non appliquée) : la liste reste lisible.
-  if (error) return (await lire(colonnes)).data ?? [];
-  return data ?? [];
+  // Colonnes des migrations récentes (refus_raison, confie_par) : si l'une manque, la liste reste lisible.
+  for (const c of [`${colonnes}, refus_raison, confie_par`, `${colonnes}, refus_raison`]) {
+    const { data, error } = await lire(c);
+    if (!error) return data ?? [];
+  }
+  return (await lire(colonnes)).data ?? [];
 }
 
 /** Derniers refus du propriétaire pour cet agent (60 jours, 5 au plus), rendus à l'agent dans son contexte. */
