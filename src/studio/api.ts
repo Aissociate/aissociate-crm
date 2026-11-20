@@ -132,6 +132,11 @@ export async function discuter(
   return fin;
 }
 
+/** Prénom tel qu'on l'affiche : « shanti » → « Shanti », « jean-pierre » → « Jean-Pierre » (le reste est laissé tel que saisi). */
+export function majuscule(prenom: string | null | undefined): string {
+  return (prenom ?? '').trim().replace(/(^|[\s-])(\p{L})/gu, (_, sep: string, lettre: string) => sep + lettre.toLocaleUpperCase('fr-FR'));
+}
+
 export function minutesEnTexte(min: number): string {
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60), m = min % 60;

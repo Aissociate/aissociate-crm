@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUp, CheckCircle2, Circle, Clock, MessageSquare, FolderOpen } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { Avatar, Carte, cx } from '../composants';
-import { minutesEnTexte, ORCHESTRATEUR } from '../api';
+import { majuscule, minutesEnTexte, ORCHESTRATEUR } from '../api';
 
 export default function Accueil() {
   const { me } = useStudio();
@@ -31,7 +31,7 @@ export default function Accueil() {
     <div className="space-y-8">
       <div className="pt-4 text-center">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Bonjour {me.user.prenom ?? ''}, que fait-on aujourd'hui&nbsp;?
+          Bonjour{me.user.prenom?.trim() ? ` ${majuscule(me.user.prenom)}` : ''}, que fait-on aujourd'hui&nbsp;?
         </h1>
         <p className="mt-2 text-neutral-500">Décrivez la mission à Léa : elle fait travailler les bons spécialistes, relit leur travail et vous répond.</p>
       </div>
