@@ -33,7 +33,7 @@ export const SECTIONS: Section[] = [
   {
     id: 'routines', label: 'Routines', to: `${BASE}/routines`, prefixes: [`${BASE}/routines`],
     onglets: [
-      { chemin: `${BASE}/routines`, label: 'Tâches planifiées' },
+      { chemin: `${BASE}/routines`, label: 'Mes routines' },
       { chemin: `${BASE}/routines/veille`, label: 'Veille' },
       { chemin: `${BASE}/routines/par-email`, label: 'Par e-mail' },
     ],

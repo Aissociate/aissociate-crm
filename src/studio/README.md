@@ -49,6 +49,24 @@ active ou désactive, et des demandes prêtes à l'emploi.
 - Les textes « Fait seul » / « Vous demande toujours » des 7 agents sont dans `missionGuidee.ts` (`AUTONOMIE`) ; un
   agent inconnu reçoit la règle commune. La conversation libre reste à `/studio/assistants/:agent`.
 
+## Routines (refonte, lot 4)
+
+- **Chaîne d'étapes** (`supabase/functions/studio/routines.ts`, testé) : départ (jours et heures), étapes d'agent,
+  « Vous validez », envoi. Une validation est insérée d'office devant le premier envoi et ne peut pas être retirée.
+  11 modèles par métier (`MODELES`), avec réglages (compteur, choix, bascule, texte) et une seule question à la
+  création. « En clair » et l'historique en phrases sont calculés côté serveur.
+- **Écrans** : `pages/Routines.tsx` (cartes), `pages/Routine.tsx` (`/studio/routines/:id` : chaîne, panneau de
+  réglage par étape, « La dernière fois », historique), `pages/NouvelleRoutine.tsx` (`/studio/routines/nouvelle` :
+  demande écrite ou dictée à Léa via `routine_proposer`, ou galerie `routine_modeles`, puis `routine_creer`).
+- **Mode essai** : 7 jours à la création. Les livrables sont notés dans un carnet (`Ctx.essai`, `outils.ts`) sans
+  rien envoyer ni écrire. À la fin, une décision « Mettre en route » (`routine_activer`) arrive dans
+  « Aujourd'hui » ; la routine reste à l'essai tant qu'elle n'est pas validée. « Essayer sur un vrai cas » lance un
+  passage d'essai à la demande.
+- **Passages** (`studio_routine_passages`) : un par exécution. Un échec planifié est repris une heure plus tard
+  (`reprise_prevue`, deuxième et dernière tentative) ; l'historique fusionne l'échec et sa reprise en un incident.
+- Pas de déclencheur par événement : plusieurs heures par jour font office de surveillance. Sans la migration
+  `20261124100000_studio_routines.sql`, les actions répondent 503 et l'ancienne liste reste lisible.
+
 ## Isolation (à préserver)
 
 | Couche | Emplacement | Contact avec le CRM |

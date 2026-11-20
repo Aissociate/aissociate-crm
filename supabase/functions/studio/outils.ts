@@ -39,7 +39,9 @@ export type ActionLivrable =
   | { type: "reseaux_envoyer_message"; compte: { id: string; reseau: zernio.Reseau; nom: string }; conversation_id: string; destinataire: string; texte: string }
   | { type: "mailing_envoyer"; objet: string; contenu: string; liste: string | null; destinataires: number }
   // Applications reliées en un clic (applications_outils.ts) : blog, CRM, YouTube, WhatsApp.
-  | apps.ActionApp;
+  | apps.ActionApp
+  // Fin du mode essai d'une routine : la mettre en route pour de vrai (décision dans « Aujourd'hui »).
+  | { type: "routine_activer"; tache_id: string; titre: string; contenu: string };
 
 const lisibleReunion = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
 
@@ -51,6 +53,7 @@ export function titreAction(a: ActionLivrable): string {
   if (a.type === "mailing_envoyer") return `Mailing — ${a.objet}`;
   if (a.type === "gmail_envoyer") return `E-mail — ${a.objet}`;
   if (a.type === "agenda_creer") return `Rendez-vous — ${a.titre}`;
+  if (a.type === "routine_activer") return `Routine — ${a.titre}`;
   if (a.type === "reseaux_repondre_commentaire") return `Réponse ${zernio.NOMS_RESEAUX[a.compte.reseau]} — ${a.texte.replace(/\s+/g, " ").slice(0, 50)}`;
   if (a.type === "reseaux_envoyer_message") return `Message ${zernio.NOMS_RESEAUX[a.compte.reseau]} à ${a.destinataire}`;
   if (a.type === "reseaux_publier") {
@@ -132,6 +135,7 @@ export function modifierAction(a: ActionLivrable, champs: Record<string, unknown
     const texte = txt("texte", 5000);
     return texte ? { ...a, texte } : { erreur: "Le texte ne peut pas être vide." };
   }
+  if (a.type === "routine_activer") return { erreur: "Cette décision ne se modifie pas : mettez la routine en route, ou réglez-la dans « Routines »." };
   const titre = txt("titre", 200) || a.titre, contenu = txt("contenu", 100_000);
   if (!contenu) return { erreur: "Le document ne peut pas être vide." };
   return { ...a, titre, contenu };
@@ -597,7 +601,15 @@ type Ctx = {
   apiKey?: string;
   /** Agent qui a confié la mission en cours (orchestration par Léa) ; noté sur les livrables créés. */
   confiePar?: string | null;
+  /** Passage de routine en mode essai : les propositions sont notées ici ; rien n'est soumis, enregistré ni envoyé. */
+  essai?: CarnetEssai | null;
 };
+
+/** Ce qu'une routine en essai aurait proposé (historique « Ce qui s'est passé »). */
+export type CarnetEssai = { propositions: { agent: string; titre: string; apercu: string }[] };
+
+/** Outils qui écrivent dans l'espace : sans effet en mode essai. */
+const ESSAI_SANS_ECRITURE = new Set(["note_enregistrer", "competence_enregistrer", "ranger", "veille_ajouter_flux", "document_modifier"]);
 export type Outils = {
   definitions: DefinitionOutil[];
   consigne: string;
@@ -668,6 +680,14 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const creerLivrable = async (champs: Record<string, unknown>) => {
     const ligne = { workspace_id: ctx.wsId, conversation_id: ctx.conversationId, agent_id: ctx.agentId, soumis_par: ctx.acteur, ...champs };
     const inserer = (l: Record<string, unknown>) => ctx.sb.from("studio_livrables").insert(l).select("id").single();
+    if (ctx.essai) {
+      // Mode essai : la proposition est notée pour le dirigeant, aucun livrable n'est créé.
+      ctx.essai.propositions.push({
+        agent: ctx.agentId, titre: String(champs.titre ?? "Proposition").slice(0, 200),
+        apercu: String(champs.contenu ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500),
+      });
+      return { data: { id: crypto.randomUUID() }, error: null } as unknown as Awaited<ReturnType<typeof inserer>>;
+    }
     if (!ctx.confiePar) return await inserer(ligne);
     const r = await inserer({ ...ligne, confie_par: ctx.confiePar });
     return r.error && /confie_par/.test(r.error.message) ? await inserer(ligne) : r;
@@ -677,6 +697,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const proposer = async (titre: string, contenu: string, action: ActionLivrable, quoi: string) => {
     const { data: l, error } = await creerLivrable({ titre, contenu, action });
     if (error) return { resultat: `Proposition impossible : ${error.message}`, libelle: `Proposition : ${quoi}` };
+    if (ctx.essai) return { resultat: `Mode essai : proposition notée pour le dirigeant (« ${titre} »). Rien n'est soumis ni envoyé.`, libelle: `${quoi} (essai)` };
     await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre } });
     return {
       resultat: `Proposition enregistrée sous la référence ${refLivrable(l.id)}. ${quoi} sera exécuté dès que le propriétaire l'aura validé (rubrique Livrables, ou réponse « VALIDÉ ${refLivrable(l.id)} » par e-mail).`,
@@ -697,6 +718,9 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
     async executer(nom, argsJson) {
       let a: Record<string, string> = {};
       try { a = JSON.parse(argsJson || "{}"); } catch { return { resultat: "Arguments illisibles.", libelle: "Outil" }; }
+      if (ctx.essai && ESSAI_SANS_ECRITURE.has(nom)) {
+        return { resultat: "Mode essai : rien n'est enregistré. Indique dans ton compte rendu ce que tu aurais enregistré.", libelle: "Essai : non enregistré" };
+      }
       try {
         if (nom === "ressource_lire") {
           const titre = String(a.titre ?? "").trim();
@@ -793,6 +817,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const d = await dossierPour(a.dossier);
           const { data: l, error } = await creerLivrable({ titre, contenu: html, format: "html", dossier_id: d.id });
           if (error) return { resultat: `Document non créé : ${error.message}`, libelle: "Document non créé" };
+          if (ctx.essai) return { resultat: `Mode essai : document « ${titre} » noté pour le dirigeant, rien n'est enregistré.`, libelle: `Document « ${titre.slice(0, 60)} » (essai)` };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre, format: "html" } });
           return {
             resultat: `Document créé, référence ${refLivrable(l.id)}. Il s'affiche à droite de la conversation ; le client peut le modifier et l'exporter en PDF ou Word.`,
@@ -829,6 +854,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           ].filter(Boolean).join("\n\n");
           const { data: l, error } = await creerLivrable({ titre: `Article — ${titre}`.slice(0, 250), contenu });
           if (error) return { resultat: `Enregistrement impossible : ${error.message}`, libelle: "Article non enregistré" };
+          if (ctx.essai) return { resultat: `Mode essai : article « ${titre} » noté pour le dirigeant, rien n'est enregistré.`, libelle: `Article « ${titre.slice(0, 60)} » (essai)` };
           await journaliser(ctx.sb, { wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, action: "livrable_soumis", detail: { livrable: l.id, titre: `Article — ${titre}` } });
           return { resultat: `Article enregistré comme brouillon à valider, référence ${refLivrable(l.id)} (rubrique Livrables).`, libelle: `Article « ${titre.slice(0, 60)} » (à valider)` };
         }
@@ -1071,6 +1097,13 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
 /** Exécute l'action d'un livrable validé. Renvoie le résultat à enregistrer. */
 export async function executerAction(sb: SupabaseClient, wsId: string, action: ActionLivrable, livrableId?: string): Promise<{ ok: true; lien: string | null; id: string } | { ok: false; erreur: string }> {
   try {
+    if (action.type === "routine_activer") {
+      // Fin de l'essai : la routine agit désormais pour de vrai (toujours avec validation avant tout envoi).
+      const { data, error } = await sb.from("studio_taches").update({ essai_jusqu_au: null, essai_signale: true })
+        .eq("id", action.tache_id).eq("workspace_id", wsId).select("id").maybeSingle();
+      if (error || !data) return { ok: false, erreur: error?.message ?? "Routine introuvable : elle a peut-être été supprimée." };
+      return { ok: true, id: action.tache_id, lien: null };
+    }
     if (action.type === "mailing_envoyer") {
       if (!livrableId) return { ok: false, erreur: "Livrable inconnu" };
       const n = await mailing.mettreEnFile(sb, wsId, livrableId, action.liste);

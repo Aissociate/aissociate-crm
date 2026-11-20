@@ -49,6 +49,13 @@
 // Tâches planifiées (taches.ts) :
 //   client  taches | tache_enregistrer {id?, titre, agent_id, consigne, heures[], jours[], actif} | tache_supprimer {id}
 //           tache_lancer {id}                       (écriture : propriétaire)
+// Routines (routines.ts, refonte §3.4 et §3.5) — une tâche planifiée vue comme une chaîne d'étapes :
+//   client  routines → {routines: [étapes, « En clair », historique…], installees} | routine_modeles → galerie et outils reliés
+//           routine_regler {id, reglages?, heures?, jours?, actif?} | routine_essayer {id} (passage à blanc)
+//           routine_activer {id} (fin de l'essai) | routine_supprimer {id}
+//           routine_proposer {demande} → chaîne proposée par Léa et sa question | routine_creer {modele | proposition, reponse?, saisie?}
+//           (écriture : propriétaire ; une routine créée démarre en essai 7 jours, puis une décision « la mettre en route ? »)
+//   cron    taches_cron relance aussi une fois, une heure plus tard, un passage en échec (reprise_prevue)
 //   cron    controle_cron {cle} (pg_cron quotidien) → contrôle du parcours client, alerte e-mail si problème (controle.ts)
 //   cron    ameliorations_cron {cle} (pg_cron quotidien) → propositions d'amélioration tirées des conversations, déposées dans CRM › Développement (ameliorations.ts)
 //   cron    taches_cron {cle} (pg_cron horaire) → tache_executer {cle, id} par tâche échue, chacune dans sa propre instance
@@ -76,6 +83,12 @@ import * as mailing from "./mailing.ts";
 import * as bureau from "./bureau.ts";
 import { creerInvitation, ouvrirInvitation } from "./invitations.ts";
 import { consigneTache, egaliteSure, libellePlanning, MODELES_TACHES, planningValide, prochaineExecution } from "./taches.ts";
+import {
+  AVIS_ESSAI, bilanPassages, chaine, consigneDe, consigneModele, consigneProposition, enClair, erreurReglages, etapesEnregistrees,
+  historique, modeleDe, modelesPour, NOMS_CAPACITES, reglagesDe, TONS, validerProposition,
+  type Capacite, type Passage, type RoutineBrute,
+} from "./routines.ts";
+import { extraireJson } from "./ameliorations_regles.ts";
 
 /** Origine des liens d'invitation : seulement nos domaines (l'en-tête Origin est contrôlé par le client). */
 function origineSure(req: Request | string): string {
@@ -96,7 +109,7 @@ import {
 import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
 import { verifierSvix } from "./liaison.ts";
 import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
-import { outilsEspace } from "./outils.ts";
+import { outilsEspace, type CarnetEssai } from "./outils.ts";
 import * as zernio from "./zernio.ts";
 import * as applications from "./applications.ts";
 import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./facturation.ts";
@@ -359,45 +372,160 @@ async function cleCron(sb: SupabaseClient): Promise<string | null> {
   return (data?.cle as string | undefined) ?? null;
 }
 
+/** Colonnes des routines (lot 4 de la refonte). */
+const SELECT_ROUTINE = `${SELECT_TACHE}, etapes, modele, reglages, essai_jusqu_au, essai_signale, reprise_prevue, created_at`;
+/** Migration des routines pas encore appliquée (colonne ou table inconnue) : on retombe sur l'ancien fonctionnement. */
+const schemaRoutinesAbsent = (e: { message?: string; code?: string } | null | undefined) =>
+  Boolean(e && /etapes|modele|reglages|essai_|reprise_prevue|studio_routine_passages|PGRST20[45]|42703|42P01/.test(`${e.code ?? ""} ${e.message ?? ""}`));
+/** Une seule reprise automatique après un échec, une heure plus tard. */
+const REPRISE_MS = 3_600_000;
+const ESSAI_JOURS = 7;
+
+type OptionsPassage = { essai?: boolean; tentative?: number; manuel?: boolean };
+
 /** Lance une tâche dans sa propre instance de la fonction (la réponse revient tout de suite). */
-async function declencherTache(cle: string, id: string): Promise<void> {
+async function declencherTache(cle: string, id: string, o: OptionsPassage = {}): Promise<void> {
   await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/studio`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "tache_executer", cle, id }),
+    body: JSON.stringify({ action: "tache_executer", cle, id, ...o }),
   }).then((r) => r.body?.cancel()).catch((e) => console.error("[studio] tâche:", e instanceof Error ? e.message : String(e)));
 }
 
-/** Exécution d'une tâche : réservation (une seule instance à la fois), mission, compte rendu. */
-async function executerTache(sb: SupabaseClient, id: string): Promise<void> {
+/** Prénoms de tous les agents (phrases des routines). */
+async function prenomsAgents(sb: SupabaseClient): Promise<Map<string, string>> {
+  const { data } = await sb.from("studio_agents").select("id, prenom");
+  return new Map((data ?? []).map((a) => [String(a.id), String(a.prenom)]));
+}
+
+/**
+ * Passage d'une routine : réservation (une seule instance à la fois), mission, compte rendu,
+ * ligne d'historique. En mode essai, rien n'est soumis ni envoyé (outils.ts › CarnetEssai) et la
+ * conversation est à part, pour que l'agent ne croie pas avoir déjà proposé ce qu'il a seulement montré.
+ * Un échec est retenté une fois, une heure plus tard (tachesEchues).
+ */
+async function executerTache(sb: SupabaseClient, id: string, o: OptionsPassage = {}): Promise<void> {
   const maintenant = new Date();
   const limite = new Date(maintenant.getTime() - TACHE_BLOCAGE_MS).toISOString();
-  const { data: t } = await sb.from("studio_taches").update({ en_cours_depuis: maintenant.toISOString() })
-    .eq("id", id).or(`en_cours_depuis.is.null,en_cours_depuis.lt.${limite}`).select(`${SELECT_TACHE}, workspace_id`).maybeSingle();
+  const reserver = (colonnes: string) => sb.from("studio_taches").update({ en_cours_depuis: maintenant.toISOString() })
+    .eq("id", id).or(`en_cours_depuis.is.null,en_cours_depuis.lt.${limite}`).select(`${colonnes}, workspace_id`).maybeSingle();
+  let { data, error } = await reserver(SELECT_ROUTINE);
+  if (error && schemaRoutinesAbsent(error)) ({ data, error } = await reserver(SELECT_TACHE));
+  const t = data as Record<string, unknown> | null;
   if (!t) return; // déjà en cours ailleurs
-  const prochaine = t.actif ? prochaineExecution({ heures: t.heures as number[], jours: t.jours as number[] }, maintenant) : null;
-  let statut: "ok" | "erreur" = "erreur", compteRendu = "", conversationId = t.conversation_id as string | null;
+  const essaiEnCours = typeof t.essai_jusqu_au === "string" && Date.parse(t.essai_jusqu_au) > maintenant.getTime();
+  const enEssai = o.essai === true || essaiEnCours;
+  const tentative = o.tentative === 2 ? 2 : 1;
+  const planning = { heures: t.heures as number[], jours: t.jours as number[] };
+  const prochaine = t.actif ? prochaineExecution(planning, maintenant) : null;
+  const carnet: CarnetEssai | null = enEssai ? { propositions: [] } : null;
+
+  // Ligne d'historique (table absente avant la migration : on continue sans).
+  const { data: passage } = await sb.from("studio_routine_passages").insert({
+    workspace_id: t.workspace_id, tache_id: id, debut: maintenant.toISOString(), tentative, essai: enEssai, manuel: o.manuel === true,
+  }).select("id").maybeSingle();
+
+  const prenoms = await prenomsAgents(sb);
+  const routine = { ...(t as unknown as RoutineBrute), consigne: String(t.consigne) };
+  const consigne = consigneDe(routine, prenoms) + (enEssai ? `\n\n${AVIS_ESSAI}` : "");
+  let statut: "ok" | "erreur" = "erreur", compteRendu = "";
+  let conversationId = enEssai ? null : (t.conversation_id as string | null);
   try {
     const r = await executeurMail(sb, "tache")(String(t.user_id), {
-      agent_id: t.agent_id, message: consigneTache(String(t.titre), String(t.consigne), maintenant), conversation_id: conversationId,
+      agent_id: t.agent_id, message: consigneTache(String(t.titre), consigne, maintenant), conversation_id: conversationId,
+      ...(carnet ? { essai: carnet } : {}),
     });
     if (r.ok) { statut = "ok"; compteRendu = r.texte; conversationId = r.conversation_id ?? conversationId; }
     else compteRendu = r.erreur;
   } catch (e) {
     compteRendu = e instanceof Error ? e.message : String(e);
   }
+
+  // Propositions réellement déposées dans « Aujourd'hui » pendant ce passage.
+  let nbLivrables = 0;
+  if (!enEssai && statut === "ok" && conversationId) {
+    const { count } = await sb.from("studio_livrables").select("id", { count: "exact", head: true })
+      .eq("conversation_id", conversationId).gte("created_at", maintenant.toISOString());
+    nbLivrables = count ?? 0;
+  }
+  if (passage?.id) {
+    await sb.from("studio_routine_passages").update({
+      fin: new Date().toISOString(), statut, compte_rendu: compteRendu.slice(0, 4000),
+      propositions: carnet?.propositions ?? [], nb_livrables: nbLivrables, conversation_id: conversationId,
+    }).eq("id", passage.id);
+  }
+  const reprendre = statut === "erreur" && tentative === 1 && !o.manuel && !o.essai && Boolean(t.actif);
   await sb.from("studio_taches").update({
     en_cours_depuis: null, derniere_execution: maintenant.toISOString(), dernier_statut: statut,
-    dernier_compte_rendu: compteRendu.slice(0, 4000), conversation_id: conversationId,
+    dernier_compte_rendu: compteRendu.slice(0, 4000),
+    // Un essai a sa propre conversation : celle de la routine reste celle des vrais passages.
+    ...(enEssai ? {} : { conversation_id: conversationId }),
     ...(t.actif ? { prochaine_execution: prochaine?.toISOString() ?? null } : {}),
   }).eq("id", id);
+  if (reprendre) {
+    await sb.from("studio_taches").update({ reprise_prevue: new Date(maintenant.getTime() + REPRISE_MS).toISOString() }).eq("id", id);
+  }
   await journaliser(sb, {
     wsId: String(t.workspace_id), acteur: "tache", agentId: String(t.agent_id), action: "tache_executee",
-    detail: { tache: id, titre: t.titre, statut, conversation: conversationId, erreur: statut === "erreur" ? compteRendu.slice(0, 300) : null },
+    detail: {
+      tache: id, titre: t.titre, statut, conversation: conversationId, essai: enEssai, tentative,
+      propositions: carnet ? carnet.propositions.length : nbLivrables, erreur: statut === "erreur" ? compteRendu.slice(0, 300) : null,
+    },
   });
+}
+
+/**
+ * Fin des 7 jours d'essai : rien ne se met en route tout seul. Une décision « la mettre en
+ * route ? » arrive dans « Aujourd'hui » ; d'ici là, la routine continue de tourner à blanc.
+ */
+async function signalerFinsEssai(sb: SupabaseClient): Promise<number> {
+  const { data, error } = await sb.from("studio_taches").select("id, workspace_id, titre, agent_id")
+    .eq("essai_signale", false).lte("essai_jusqu_au", new Date().toISOString()).limit(50);
+  if (error) return 0; // migration pas encore appliquée
+  let deposees = 0;
+  for (const t of data ?? []) {
+    const { data: ok } = await sb.from("studio_taches").update({ essai_signale: true })
+      .eq("id", t.id).eq("essai_signale", false).select("id").maybeSingle();
+    if (!ok) continue;
+    const { data: passages } = await sb.from("studio_routine_passages")
+      .select("debut, fin, statut, tentative, essai, manuel, compte_rendu, propositions, nb_livrables")
+      .eq("tache_id", t.id).order("debut", { ascending: false }).limit(30);
+    const lignes = historique((passages ?? []) as Passage[]);
+    const contenu = [
+      `Pendant ${ESSAI_JOURS} jours, la routine « ${t.titre} » vous a montré ce qu'elle aurait fait, sans rien envoyer.`,
+      lignes.length ? lignes.slice(0, 7).map((l) => `- ${new Date(l.date).toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "short", day: "numeric", month: "short" })} : ${l.texte}`).join("\n") : "Elle n'a pas encore eu l'occasion de tourner.",
+      "En la mettant en route, elle agit pour de vrai. Vous validez toujours avant que quoi que ce soit parte. Sans réponse de votre part, elle continue à l'essai.",
+    ].join("\n\n");
+    const { data: l } = await sb.from("studio_livrables").insert({
+      workspace_id: t.workspace_id, agent_id: t.agent_id, titre: `Routine — ${t.titre}`.slice(0, 200), contenu, soumis_par: "routine",
+      action: { type: "routine_activer", tache_id: t.id, titre: t.titre, contenu },
+    }).select("id").maybeSingle();
+    await journaliser(sb, { wsId: String(t.workspace_id), acteur: "tache", agentId: String(t.agent_id), action: "routine_essai_termine", detail: { tache: t.id, titre: t.titre, livrable: l?.id ?? null } });
+    deposees++;
+  }
+  return deposees;
 }
 
 /** Passage horaire : chaque tâche échue est avancée à son prochain créneau, puis lancée. */
 async function tachesEchues(sb: SupabaseClient, cle: string): Promise<number> {
+  const lancees = await tachesPlanifiees(sb, cle);
+  // Reprises : un passage en échec est retenté une fois, une heure plus tard.
+  let reprises = 0;
+  const { data: aReprendre, error } = await sb.from("studio_taches").select("id, reprise_prevue")
+    .eq("actif", true).lte("reprise_prevue", new Date().toISOString()).limit(50);
+  if (!error) {
+    for (const t of aReprendre ?? []) {
+      const { data: ok } = await sb.from("studio_taches").update({ reprise_prevue: null })
+        .eq("id", t.id).eq("reprise_prevue", t.reprise_prevue).select("id").maybeSingle();
+      if (!ok) continue;
+      await declencherTache(cle, String(t.id), { tentative: 2 });
+      reprises++;
+    }
+  }
+  await signalerFinsEssai(sb);
+  return lancees + reprises;
+}
+
+async function tachesPlanifiees(sb: SupabaseClient, cle: string): Promise<number> {
   const maintenant = new Date();
   const { data } = await sb.from("studio_taches").select("id, heures, jours, prochaine_execution")
     .eq("actif", true).lte("prochaine_execution", maintenant.toISOString()).order("prochaine_execution").limit(50);
@@ -454,6 +582,238 @@ async function enregistrerTache(sb: SupabaseClient, s: Session, body: Record<str
     detail: { titre, planning: libellePlanning(p), actif, modification: typeof body.id === "string" },
   });
   return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Routines (refonte §3.4, §3.5) : la tâche planifiée vue comme une chaîne d'étapes
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SELECT_PASSAGE = "tache_id, debut, fin, statut, tentative, essai, manuel, compte_rendu, propositions, nb_livrables";
+
+/** Outils reliés à l'espace, au sens des routines (ce dont un modèle a besoin). */
+async function capacitesEspace(sb: SupabaseClient, wsId: string): Promise<Capacite[]> {
+  const zernioOk = zernio.zernioConfigure();
+  const [boites, comptes, { count }] = await Promise.all([
+    zernioOk ? bureau.boitesEspace(wsId).catch(() => [] as bureau.Boite[]) : Promise.resolve([] as bureau.Boite[]),
+    zernioOk ? zernio.comptesEspace(wsId).catch(() => [] as zernio.CompteReseau[]) : Promise.resolve([] as zernio.CompteReseau[]),
+    sb.from("studio_flux").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).eq("actif", true),
+  ]);
+  const c: Capacite[] = [];
+  if (bureau.boitePour(boites, "email")) c.push("mail");
+  if (bureau.boitePour(boites, "calendar")) c.push("agenda");
+  if (comptes.length) c.push("reseaux");
+  if ((count ?? 0) > 0) c.push("veille");
+  return c;
+}
+
+/** Une routine telle que l'affiche l'écran Routine. */
+function vueRoutine(t: Record<string, unknown>, prenoms: Map<string, string>, passages: Passage[]) {
+  const m = modeleDe(t.modele);
+  const brute = t as unknown as RoutineBrute;
+  const etapes = chaine(brute, prenoms);
+  const lignes = passages.length ? historique(passages)
+    // Avant la migration : seul le dernier passage est connu.
+    : t.derniere_execution ? historique([{
+      debut: String(t.derniere_execution), statut: t.dernier_statut === "ok" ? "ok" : "erreur", tentative: 2, essai: false,
+      compte_rendu: t.dernier_compte_rendu as string | null,
+    }]) : [];
+  const essaiJusquAu = typeof t.essai_jusqu_au === "string" && t.essai_jusqu_au ? t.essai_jusqu_au : null;
+  return {
+    id: t.id, titre: t.titre, agent_id: t.agent_id, actif: t.actif, modele: m?.id ?? null,
+    reglages: m ? reglagesDe(m, t.reglages) : ((t.reglages ?? {}) as Record<string, unknown>),
+    heures: t.heures, jours: t.jours, planning: libellePlanning({ heures: t.heures as number[], jours: t.jours as number[] }),
+    prochaine_execution: t.prochaine_execution, derniere_execution: t.derniere_execution, cree_le: t.created_at ?? null,
+    essai_jusqu_au: essaiJusquAu, essai_termine: Boolean(essaiJusquAu && Date.parse(essaiJusquAu) <= Date.now()),
+    en_cours: Boolean(t.en_cours_depuis && Date.parse(String(t.en_cours_depuis)) > Date.now() - TACHE_BLOCAGE_MS),
+    etapes, en_clair: enClair(etapes), historique: lignes.slice(0, 20), bilan: bilanPassages(lignes),
+    // Ancienne tâche planifiée : la consigne écrite à l'époque reste lisible.
+    consigne_origine: !m && !etapesEnregistrees(t.etapes) ? t.consigne : null,
+    conversation_id: t.conversation_id,
+  };
+}
+
+async function listerRoutines(sb: SupabaseClient, wsId: string) {
+  let migree = true;
+  let { data, error } = await sb.from("studio_taches").select(SELECT_ROUTINE).eq("workspace_id", wsId).order("created_at");
+  if (error && schemaRoutinesAbsent(error)) {
+    migree = false;
+    ({ data, error } = await sb.from("studio_taches").select(SELECT_TACHE).eq("workspace_id", wsId).order("created_at"));
+  }
+  const lignes = (data ?? []) as unknown as Record<string, unknown>[];
+  const ids = lignes.map((t) => String(t.id));
+  const { data: passages } = migree && ids.length
+    ? await sb.from("studio_routine_passages").select(SELECT_PASSAGE).in("tache_id", ids).order("debut", { ascending: false }).limit(400)
+    : { data: [] as Record<string, unknown>[] };
+  const parTache = new Map<string, Passage[]>();
+  for (const p of passages ?? []) {
+    const k = String(p.tache_id);
+    if (!parTache.has(k)) parTache.set(k, []);
+    if (parTache.get(k)!.length < 30) parTache.get(k)!.push(p as unknown as Passage);
+  }
+  const prenoms = await prenomsAgents(sb);
+  return { routines: lignes.map((t) => vueRoutine(t, prenoms, parTache.get(String(t.id)) ?? [])), installees: migree };
+}
+
+/** Lecture d'une routine de l'espace (toutes colonnes, ou colonnes d'avant la migration). */
+async function lireRoutine(sb: SupabaseClient, wsId: string, id: string) {
+  const lire = (colonnes: string) => sb.from("studio_taches").select(colonnes).eq("id", id).eq("workspace_id", wsId).maybeSingle();
+  let { data, error } = await lire(SELECT_ROUTINE);
+  if (error && schemaRoutinesAbsent(error)) ({ data, error } = await lire(SELECT_TACHE));
+  return (data ?? null) as Record<string, unknown> | null;
+}
+
+/** Réglages, planning ou état d'une routine (chaque clic de l'écran Routine l'enregistre). */
+async function reglerRoutine(sb: SupabaseClient, s: Session, body: Record<string, unknown>): Promise<{ ok: true } | { erreur: string }> {
+  const t = await lireRoutine(sb, s.ws.id, String(body.id ?? ""));
+  if (!t) return { erreur: "Routine introuvable." };
+  const champs: Record<string, unknown> = {};
+  const journal: Record<string, unknown> = {};
+  const m = modeleDe(t.modele);
+  if (body.reglages && typeof body.reglages === "object") {
+    const recus = body.reglages as Record<string, unknown>;
+    if (m) {
+      const fusion = { ...reglagesDe(m, t.reglages), ...recus };
+      const erreur = erreurReglages(m, fusion);
+      if (erreur) return { erreur };
+      const r = reglagesDe(m, fusion);
+      champs.reglages = r;
+      champs.consigne = consigneModele(m, r, await prenomsAgents(sb)).slice(0, 4000);
+      journal.reglages = r;
+    } else if (etapesEnregistrees(t.etapes)) {
+      // Routine proposée par Léa : seul le ton se règle ici ; le reste se demande à Léa.
+      if (typeof recus.ton !== "string" || !(recus.ton in TONS)) return { erreur: "Réglage inconnu." };
+      champs.reglages = { ...((t.reglages ?? {}) as Record<string, unknown>), ton: recus.ton };
+      journal.reglages = champs.reglages;
+    } else return { erreur: "Cette ancienne tâche ne se règle pas étape par étape : demandez à Léa de la refaire en routine." };
+  }
+  let planning = { heures: t.heures as number[], jours: t.jours as number[] };
+  if (body.heures !== undefined || body.jours !== undefined) {
+    const p = planningValide({ heures: body.heures ?? t.heures, jours: body.jours ?? t.jours });
+    if ("erreur" in p) return p;
+    planning = p;
+    champs.heures = p.heures;
+    champs.jours = p.jours;
+    journal.planning = libellePlanning(p);
+  }
+  const actif = typeof body.actif === "boolean" ? body.actif : Boolean(t.actif);
+  if (typeof body.actif === "boolean") { champs.actif = actif; journal.actif = actif; }
+  if (champs.heures || typeof body.actif === "boolean") {
+    champs.prochaine_execution = actif ? prochaineExecution(planning, new Date())?.toISOString() ?? null : null;
+  }
+  if (!Object.keys(champs).length) return { ok: true };
+  const { error } = await sb.from("studio_taches").update(champs).eq("id", t.id).eq("workspace_id", s.ws.id);
+  if (error) return { erreur: error.message };
+  await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: String(t.agent_id), action: "routine_reglee", detail: { tache: t.id, titre: t.titre, ...journal } });
+  return { ok: true };
+}
+
+/** Galerie « Nouvelle routine » : modèles que l'équipe sait faire, et ce qui manque pour chacun. */
+async function galerieRoutines(sb: SupabaseClient, s: Session) {
+  const [agents, capacites] = await Promise.all([agentsDuWorkspace(sb, s.ws), capacitesEspace(sb, s.ws.id)]);
+  const prenoms = new Map(agents.map((a) => [String(a.id), String(a.prenom)]));
+  return {
+    capacites,
+    modeles: modelesPour(agents.map((a) => String(a.id))).map((m) => {
+      const etapes = chaine({ titre: m.titre, agent_id: m.agent, heures: m.planning.heures, jours: m.planning.jours, modele: m.id, reglages: {} }, prenoms);
+      return {
+        id: m.id, agent: m.agent, titre: m.titre, gain: m.gain, etapes, en_clair: enClair(etapes),
+        question: { texte: m.question.texte, reponses: m.question.reponses.map((r) => r.libelle), saisie: m.question.saisie ? { libelle: m.question.saisie.libelle } : null },
+        manque: m.requiert.filter((c) => !capacites.includes(c)).map((c) => NOMS_CAPACITES[c]),
+      };
+    }),
+  };
+}
+
+/** « Quelle tâche ne voulez-vous plus faire vous-même ? » → Léa propose une chaîne et pose une question. */
+async function proposerRoutine(sb: SupabaseClient, s: Session, demande: string) {
+  const texte = demande.trim().slice(0, 2000);
+  if (texte.length < 8) return { erreur: "Décrivez la tâche en une phrase." };
+  const refus = await garde(sb, s.ws.id);
+  if (refus) return { erreur: refus.message };
+  const [agents, capacites, { data: aiRow }] = await Promise.all([
+    agentsDuWorkspace(sb, s.ws), capacitesEspace(sb, s.ws.id), sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle(),
+  ]);
+  const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
+  const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
+  if (!apiKey) return { erreur: "Service IA non configuré. Contactez Aissociate." };
+  const equipeDispo = agents.map((a) => ({ id: String(a.id), prenom: String(a.prenom), metier: String(a.metier) }));
+  const modele = autorise(ai.model_plan) ?? autorise(ai.model_studio) ?? MODELE_DEFAUT;
+  let contenu = "";
+  try {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "X-Title": "Aissociate Studio - routines" },
+      body: JSON.stringify({
+        model: modele, temperature: 0.2, max_tokens: 4000,
+        messages: [{ role: "system", content: consigneProposition(equipeDispo, capacites) }, { role: "user", content: texte }],
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(`OpenRouter ${r.status}`);
+    contenu = String(j?.choices?.[0]?.message?.content ?? "");
+  } catch (e) {
+    console.error("[studio] routine proposée :", e instanceof Error ? e.message : String(e));
+    return { erreur: "Léa n'a pas pu répondre. Réessayez dans un instant, ou partez d'une routine prête à l'emploi." };
+  }
+  const brut = extraireJson(contenu);
+  const v = brut === null ? { erreur: "Léa n'a pas pu proposer de routine pour cette tâche. Reformulez-la en une phrase." } : validerProposition(brut, equipeDispo);
+  if ("erreur" in v) return v;
+  const prenoms = new Map(equipeDispo.map((a) => [a.id, a.prenom]));
+  const etapes = chaine({ titre: v.titre, agent_id: v.agent, heures: v.planning.heures, jours: v.planning.jours, etapes: v.etapes }, prenoms);
+  await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: "lea", action: "routine_proposee", detail: { demande: texte.slice(0, 300), titre: v.titre } });
+  return { proposition: v, etapes, en_clair: enClair(etapes) };
+}
+
+/** Mise en place d'une routine (modèle ou proposition de Léa), en mode essai pendant 7 jours. */
+async function creerRoutine(sb: SupabaseClient, s: Session, body: Record<string, unknown>): Promise<{ id: string } | { erreur: string; statut?: number }> {
+  const agents = await agentsDuWorkspace(sb, s.ws);
+  const ids = agents.map((a) => String(a.id));
+  const prenoms = new Map(agents.map((a) => [String(a.id), String(a.prenom)]));
+  const reponse = Number(body.reponse);
+  const saisie = typeof body.saisie === "string" ? body.saisie.trim().slice(0, 200) : "";
+  let ligne: Record<string, unknown>;
+  const m = modeleDe(body.modele);
+  if (m) {
+    if (!modelesPour(ids).includes(m)) return { erreur: "Ce modèle demande un agent qui n'est pas dans votre équipe." };
+    let choix: Record<string, unknown> = {};
+    if (saisie && m.question.saisie) choix = { [m.question.saisie.id]: saisie, ...m.question.saisie.reglages };
+    else if (Number.isInteger(reponse) && m.question.reponses[reponse]) choix = m.question.reponses[reponse].reglages;
+    const erreur = erreurReglages(m, { ...reglagesDe(m, {}), ...choix });
+    if (erreur) return { erreur };
+    const r = reglagesDe(m, choix);
+    ligne = {
+      titre: m.titre, agent_id: m.agent, modele: m.id, reglages: r, etapes: null, heures: m.planning.heures, jours: m.planning.jours,
+      consigne: consigneModele(m, r, prenoms).slice(0, 4000),
+    };
+  } else {
+    const v = validerProposition(body.proposition, agents.map((a) => ({ id: String(a.id), prenom: String(a.prenom) })));
+    if ("erreur" in v) return v;
+    const choisie = Number.isInteger(reponse) ? v.question.reponses[reponse] : undefined;
+    const precision = saisie || choisie;
+    ligne = {
+      titre: v.titre, agent_id: v.agent, modele: null, reglages: {}, etapes: v.etapes, heures: v.planning.heures, jours: v.planning.jours,
+      consigne: `${v.consigne}${precision ? `\n\nRéponse du dirigeant à « ${v.question.texte} » : ${precision}` : ""}`.slice(0, 4000),
+    };
+  }
+  const { count } = await sb.from("studio_taches").select("id", { count: "exact", head: true }).eq("workspace_id", s.ws.id);
+  if ((count ?? 0) >= 20) return { erreur: "20 routines au maximum par espace : mettez-en une en pause ou supprimez-la." };
+  const maintenant = new Date();
+  const { data, error } = await sb.from("studio_taches").insert({
+    ...ligne, workspace_id: s.ws.id, user_id: s.user.id, actif: true,
+    essai_jusqu_au: new Date(maintenant.getTime() + ESSAI_JOURS * 86_400_000).toISOString(),
+    prochaine_execution: prochaineExecution({ heures: ligne.heures as number[], jours: ligne.jours as number[] }, maintenant)?.toISOString() ?? null,
+  }).select("id").single();
+  if (error) {
+    return schemaRoutinesAbsent(error)
+      ? { erreur: "Les routines sont en cours d'installation sur votre espace : réessayez dans quelques minutes.", statut: 503 }
+      : { erreur: error.message };
+  }
+  await journaliser(sb, {
+    wsId: s.ws.id, acteur: acteurDe(s), agentId: String(ligne.agent_id), action: "routine_creee",
+    detail: { tache: data.id, titre: ligne.titre, modele: ligne.modele, essai_jours: ESSAI_JOURS },
+  });
+  return { id: String(data.id) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -789,11 +1149,14 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     pieces: pieces.length ? pieces : null,
   }).select("id").single();
 
+  // Passage de routine en mode essai (routines.ts) : uniquement depuis le moteur des routines, jamais depuis le navigateur.
+  const carnetEssai = s.sessionId === "tache" && body.essai && typeof body.essai === "object"
+    && Array.isArray((body.essai as CarnetEssai).propositions) ? body.essai as CarnetEssai : null;
   // Outils branchés sur les connexions Zernio de l'espace (messagerie, agenda, fichiers, réseaux), s'il y en a.
   const outils = await outilsEspace({
     sb, wsId: s.ws.id, acteur: acteurDe(s),
     agentId: agent.id, agentPrenom: agent.prenom, userId: s.sessionId === "mail" ? null : s.user.id,
-    conversationId: conversationId as string, apiKey,
+    conversationId: conversationId as string, apiKey, essai: carnetEssai,
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, prenom: a.prenom, metier: a.metier }));
@@ -920,7 +1283,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               sb, wsId: s.ws.id, acteur: acteurDe(s), agentId: collegue.id, agentPrenom: collegue.prenom,
               userId: s.sessionId === "mail" ? null : s.user.id, conversationId: conversationId as string, apiKey,
               // Ses propositions portent la trace de l'agent qui lui a confié la mission (studio_livrables.confie_par).
-              confiePar: agent.id,
+              confiePar: agent.id, essai: carnetEssai,
             }).catch(() => null);
             const sys = construirePrompt({
               agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
@@ -1384,7 +1747,9 @@ Deno.serve(async (req: Request) => {
         (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
         return json({ ok: true });
       }
-      const travail = executerTache(sb, String(body.id ?? ""))
+      const travail = executerTache(sb, String(body.id ?? ""), {
+        essai: body.essai === true, manuel: body.manuel === true, tentative: body.tentative === 2 ? 2 : 1,
+      })
         .catch((e) => console.error("[studio] tâche:", e instanceof Error ? e.message : String(e)));
       (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
       return json({ ok: true });
@@ -2099,6 +2464,52 @@ Deno.serve(async (req: Request) => {
         if (!t || !cle) return json({ error: "Tâche introuvable ou planification non installée." }, 404);
         await declencherTache(cle, String(t.id));
         return json(await listerTaches(sb, s.ws.id));
+      }
+
+      // ── Routines (refonte §3.4, §3.5) ──
+      case "routines":
+        return json(await listerRoutines(sb, s.ws.id));
+
+      case "routine_modeles":
+        return json(await galerieRoutines(sb, s));
+
+      case "routine_regler":
+      case "routine_essayer":
+      case "routine_activer":
+      case "routine_supprimer":
+      case "routine_proposer":
+      case "routine_creer": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (action === "routine_proposer") {
+          const r = await proposerRoutine(sb, s, String(body.demande ?? ""));
+          return "erreur" in r ? json({ error: r.erreur }, 400) : json(r);
+        }
+        if (action === "routine_creer") {
+          const r = await creerRoutine(sb, s, body);
+          if ("erreur" in r) return json({ error: r.erreur }, r.statut ?? 400);
+          return json({ id: r.id, ...(await listerRoutines(sb, s.ws.id)) });
+        }
+        const id = String(body.id ?? "");
+        if (action === "routine_regler") {
+          const r = await reglerRoutine(sb, s, body);
+          if ("erreur" in r) return json({ error: r.erreur }, 400);
+        } else if (action === "routine_essayer") {
+          // « Essayer sur un vrai cas » : un passage immédiat à blanc, rien n'est envoyé.
+          const t = await lireRoutine(sb, s.ws.id, id);
+          const cle = await cleCron(sb);
+          if (!t || !cle) return json({ error: "Routine introuvable ou planification non installée." }, 404);
+          await declencherTache(cle, id, { essai: true, manuel: true });
+          await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: String(t.agent_id), action: "routine_essayee", detail: { tache: id, titre: t.titre } });
+        } else if (action === "routine_activer") {
+          const { data: t, error } = await sb.from("studio_taches").update({ essai_jusqu_au: null, essai_signale: true })
+            .eq("id", id).eq("workspace_id", s.ws.id).select("titre, agent_id").maybeSingle();
+          if (error || !t) return json({ error: error?.message ?? "Routine introuvable." }, 404);
+          await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: String(t.agent_id), action: "routine_mise_en_route", detail: { tache: id, titre: t.titre } });
+        } else {
+          const { data: t } = await sb.from("studio_taches").delete().eq("id", id).eq("workspace_id", s.ws.id).select("titre, agent_id").maybeSingle();
+          if (t) await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), agentId: String(t.agent_id), action: "tache_supprimee", detail: { titre: t.titre } });
+        }
+        return json(await listerRoutines(sb, s.ws.id));
       }
 
       case "journal":

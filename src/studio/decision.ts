@@ -80,6 +80,8 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
       return { portee: 'Votre CRM', bouton: 'Créer le contact', fait: 'Contact créé dans votre CRM.' };
     case 'app_crm_note':
       return { portee: 'Votre CRM', bouton: 'Ajouter la note', fait: 'Note ajoutée dans votre CRM.' };
+    case 'routine_activer':
+      return { portee: 'Votre routine', bouton: 'Mettre en route', fait: 'Routine en route : ses envois attendront toujours votre feu vert.' };
     default:
       // Livrable sans action : un texte ou un document à relire, rien ne part de lui-même.
       return l.type_action

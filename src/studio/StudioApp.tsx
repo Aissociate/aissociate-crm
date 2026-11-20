@@ -27,7 +27,9 @@ const Perimetre = lazy(() => import('./pages/Perimetre'));
 const Journal = lazy(() => import('./pages/Journal'));
 const Livrables = lazy(() => import('./pages/Livrables'));
 const ParEmail = lazy(() => import('./pages/ParEmail'));
-const Taches = lazy(() => import('./pages/Taches'));
+const Routines = lazy(() => import('./pages/Routines'));
+const Routine = lazy(() => import('./pages/Routine'));
+const NouvelleRoutine = lazy(() => import('./pages/NouvelleRoutine'));
 const Veille = lazy(() => import('./pages/Veille'));
 const Contacts = lazy(() => import('./pages/Contacts'));
 const Desinscription = lazy(() => import('./pages/Desinscription'));
@@ -272,7 +274,9 @@ export default function StudioApp() {
             <Route path="equipe" element={<Equipe />} />
             <Route path="equipe/:agentId" element={<Specialiste />} />
             <Route path="assistants/:agentId" element={<AgentChatParAgent />} />
-            <Route path="routines" element={<Taches />} />
+            <Route path="routines" element={<Routines />} />
+            <Route path="routines/nouvelle" element={<NouvelleRoutine />} />
+            <Route path="routines/:id" element={<Routine />} />
             <Route path="routines/veille" element={<Veille />} />
             <Route path="routines/par-email" element={<ParEmail />} />
             <Route path="documents" element={<Ressources />} />
