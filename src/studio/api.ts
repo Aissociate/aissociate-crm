@@ -7,8 +7,16 @@ const CLE_JETON = 'studio.jeton';
 /** Léa : point d'entrée de l'espace, elle fait travailler les spécialistes (voir equipe.ts côté serveur). */
 export const ORCHESTRATEUR = 'lea';
 
-export type Champ = { nom: string; label: string; type: 'texte' | 'long' | 'choix'; options?: string[]; requis?: boolean; aide?: string };
-export type SuperPouvoir = { id: string; titre: string; description?: string; champs: Champ[]; media?: 'image' | 'video' };
+export type Champ = {
+  nom: string; label: string; type: 'texte' | 'long' | 'choix'; options?: string[]; requis?: boolean; aide?: string;
+  /** Formulation en question du champ à choix d'une mission guidée (« Sur quel ton ? ») ; sinon le libellé. */
+  question?: string;
+};
+export type SuperPouvoir = {
+  id: string; titre: string; description?: string; champs: Champ[]; media?: 'image' | 'video';
+  /** Ce que le dirigeant reçoit (« un e-mail prêt à envoyer ») ; sinon voir missionGuidee.ts. */
+  recoit?: string;
+};
 export type Media = {
   id: string; type: 'image' | 'video'; statut: 'en_cours' | 'pret' | 'echec';
   url?: string | null; erreur?: string | null; mime?: string | null;
@@ -84,7 +92,11 @@ export async function appel<T = Record<string, unknown>>(action: string, donnees
 
 /** Chat en flux SSE : `onDelta` reçoit le texte au fil de l'eau. */
 export async function discuter(
-  params: { agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> }; pieces?: PieceJointe[] },
+  params: {
+    agent_id: string; message?: string; conversation_id?: string | null; pouvoir?: { id: string; valeurs: Record<string, string> }; pieces?: PieceJointe[];
+    /** Mission guidée : la réponse est soumise d'office comme livrable à valider. */
+    mission?: boolean;
+  },
   cb: {
     onMeta?: (m: { conversation_id: string; ressources: string[]; savoirs?: { titre: string; source: string | null }[] }) => void;
     onDelta: (t: string) => void;

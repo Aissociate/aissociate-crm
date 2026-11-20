@@ -37,6 +37,8 @@
 //           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?, raison (refus : trop_long | mauvais_ton | pas_le_moment | autre)} (propriétaire)
 //           livrable_modifier {id, champs} (version précédente gardée, repasse à valider)
 //           aujourdhui → { decisions, faits, minutes_semaine, a_venir } (écran d'accueil : faits.ts)
+//           equipe → { etats: { [agent]: { decisions, au_travail } }, connexions } (« Mon équipe »)
+//   chat {…, pouvoir, mission: true} : mission guidée, la réponse est soumise d'office comme livrable à valider
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
 //   Toute mission (chat, média) est refusée si l'espace est suspendu ou a atteint son plafond IA du jour.
@@ -107,6 +109,7 @@ import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
 import { colonneSensibleAbsente, detecterSensible, DOSSIER_SENSIBLE, messageSensible } from "./sensible.ts";
 import { aVenir, faitsSemaine, type LigneFait } from "./faits.ts";
+import { etatsAgents, soumettreMission } from "./livrables.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
 import * as vision from "./vision.ts";
@@ -1070,6 +1073,14 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", content: answer,
         }, usage, model);
         emit("done", { message_id: row?.id ?? null, conversation_id: conversationId });
+        // Mission guidée : le résultat rejoint « Aujourd'hui » comme livrable à valider (livrables.ts › soumettreMission).
+        if (body.mission === true && row?.id) {
+          const { count } = await sb.from("studio_livrables").select("id", { count: "exact", head: true })
+            .eq("conversation_id", conversationId).gte("created_at", debutGeneration);
+          if (soumettreMission({ mission: true, texte: answer, propositions: count ?? 0 })) {
+            await soumettreLivrable(sb, s.ws.id, acteurDe(s), row.id);
+          }
+        }
         // Demande relayée à un collègue : elle ne compte pas (le client la renverra au bon agent).
         if (answer.includes("[[RELAIS:") && messageClient?.id) {
           await sb.from("studio_messages").update({ hors_quota: true }).eq("id", messageClient.id);
@@ -2092,6 +2103,20 @@ Deno.serve(async (req: Request) => {
 
       case "journal":
         return json({ lignes: await lireJournal(sb, s.ws.id) });
+
+      // ── « Mon équipe » : état de chaque agent et comptes branchés de l'espace ──
+      case "equipe": {
+        const [{ data: aValider }, { data: enRedaction }, { data: routines }, connexions] = await Promise.all([
+          sb.from("studio_livrables").select("agent_id").eq("workspace_id", s.ws.id).eq("statut", "a_valider").limit(500),
+          sb.from("studio_conversations").select("agent_id, generation_depuis").eq("workspace_id", s.ws.id).not("generation_depuis", "is", null).limit(100),
+          sb.from("studio_taches").select("agent_id, en_cours_depuis").eq("workspace_id", s.ws.id).not("en_cours_depuis", "is", null).limit(50),
+          connecteursActifs(sb, s.ws.id).catch(() => [] as Awaited<ReturnType<typeof connecteursActifs>>),
+        ]);
+        return json({
+          etats: etatsAgents(aValider ?? [], enRedaction ?? [], routines ?? []),
+          connexions: [...new Set(connexions.map((c) => c.libelle))].slice(0, 12),
+        });
+      }
 
       // ── Écran « Aujourd'hui » : décisions en attente, fait cette semaine, à venir ──
       case "aujourdhui": {

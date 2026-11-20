@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { deciderLivrable, raisonRefus, RAISONS_REFUS, transitionPermise, type Dependances } from './livrables';
+import { deciderLivrable, enCours, etatsAgents, raisonRefus, RAISONS_REFUS, soumettreMission, transitionPermise, type Dependances } from './livrables';
 
 type Ligne = Record<string, unknown>;
 
@@ -138,5 +138,45 @@ describe('raison de refus', () => {
     expect(Object.values(RAISONS_REFUS)).toEqual(['Trop long', 'Pas le bon ton', 'Pas le moment', 'Autre raison']);
     expect(raisonRefus('autre')).toBe('autre');
     expect(raisonRefus(undefined)).toBeNull();
+  });
+});
+
+describe('mission guidée : le résultat rejoint « Aujourd\'hui »', () => {
+  it('soumet la réponse quand rien d\'autre n\'a été proposé', () => {
+    expect(soumettreMission({ mission: true, texte: 'Voici votre planning…', propositions: 0 })).toBe(true);
+  });
+  it('ne soumet ni une conversation ordinaire, ni une réponse vide, ni un relais', () => {
+    expect(soumettreMission({ mission: false, texte: 'Bonjour', propositions: 0 })).toBe(false);
+    expect(soumettreMission({ mission: true, texte: '  \n', propositions: 0 })).toBe(false);
+    expect(soumettreMission({ mission: true, texte: "Ce n'est pas mon domaine. [[RELAIS:theo]]", propositions: 0 })).toBe(false);
+  });
+  it('laisse la place à la proposition déposée par l\'agent (e-mail, publication, document)', () => {
+    expect(soumettreMission({ mission: true, texte: 'J\'ai préparé la relance L-1a2b3c4d.', propositions: 1 })).toBe(false);
+  });
+});
+
+describe('état des agents (« Mon équipe »)', () => {
+  const t0 = Date.parse('2026-11-24T08:00:00Z');
+  const ilYA = (ms: number) => new Date(t0 - ms).toISOString();
+
+  it('reconnaît un travail en cours à sa fraîcheur', () => {
+    expect(enCours(ilYA(60_000), 180_000, t0)).toBe(true);
+    expect(enCours(ilYA(200_000), 180_000, t0)).toBe(false); // réponse bloquée : plus « en cours »
+    expect(enCours(null, 180_000, t0)).toBe(false);
+    expect(enCours('pas une date', 180_000, t0)).toBe(false);
+  });
+
+  it('compte les décisions par agent et note qui travaille', () => {
+    const etats = etatsAgents(
+      [{ agent_id: 'theo' }, { agent_id: 'theo' }, { agent_id: 'hugo' }, { agent_id: null }],
+      [{ agent_id: 'lea', generation_depuis: ilYA(30_000) }, { agent_id: 'sam', generation_depuis: ilYA(600_000) }],
+      [{ agent_id: 'theo', en_cours_depuis: ilYA(5 * 60_000) }, { agent_id: 'ines', en_cours_depuis: ilYA(20 * 60_000) }],
+      t0,
+    );
+    expect(etats).toEqual({
+      theo: { decisions: 2, au_travail: true },
+      hugo: { decisions: 1, au_travail: false },
+      lea: { decisions: 0, au_travail: true },
+    });
   });
 });
