@@ -922,9 +922,13 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           const modeleCollegue = collegue.modele_effectif ?? autorise(ai.model_studio) ?? MODELE_DEFAUT;
           let texte = "";
           let outilsOk = Boolean(fil.outils);
+          let relance = false;
           for (let t = 0; t < equipe.TOURS_MISSION; t++) {
+            const final = t === equipe.TOURS_MISSION - 1;
+            // Dernier tour : plus d'outils, et on le dit, sinon certains modèles rendent une réponse vide.
+            if (final && !relance) fil.messages.push({ role: "user", content: equipe.RELANCE_MISSION });
             const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: 8000, usage: { include: true } };
-            if (outilsOk && fil.outils) { corps.tools = fil.outils.definitions; corps.tool_choice = t === equipe.TOURS_MISSION - 1 ? "none" : "auto"; }
+            if (outilsOk && fil.outils) { corps.tools = fil.outils.definitions; corps.tool_choice = final || relance ? "none" : "auto"; }
             const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST", signal: stop.signal, headers: entetesOR, body: JSON.stringify(corps),
             });
@@ -939,7 +943,11 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             const contenu = String(m?.content ?? "");
             const appelsM = appelsValides((Array.isArray(m?.tool_calls) ? m.tool_calls : []) as AppelOutil[]);
             if (!appelsM.length || !fil.outils) {
-              if (!contenu.trim()) console.error(`[studio] mission ${collegue.id} : réponse vide (fin : ${j?.choices?.[0]?.finish_reason ?? "?"}, tour ${t + 1})`);
+              if (!contenu.trim()) {
+                console.error(`[studio] mission ${collegue.id} : réponse vide (fin : ${j?.choices?.[0]?.finish_reason ?? "?"}, tour ${t + 1})`);
+                // Une seule relance explicite, sans outils.
+                if (!relance) { relance = true; if (!final) fil.messages.push({ role: "user", content: equipe.RELANCE_MISSION }); t = Math.min(t, equipe.TOURS_MISSION - 2); continue; }
+              }
               texte = contenu; fil.messages.push({ role: "assistant", content: contenu }); break;
             }
             fil.messages.push({ role: "assistant", content: contenu, tool_calls: appelsM });
@@ -971,6 +979,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         };
         // Léa enchaîne missions, relectures et reprises : il lui faut plus de tours qu'à un spécialiste.
         const TOURS = missions ? 10 : 7;
+        let relanceVide = false;
         for (let tour = 0; tour < TOURS; tour++) {
           const dernier = tour === TOURS - 1;
           const corps: Record<string, unknown> = { model, messages, stream: true, temperature: 0.5, usage: { include: true } };
@@ -1015,6 +1024,13 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             }
           }
           const complets = appelsValides(appels);
+          // Réponse vide après des outils (certains modèles s'arrêtent là) : une relance explicite.
+          if (!complets.length && !answer.trim() && tour > 0 && !relanceVide && !dernier) {
+            relanceVide = true;
+            console.error(`[studio] chat ${agent.id} : réponse vide après outils, relance`);
+            messages.push({ role: "user", content: "(Rédige maintenant ta réponse complète au client avec ce que tu as, sans appeler d'outil.)" });
+            continue;
+          }
           if (!complets.length || !outils) break;
           messages.push({ role: "assistant", content: texteTour, tool_calls: complets });
           for (const a of complets.slice(0, 5)) {

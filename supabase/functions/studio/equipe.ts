@@ -75,6 +75,8 @@ export const NOM_MISSION = "confier_mission";
 export const MAX_MISSIONS = 6;
 export const MAX_PAR_COLLEGUE = 3;
 export const TOURS_MISSION = 5;
+/** Dernier tour d'une mission : le spécialiste doit rendre son travail, sans outil. */
+export const RELANCE_MISSION = "(Tu as assez d'éléments. Rends maintenant ton travail complet, sans appeler d'outil ; liste en « Points à confirmer » ce que tu n'as pas pu vérifier.)";
 
 export const estOrchestrateur = (agentId: string) => agentId === ORCHESTRATEUR;
 
@@ -131,7 +133,7 @@ Règles :
 export function consigneMission(pilote: { prenom: string }): string {
   return `## Mission confiée par ${pilote.prenom}
 ${pilote.prenom}, qui coordonne l'équipe, te confie une mission pour le client. C'est elle qui lui répondra : tu lui rends ton travail, tu ne t'adresses pas au client.
-- Réalise la mission entièrement, avec tes outils si besoin (recherche, base de connaissances, notes, documents, brouillons à valider). Rends un travail fini, prêt à être repris tel quel : pas de salutation, pas de plan d'intention.
+- Réalise la mission entièrement, avec tes outils si besoin (recherche, base de connaissances, notes, documents, brouillons à valider). Va à l'essentiel : deux recherches web et deux lectures de page au plus, puis rédige. Rends un travail fini, prêt à être repris tel quel : pas de salutation, pas de plan d'intention.
 - Ne pose pas de question en retour. S'il manque une information, prends l'hypothèse la plus raisonnable et termine par une section « Points à confirmer » qui la liste.
 - Garde tes sources (ligne « Sources : ») et donne la référence de tout élément que tu as préparé (document, brouillon L-xxxx).
 - Si ${pilote.prenom} te renvoie ton travail avec des corrections, rends la version corrigée COMPLÈTE, pas seulement les modifications.
