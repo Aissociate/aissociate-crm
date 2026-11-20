@@ -124,7 +124,7 @@ export default function Aujourdhui() {
                 </p>
               );
             }) : <p className="text-[15px] text-[#5F5B57]">{decisions.pret ? 'Aucune routine planifiée pour l\'instant.' : ' '}</p>}
-            <Link to="/studio/routines" className="text-[15px] font-medium text-[#B24A0C] underline underline-offset-[3px] hover:text-[#141414]">Voir les routines</Link>
+            <Link to="/studio/routines" className="inline-flex min-h-[44px] items-center self-start text-[15px] font-medium text-[#B24A0C] underline underline-offset-[3px] hover:text-[#141414]">Voir les routines</Link>
           </div>
 
           {reste > 0 && (

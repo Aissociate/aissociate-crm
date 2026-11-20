@@ -17,8 +17,11 @@ export function useEstMobile(): boolean {
   useEffect(() => {
     const m = window.matchMedia(requete);
     const maj = () => setMobile(m.matches);
+    maj();
+    // « change » ne part pas toujours (émulation d'écran, onglet en arrière-plan) : on écoute aussi le redimensionnement.
     m.addEventListener('change', maj);
-    return () => m.removeEventListener('change', maj);
+    window.addEventListener('resize', maj);
+    return () => { m.removeEventListener('change', maj); window.removeEventListener('resize', maj); };
   }, []);
   return mobile;
 }
