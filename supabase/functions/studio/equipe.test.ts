@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   consigne, consigneMission, definition, definitionMission, estOrchestrateur, MAX_MISSIONS, MAX_PAR_COLLEGUE, mentionAide,
-  nbFactures, nettoyer, NOM_MISSION, NOM_OUTIL, ORCHESTRATEUR, perimetreOrchestrateur, refusMission,
+  nbFactures, nettoyer, NOM_MISSION, NOM_OUTIL, ORCHESTRATEUR, perimetreOrchestrateur, PLAFOND_MISSION, refusMission,
+  relancerSansRaisonnement,
 } from './equipe';
 
 const C = [{ id: 'seo', prenom: 'Léa', metier: 'Référencement' }, { id: 'compta', prenom: 'Marc', metier: 'Comptabilité' }];
@@ -20,6 +21,12 @@ describe('missions d\'équipe', () => {
     expect(mentionAide([])).toBe('');
     expect(mentionAide(['Léa (SEO)', 'Léa (SEO)'])).toBe("_Avec l'aide de Léa (SEO)._");
     expect(mentionAide(['Léa (SEO)', 'Marc (Compta)', 'Zoé (RH)'])).toBe("_Avec l'aide de Léa (SEO), Marc (Compta) et Zoé (RH)._");
+  });
+  it('relance sans raisonnement, une seule fois, quand le plafond a été consommé sans texte', () => {
+    expect(relancerSansRaisonnement('length', false)).toBe(true);
+    expect(relancerSansRaisonnement('length', true)).toBe(false);
+    expect(relancerSansRaisonnement('stop', false)).toBe(false);
+    expect(PLAFOND_MISSION).toBeGreaterThan(8000);
   });
 });
 

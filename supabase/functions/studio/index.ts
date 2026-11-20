@@ -1262,7 +1262,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         };
         // ── Orchestration : missions confiées par Léa aux spécialistes ──
         // Un fil par spécialiste, gardé le temps de la demande : le rappeler reprend sa mission.
-        type FilMission = { messages: Record<string, unknown>[]; outils: Awaited<ReturnType<typeof outilsEspace>> | null; appels: number };
+        type FilMission = { messages: Record<string, unknown>[]; outils: Awaited<ReturnType<typeof outilsEspace>> | null; appels: number; sansRaisonnement?: boolean };
         const fils = new Map<string, FilMission>();
         let nbMissions = 0;
         const confier = async (argsJson: string): Promise<{ resultat: string; libelle: string }> => {
@@ -1299,11 +1299,16 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           let texte = "";
           let outilsOk = Boolean(fil.outils);
           let relance = false;
+          // Un modèle qui raisonne peut épuiser son plafond avant d'écrire (fin « length », texte vide) :
+          // la relance se fait alors sans raisonnement, sinon elle échoue de la même façon.
+          // Retenu pour les reprises du même spécialiste dans cette demande.
+          let sansRaisonnement = fil.sansRaisonnement ?? false;
           for (let t = 0; t < equipe.TOURS_MISSION; t++) {
             const final = t === equipe.TOURS_MISSION - 1;
             // Dernier tour : plus d'outils, et on le dit, sinon certains modèles rendent une réponse vide.
             if (final && !relance) fil.messages.push({ role: "user", content: equipe.RELANCE_MISSION });
-            const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: 8000, usage: { include: true } };
+            const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: equipe.PLAFOND_MISSION, usage: { include: true } };
+            if (sansRaisonnement) corps.reasoning = { enabled: false };
             if (outilsOk && fil.outils) { corps.tools = fil.outils.definitions; corps.tool_choice = final || relance ? "none" : "auto"; }
             const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST", signal: stop.signal, headers: entetesOR, body: JSON.stringify(corps),
@@ -1320,7 +1325,14 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             const appelsM = appelsValides((Array.isArray(m?.tool_calls) ? m.tool_calls : []) as AppelOutil[]);
             if (!appelsM.length || !fil.outils) {
               if (!contenu.trim()) {
-                console.error(`[studio] mission ${collegue.id} : réponse vide (fin : ${j?.choices?.[0]?.finish_reason ?? "?"}, tour ${t + 1})`);
+                const fin = String(j?.choices?.[0]?.finish_reason ?? "?");
+                console.error(`[studio] mission ${collegue.id} : réponse vide (fin : ${fin}, tour ${t + 1}${sansRaisonnement ? ", sans raisonnement" : ""})`);
+                // Plafond atteint sans texte : une relance de plus, cette fois sans raisonnement.
+                if (equipe.relancerSansRaisonnement(fin, sansRaisonnement)) {
+                  sansRaisonnement = true; fil.sansRaisonnement = true; relance = true;
+                  if (!final && fil.messages.at(-1)?.content !== equipe.RELANCE_MISSION) fil.messages.push({ role: "user", content: equipe.RELANCE_MISSION });
+                  t = Math.min(t, equipe.TOURS_MISSION - 2); continue;
+                }
                 // Une seule relance explicite, sans outils.
                 if (!relance) { relance = true; if (!final) fil.messages.push({ role: "user", content: equipe.RELANCE_MISSION }); t = Math.min(t, equipe.TOURS_MISSION - 2); continue; }
               }

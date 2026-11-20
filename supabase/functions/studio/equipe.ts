@@ -77,6 +77,10 @@ export const MAX_PAR_COLLEGUE = 3;
 export const TOURS_MISSION = 5;
 /** Dernier tour d'une mission : le spécialiste doit rendre son travail, sans outil. */
 export const RELANCE_MISSION = "(Tu as assez d'éléments. Rends maintenant ton travail complet, sans appeler d'outil ; liste en « Points à confirmer » ce que tu n'as pas pu vérifier.)";
+/** Plafond de jetons d'un tour de mission, raisonnement compris : un livrable long (12 textes) dépassait 8 000. */
+export const PLAFOND_MISSION = 16_000;
+/** Réponse vide parce que le plafond est atteint (le raisonnement l'a consommé) : relancer sans raisonnement, une fois. */
+export const relancerSansRaisonnement = (fin: string, dejaSansRaisonnement: boolean) => fin === "length" && !dejaSansRaisonnement;
 
 export const estOrchestrateur = (agentId: string) => agentId === ORCHESTRATEUR;
 
