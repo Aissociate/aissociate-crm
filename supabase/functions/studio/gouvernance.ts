@@ -10,7 +10,8 @@ import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Repons
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
 import * as courriel from "./courriel.ts";
 import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
-import { deciderLivrable as decider } from "./livrables.ts";
+import { deciderLivrable as decider, raisonRefus, RAISONS_REFUS } from "./livrables.ts";
+import type { Refus } from "./contexte.ts";
 
 export { journaliser };
 
@@ -346,8 +347,25 @@ export async function modifierLivrable(sb: SupabaseClient, wsId: string, acteur:
 }
 
 export async function listerLivrables(sb: SupabaseClient, wsId: string) {
-  const { data } = await sb.from("studio_livrables")
-    .select("id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions, dossier_id, format")
-    .eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
+  const colonnes = "id, titre, contenu, statut, agent_id, conversation_id, soumis_par, decide_par, decide_le, commentaire, created_at, type_action:action->>type, action, resultat, versions, dossier_id, format";
+  const lire = (c: string) => sb.from("studio_livrables").select(c).eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200);
+  const { data, error } = await lire(`${colonnes}, refus_raison`);
+  // Colonne absente (migration studio_refus_raison non appliquée) : la liste reste lisible.
+  if (error) return (await lire(colonnes)).data ?? [];
   return data ?? [];
+}
+
+/** Derniers refus du propriétaire pour cet agent (60 jours, 5 au plus), rendus à l'agent dans son contexte. */
+export async function refusRecents(sb: SupabaseClient, wsId: string, agentId: string): Promise<Refus[]> {
+  const { data, error } = await sb.from("studio_livrables").select("titre, refus_raison, commentaire, decide_le")
+    .eq("workspace_id", wsId).eq("agent_id", agentId).eq("statut", "refuse")
+    .gte("decide_le", new Date(Date.now() - 60 * 86_400_000).toISOString())
+    .order("decide_le", { ascending: false }).limit(5);
+  if (error) return [];
+  return (data ?? []).filter((r) => raisonRefus(r.refus_raison)).map((r) => ({
+    titre: String(r.titre), raison: RAISONS_REFUS[raisonRefus(r.refus_raison)!],
+    // Le commentaire automatique des décisions par e-mail n'apprend rien à l'agent.
+    commentaire: r.commentaire && r.commentaire !== "Décision reçue par e-mail" ? String(r.commentaire) : null,
+    date: String(r.decide_le).slice(0, 10),
+  }));
 }

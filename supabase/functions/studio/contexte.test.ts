@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import demo from '../../seed/studio_demo.json';
 import {
-  construirePrompt, selectionnerRessources, BUDGET_SAVOIRS, HARNESS_REGLES_DEFAUT,
+  blocRefus, construirePrompt, selectionnerRessources, BUDGET_SAVOIRS, HARNESS_REGLES_DEFAUT,
   type AgentPrompt, type ConnecteurActif, type Creation, type Ressource,
 } from './contexte';
 
@@ -156,5 +156,30 @@ describe('contexte des agents après un mois de fonctionnement', () => {
         extrait: 'Entre professionnels, tout retard de paiement entraîne de plein droit des pénalités de retard et une indemnité forfaitaire pour frais de recouvrement de 40 €. Les pénalités sont exigibles sans qu\'un rappel soit nécessaire. Le taux appliqué est celui prévu aux CGV ou, à défaut, le taux de la BCE majoré de 10 points.',
       }],
     }));
+  });
+});
+
+describe('retours du dirigeant sur les propositions refusées', () => {
+  const base = { agent: equipe.find((a) => a.id === 'hugo')!, equipe, ws: demo.workspace, ressources: [] };
+
+  it("n'ajoute rien quand l'agent n'a aucun refus", () => {
+    expect(blocRefus([])).toBe('');
+    expect(construirePrompt({ ...base, refus: [] })).not.toContain('propositions refusées');
+  });
+
+  it('rend la raison et le commentaire, avant le rappel final', () => {
+    const p = construirePrompt({
+      ...base,
+      refus: [{ titre: 'Publication Facebook — Promo de rentrée', raison: 'Trop long', commentaire: 'Trois lignes\nsuffisent', date: '2026-11-20' }],
+    });
+    expect(p).toContain('- 2026-11-20 — « Publication Facebook — Promo de rentrée » : Trop long (« Trois lignes suffisent »)');
+    expect(p.indexOf('propositions refusées')).toBeLessThan(p.indexOf('## Rappel avant de répondre'));
+  });
+
+  it('se limite aux 5 derniers refus et borne les textes', () => {
+    const refus = Array.from({ length: 8 }, (_, i) => ({ titre: `T${i} ${'x'.repeat(300)}`, raison: 'Autre raison', commentaire: 'y'.repeat(900), date: '2026-11-20' }));
+    const lignes = blocRefus(refus).split('\n').filter((l) => l.startsWith('- '));
+    expect(lignes).toHaveLength(5);
+    expect(Math.max(...lignes.map((l) => l.length))).toBeLessThan(500);
   });
 });

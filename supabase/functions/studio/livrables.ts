@@ -14,6 +14,16 @@ export function transitionPermise(de: string, vers: string): boolean {
   return TRANSITIONS[de]?.includes(vers) === true;
 }
 
+/** Raisons de refus proposées en un clic (colonne studio_livrables.refus_raison). */
+export const RAISONS_REFUS = {
+  trop_long: "Trop long", mauvais_ton: "Pas le bon ton", pas_le_moment: "Pas le moment", autre: "Autre raison",
+} as const;
+export type RaisonRefus = keyof typeof RAISONS_REFUS;
+
+export function raisonRefus(v: unknown): RaisonRefus | null {
+  return typeof v === "string" && Object.hasOwn(RAISONS_REFUS, v) ? (v as RaisonRefus) : null;
+}
+
 type Erreur = { message: string } | null;
 type Filtre<T> = PromiseLike<{ data: T[] | null; error: Erreur }> & {
   eq: (colonne: string, valeur: unknown) => Filtre<T>;
@@ -53,15 +63,26 @@ export async function deciderLivrable(
   const avant = String(l.statut), id = String(l.id), agentId = (l.agent_id as string | null) ?? null;
   if (!transitionPermise(avant, statut)) return { erreur: `Passage « ${avant} » → « ${statut} » impossible.`, statut: 400 };
   const commentaire = String(body.commentaire ?? "").trim().slice(0, 1000) || null;
+  // Un refus porte toujours une raison : elle est rendue à l'agent à ses prochaines missions (contexte.ts).
+  const raison = statut === "refuse" ? raisonRefus(body.raison) : null;
+  if (statut === "refuse" && !raison) return { erreur: "Indiquez la raison du refus.", statut: 400 };
 
   // Écriture conditionnée au statut lu : deux décisions simultanées (double-clic, ou clic
   // + « VALIDÉ » par e-mail) ne passent pas toutes les deux, donc l'action ne part qu'une fois.
-  const { data: pris, error } = await db.from("studio_livrables").update({
-    statut, commentaire, decide_par: decideur.acteur, decide_le: new Date().toISOString(),
-  }).eq("id", id).eq("workspace_id", wsId).eq("statut", avant).select("id");
+  const maj = { statut, commentaire, decide_par: decideur.acteur, decide_le: new Date().toISOString() };
+  const ecrire = (valeurs: Record<string, unknown>) => db.from("studio_livrables").update(valeurs)
+    .eq("id", id).eq("workspace_id", wsId).eq("statut", avant).select("id");
+  let { data: pris, error } = await ecrire({ ...maj, refus_raison: raison });
+  if (error && /refus_raison/.test(error.message)) {
+    // Colonne absente (migration studio_refus_raison non appliquée) : la raison reste lisible dans le commentaire.
+    ({ data: pris, error } = await ecrire({ ...maj, commentaire: raison ? [RAISONS_REFUS[raison], commentaire].filter(Boolean).join(" — ") : commentaire }));
+  }
   if (error) return { erreur: error.message, statut: 400 };
   if (!pris?.length) return { erreur: "Ce livrable vient d'être traité : rechargez la page.", statut: 409 };
-  await deps.journaliser({ acteur: decideur.acteur, agentId, action: `livrable_${statut}`, detail: { livrable: id, titre: l.titre, commentaire } });
+  await deps.journaliser({
+    acteur: decideur.acteur, agentId, action: `livrable_${statut}`,
+    detail: { livrable: id, titre: l.titre, commentaire, ...(raison ? { raison } : {}) },
+  });
 
   // Livrable porteur d'une action (ex. créer un document dans le Drive) : le « VALIDÉ »
   // déclenche l'exécution. Réussite → publié avec le lien ; échec → reste validé, erreur notée.

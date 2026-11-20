@@ -33,7 +33,7 @@
 // Gouvernance (gouvernance.ts) :
 //   public  onboarding_soumettre {contact_nom, email, telephone?, accord, reponses}
 //   client  perimetre | suspendre {suspendu} (propriétaire) | journal
-//           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?} (propriétaire)
+//           livrables | livrable_soumettre {message_id} | livrable_decider {id, statut, commentaire?, raison (refus : trop_long | mauvais_ton | pas_le_moment | autre)} (propriétaire)
 //           livrable_modifier {id, champs} (version précédente gardée, repasse à valider)
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
@@ -86,7 +86,7 @@ async function etatConnexions(wsId: string) {
   return { configure: true, boites, comptes };
 }
 import {
-  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner,
+  deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner, refusRecents,
   soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
 } from "./gouvernance.ts";
 import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
@@ -797,6 +797,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const missions = orchestre && Boolean(outils) && collegues.length > 0;
   const systemeBase = construirePrompt({
     agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo,
+    refus: await refusRecents(sb, s.ws.id, agent.id),
     perimetre: orchestre ? equipe.perimetreOrchestrateur(outils ? collegues : []) : undefined,
   });
   if (outils && collegues.length) outils.definitions.push(missions ? equipe.definitionMission(collegues) : equipe.definition(collegues));
@@ -915,6 +916,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             const sys = construirePrompt({
               agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
               savoirs: await chargerSavoirs(sb, collegue.id, consigne),
+              refus: await refusRecents(sb, s.ws.id, collegue.id),
             }) + (sesOutils ? `\n\n${sesOutils.consigne}` : "") + "\n\n" + equipe.consigneMission(agent);
             fil = { messages: [{ role: "system", content: sys }], outils: sesOutils, appels: 0 };
             fils.set(collegue.id, fil);

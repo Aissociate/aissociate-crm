@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { deciderLivrable, transitionPermise, type Dependances } from './livrables';
+import { deciderLivrable, raisonRefus, RAISONS_REFUS, transitionPermise, type Dependances } from './livrables';
 
 type Ligne = Record<string, unknown>;
 
@@ -55,7 +55,7 @@ describe('décision sur un livrable', () => {
     expect(await deciderLivrable(sb, WS, membre, { id: 'l1', statut: 'valide' }, deps)).toMatchObject({ statut: 403 });
     expect(await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'publie' }, deps)).toMatchObject({ statut: 400 });
     expect(await deciderLivrable(sb, 'autre-espace', patron, { id: 'l1', statut: 'valide' }, deps)).toMatchObject({ statut: 404 });
-    expect(await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'refuse' }, deps)).toMatchObject({ ok: true });
+    expect(await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'refuse', raison: 'pas_le_moment' }, deps)).toMatchObject({ ok: true });
     expect(deps.executer).not.toHaveBeenCalled();
     expect(lignes[0].statut).toBe('refuse');
   });
@@ -109,5 +109,34 @@ describe('aucun autre chemin vers une action externe', () => {
   it('aucun module n\'écrit le statut « publié » hors de livrables.ts', () => {
     const ecrivains = sources.filter((f) => /statut:\s*["']publie["']/.test(lire(f)));
     expect(ecrivains).toEqual(['livrables.ts']);
+  });
+});
+
+describe('raison de refus', () => {
+  it('refuse un refus sans raison ou avec une raison inconnue', async () => {
+    const { lignes, deps, sb } = scene();
+    expect(await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'refuse' }, deps)).toMatchObject({ statut: 400 });
+    expect(await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'refuse', raison: 'toString' }, deps)).toMatchObject({ statut: 400 });
+    expect(lignes[0].statut).toBe('a_valider');
+  });
+
+  it('enregistre la raison sur le livrable et au journal', async () => {
+    const { lignes, deps, sb } = scene();
+    expect(await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'refuse', raison: 'mauvais_ton', commentaire: ' Trop familier ' }, deps)).toEqual({ ok: true });
+    expect(lignes[0]).toMatchObject({ statut: 'refuse', refus_raison: 'mauvais_ton', commentaire: 'Trop familier' });
+    expect(deps.journaliser).toHaveBeenCalledWith(expect.objectContaining({ action: 'livrable_refuse', detail: expect.objectContaining({ raison: 'mauvais_ton' }) }));
+  });
+
+  it('efface la raison quand le livrable est remis à valider', async () => {
+    const { lignes, deps, sb } = scene('refuse');
+    lignes[0].refus_raison = 'trop_long';
+    await deciderLivrable(sb, WS, patron, { id: 'l1', statut: 'a_valider' }, deps);
+    expect(lignes[0]).toMatchObject({ statut: 'a_valider', refus_raison: null });
+  });
+
+  it('connaît les quatre raisons de la maquette', () => {
+    expect(Object.values(RAISONS_REFUS)).toEqual(['Trop long', 'Pas le bon ton', 'Pas le moment', 'Autre raison']);
+    expect(raisonRefus('autre')).toBe('autre');
+    expect(raisonRefus(undefined)).toBeNull();
   });
 });

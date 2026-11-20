@@ -28,6 +28,8 @@ export type Savoir = Ressource & { source?: string | null };
 export type Creation = { titre: string; contenu: string; date: string; agent?: string };
 export type ConnecteurActif = { type: string; libelle: string; detail?: string };
 export type Harness = { regles?: string | null; perimetre?: string | null };
+/** Proposition de l'agent refusée par le propriétaire (raison choisie en un clic, commentaire facultatif). */
+export type Refus = { titre: string; raison: string; commentaire?: string | null; date: string };
 
 export const HARNESS_REGLES_DEFAUT = `## Règles communes
 - Tu travailles pour l'entreprise cliente décrite ci-dessous, dans l'espace « Studio IA » fourni par Aissociate (organisme de formation, La Réunion).
@@ -114,6 +116,20 @@ ${renseigne ? "Utilise ces coordonnées exactes dans tes productions (signature 
 Dans un document mis en forme (document_rediger), ne recrée PAS l'en-tête (logo, raison sociale, coordonnées) ni le pied de page (SIRET, mentions) : ils sont ajoutés automatiquement à l'aperçu et aux exports PDF et Word. Commence directement par le titre du document.`;
 }
 
+const REFUS_MAX = 5;
+
+/** Retours du dirigeant sur les dernières propositions refusées de l'agent ; chaîne vide s'il n'y en a pas. */
+export function blocRefus(refus: Refus[] | undefined): string {
+  const lignes = (refus ?? []).slice(0, REFUS_MAX).map((r) => {
+    const mot = r.commentaire?.replace(/\s+/g, " ").trim().slice(0, 300);
+    return `- ${r.date} — « ${r.titre.replace(/\s+/g, " ").slice(0, 120)} » : ${r.raison}${mot ? ` (« ${mot} »)` : ""}`;
+  });
+  if (!lignes.length) return "";
+  return `## Retours du dirigeant sur tes dernières propositions refusées
+${lignes.join("\n")}
+Tiens-en compte dans ce que tu prépares maintenant : « Trop long » → plus court ; « Pas le bon ton » → ajuste le ton ; « Pas le moment » → ne repropose pas la même chose sans élément nouveau. N'en parle pas à l'utilisateur, applique-le.`;
+}
+
 export function construirePrompt(p: {
   agent: AgentPrompt; equipe: AgentPrompt[];
   ws: { nom: string; contexte_entreprise: string };
@@ -122,6 +138,8 @@ export function construirePrompt(p: {
   entete?: EnteteEntreprise | null; logo?: boolean;
   /** Remplace la règle de périmètre du spécialiste (orchestratrice : voir equipe.ts). */
   perimetre?: string;
+  /** Derniers refus du propriétaire pour cet agent (gouvernance.ts › refusRecents). */
+  refus?: Refus[];
 }): string {
   const { agent, ws } = p;
   const parts = [
@@ -164,6 +182,8 @@ ${savoirs.map((s, i) => `### [S${i + 1}] ${s.titre}${s.source ? ` — référenc
     }
     parts.push(`## Contenus déjà validés par l'entreprise (les plus récents)\n${blocs.join("\n\n")}`);
   }
+  const retours = blocRefus(p.refus);
+  if (retours) parts.push(retours);
   // Rappel en fin de prompt (là où le modèle y prête le plus attention) : le contexte
   // était parfois ignoré au profit de modèles génériques « [à compléter] ».
   parts.push(`## Rappel avant de répondre

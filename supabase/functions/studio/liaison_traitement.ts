@@ -112,7 +112,7 @@ export async function traiterMail(
     for (const d of decisions(`${sujet}\n${texte}`)) {
       const l = (livs ?? []).find((x) => refLivrable(String(x.id)) === d.ref);
       if (!l) { lignes.push(`${d.ref} : livrable introuvable.`); continue; }
-      const r = await deciderLivrable(sb, ws.id, { acteur, proprietaire }, { id: l.id, statut: d.statut, commentaire: "Décision reçue par e-mail" });
+      const r = await deciderLivrable(sb, ws.id, { acteur, proprietaire }, { id: l.id, statut: d.statut, commentaire: "Décision reçue par e-mail", raison: "autre" });
       lignes.push(`${d.ref} « ${l.titre} » : ${"erreur" in r ? r.erreur : d.statut === "valide" ? "VALIDÉ" : "refusé"}`);
     }
     await repondreAu(lignes.join("\n"));
