@@ -7,7 +7,8 @@ import { useStudio } from '../StudioApp';
 import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type PieceJointe, type SuperPouvoir } from '../api';
 import MediaVue from '../MediaVue';
 import BoutonsExport from '../BoutonsExport';
-import { Avatar, Markdown, cx } from '../composants';
+import { Avatar, FournisseurReferences, Markdown, cx } from '../composants';
+import { trouverParRef } from '../references';
 
 export default function AgentChat() {
   const { me, gerer, rafraichir } = useStudio();
@@ -82,6 +83,21 @@ export default function AgentChat() {
     } catch { /* liste facultative */ }
   }, []);
   useEffect(() => { chargerDocuments(convId); if (!convId) setDocOuvert(null); }, [convId, chargerDocuments]);
+
+  // Clic sur « L-xxxxxxxx » dans une réponse : le document s'ouvre dans le panneau de droite,
+  // même s'il vient d'une autre conversation.
+  const ouvrirReference = useCallback(async (ref: string) => {
+    const ici = trouverParRef(documents, ref);
+    if (ici) { setDocOuvert(ici.id); return; }
+    try {
+      const r = await appel<{ livrables: (DocumentHtml & { conversation_id: string | null; format?: string })[] }>('livrables');
+      const l = trouverParRef(r.livrables, ref);
+      if (!l) { setErreur(`Le document ${ref} est introuvable : il a peut-être été supprimé.`); return; }
+      if (l.format !== 'html') { setErreur(`${ref} est un texte sans mise en page : il n'y a pas de document à ouvrir.`); return; }
+      setDocuments((ds) => (ds.some((d) => d.id === l.id) ? ds : [...ds, l]));
+      setDocOuvert(l.id);
+    } catch (e) { setErreur(gerer(e)); }
+  }, [documents, gerer]);
 
   const arreter = () => {
     if (convEnCours.current) appel('chat_arreter', { conversation_id: convEnCours.current }).catch(() => undefined);
@@ -316,7 +332,7 @@ export default function AgentChat() {
                       {m.outils.map((o, k) => <li key={k} className="flex items-center gap-1.5"><span aria-hidden>↳</span>{o}</li>)}
                     </ul>
                   ) : null}
-                  {m.content ? <Markdown texte={extraireRelais(m.content).texte} /> : (
+                  {m.content ? <FournisseurReferences value={ouvrirReference}><Markdown texte={extraireRelais(m.content).texte} /></FournisseurReferences> : (
                     <span className="flex gap-1 py-1" aria-label={`${agent.prenom} rédige`}>
                       {[0, 1, 2].map((d) => <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-neutral-300" style={{ animationDelay: `${d * 120}ms` }} />)}
                     </span>
