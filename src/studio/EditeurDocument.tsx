@@ -10,7 +10,8 @@ import { lignesEntete } from './exportDoc';
 import { separer } from './htmlSur';
 import { cx } from './composants';
 
-export type DocumentHtml = { id: string; titre: string; contenu: string; statut?: string };
+/** `versions` : versions précédentes (la version courante est la suivante), pour le nom de fichier. */
+export type DocumentHtml = { id: string; titre: string; contenu: string; statut?: string; versions?: unknown[] | null };
 
 const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -97,7 +98,7 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
   };
   const exporter = async (f: 'pdf' | 'word') => {
     setExport(f); setMessage('');
-    try { await exporterDocumentHtml(f, { titre: titre.trim() || doc.titre, html: contenuActuel(), agent, nomEspace }); }
+    try { await exporterDocumentHtml(f, { titre: titre.trim() || doc.titre, html: contenuActuel(), agent, nomEspace, id: doc.id, version: (doc.versions?.length ?? 0) + 1 }); }
     catch (e) { setMessage(gerer(e)); } finally { setExport(''); }
   };
   const fermer = () => { if (!modifie || confirm('Fermer sans enregistrer vos modifications ?')) onClose(); };

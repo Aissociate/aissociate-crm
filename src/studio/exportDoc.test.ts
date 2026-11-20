@@ -32,7 +32,14 @@ describe('exports Word / PDF du Studio', () => {
     expect(lignesEntete({ siret: '123', mentions: 'RCS' }, 'X').pied).toBe('X · SIRET 123 · RCS');
   });
 
-  it('propose un nom de fichier propre', () => {
-    expect(nomFichier("Relance d'impayé — CE Sucrerie", 'docx')).toMatch(/^relance-d-impaye-ce-sucrerie-\d{4}-\d{2}-\d{2}\.docx$/);
+  it('nomme un livrable Agent-Titre-Réf-vN', () => {
+    expect(nomFichier({ agent: 'Hugo', titre: 'Posts réseaux sociaux — 3 actualités IA', id: '88e7c4db-dfeb-4dc7-9d5b-d3b24ba113a9', version: 2 }, 'pdf'))
+      .toBe('Hugo-Posts-reseaux-sociaux-3-actualites-IA-L-88e7c4db-v2.pdf');
+    expect(nomFichier({ agent: 'Léa', titre: 'Plan', id: '11112222-0000-0000-0000-000000000000' }, 'doc')).toBe('Lea-Plan-L-11112222-v1.doc');
+  });
+  it('date un document sans livrable, et tient sans titre ni agent', () => {
+    const date = new Date('2026-11-21T08:00:00Z');
+    expect(nomFichier({ agent: 'Théo', titre: "Relance d'impayé — CE Sucrerie", date }, 'docx')).toBe('Theo-Relance-d-impaye-CE-Sucrerie-2026-11-21.docx');
+    expect(nomFichier({ titre: '—', date }, 'pdf')).toBe('Document-2026-11-21.pdf');
   });
 });
