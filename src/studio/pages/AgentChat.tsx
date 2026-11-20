@@ -9,6 +9,8 @@ import MediaVue from '../MediaVue';
 import BoutonsExport from '../BoutonsExport';
 import { Avatar, FournisseurReferences, Markdown, cx } from '../composants';
 import { trouverParRef } from '../references';
+import { collegueAuTravail } from '../travail';
+import EnTravail from '../EnTravail';
 
 export default function AgentChat() {
   const { me, gerer, rafraichir } = useStudio();
@@ -332,11 +334,13 @@ export default function AgentChat() {
                       {m.outils.map((o, k) => <li key={k} className="flex items-center gap-1.5"><span aria-hidden>↳</span>{o}</li>)}
                     </ul>
                   ) : null}
-                  {m.content ? <FournisseurReferences value={ouvrirReference}><Markdown texte={extraireRelais(m.content).texte} /></FournisseurReferences> : (
-                    <span className="flex gap-1 py-1" aria-label={`${agent.prenom} rédige`}>
-                      {[0, 1, 2].map((d) => <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-neutral-300" style={{ animationDelay: `${d * 120}ms` }} />)}
-                    </span>
-                  )}
+                  {m.content && <FournisseurReferences value={ouvrirReference}><Markdown texte={extraireRelais(m.content).texte} /></FournisseurReferences>}
+                  {i === messages.length - 1 && !m.id && (enCours || attente || !m.content) && (() => {
+                    // Réponse en préparation : qui travaille, et le collègue sollicité s'il y en a un.
+                    const p = collegueAuTravail(m.outils, me.agents.filter((x) => x.id !== agent.id).map((x) => x.prenom));
+                    const c = p ? me.agents.find((x) => x.prenom === p) ?? null : null;
+                    return <div className={cx(m.content && 'mt-2 border-t border-neutral-100 pt-2')}><EnTravail agent={agent} collegue={c} /></div>;
+                  })()}
                 </div>
                 <Relais contenu={m.content} termine={Boolean(m.id)} demande={messages[i - 1]?.content} agentId={agent.id} />
                 {i === messages.length - 1 && ressources.length > 0 && (
