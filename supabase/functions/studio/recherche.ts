@@ -46,7 +46,8 @@ export async function rechercherWeb(apiKey: string, requete: string, max: number
     method: "POST", signal: signal ?? AbortSignal.timeout(60_000),
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aissociate.re", "X-Title": "Aissociate Studio IA" },
     body: JSON.stringify({
-      model: MODELE_RECHERCHE, max_tokens: 1500, temperature: 0.1, usage: { include: true },
+      // Sans raisonnement : sinon le modèle y consomme tout le budget et rend une réponse vide.
+      model: MODELE_RECHERCHE, max_tokens: 2500, temperature: 0.1, reasoning: { enabled: false }, usage: { include: true },
       plugins: [{ id: "web", max_results: max }],
       messages: [{ role: "system", content: CONSIGNE }, { role: "user", content: requete }],
     }),
