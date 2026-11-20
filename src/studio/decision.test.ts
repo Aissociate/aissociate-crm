@@ -25,6 +25,7 @@ describe('présentation d\'une décision', () => {
     expect(presenter({ type_action: 'agenda_creer', action: { participants: ['a@x.re', 'b@x.re'] } })).toMatchObject({ portee: 'Invitation à 2 personnes' });
     expect(presenter({ type_action: 'agenda_creer', action: {} })).toMatchObject({ portee: 'Votre agenda', bouton: 'Créer le rendez-vous' });
     expect(presenter({ type_action: 'drive_creer_document', action: {} }).bouton).toBe('Créer le document');
+    expect(presenter({ type_action: 'routine_activer', action: { tache_id: 'x' } })).toMatchObject({ portee: 'Votre routine', bouton: 'Mettre en route' });
     expect(presenter({ type_action: 'reseaux_repondre_commentaire', action: {} }).portee).toBe('Réponse publique');
     expect(presenter({ type_action: 'app_blog_article', action: {} }).portee).toBe('Publication sur votre site');
   });
