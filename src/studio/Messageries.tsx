@@ -20,7 +20,11 @@ const AIDE: Record<Quoi, string> = {
   microsoft: 'Outlook.com ou Microsoft 365 : e-mails, calendrier et OneDrive en une connexion.',
   email: 'OVH, Infomaniak, IONOS, iCloud… : saisissez votre adresse, la page vous guide (mot de passe d\'application).',
 };
-const fournisseurDe = (q: Quoi): Fournisseur => (q === 'email' ? 'imap' : q);
+// eslint-disable-next-line react-refresh/only-export-components
+export const fournisseurDe = (q: Quoi): Fournisseur => (q === 'email' ? 'imap' : q);
+/** Action d'un compte connecté : icône et libellé visible (une icône seule ne se devine pas). */
+// eslint-disable-next-line react-refresh/only-export-components
+export const CL_ACTION = 'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50';
 
 /** Message lisible au retour de la page de connexion (paramètres ajoutés par Zernio). */
 function messageRetour(p: URLSearchParams): { ok: boolean; texte: string } | null {
@@ -122,18 +126,18 @@ export function ComptesMessagerie({ m, quoi }: { m: Messageries; quoi: Quoi }) {
                 <span className="truncate">{b.a_reconnecter ? 'À reconnecter' : b.zones.map((z) => ZONES[z]).join(' · ')}</span>
               </p>
             </div>
-            {proprietaire && (
-              <>
-                <button onClick={() => m.connecter(quoi, b.id)} disabled={occupe} title="Reconnecter (ressaisir le compte, étendre les accès)"
-                  className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" aria-label={`Reconnecter ${b.adresse}`}>
-                  {m.enCours === b.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                </button>
-                <button onClick={() => m.deconnecter(b)} disabled={occupe} className="rounded-lg p-1.5 text-neutral-400 hover:text-red-600" aria-label={`Déconnecter ${b.adresse}`}>
-                  <Unplug className="h-4 w-4" />
-                </button>
-              </>
-            )}
           </div>
+          {proprietaire && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              <button onClick={() => m.connecter(quoi, b.id)} disabled={occupe} title="Ressaisir le compte ou étendre les accès"
+                className={CL_ACTION} aria-label={`Reconnecter ${b.adresse}`}>
+                {m.enCours === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Reconnecter
+              </button>
+              <button onClick={() => m.deconnecter(b)} disabled={occupe} className={cx(CL_ACTION, 'hover:text-red-600')} aria-label={`Déconnecter ${b.adresse}`}>
+                <Unplug className="h-3.5 w-3.5" /> Déconnecter
+              </button>
+            </div>
+          )}
           {b.fournisseur === 'google' && b.zones.includes('files') && proprietaire && !b.a_reconnecter && (
             <button onClick={() => m.choisirFichiers(b)} disabled={occupe}
               className="mt-2 flex items-center gap-1.5 rounded-lg px-1 py-0.5 text-xs font-medium text-orange-600 hover:bg-orange-50">
@@ -142,11 +146,26 @@ export function ComptesMessagerie({ m, quoi }: { m: Messageries; quoi: Quoi }) {
             </button>
           )}
           {b.a_reconnecter && proprietaire && (
-            <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">Vos agents n'ont plus accès à ce compte. Cliquez sur l'icône de reconnexion.</p>
+            <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">Vos agents n'ont plus accès à ce compte. Cliquez sur « Reconnecter ».</p>
           )}
         </div>
       ))}
       {boites.length === 0 && <p className="text-xs text-neutral-500">{AIDE[quoi]}</p>}
+      {quoi === 'email' && (
+        <details className="text-xs text-neutral-500">
+          <summary className="cursor-pointer font-medium text-orange-700 hover:underline">Qu'est-ce qu'un mot de passe d'application ?</summary>
+          <p className="mt-1">
+            Certaines messageries refusent votre mot de passe habituel à un outil extérieur : elles demandent un mot de passe
+            à part, créé dans les réglages de sécurité de votre compte et réservé à cet usage. Vous pouvez le supprimer quand
+            vous voulez, sans changer votre mot de passe principal. Si votre messagerie n'en parle pas, votre mot de passe habituel suffit.
+          </p>
+          <p className="mt-1">
+            Guides officiels : <a className="underline" href="https://support.google.com/accounts/answer/185833?hl=fr" target="_blank" rel="noreferrer">Gmail</a>
+            {' · '}<a className="underline" href="https://support.apple.com/fr-fr/102654" target="_blank" rel="noreferrer">iCloud</a>.
+            Pour une autre messagerie, cherchez « mot de passe d'application » dans l'aide de votre hébergeur.
+          </p>
+        </details>
+      )}
       {boites.some((b) => b.fournisseur === 'google') && (
         <p className="text-xs text-neutral-500">Sur Google Drive, vos agents voient les documents qu'ils créent et ceux que vous choisissez.</p>
       )}

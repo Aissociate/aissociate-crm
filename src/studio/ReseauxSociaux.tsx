@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Plus, RefreshCw, Un
 import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { Bouton, cx } from './composants';
+import { CL_ACTION } from './Messageries';
 
 export type Reseau = 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'twitter' | 'threads' | 'pinterest' | 'googlebusiness';
 export type CompteReseau = { id: string; reseau: Reseau; nom: string; identifiant: string; photo: string | null; lien: string | null; a_reconnecter: boolean };
@@ -104,20 +105,20 @@ export function ComptesReseau({ reseaux, reseau }: { reseaux: Reseaux; reseau: R
               </p>
             </div>
             {c.lien && <a href={c.lien} target="_blank" rel="noreferrer" className="rounded-lg p-1.5 text-neutral-400 hover:text-neutral-700" aria-label={`Ouvrir ${c.nom}`}><ExternalLink className="h-4 w-4" /></a>}
-            {proprietaire && (
-              <>
-                <button onClick={() => reseaux.connecter(reseau, c.id)} disabled={occupe} title="Reconnecter (ressaisir le compte)"
-                  className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" aria-label={`Reconnecter ${c.nom}`}>
-                  {reseaux.enCours === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                </button>
-                <button onClick={() => reseaux.deconnecter(c)} disabled={occupe} className="rounded-lg p-1.5 text-neutral-400 hover:text-red-600" aria-label={`Déconnecter ${c.nom}`}>
-                  <Unplug className="h-4 w-4" />
-                </button>
-              </>
-            )}
           </div>
+          {proprietaire && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              <button onClick={() => reseaux.connecter(reseau, c.id)} disabled={occupe} title="Ressaisir le compte"
+                className={CL_ACTION} aria-label={`Reconnecter ${c.nom}`}>
+                {reseaux.enCours === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Reconnecter
+              </button>
+              <button onClick={() => reseaux.deconnecter(c)} disabled={occupe} className={cx(CL_ACTION, 'hover:text-red-600')} aria-label={`Déconnecter ${c.nom}`}>
+                <Unplug className="h-3.5 w-3.5" /> Déconnecter
+              </button>
+            </div>
+          )}
           {c.a_reconnecter && proprietaire && (
-            <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">Vos agents ne peuvent plus publier sur ce compte. Cliquez sur l'icône de reconnexion.</p>
+            <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">Vos agents ne peuvent plus publier sur ce compte. Cliquez sur « Reconnecter ».</p>
           )}
         </div>
       ))}
