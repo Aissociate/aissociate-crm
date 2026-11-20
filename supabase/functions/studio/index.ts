@@ -125,6 +125,7 @@ import { aVenir, faitsSemaine, type LigneFait } from "./faits.ts";
 import { etatsAgents, soumettreMission } from "./livrables.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
+import * as consignes from "./consignes.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
@@ -1190,6 +1191,17 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   let clientParti = false;
   const debutGeneration = new Date().toISOString();
   await sb.from("studio_conversations").update({ generation_depuis: debutGeneration, arret_demande: null }).eq("id", conversationId);
+  // Consignes ajoutées par le client pendant la réflexion (action chat_consigne) : lues entre deux
+  // tours. Le spécialiste en mission les reçoit aussitôt ; l'agent principal toujours, à son tour suivant.
+  const consignesVues = new Set<string>(messageClient?.id ? [String(messageClient.id)] : []);
+  const consignesPourAgent: string[] = [];
+  const nouvellesConsignes = async (): Promise<string[]> => {
+    const { data } = await sb.from("studio_messages").select("id, content").eq("conversation_id", conversationId)
+      .eq("role", "user").like("content", `${consignes.PREFIXE}%`).gt("created_at", debutGeneration).order("created_at").limit(20);
+    const neuves = (data ?? []).filter((m) => !consignesVues.has(String(m.id)));
+    neuves.forEach((m) => consignesVues.add(String(m.id)));
+    return neuves.map((m) => consignes.texteConsigne(String(m.content ?? ""))).filter(Boolean);
+  };
   const stream = new ReadableStream({
     cancel() { clientParti = true; },
     start(controller) {
@@ -1305,6 +1317,13 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           let sansRaisonnement = fil.sansRaisonnement ?? false;
           for (let t = 0; t < equipe.TOURS_MISSION; t++) {
             const final = t === equipe.TOURS_MISSION - 1;
+            // Consigne du client arrivée pendant la mission : le spécialiste l'applique, l'agent principal la recevra aussi.
+            const ajouts = await nouvellesConsignes().catch(() => []);
+            if (ajouts.length) {
+              for (const c of ajouts) fil.messages.push({ role: "user", content: consignes.pourSpecialiste(c, agent.prenom) });
+              consignesPourAgent.push(...ajouts);
+              emit("outil", { libelle: consignes.libellePrise(ajouts.length, collegue.prenom) });
+            }
             // Dernier tour : plus d'outils, et on le dit, sinon certains modèles rendent une réponse vide.
             if (final && !relance) fil.messages.push({ role: "user", content: equipe.RELANCE_MISSION });
             const corps: Record<string, unknown> = { model: modeleCollegue, messages: fil.messages, temperature: 0.5, max_tokens: equipe.PLAFOND_MISSION, usage: { include: true } };
@@ -1370,6 +1389,11 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         let relanceVide = false;
         for (let tour = 0; tour < TOURS; tour++) {
           const dernier = tour === TOURS - 1;
+          // Consignes ajoutées en cours de route : celles déjà vues par un spécialiste, puis les nouvelles.
+          const dejaVues = consignesPourAgent.splice(0);
+          const neuves = await nouvellesConsignes().catch(() => []);
+          for (const c of [...dejaVues, ...neuves]) messages.push({ role: "user", content: consignes.pourAgent(c) });
+          if (neuves.length) emit("outil", { libelle: consignes.libellePrise(neuves.length) });
           const corps: Record<string, unknown> = { model, messages, stream: true, temperature: 0.5, usage: { include: true } };
           if (avecOutils && outils) { corps.tools = outils.definitions; corps.tool_choice = dernier ? "none" : "auto"; }
           const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -1437,6 +1461,10 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           if (texteTour.trim()) { answer += "\n\n"; emit("delta", { text: "\n\n" }); }
         }
         usage = usageVu ? total : null;
+        // Consigne arrivée pendant la rédaction finale : trop tard pour cette réponse, on le dit.
+        if ([...consignesPourAgent, ...(await nouvellesConsignes().catch(() => []))].length) {
+          emit("outil", { libelle: "Consigne arrivée après la fin de la réflexion : renvoyez-la comme nouveau message" });
+        }
         if (!answer.trim()) answer = "Je n'ai pas pu produire de réponse. Pouvez-vous reformuler ?";
         // Mission d'équipe : mention discrète des collègues consultés.
         const mention = equipe.mentionAide(aides);
@@ -2143,6 +2171,21 @@ Deno.serve(async (req: Request) => {
 
       case "chat":
         return await chat(sb, s, body);
+
+      case "chat_consigne": {
+        // Consigne ajoutée pendant qu'un agent réfléchit : lue par la génération en cours entre deux tours.
+        const texte = String(body.texte ?? "").trim().slice(0, consignes.LONGUEUR_MAX);
+        if (!texte) return json({ error: "Consigne vide." }, 400);
+        const { data: conv } = await sb.from("studio_conversations").select("id, agent_id, generation_depuis")
+          .eq("id", String(body.conversation_id ?? "")).eq("workspace_id", s.ws.id).eq("user_id", s.user.id).maybeSingle();
+        if (!conv) return json({ error: "Conversation introuvable." }, 404);
+        if (!conv.generation_depuis) return json({ error: "La réponse est déjà terminée : envoyez votre consigne comme nouveau message." }, 409);
+        const { error } = await sb.from("studio_messages").insert({
+          conversation_id: conv.id, workspace_id: s.ws.id, agent_id: conv.agent_id, role: "user",
+          content: consignes.PREFIXE + texte, hors_quota: true, // précise la demande en cours, n'en compte pas une nouvelle
+        });
+        return error ? json({ error: error.message }, 400) : json({ ok: true });
+      }
 
       case "chat_arreter": {
         await sb.from("studio_conversations").update({ arret_demande: new Date().toISOString() })

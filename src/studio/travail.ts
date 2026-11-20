@@ -2,6 +2,10 @@
 // qu'il a sollicité s'il y en a un. Déduit des libellés d'étape envoyés par le serveur
 // (functions/studio/index.ts : consulter / confier). Module pur (testé).
 
+/** Préfixe des consignes ajoutées en cours de réflexion (même valeur que functions/studio/consignes.ts). */
+export const PREFIXE_CONSIGNE = '↪ ';
+export const estConsigne = (contenu: string) => contenu.startsWith(PREFIXE_CONSIGNE);
+
 /** Prénom du collègue encore au travail d'après la dernière étape annoncée, sinon null. */
 export function collegueAuTravail(etapes: string[] | undefined, prenoms: string[]): string | null {
   const derniere = etapes?.[etapes.length - 1]?.trim();
