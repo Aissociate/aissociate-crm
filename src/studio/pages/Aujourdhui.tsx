@@ -12,6 +12,7 @@ import { heureLisible, jourLisible, phraseEtat } from '../decision';
 import { useStudio } from '../StudioApp';
 import { CarteDecision, LigneRepliee, LigneSuite, type Contexte } from '../aujourdhui/CarteDecision';
 import DemanderLea from '../aujourdhui/DemanderLea';
+import DecisionsMobile, { useEstMobile } from '../aujourdhui/DecisionsMobile';
 import { useDecisions, type Decision, type Echeance } from '../aujourdhui/useDecisions';
 
 const ETATS_ECHEANCE: Record<Echeance['etat'], (prenom: string) => string> = {
@@ -24,6 +25,7 @@ export default function Aujourdhui() {
   const { me, gerer, rafraichir } = useStudio();
   const decisions = useDecisions(gerer, rafraichir);
   const [document, setDocument] = useState<Decision | null>(null);
+  const mobile = useEstMobile();
   const agents = new Map(me.agents.map((a) => [a.id, a]));
   const ctx: Contexte = { agents, proprietaire: me.user.role === 'proprietaire', gerer, onDocument: setDocument };
   const prenom = majuscule(me.user.prenom);
@@ -54,7 +56,7 @@ export default function Aujourdhui() {
         </div>
         {me.agents.length > 0 && (
           <Link to="/studio/equipe" aria-label={`Voir mon équipe : ${me.agents.length} agent${me.agents.length > 1 ? 's' : ''}`}
-            className="flex min-h-[44px] items-center gap-3 rounded-full border border-[#E7E5E2] bg-white py-1.5 pl-3.5 pr-4 text-[#141414] hover:border-[#D6D3CF]">
+            className="hidden min-h-[44px] items-center gap-3 rounded-full border sm:flex border-[#E7E5E2] bg-white py-1.5 pl-3.5 pr-4 text-[#141414] hover:border-[#D6D3CF]">
             <span className="flex">
               {me.agents.slice(0, 7).map((a) => (
                 <span key={a.id} className="-ml-2 rounded-full border-2 border-white first:ml-0"><Avatar prenom={a.prenom} couleur={a.couleur} photo={a.photo} taille={32} /></span>
@@ -69,7 +71,9 @@ export default function Aujourdhui() {
 
       <div className="flex flex-wrap items-start gap-7">
         <section aria-label="Décisions en attente" className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
-          {!decisions.pret ? (decisions.erreur ? null : <Chargement />) : decisions.decisions.length === 0 ? (
+          {!decisions.pret ? (decisions.erreur ? null : <Chargement />) : mobile ? (
+            <DecisionsMobile decisions={decisions} ctx={ctx} />
+          ) : decisions.decisions.length === 0 ? (
             <div className="rounded-[18px] border border-[#E7E5E2] bg-white p-6">
               <p className="text-[19px] font-bold">Rien n'attend votre accord.</p>
               <p className="mt-1 text-[15px] text-[#5F5B57]">
@@ -83,7 +87,8 @@ export default function Aujourdhui() {
               ? <CarteDecision key={d.id} d={d} decisions={decisions} ctx={ctx} />
               : <LigneRepliee key={d.id} d={d} decisions={decisions} ctx={ctx} />;
           })}
-          <div className="mt-2"><DemanderLea /></div>
+          {/* Sur téléphone, « Parler à Léa » est dans DecisionsMobile. */}
+          {!mobile && <div className="mt-2"><DemanderLea /></div>}
         </section>
 
         <aside aria-label="Fait sans vous" className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
