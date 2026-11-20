@@ -217,7 +217,7 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
         {envoi ? 'Transmission…' : `Confier à ${agent.prenom}`}
       </button>
       <p className="text-[14.5px] text-[#5F5B57]" aria-live="polite">
-        {manquant ? `Il manque : ${manquant === guide.choix ? guide.question.replace(/\s*\?$/, '') : manquant.label}.`
+        {manquant ? `Il manque : « ${manquant === guide.choix ? guide.question : manquant.label} »`
           : pouvoir.media ? `${agent.prenom} prépare, puis vous retrouvez le résultat dans « Mes documents ».`
             : `${agent.prenom} prépare, puis vous validez dans « Aujourd'hui ».`}
       </p>

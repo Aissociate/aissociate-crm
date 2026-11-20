@@ -41,7 +41,7 @@ export default function Equipe() {
               {r.connexions.map((c) => <span key={c} className="rounded-full border border-[#E7E5E2] bg-white px-2.5 py-0.5 text-[13px] text-[#141414]">{c}</span>)}
             </>
           ) : <span>Aucun outil n'est encore branché : vos agents préparent, mais ne peuvent rien déposer dans vos comptes.</span>}
-          <Link to="/studio/reglages" className="ml-1 font-medium text-[#B24A0C] underline underline-offset-[3px] hover:text-[#141414]">
+          <Link to="/studio/reglages" className="ml-1 inline-flex min-h-[44px] items-center font-medium text-[#B24A0C] underline underline-offset-[3px] hover:text-[#141414]">
             {r.connexions.length ? 'Gérer les connecteurs' : 'Relier mes outils'}
           </Link>
         </p>
@@ -62,7 +62,9 @@ export default function Equipe() {
               </div>
               {etat && (
                 etat.ton === 'attente' ? (
-                  <Link to="/studio" className="self-start rounded-full bg-[#FDEEE2] px-3 py-[3px] text-[13px] font-semibold text-[#B24A0C] hover:underline">{etat.texte}</Link>
+                  <Link to="/studio" className="group -my-2 inline-flex min-h-[44px] items-center self-start">
+                    <span className="rounded-full bg-[#FDEEE2] px-3 py-[3px] text-[13px] font-semibold text-[#B24A0C] group-hover:underline">{etat.texte}</span>
+                  </Link>
                 ) : <span className="self-start rounded-full bg-[#E4F1EA] px-3 py-[3px] text-[13px] font-semibold text-[#2E6B48]">{etat.texte}</span>
               )}
               <div className="flex flex-col gap-2 text-[15px]">
