@@ -1,5 +1,7 @@
 // Briques d'interface du Studio IA (style propre au module, indépendant du thème CRM).
-import { type ReactNode, Fragment } from 'react';
+import { type ReactNode, Fragment, createContext, useContext } from 'react';
+import { FileType } from 'lucide-react';
+import { decouperReferences } from './references';
 
 export function cx(...c: (string | false | null | undefined)[]) { return c.filter(Boolean).join(' '); }
 
@@ -72,19 +74,39 @@ export function Chargement() {
 
 // ─── Markdown minimal et sûr (aucun HTML injecté) ───────────────────────────
 
+/** Ouverture d'un document cité (« L-xxxxxxxx ») : fournie par l'écran de chat, absente ailleurs. */
+const ContexteReferences = createContext<((ref: string) => void) | null>(null);
+export const FournisseurReferences = ContexteReferences.Provider;
+
+function Reference({ code }: { code: string }) {
+  const ouvrir = useContext(ContexteReferences);
+  if (!ouvrir) return <>{code}</>;
+  return (
+    <button type="button" onClick={() => ouvrir(code)} title="Ouvrir le document à droite"
+      className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-1.5 py-0.5 align-baseline font-semibold text-orange-800 underline decoration-orange-300 underline-offset-2 hover:bg-orange-100">
+      <FileType aria-hidden className="h-3.5 w-3.5" />{code}
+    </button>
+  );
+}
+
+/** Texte brut avec ses références de documents rendues cliquables. */
+function avecReferences(texte: string, cle: string): ReactNode[] {
+  return decouperReferences(texte).map((p, j) => (typeof p === 'string' ? p : <Reference key={`${cle}-${j}`} code={p.ref} />));
+}
+
 function enLigne(texte: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
   let dernier = 0, m: RegExpExecArray | null, k = 0;
   while ((m = re.exec(texte))) {
-    if (m.index > dernier) out.push(texte.slice(dernier, m.index));
+    if (m.index > dernier) out.push(...avecReferences(texte.slice(dernier, m.index), `t${k++}`));
     const t = m[0];
-    if (t.startsWith('**')) out.push(<strong key={k++}>{t.slice(2, -2)}</strong>);
+    if (t.startsWith('**')) out.push(<strong key={k++}>{avecReferences(t.slice(2, -2), `s${k}`)}</strong>);
     else if (t.startsWith('`')) out.push(<code key={k++} className="rounded bg-neutral-100 px-1 py-0.5 text-[0.9em]">{t.slice(1, -1)}</code>);
-    else out.push(<em key={k++}>{t.slice(1, -1)}</em>);
+    else out.push(<em key={k++}>{avecReferences(t.slice(1, -1), `e${k}`)}</em>);
     dernier = m.index + t.length;
   }
-  if (dernier < texte.length) out.push(texte.slice(dernier));
+  if (dernier < texte.length) out.push(...avecReferences(texte.slice(dernier), `t${k++}`));
   return out;
 }
 
