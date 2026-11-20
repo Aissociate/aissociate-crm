@@ -124,7 +124,7 @@ export default function Taches() {
                     <div className="mt-2 text-sm">
                       <Markdown texte={t.dernier_compte_rendu} />
                       <div className="mt-2 flex gap-4 text-xs">
-                        <Link to="/studio/livrables" className="font-medium text-orange-600 hover:underline">Voir les livrables à valider</Link>
+                        <Link to="/studio" className="font-medium text-orange-600 hover:underline">Voir les livrables à valider</Link>
                         {t.conversation_id && <Link to={`/studio/assistants/${t.agent_id}?c=${t.conversation_id}`} className="text-neutral-500 hover:underline">Historique de la tâche</Link>}
                       </div>
                     </div>
