@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BookOpen, FileUp, Pencil, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { extractPdfTextFromFile, isPdf } from '@/lib/pdfText';
+import { FORMATS_DOCUMENTS, extraireTexte } from '../extraction';
 import { Badge, Button } from '@/components/ui';
 
 const db = supabase as unknown as SupabaseClient;
@@ -29,8 +29,8 @@ export default function SavoirsAgent({ agentId, prenom }: { agentId: string; pre
   const importer = async (f: File) => {
     setErreur(''); setLecture(true);
     try {
-      const texte = isPdf(f.name, f.type) ? await extractPdfTextFromFile(f) : await f.text();
-      if (!texte.trim()) throw new Error('Aucun texte lisible (PDF scanné ?).');
+      // Mêmes formats que le Studio : PDF, Word, Excel, PowerPoint, OpenDocument, texte, ZIP.
+      const texte = await extraireTexte(f);
       setEdite({ titre: f.name.replace(/\.[^.]+$/, ''), source: f.name, contenu: texte.slice(0, MAX) });
     } catch (e) { setErreur(e instanceof Error ? e.message : String(e)); }
     finally { setLecture(false); if (fichier.current) fichier.current.value = ''; }
@@ -67,7 +67,7 @@ export default function SavoirsAgent({ agentId, prenom }: { agentId: string; pre
         <p className="font-semibold text-fg">Base de connaissances de {prenom}</p>
         <span className="text-xs text-muted">· commune à tous les clients, citée par l'agent</span>
         <div className="ml-auto flex gap-2">
-          <input ref={fichier} type="file" accept=".pdf,.txt,.md,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && importer(e.target.files[0])} />
+          <input ref={fichier} type="file" accept={FORMATS_DOCUMENTS} className="hidden" onChange={(e) => e.target.files?.[0] && importer(e.target.files[0])} />
           <Button variant="secondary" onClick={() => fichier.current?.click()} disabled={lecture}>
             <FileUp className="mr-1 inline h-3.5 w-3.5" />{lecture ? 'Lecture…' : 'Importer un fichier'}
           </Button>

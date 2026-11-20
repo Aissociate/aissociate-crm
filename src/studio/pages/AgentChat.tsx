@@ -386,7 +386,7 @@ export default function AgentChat() {
             <input ref={champFichier} type="file" multiple accept={`${FORMATS_DOCUMENTS},${FORMATS_IMAGES}`} className="hidden"
               onChange={(e) => e.target.files?.length && joindre([...e.target.files])} />
             <button type="button" onClick={() => champFichier.current?.click()} disabled={lecture || enCours || pieces.length >= 5}
-              aria-label="Joindre un document ou une image" title="Joindre un document (PDF, Word, Excel, PowerPoint, CSV, texte) ou une image (photo, capture, facture scannée)"
+              aria-label="Joindre un document ou une image" title="Joindre un document (PDF, Word, Excel, PowerPoint, CSV, texte, ZIP) ou une image (photo, capture, facture scannée)"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 disabled:opacity-40"><Paperclip className="h-4 w-4" /></button>
             <textarea
               value={saisie} onChange={(e) => setSaisie(e.target.value)} rows={2}

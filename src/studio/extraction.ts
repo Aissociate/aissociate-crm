@@ -4,6 +4,7 @@
 //   PDF (unpdf) · Word .docx (mammoth) · Excel .xlsx/.xls/.ods (SheetJS, en CSV par feuille)
 //   PowerPoint .pptx et OpenDocument .odt/.odp (jszip, texte des diapositives / paragraphes)
 //   Texte : .txt .md .csv .tsv .json .xml .html .rtf (balises retirées)
+//   Archive .zip (jszip) : chaque fichier lisible de l'archive, avec son chemin (pas de zip imbriqué)
 
 const CDN = {
   unpdf: 'https://esm.sh/unpdf@1.6.2',
@@ -15,8 +16,10 @@ const charger = <T,>(url: string) => import(/* @vite-ignore */ url) as Promise<T
 
 export const FORMATS_DOCUMENTS = [
   '.pdf', '.docx', '.xlsx', '.xls', '.ods', '.pptx', '.odt', '.odp',
-  '.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm', '.rtf',
+  '.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm', '.rtf', '.zip',
 ].join(',');
+/** Archive : nombre de fichiers lus au plus. */
+export const FICHIERS_ZIP_MAX = 40;
 export const TAILLE_MAX = 15e6;
 
 export const extension = (nom: string) => nom.split('.').pop()?.toLowerCase() ?? '';
@@ -37,7 +40,14 @@ export function texteRtf(rtf: string): string {
 /** Ordre naturel des diapositives : slide2 avant slide10. */
 export const ordreNaturel = (a: string, b: string) => (Number(/(\d+)\.xml$/.exec(a)?.[1] ?? 0) - Number(/(\d+)\.xml$/.exec(b)?.[1] ?? 0));
 
-type Zip = { files: Record<string, { async: (t: 'string') => Promise<string> }> };
+type EntreeZip = { dir: boolean; async(t: 'string'): Promise<string>; async(t: 'arraybuffer'): Promise<ArrayBuffer> };
+type Zip = { files: Record<string, EntreeZip> };
+
+/** Entrées d'archive à lire : ni dossiers, ni fichiers système (__MACOSX, .DS_Store, fichiers cachés). */
+export function entreesUtiles(noms: string[]): string[] {
+  return noms.filter((n) => !n.endsWith('/') && !/(^|\/)(__MACOSX|\.[^/]*)(\/|$)/.test(n) && !/(^|\/)(Thumbs\.db|desktop\.ini)$/i.test(n))
+    .sort((a, b) => a.localeCompare(b, 'fr'));
+}
 
 async function textePdf(buf: ArrayBuffer): Promise<string> {
   const m = await charger<{
@@ -54,7 +64,7 @@ async function zip(buf: ArrayBuffer): Promise<Zip> {
 }
 
 /** Extrait le texte d'un fichier ; lève une erreur lisible si le format n'est pas pris en charge. */
-export async function extraireTexte(f: File): Promise<string> {
+export async function extraireTexte(f: File, dansArchive = false): Promise<string> {
   if (f.size > TAILLE_MAX) throw new Error(`« ${f.name} » est trop volumineux (15 Mo max).`);
   const ext = extension(f.name);
   let texte = '';
@@ -79,10 +89,32 @@ export async function extraireTexte(f: File): Promise<string> {
   } else if (['html', 'htm', 'xml'].includes(ext)) texte = texteDeBalises(await f.text());
   else if (ext === 'rtf') texte = texteRtf(await f.text());
   else if (['txt', 'md', 'csv', 'tsv', 'json'].includes(ext) || f.type.startsWith('text/')) texte = await f.text();
-  else throw new Error(`Format « .${ext} » non pris en charge. Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument, CSV, texte.`);
+  else if (ext === 'zip' && !dansArchive) texte = await texteArchive(f);
+  else throw new Error(`Format « .${ext} » non pris en charge. Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument, CSV, texte, ZIP.`);
   texte = texte.trim();
   if (!texte) throw new Error(`Aucun texte lisible dans « ${f.name} » (document scanné ou image ?).`);
   return texte;
+}
+
+/** Archive ZIP : le texte de chaque fichier lisible, précédé de son chemin ; les autres sont listés. */
+async function texteArchive(f: File): Promise<string> {
+  const z = await zip(await f.arrayBuffer());
+  const noms = entreesUtiles(Object.keys(z.files).filter((n) => !z.files[n].dir));
+  if (!noms.length) throw new Error(`L'archive « ${f.name} » est vide.`);
+  const parties: string[] = [], ignores: string[] = [];
+  for (const nom of noms.slice(0, FICHIERS_ZIP_MAX)) {
+    try {
+      const contenu = await z.files[nom].async('arraybuffer');
+      const texte = await extraireTexte(new File([contenu], nom.split('/').pop() ?? nom), true);
+      parties.push(`# Fichier « ${nom} »\n${texte}`);
+    } catch (e) {
+      ignores.push(`${nom} (${e instanceof Error ? e.message.replace(/ Formats acceptés.*$/, '') : 'illisible'})`);
+    }
+  }
+  if (noms.length > FICHIERS_ZIP_MAX) ignores.push(`${noms.length - FICHIERS_ZIP_MAX} autre(s) fichier(s) non lus (${FICHIERS_ZIP_MAX} au plus par archive)`);
+  if (!parties.length) throw new Error(`Aucun fichier lisible dans l'archive « ${f.name} ».`);
+  return [`Archive « ${f.name} » : ${parties.length} fichier(s) lu(s) sur ${noms.length}.`, ...parties,
+    ...(ignores.length ? [`# Fichiers non lus\n${ignores.map((x) => `- ${x}`).join('\n')}`] : [])].join('\n\n');
 }
 
 // ── Images : réduites dans le navigateur, puis lues par le modèle de vision côté serveur ──

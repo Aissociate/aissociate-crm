@@ -783,7 +783,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const outils = await outilsEspace({
     sb, wsId: s.ws.id, acteur: acteurDe(s),
     agentId: agent.id, agentPrenom: agent.prenom, userId: s.sessionId === "mail" ? null : s.user.id,
-    conversationId: conversationId as string,
+    conversationId: conversationId as string, apiKey,
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const systemeBase = construirePrompt({ agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo });
@@ -930,6 +930,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               ? await consulter(a.function.arguments)
               : await outils.executer(a.function.name, a.function.arguments);
             emit("outil", { libelle: res.libelle });
+            // Outil payant (recherche web) : son coût rejoint celui de la réponse.
+            if ("usage" in res && res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
             if ("document" in res && res.document) emit("document", res.document);
             messages.push({ role: "tool", tool_call_id: a.id, content: res.resultat.slice(0, 40_000) });
           }
