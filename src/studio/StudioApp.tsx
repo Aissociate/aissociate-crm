@@ -11,7 +11,7 @@ import { Chargement, cx } from './composants';
 import SignalerBug, { ouvrirSignalement } from './composants/SignalerBug';
 
 const Connexion = lazy(() => import('./pages/Connexion'));
-const Accueil = lazy(() => import('./pages/Accueil'));
+const Aujourdhui = lazy(() => import('./pages/Aujourdhui'));
 const Assistants = lazy(() => import('./pages/Assistants'));
 const AgentChat = lazy(() => import('./pages/AgentChat'));
 const Ressources = lazy(() => import('./pages/Ressources'));
@@ -264,7 +264,7 @@ export default function StudioApp() {
           <Route path="desinscription/:jeton" element={<Desinscription />} />
           <Route element={<Garde />}>
             {/* Cinq sections (routes.ts) ; les pages regroupées sont leurs onglets. */}
-            <Route index element={<Accueil />} />
+            <Route index element={<Aujourdhui />} />
             <Route path="aujourdhui" element={<Navigate to={BASE} replace />} />
             <Route path="aujourdhui/livrables" element={<Livrables />} />
             <Route path="aujourdhui/journal" element={<Journal />} />
