@@ -99,6 +99,11 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
       const serveur = typeof a.serveur === 'string' && a.serveur ? a.serveur : 'votre outil';
       return { portee: `Action dans ${serveur}`, bouton: 'Valider et lancer', fait: `Action exécutée dans ${serveur}.`, modifiable: false };
     }
+    case 'api_appel': {
+      // Requête qui écrit vers une API reliée par le client : envoyée telle que montrée.
+      const api = typeof a.api === 'string' && a.api ? a.api : 'votre logiciel';
+      return { portee: `Requête vers ${api}`, bouton: 'Valider et envoyer', fait: `Requête envoyée à ${api}.`, modifiable: false };
+    }
     default:
       // Livrable sans action : un texte ou un document à relire, rien ne part de lui-même.
       return l.type_action
