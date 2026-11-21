@@ -21,6 +21,7 @@
 //   drive_choisir {compte_id} | connexion_invitation {cible?, email?}   (messagerie, agenda, fichiers via Zernio)
 // Public : invitation_ouvrir {jeton}                → lien Zernio pour l'espace de l'invitation
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
+//   acces_connecteurs | acces_connecteur_regler {cle, agents: string[] | null, nom?}  (connecteur réservé à certains agents)
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
 //   fichier_deposer {jeton, index, total, morceau(base64), nom, type?} → fichier gardé tel quel dans « Mes ressources » (fichiers.ts)
 //   ressource_toggle {id, actif, confirmer? (requis pour activer une ressource sensible)} | ressource_delete {id}
@@ -132,6 +133,7 @@ import * as routineChat from "./routine_outil.ts";
 import * as lots from "./lots.ts";
 import * as mcpClient from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
+import * as accesAgents from "./acces.ts";
 import * as fichiers from "./fichiers.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
@@ -2327,8 +2329,29 @@ Deno.serve(async (req: Request) => {
       case "connecteur_supprimer": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         await sb.from("studio_connecteurs").delete().eq("workspace_id", s.ws.id).eq("type", String(body.type ?? ""));
+        // Un connecteur recréé plus tard sous le même nom repart ouvert à toute l'équipe.
+        await accesAgents.reglerAcces(sb, s.ws.id, String(body.type ?? ""), null);
         await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connecteur_supprime", detail: { type: String(body.type ?? "") } });
         return json({ ok: true, connecteurs: await listerConnecteurs(sb, s.ws.id) });
+      }
+
+      // ── Connecteurs réservés à certains agents (acces.ts) : pas de réglage = toute l'équipe ──
+      case "acces_connecteurs":
+        return json({ acces: Object.fromEntries(await accesAgents.chargerAcces(sb, s.ws.id)) });
+
+      case "acces_connecteur_regler": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (!accesAgents.cleValide(body.cle)) return json({ error: "Connecteur inconnu" }, 400);
+        const equipeIds = (await agentsDuWorkspace(sb, s.ws)).map((a) => String(a.id));
+        const agentsChoisis = accesAgents.agentsRetenus(body.agents, equipeIds);
+        if (agentsChoisis && !Array.isArray(agentsChoisis)) return json({ error: agentsChoisis.erreur }, 400);
+        const r = await accesAgents.reglerAcces(sb, s.ws.id, body.cle, agentsChoisis);
+        if (r.erreur) return json({ error: r.erreur }, 500);
+        await journaliser(sb, {
+          wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "connecteur_agents",
+          detail: { connecteur: body.cle, nom: String(body.nom ?? "").slice(0, 120), agents: agentsChoisis ?? "toute l'équipe" },
+        });
+        return json({ acces: Object.fromEntries(await accesAgents.chargerAcces(sb, s.ws.id)) });
       }
 
       case "media_statut": {
