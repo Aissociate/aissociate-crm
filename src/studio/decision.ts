@@ -56,6 +56,16 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
         ? { portee: `Envoi à ${n} destinataires`, bouton: `Envoyer aux ${n} destinataires`, fait: `E-mail envoyé aux ${n} destinataires.` }
         : { portee: 'Envoi à 1 destinataire', bouton: "Envoyer l'e-mail", fait: 'E-mail envoyé.' };
     }
+    case 'qualiopi_envoyer': {
+      // Document ou lien Qualiopi envoyé à un stagiaire par la messagerie du CRM (espace Aissociate).
+      const pj = tableau(a.pieces).length;
+      const qui = typeof a.nom === 'string' && a.nom ? a.nom : 'le stagiaire';
+      return {
+        portee: `Envoi à ${qui}${pj ? ` avec ${pj} pièce${s(pj)} jointe${s(pj)}` : ''}`,
+        bouton: `Envoyer à ${qui}`,
+        fait: `E-mail envoyé à ${qui} ; la pièce est rangée « envoyée » dans le dossier Qualiopi.`,
+      };
+    }
     case 'mailing_envoyer': {
       const n = Number(a.destinataires) || 0;
       return { portee: `Envoi à ${n} abonné${s(n)}`, bouton: n ? `Envoyer aux ${n} abonné${s(n)}` : 'Envoyer le mailing', fait: 'Mailing mis en file : les envois partent par lots.' };

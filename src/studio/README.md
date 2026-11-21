@@ -309,6 +309,21 @@ et la table `studio_nango_connexions` ne servent plus.
   jamais lu. En cas d'échec, un livrable « Traitement en lot — n non traités » fait le bilan. Limite connue :
   une étape interrompue par l'hébergeur arrête la chaîne (rien n'est rejoué).
 
+## Conformité Qualiopi de Nora (`qualiopi.ts`, `qualiopi_crm.ts`) — espace Aissociate seulement
+
+Dans l'espace de l'organisme de formation (`ESPACE_AISSOCIATE`, réglable par `STUDIO_ESPACES_ORGANISME`), Nora reçoit
+4 outils et 5 super-pouvoirs ajoutés par le code (`pouvoirsQualiopi`, aucune ligne en base, prompt système inchangé).
+Aucun autre agent, aucun autre espace n'y a accès ; l'exécution d'un envoi revérifie l'espace.
+
+- Lecture : `qualiopi_sessions`, `qualiopi_session` (stagiaires, checklist `qualiopi_dossier_docs`, `evaluation_liens`, émargement, devis).
+- Production (`qualiopi_produire`), avec les générateurs du CRM : `qualiopi-doc` (convocation, livret d'accueil,
+  attestation de fin, certificat de réalisation, modèles de `qualiopi-doc/modeles.ts`), `generate-agefice` (convention,
+  mode direct par session), `generate-plan` (programme), `generate-devis`, demi-journées d'émargement. Le fichier est
+  rangé dans la ligne de checklist de la session ou du stagiaire (jamais de retour en arrière d'un statut).
+- Envois (`qualiopi_proposer_envois`) : une décision `qualiopi_envoyer` par stagiaire ; au « VALIDÉ », `send-email`
+  (SMTP du CRM), lien personnel créé ou retrouvé (`emargement_acces`, `evaluation_liens`), pièce « envoyée », trace
+  dans `emails`. Le questionnaire à froid reste envoyé seul par `qualiopi-cron` à J+30 ; Nora relance les sans-réponse.
+
 ## Dossiers (`dossiers.ts`, `src/studio/Dossiers.tsx`)
 Arborescence par espace (`studio_dossiers`, 5 niveaux) pour ranger ressources (notes, fichiers, compétences),
 livrables et visuels (`dossier_id` sur `studio_documents`, `studio_livrables`, `studio_medias`).

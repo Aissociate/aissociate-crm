@@ -128,6 +128,7 @@ import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
 import * as consignes from "./consignes.ts";
 import * as pouvoirs from "./pouvoirs.ts";
+import { pouvoirsQualiopi } from "./qualiopi.ts";
 import * as routineChat from "./routine_outil.ts";
 import * as lots from "./lots.ts";
 import * as mcpClient from "./mcp_client.ts";
@@ -1008,6 +1009,8 @@ async function agentsDuWorkspace(sb: SupabaseClient, ws: Session["ws"]) {
     .filter((a) => equipe.estOrchestrateur(a.id) || ((a.offres as string[]).includes(offre) && parAgent.get(a.id)?.actif !== false))
     .map((a) => ({
       ...a,
+      // Conformité Qualiopi : super-pouvoirs ajoutés à Nora dans l'espace de l'organisme seulement (qualiopi.ts).
+      super_pouvoirs: [...((a.super_pouvoirs ?? []) as SuperPouvoir[]), ...pouvoirsQualiopi(ws.id, a.id as string)],
       consignes: parAgent.get(a.id)?.consignes ?? "",
       // Priorité : cet agent pour ce client > ce client > cet agent (le défaut global vient de `parametres`).
       modele_effectif: autorise(parAgent.get(a.id)?.modele) ?? autorise(ws.modele) ?? autorise(a.modele as string | null),
