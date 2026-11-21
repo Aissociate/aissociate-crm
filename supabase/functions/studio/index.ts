@@ -129,6 +129,7 @@ import * as equipe from "./equipe.ts";
 import * as consignes from "./consignes.ts";
 import * as pouvoirs from "./pouvoirs.ts";
 import * as routineChat from "./routine_outil.ts";
+import * as lots from "./lots.ts";
 import * as fichiers from "./fichiers.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
@@ -2403,6 +2404,49 @@ Deno.serve(async (req: Request) => {
         const f = d ? fichiers.fichierStocke(d.contenu, String(d.titre)) : null;
         if (f?.chemin.startsWith(`${s.ws.id}/`)) await sb.storage.from("studio-medias").remove([f.chemin]).catch(() => undefined);
         return json({ ok: true });
+      }
+
+      // Gestion groupée (lots.ts) : activer, désactiver, ranger ou supprimer plusieurs ressources d'un coup.
+      case "ressources_lot": {
+        const op = lots.opGestion(body.op);
+        if (!op) return json({ error: "Opération inconnue" }, 400);
+        const ids = lots.idsValides(body.ids, lots.GESTION_MAX);
+        if ("erreur" in ids) return json({ error: ids.erreur }, 400);
+        const { data: docs } = await sb.from("studio_documents").select("id, titre, contenu, sensible, actif")
+          .eq("workspace_id", s.ws.id).in("id", ids);
+        const trouves = (docs ?? []) as { id: string; titre: string; contenu: string; sensible?: string | null; actif: boolean }[];
+        if (!trouves.length) return json({ error: "Ressources introuvables" }, 404);
+        const cibles = trouves.map((d) => d.id);
+        if (op === "activer") {
+          // Les sensibles ne s'activent qu'en connaissance de cause, comme une par une.
+          const sensibles = trouves.filter((d) => d.sensible && !d.actif);
+          if (sensibles.length && body.confirmer !== true) {
+            return json({ error: "Certaines ressources contiennent des données sensibles : confirmez pour les rendre lisibles par vos agents.", sensibles: sensibles.map((d) => d.titre) }, 409);
+          }
+          for (const d of sensibles) {
+            await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "ressource_sensible_activee", detail: { titre: d.titre, nature: d.sensible } });
+          }
+        }
+        if (op === "activer" || op === "desactiver") {
+          const { error } = await sb.from("studio_documents").update({ actif: op === "activer" }).eq("workspace_id", s.ws.id).in("id", cibles);
+          if (error) return json({ error: error.message }, 400);
+        } else if (op === "ranger") {
+          const dossier = await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id);
+          if (dossier === false) return json({ error: "Dossier introuvable" }, 404);
+          for (const id of cibles) {
+            const r = await dossiers.ranger(sb, s.ws.id, "ressource", id, dossier);
+            if ("erreur" in r) return json({ error: r.erreur }, 400);
+          }
+        } else {
+          const { error } = await sb.from("studio_documents").delete().eq("workspace_id", s.ws.id).in("id", cibles);
+          if (error) return json({ error: error.message }, 400);
+          // Fichiers transmis tels quels : ils quittent aussi le stockage.
+          const chemins = trouves.map((d) => fichiers.fichierStocke(d.contenu, d.titre)?.chemin)
+            .filter((c): c is string => Boolean(c?.startsWith(`${s.ws.id}/`)));
+          if (chemins.length) await sb.storage.from("studio-medias").remove(chemins).catch(() => undefined);
+        }
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "ressources_lot", detail: { op, nombre: cibles.length } });
+        return json({ ok: true, nombre: cibles.length });
       }
 
       // Fichier joint au chat que le navigateur ne lit pas : gardé tel quel (fichiers.ts), rangé dans « Mes ressources ».

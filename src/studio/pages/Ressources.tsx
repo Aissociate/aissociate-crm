@@ -6,6 +6,7 @@ import { Bouton, Chargement, Interrupteur, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
 import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
+import BarreSelection from '../ressources/BarreSelection';
 
 type Ajout = { id: string; sensible: { type: string; message: string } | null };
 const NATURES: Record<NonNullable<Ressource['sensible']>, string> = {
@@ -43,6 +44,15 @@ export default function Ressources() {
   const visibles = useMemo(() => (liste ?? []).filter((r) => r.type === onglet
     && dansFiltre(dossiers.dossiers, filtre, r.dossier_id)
     && r.titre.toLowerCase().includes(recherche.toLowerCase())), [liste, onglet, recherche, filtre, dossiers.dossiers]);
+
+  /** Ressources cochées pour une action groupée : seulement parmi celles affichées. */
+  const [coches, setCoches] = useState<Set<string>>(new Set());
+  const [info, setInfo] = useState('');
+  const choisies = useMemo(() => visibles.filter((r) => coches.has(r.id)), [visibles, coches]);
+  const toutCoche = visibles.length > 0 && choisies.length === visibles.length;
+  const cocher = (id: string) => setCoches((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toutBasculer = () => setCoches(toutCoche ? new Set() : new Set(visibles.map((r) => r.id)));
+  useEffect(() => { setCoches(new Set()); }, [onglet, filtre]);
 
   const importer = async (fichiers: File[]) => {
     setErreur(''); setAvis([]); setImport(true);
@@ -142,6 +152,24 @@ export default function Ressources() {
         </div>
       )}
 
+      {info && (
+        <p className="mb-4 flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
+          <span className="flex-1">{info}</span>
+          <button onClick={() => setInfo('')} aria-label="Fermer le message"><X className="h-4 w-4" /></button>
+        </p>
+      )}
+      {choisies.length > 0 && (
+        <BarreSelection choisies={choisies} options={dossiers.options} gerer={gerer}
+          onVider={() => setCoches(new Set())}
+          onErreur={(m) => { setErreur(m); charger(); }}
+          onFini={async (m) => { setErreur(''); setInfo(m); setCoches(new Set()); await charger(); dossiers.charger(); rafraichir(); }} />
+      )}
+      {liste !== null && visibles.length > 0 && (
+        <label className="mb-2 inline-flex min-h-[36px] items-center gap-2 px-1 text-sm text-neutral-600">
+          <input type="checkbox" checked={toutCoche} onChange={toutBasculer} className="h-4 w-4 accent-neutral-900" />
+          {toutCoche ? 'Tout désélectionner' : `Tout sélectionner (${visibles.length})`}
+        </label>
+      )}
       {liste === null ? <Chargement /> : visibles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-300 py-14 text-center text-sm text-neutral-500">
           {filtre !== 'tous' ? "Rien dans ce dossier pour l'instant." : onglet === 'fichier' ? 'Importez votre plaquette, vos offres, votre charte… vos agents les utiliseront.' : 'Ajoutez des notes : tarifs, process, FAQ clients…'}
@@ -149,7 +177,9 @@ export default function Ressources() {
       ) : (
         <div className="space-y-2">
           {visibles.map((r) => (
-            <div key={r.id} className="flex items-center gap-4 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+            <div key={r.id} className={cx('flex items-center gap-4 rounded-2xl border bg-white px-4 py-3', coches.has(r.id) ? 'border-neutral-900' : 'border-neutral-200')}>
+              <input type="checkbox" checked={coches.has(r.id)} onChange={() => cocher(r.id)} aria-label={`Sélectionner ${r.titre}`}
+                className="h-4 w-4 shrink-0 accent-neutral-900" />
               <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-neutral-100 text-[9px] font-semibold uppercase text-neutral-500">
                 {r.type === 'note' ? <StickyNote className="h-4 w-4" /> : <><FileText className="h-4 w-4" />{r.format}</>}
               </span>
