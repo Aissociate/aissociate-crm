@@ -15,12 +15,15 @@ export default function MediaVue({ media: initial }: { media: Media }) {
     let actif = true;
     const debut = Date.now();
     const tic = setInterval(() => setSecondes(Math.round((Date.now() - debut) / 1000)), 1000);
-    const sonde = setInterval(async () => {
+    const verifier = async () => {
       try {
         const r = await appel<{ media: Media }>('media_statut', { id: media.id });
         if (actif && r.media.statut !== 'en_cours') setMedia(r.media);
       } catch { /* réseau : on réessaie au tour suivant */ }
-    }, 5000);
+    };
+    // Un média déjà prêt (cité dans un document) s'affiche tout de suite, sans attendre 5 s.
+    void verifier();
+    const sonde = setInterval(verifier, 5000);
     return () => { actif = false; clearInterval(tic); clearInterval(sonde); };
   }, [media.id, media.statut]);
 

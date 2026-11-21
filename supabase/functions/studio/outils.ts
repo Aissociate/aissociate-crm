@@ -27,7 +27,7 @@ import * as apps from "./applications_outils.ts";
 import { colonneSensibleAbsente, detecterSensible, type Sensible } from "./sensible.ts";
 import * as fichiersBruts from "./fichiers.ts";
 import type { PieceStockee } from "./fichiers.ts";
-import { dureeLien, marqueurMedia, separerMedias } from "./pouvoirs.ts";
+import { completerReferences, dureeLien, marqueurMedia, separerMedias } from "./pouvoirs.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -850,7 +850,13 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           return { resultat: `« ${nomCible} » rangé ${d.chemin ? `dans « ${d.chemin} »` : "à la racine"}.`, libelle: `Rangé : « ${nomCible.slice(0, 50)} » → ${d.chemin || "racine"}` };
         }
         if (nom === "document_rediger") {
-          const html = nettoyerHtml(String(a.html ?? ""));
+          let html = nettoyerHtml(String(a.html ?? ""));
+          // Visuels cités (« media:… ») : identifiant complété, pour que l'aperçu de la décision les montre.
+          if (/media:[0-9a-f]/i.test(html)) {
+            const { data: ms } = await ctx.sb.from("studio_medias").select("id").eq("workspace_id", ctx.wsId)
+              .order("created_at", { ascending: false }).limit(300);
+            html = completerReferences(html, (ms ?? []).map((x) => String(x.id)));
+          }
           const titre = String(a.titre ?? "").trim().slice(0, 200) || titreDuHtml(html) || "Document";
           if (html.replace(/<[^>]+>/g, "").trim().length < 20) return { resultat: "Document vide : fournis le HTML complet.", libelle: "Document non créé" };
           const d = await dossierPour(a.dossier);

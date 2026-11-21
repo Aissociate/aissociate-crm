@@ -121,6 +121,21 @@ export const listePouvoirs = (pouvoirs: PouvoirCollegue[] | undefined) =>
 export const referenceMedia = (id: string) => `media:${id}`;
 const REFERENCE = /^(?:media:([0-9a-f-]{36})|\[\[MEDIA:([0-9a-f-]{36}):(?:image|video)\]\])$/i;
 
+/**
+ * Références « media:… » d'un texte (document, publication) complétées en identifiant entier :
+ * un agent abrège parfois l'identifiant (« media:de54207b »), que ni l'aperçu ni la publication
+ * ne savent alors retrouver. Seul un préfixe désignant un unique média de l'espace est complété.
+ */
+export function completerReferences(texte: string, ids: string[]): string {
+  const connus = ids.map((i) => i.toLowerCase());
+  return texte.replace(/media:([0-9a-f][0-9a-f-]{5,35})/gi, (tout, brut: string) => {
+    const p = brut.toLowerCase().replace(/-+$/, "");
+    if (p.length === 36) return tout;
+    const trouves = connus.filter((i) => i.startsWith(p));
+    return trouves.length === 1 ? `media:${trouves[0]}${brut.slice(p.length)}` : tout;
+  });
+}
+
 /** Sépare les médias d'une publication : visuels du Studio (media:id ou repère) et adresses https. */
 export function separerMedias(brut: unknown): { studio: string[]; adresses: string[] } {
   const liste = (Array.isArray(brut) ? brut.map(String) : String(brut ?? "").split(/[\s,]+/)).map((x) => x.trim()).filter(Boolean);

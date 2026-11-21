@@ -3,6 +3,7 @@
 import type { Media } from './api';
 
 const MARQUEUR = /\[\[MEDIA:([0-9a-f-]{36}):(image|video)\]\]/gi;
+const REFERENCE = /\bmedia:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
 /** Médias d'une réponse : ceux reçus en direct, puis ceux cités par repère, sans doublon. */
 export function mediasDuMessage(contenu: string, enDirect: Media[] = []): Media[] {
@@ -14,6 +15,14 @@ export function mediasDuMessage(contenu: string, enDirect: Media[] = []): Media[
     vus.add(id);
     // MediaVue interroge le serveur tant que le média est « en cours ».
     out.push({ id, type: m[2].toLowerCase() as Media['type'], statut: 'en_cours' });
+  }
+  // Références « media:<id> » (citées dans un document ou une publication) : le type réel
+  // est donné par le serveur au premier appel de MediaVue.
+  for (const m of contenu.matchAll(REFERENCE)) {
+    const id = m[1].toLowerCase();
+    if (vus.has(id)) continue;
+    vus.add(id);
+    out.push({ id, type: 'image', statut: 'en_cours' });
   }
   return out;
 }

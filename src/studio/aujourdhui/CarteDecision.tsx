@@ -1,6 +1,6 @@
 // Une décision de l'écran « Aujourd'hui », dans ses états : dépliée (une seule à la fois),
 // repliée sur une ligne, puis ce qu'il en est advenu (envoi retenu, fait, refusée).
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, FileType, Lock } from 'lucide-react';
 import type { Agent } from '../api';
@@ -43,6 +43,7 @@ export function Portee({ texte }: { texte: string }) {
 
 /** Contenu réel de ce qui partira (ou du texte à relire), borné en hauteur. */
 export function Apercu({ d, onDocument, compact }: { d: Decision; onDocument: (d: Decision) => void; compact?: boolean }) {
+  const medias = useMemo(() => mediasDuMessage(d.contenu), [d.contenu]);
   return (
     <div className={cx('overflow-y-auto rounded-xl border border-[#EEEDEA] bg-[#F6F5F3] px-4 py-3.5 text-[15px]', compact ? 'max-h-56' : 'max-h-72')}>
       {d.format === 'html' ? (
@@ -51,12 +52,18 @@ export function Apercu({ d, onDocument, compact }: { d: Decision; onDocument: (d
           <button type="button" onClick={() => onDocument(d)} className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 font-medium text-[#B24A0C] underline underline-offset-[3px]">
             <FileType className="h-4 w-4" aria-hidden /> Ouvrir le document
           </button>
+          {/* Visuels cités dans le document (« media:… ») : vus avant de valider. */}
+          {medias.length > 0 && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {medias.map((m) => <MediaVue key={m.id} media={m} />)}
+            </div>
+          )}
         </>
       ) : (
         <>
           <Markdown texte={d.contenu} />
           {/* Visuels et vidéos créés par l'équipe (repères [[MEDIA:…]]) : vus avant de valider. */}
-          {mediasDuMessage(d.contenu).map((m) => <div key={m.id} className="mt-3"><MediaVue media={m} /></div>)}
+          {medias.map((m) => <div key={m.id} className="mt-3"><MediaVue media={m} /></div>)}
         </>
       )}
     </div>

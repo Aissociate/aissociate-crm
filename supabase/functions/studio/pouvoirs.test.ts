@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ajoutMedias, consigneMedia, definitionMedia, listePouvoirs, marqueurMedia, mediasDe, NOM_OUTIL_MEDIA, pouvoirsMedia,
+  ajoutMedias, completerReferences, consigneMedia, definitionMedia, listePouvoirs, marqueurMedia, mediasDe, NOM_OUTIL_MEDIA, pouvoirsMedia,
   referenceMedia, rendrePouvoir, sansMarqueurs, separerMedias, dureeLien, valeurChamp,
 } from "./pouvoirs.ts";
 import { mediasDuMessage, sansMarqueursMedia } from "../../../src/studio/marqueursMedia.ts";
@@ -90,5 +90,20 @@ describe("visuel du Studio dans une publication à valider", () => {
     expect(mediasDuMessage(apercu)).toEqual([{ id: ID, type: "image", statut: "en_cours" }]);
     // Instagram exige un média : le visuel du Studio en tient lieu.
     expect(modifierAction(a, { texte: "Rentrée 2026 !" })).toMatchObject({ texte: "Rentrée 2026 !", visuels: [{ id: ID }] });
+  });
+});
+
+describe("références media:… abrégées par un agent", () => {
+  const A = "de54207b-9502-4789-846b-5e222a8433fa", B = "bb8facc2-4014-44e7-8aa1-32babeef2063";
+  it("complète un préfixe qui désigne un seul média de l'espace", () => {
+    expect(completerReferences("Produit (réf. media:de54207b)", [A, B])).toBe(`Produit (réf. media:${A})`);
+    expect(completerReferences(`déjà entier media:${B}.`, [A, B])).toBe(`déjà entier media:${B}.`);
+  });
+  it("laisse intact un préfixe inconnu ou ambigu", () => {
+    expect(completerReferences("media:ffffffff", [A, B])).toBe("media:ffffffff");
+    expect(completerReferences("media:de5420", [A, "de5420aa-0000-0000-0000-000000000000"])).toBe("media:de5420");
+  });
+  it("l'aperçu d'un document montre les visuels cités par référence", () => {
+    expect(mediasDuMessage(`<td>Produit (réf. media:${A})</td>`)).toEqual([{ id: A, type: "image", statut: "en_cours" }]);
   });
 });
