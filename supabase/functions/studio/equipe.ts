@@ -11,7 +11,8 @@ import { listePouvoirs, type PouvoirCollegue } from "./pouvoirs.ts";
 export const NOM_OUTIL = "consulter_collegue";
 export const MAX_CONSULTATIONS = 3;
 
-export type Collegue = { id: string; prenom: string; metier: string; pouvoirs?: PouvoirCollegue[] };
+/** `connecteurs` : connecteurs réservés (acces.ts) que ce collègue peut utiliser, en clair. */
+export type Collegue = { id: string; prenom: string; metier: string; pouvoirs?: PouvoirCollegue[]; connecteurs?: string[] };
 
 export function definition(collegues: Collegue[]): DefinitionOutil {
   return {
@@ -120,7 +121,7 @@ Tu es l'interlocutrice unique de l'entreprise dans cet espace. Aucun spécialist
 Tu es l'interlocutrice unique de l'entreprise. Le client te parle à toi ; tu fais travailler les spécialistes en coulisse avec ${NOM_MISSION}, tu contrôles leur travail, et tu rends UNE réponse complète.
 
 Spécialistes de l'espace :
-${collegues.map((c) => `- ${c.prenom} (${c.metier}) — id ${c.id}${c.pouvoirs?.length ? `\n  Super-pouvoirs : ${listePouvoirs(c.pouvoirs)}` : ""}`).join("\n")}
+${collegues.map((c) => `- ${c.prenom} (${c.metier}) — id ${c.id}${c.pouvoirs?.length ? `\n  Super-pouvoirs : ${listePouvoirs(c.pouvoirs)}` : ""}${c.connecteurs?.length ? `\n  Connecteurs réservés : ${c.connecteurs.join(" ; ")}` : ""}`).join("\n")}
 
 Méthode, à chaque demande :
 1. Trier. Une salutation, une question sur l'espace, une tâche d'organisation ou d'assistanat courant (reformuler, résumer, classer, planifier) : réponds toi-même, sans mobiliser personne. Tout ce qui relève du métier d'un spécialiste de la liste : confie-le-lui TOUJOURS, même pour une question courte, même si tu connais la réponse, même si une note ou une recherche te la donnerait. Il a la méthode et la base de connaissances de son métier ; toi, tu contrôles. Ne fais pas toi-même la recherche ou la rédaction qui lui revient.
@@ -135,7 +136,8 @@ Règles :
 - N'écris jamais de balise [[RELAIS:…]] et ne demande jamais au client de s'adresser à quelqu'un d'autre : c'est toi qui fais circuler la demande.
 - N'annonce pas que tu « vas transmettre » sans le faire : appelle ${NOM_MISSION} tout de suite, sans texte d'annonce.
 - Si un spécialiste ne peut pas répondre ou si la limite d'appels est atteinte, termine avec ce que tu as et dis clairement ce qui manque.
-- Si la demande relève d'un métier qu'aucun spécialiste de l'espace ne couvre, traite-la au mieux toi-même et précise la limite.`;
+- Si la demande relève d'un métier qu'aucun spécialiste de l'espace ne couvre, traite-la au mieux toi-même et précise la limite.${collegues.some((c) => c.connecteurs?.length) ? `
+- Un « connecteur réservé » n'est utilisable que par les spécialistes chez qui il figure : ce qui en a besoin (lire, préparer un envoi), confie-le à l'un d'eux, même si ce n'est pas le métier le plus proche, et dis-lui d'utiliser ce connecteur. N'essaie pas de t'en servir toi-même s'il n'est pas dans tes outils.` : ""}`;
 }
 
 /** Consigne ajoutée au prompt du spécialiste qui travaille pour l'orchestratrice. */

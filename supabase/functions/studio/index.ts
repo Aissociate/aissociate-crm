@@ -78,7 +78,7 @@ import {
   construirePrompt, selectionnerRessources, HARNESS_PERIMETRE_DEFAUT, HARNESS_REGLES_DEFAUT,
   BUDGET_SAVOIRS, type AgentPrompt, type Creation, type EnteteEntreprise, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
-import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
+import { connecteursActifs, connecteursReservesParAgent, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
 import * as veille from "./veille.ts";
 import * as mailing from "./mailing.ts";
 import * as bureau from "./bureau.ts";
@@ -1237,9 +1237,14 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   // Les super-pouvoirs des collègues (sans leur gabarit) : Léa peut les activer en confiant une mission.
+  // Léa sait aussi qui a accès aux connecteurs réservés (acces.ts), pour confier ce qui en a besoin.
+  const reserves = equipe.estOrchestrateur(agent.id)
+    ? await connecteursReservesParAgent(sb, s.ws.id).catch(() => new Map<string, string[]>())
+    : new Map<string, string[]>();
   const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({
     id: a.id, prenom: a.prenom, metier: a.metier,
     pouvoirs: (a.super_pouvoirs ?? []).map(({ id, titre, media, champs }) => ({ id, titre, media, champs })),
+    connecteurs: reserves.get(a.id),
   }));
   // Super-pouvoirs média (visuel, vidéo) : l'agent les lance lui-même avec l'outil creer_media.
   const sesMedias = pouvoirs.pouvoirsMedia(agent.super_pouvoirs);

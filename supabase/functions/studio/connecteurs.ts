@@ -111,6 +111,23 @@ export async function connecteursActifs(sb: SupabaseClient, wsId: string, agentI
   }))];
 }
 
+/**
+ * Pour Léa : connecteurs réservés (acces.ts) que chaque agent peut utiliser, en clair, par agent.
+ * Aucun réglage : rien à dire (et pas d'appel à Zernio).
+ */
+export async function connecteursReservesParAgent(sb: SupabaseClient, wsId: string): Promise<Map<string, string[]>> {
+  const regles = await chargerAcces(sb, wsId).catch(() => new Map() as Acces);
+  const parAgent = new Map<string, string[]>();
+  if (!regles.size) return parAgent;
+  for (const c of await connecteursActifs(sb, wsId)) {
+    const agents = c.cle ? regles.get(c.cle) : undefined;
+    if (!agents) continue;
+    const nom = c.detail ? `${c.libelle} — ${c.detail.slice(0, 80)}` : c.libelle;
+    for (const a of agents) parAgent.set(a, [...(parAgent.get(a) ?? []), nom]);
+  }
+  return parAgent;
+}
+
 /** Liste pour le client : jamais le secret, seulement s'il est renseigné. */
 export async function listerConnecteurs(sb: SupabaseClient, wsId: string) {
   const { data } = await sb.from("studio_connecteurs")
