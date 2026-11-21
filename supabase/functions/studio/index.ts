@@ -73,7 +73,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.4
 import {
   calculFactice, hasherMotDePasse, motDePasseValide, nouveauJeton, sha256, verifierMotDePasse,
 } from "./securite.ts";
-import { lancerMedia, quotaMediaAtteint, statutMedia, urlSignee } from "./medias.ts";
+import { lancerMedia, quotaMediaAtteint, statutMedia, supprimerMedia, urlSignee } from "./medias.ts";
 import {
   construirePrompt, selectionnerRessources, HARNESS_PERIMETRE_DEFAUT, HARNESS_REGLES_DEFAUT,
   BUDGET_SAVOIRS, type AgentPrompt, type Creation, type EnteteEntreprise, type Harness, type Savoir, type SuperPouvoir,
@@ -2332,12 +2332,25 @@ Deno.serve(async (req: Request) => {
 
       case "medias": {
         // Galerie « Contenus » : visuels et vidéos prêts de tout l'espace.
-        const { data } = await sb.from("studio_medias").select("id, type, agent_id, prompt, chemin, mime, created_at, conversation_id, dossier_id")
-          .eq("workspace_id", s.ws.id).eq("statut", "pret").order("created_at", { ascending: false }).limit(60);
+        const { data } = await sb.from("studio_medias").select("id, type, agent_id, user_id, prompt, chemin, mime, created_at, conversation_id, dossier_id")
+          .eq("workspace_id", s.ws.id).eq("statut", "pret").not("chemin", "is", null).order("created_at", { ascending: false }).limit(60);
         const medias = await Promise.all((data ?? []).map(async ({ chemin, ...m }) => ({
           ...m, url: chemin ? await urlSignee(sb, chemin) : null,
         })));
         return json({ medias });
+      }
+
+      case "media_supprimer": {
+        // Le propriétaire, ou la personne qui a demandé le visuel.
+        const id = String(body.id ?? "");
+        if (s.user.role !== "proprietaire") {
+          const { data: m } = await sb.from("studio_medias").select("user_id").eq("id", id).eq("workspace_id", s.ws.id).maybeSingle();
+          if (!m || m.user_id !== s.user.id) return json({ error: "Seul le propriétaire de l'espace, ou la personne qui l'a demandé, peut supprimer ce visuel." }, 403);
+        }
+        const r = await supprimerMedia(sb, s.ws.id, id);
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), action: "media_supprime", detail: { media: id, type: r.type, prompt: r.prompt.slice(0, 120) } });
+        return json({ ok: true });
       }
 
       case "conversation_delete": {
