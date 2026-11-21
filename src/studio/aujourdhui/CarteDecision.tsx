@@ -6,6 +6,8 @@ import { Check, FileType, Lock } from 'lucide-react';
 import type { Agent } from '../api';
 import { Avatar, Markdown, cx } from '../composants';
 import EditeurLivrable from '../EditeurLivrable';
+import MediaVue from '../MediaVue';
+import { mediasDuMessage } from '../marqueursMedia';
 import { presenter } from '../decision';
 import { DELAI_ANNULATION, RAISONS_REFUS, type Decision, type Decisions, type Raison, type Suite } from './useDecisions';
 
@@ -50,7 +52,13 @@ export function Apercu({ d, onDocument, compact }: { d: Decision; onDocument: (d
             <FileType className="h-4 w-4" aria-hidden /> Ouvrir le document
           </button>
         </>
-      ) : <Markdown texte={d.contenu} />}
+      ) : (
+        <>
+          <Markdown texte={d.contenu} />
+          {/* Visuels et vidéos créés par l'équipe (repères [[MEDIA:…]]) : vus avant de valider. */}
+          {mediasDuMessage(d.contenu).map((m) => <div key={m.id} className="mt-3"><MediaVue media={m} /></div>)}
+        </>
+      )}
     </div>
   );
 }

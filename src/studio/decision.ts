@@ -44,6 +44,12 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
   switch (l.type_action) {
     case 'gmail_envoyer': {
       const n = tableau(a.a).length + tableau(a.cc).length;
+      // Pièces jointes : fichiers transmis tels quels, envoyés avec l'e-mail.
+      const pj = tableau(a.pieces).length;
+      if (pj) {
+        const avec = ` avec ${pj} pièce${s(pj)} jointe${s(pj)}`;
+        return { portee: `Envoi à ${n} destinataire${s(n)}${avec}`, bouton: n > 1 ? `Envoyer aux ${n} destinataires` : "Envoyer l'e-mail", fait: `E-mail envoyé${avec}.` };
+      }
       return n > 1
         ? { portee: `Envoi à ${n} destinataires`, bouton: `Envoyer aux ${n} destinataires`, fait: `E-mail envoyé aux ${n} destinataires.` }
         : { portee: 'Envoi à 1 destinataire', bouton: "Envoyer l'e-mail", fait: 'E-mail envoyé.' };
@@ -72,6 +78,8 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
     }
     case 'drive_creer_document':
       return { portee: 'Dépôt dans vos fichiers', bouton: 'Créer le document', fait: 'Document créé dans votre espace de fichiers.' };
+    case 'drive_deposer_fichier':
+      return { portee: 'Dépôt dans vos fichiers', bouton: 'Déposer le fichier', fait: 'Fichier déposé dans votre espace de fichiers.' };
     case 'app_blog_article':
       return { portee: 'Publication sur votre site', bouton: "Déposer l'article", fait: 'Article déposé sur votre site.' };
     case 'app_youtube_video':

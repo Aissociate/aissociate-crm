@@ -19,6 +19,7 @@ import {
   signauxFraude, sujetPropre, typer,
 } from "./liaison.ts";
 import { deciderLivrable, journaliser, soumettreLivrable, suspendre } from "./gouvernance.ts";
+import { mediasDe, sansMarqueurs } from "./pouvoirs.ts";
 
 export type MessageRecu = {
   message_id: string; inbox_id: string; thread_id?: string; from: string; subject?: string;
@@ -149,10 +150,11 @@ export async function traiterMail(
         : `\n\n---\nCe travail est soumis à la validation du propriétaire de l'espace (${refLivrable(l.id)}).`;
     }
   }
-  const texteReponse = r.texte.replace(/\[\[RELAIS:([a-z0-9_-]+)\]\]/gi, (_x, id: string) => {
+  const avecMedias = mediasDe(r.texte).length > 0;
+  const texteReponse = sansMarqueurs(r.texte).replace(/\[\[RELAIS:([a-z0-9_-]+)\]\]/gi, (_x, id: string) => {
     const p = equipe.find((a) => a.id === id.toLowerCase())?.prenom ?? id;
     return `\n(Pour cela, écrivez à ${p} : mettez « [${p}] » en tête de l'objet.)`;
-  });
+  }) + (avecMedias ? "\n\n(Le visuel ou la vidéo créé est à retrouver dans le Studio, rubrique « Mes contenus ».)" : "");
   await repondreAu(`${texteReponse}${mention}`);
   await clore("traitee", null, { agent_id: agentId, conversation_id: r.conversation_id, livrable_id: livrableId });
 }

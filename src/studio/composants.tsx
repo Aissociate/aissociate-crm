@@ -1,6 +1,7 @@
 // Briques d'interface du Studio IA (style propre au module, indépendant du thème CRM).
 import { type ReactNode, Fragment, createContext, useContext } from 'react';
 import { FileType } from 'lucide-react';
+import { sansMarqueursMedia } from './marqueursMedia';
 import { decouperReferences } from './references';
 
 export function cx(...c: (string | false | null | undefined)[]) { return c.filter(Boolean).join(' '); }
@@ -113,7 +114,8 @@ function enLigne(texte: string): ReactNode[] {
 const cellules = (l: string) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
 
 export function Markdown({ texte }: { texte: string }) {
-  const lignes = texte.replace(/\r/g, '').split('\n');
+  // Repères de visuels ([[MEDIA:…]]) : affichés à part (MediaVue), jamais en texte.
+  const lignes = sansMarqueursMedia(texte).replace(/\r/g, '').split('\n');
   const blocs: ReactNode[] = [];
   let i = 0, k = 0;
   while (i < lignes.length) {

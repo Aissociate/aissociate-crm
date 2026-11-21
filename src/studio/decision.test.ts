@@ -58,3 +58,12 @@ describe("phrase d'état", () => {
     expect(phraseEtat(14)).toBe('14 décisions vous attendent, le reste est fait.');
   });
 });
+
+describe('fichiers transmis tels quels', () => {
+  it("annonce les pièces jointes d'un e-mail et le dépôt d'un fichier", () => {
+    const piece = { nom: 'Plan.dwg', chemin: 'ws/fichiers/x', mime: 'application/acad' };
+    expect(presenter({ type_action: 'gmail_envoyer', action: { a: ['x@y.fr'], pieces: [piece] } } as never).portee)
+      .toBe('Envoi à 1 destinataire avec 1 pièce jointe');
+    expect(presenter({ type_action: 'drive_deposer_fichier', action: { piece } } as never).bouton).toBe('Déposer le fichier');
+  });
+});

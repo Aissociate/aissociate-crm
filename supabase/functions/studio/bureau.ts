@@ -250,7 +250,11 @@ export async function lireMail(compteId: string, id: string) {
  * Envoi d'un e-mail validé. En réponse à un message, la réponse reste dans le fil
  * si le destinataire validé est bien l'expéditeur d'origine ; sinon, e-mail séparé.
  */
-export async function envoyerMail(wsId: string, compteId: string, m: { a: string[]; cc?: string[]; objet: string; corps: string; reponseA?: string | null }) {
+export type PieceEnvoi = { filename: string; contentType: string; url: string };
+
+export async function envoyerMail(wsId: string, compteId: string, m: { a: string[]; cc?: string[]; objet: string; corps: string; reponseA?: string | null; pieces?: PieceEnvoi[] }) {
+  // Pièces jointes : Zernio les télécharge à l'envoi depuis un lien temporaire (25 Mo au total).
+  const pj = m.pieces?.length ? { attachments: m.pieces } : {};
   const b = await boiteDeLEspace(wsId, compteId);
   const lien = (fil: string) => (b.fournisseur === "google" && fil ? `https://mail.google.com/mail/u/0/#all/${fil}` : null);
   if (m.reponseA && m.a.length === 1 && !m.cc?.length) {
@@ -259,7 +263,7 @@ export async function envoyerMail(wsId: string, compteId: string, m: { a: string
       if (o.deAdresse === m.a[0]) {
         const { data } = await appel<{ data: { id: string; threadId?: string } }>(`/email/messages/${enc(m.reponseA)}/reply`, {
           method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-          body: JSON.stringify({ accountId: compteId, mode: "reply", text: m.corps }),
+          body: JSON.stringify({ accountId: compteId, mode: "reply", text: m.corps, ...pj }),
         });
         return { id: data.data.id, lien: lien(String(data.data.threadId ?? "")) };
       }
@@ -272,7 +276,7 @@ export async function envoyerMail(wsId: string, compteId: string, m: { a: string
     body: JSON.stringify({
       accountId: compteId, to: m.a.map((email) => ({ email })),
       ...(m.cc?.length ? { cc: m.cc.map((email) => ({ email })) } : {}),
-      subject: m.objet.replace(/[\r\n]+/g, " "), text: m.corps,
+      subject: m.objet.replace(/[\r\n]+/g, " "), text: m.corps, ...pj,
     }),
   });
   return { id: data.data.id, lien: lien(String(data.data.threadId ?? "")) };
@@ -394,6 +398,17 @@ async function docxDepuisMarkdown(titre: string, md: string): Promise<Uint8Array
  * Dépose un document (validé) : Google Doc modifiable sur Google Drive, fichier Word
  * sur OneDrive. Google importe depuis une adresse : copie temporaire dans le stockage.
  */
+/** Dépôt d'un fichier tel quel (Zernio le télécharge depuis un lien temporaire, 100 Mo au plus). */
+export async function deposerFichier(wsId: string, compteId: string, p: { nom: string; mime: string; url: string; dossierId?: string | null }): Promise<{ id: string; lien: string | null }> {
+  await boiteDeLEspace(wsId, compteId);
+  const { data } = await appel<{ data: Record<string, unknown> }>("/files", {
+    method: "POST",
+    body: JSON.stringify({ accountId: compteId, name: p.nom.slice(0, 200), contentType: p.mime, url: p.url, ...(p.dossierId ? { parentId: p.dossierId } : {}) }),
+  });
+  const f = versFichier(data.data ?? {});
+  return { id: f.id, lien: f.lien };
+}
+
 export async function creerDocument(sb: SupabaseClient, wsId: string, compteId: string, p: { titre: string; contenu: string; dossierId?: string | null }): Promise<{ id: string; lien: string | null }> {
   const b = await boiteDeLEspace(wsId, compteId);
   const titre = p.titre.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 200) || "Document";

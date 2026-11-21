@@ -1,6 +1,7 @@
 // Exports Word et PDF des réponses d'agents, avec le papier à en-tête du client.
 // Liaison navigateur de exportDoc.ts (pur) : lecture de l'en-tête, logo, téléchargement.
 import { appel, extraireRelais, type EnteteComplete } from './api';
+import { sansMarqueursMedia } from './marqueursMedia';
 import { construireDocx, documentHtml, documentWordHtml, nomFichier, type DocExport, type Logo, type Nommage } from './exportDoc';
 import { htmlSur } from './htmlSur';
 
@@ -29,7 +30,7 @@ async function preparer(s: Source): Promise<{ doc: DocExport; logoUrl: string | 
     logoUrl: e.logo_url,
     doc: {
       titre: s.titre, meta: `Préparé avec ${s.agent} · ${date}`,
-      contenu: extraireRelais(s.contenu).texte, entete: e.entete, nomEspace: s.nomEspace,
+      contenu: sansMarqueursMedia(extraireRelais(s.contenu).texte), entete: e.entete, nomEspace: s.nomEspace,
     },
   };
 }

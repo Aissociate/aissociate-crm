@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowUp, ArrowRight, Copy, Check, Pin, PinOff, Plus, Square, ThumbsDown, ThumbsUp, Trash2, ChevronLeft, FileText, Zap, MessageCircle, BookOpen, ShieldCheck, Paperclip, X, Loader2, ImageIcon, FileType, CornerDownRight } from 'lucide-react';
-import { FORMATS_DOCUMENTS, FORMATS_IMAGES, estImage, extension, extraireTexte, imageReduite } from '../extraction';
+import { estImage, extension, extraireTexte, imageReduite } from '../extraction';
+import { deposerFichier, lisible } from '../envoiFichier';
+import { mediasDuMessage, sansMarqueursMedia } from '../marqueursMedia';
 import EditeurDocument, { type DocumentHtml } from '../EditeurDocument';
 import { useStudio } from '../StudioApp';
 import { appel, discuter, extraireRelais, type Conversation, type Media, type Message, type PieceJointe, type SuperPouvoir } from '../api';
@@ -28,6 +30,8 @@ export default function AgentChat() {
   const [erreur, setErreur] = useState('');
   const [ressources, setRessources] = useState<string[]>([]);
   const [savoirs, setSavoirs] = useState<{ titre: string; source: string | null }[]>([]);
+  /** Fichier transmis tel quel en cours d'envoi (par morceaux). */
+  const [envoiFichier, setEnvoiFichier] = useState<{ nom: string; fait: number; total: number } | null>(null);
   const [copie, setCopie] = useState<string | null>(null);
   const [soumis, setSoumis] = useState<Record<string, boolean>>({});
   const [pieces, setPieces] = useState<PieceJointe[]>([]);
@@ -152,6 +156,12 @@ export default function AgentChat() {
           }),
           // Document créé ou modifié par l'agent : il s'ouvre aussitôt à droite.
           onDocument: (d) => { chargerDocuments(convEnCours.current).then(() => setDocOuvert(d.id)); },
+          // Visuel ou vidéo lancé par l'agent : il apparaît tout de suite, « en cours de création ».
+          onMedia: (md) => setMessages((m) => {
+            const der = m[m.length - 1];
+            if (der?.role !== 'assistant') return m;
+            return [...m.slice(0, -1), { ...der, medias: [...(der.medias ?? []), md] }];
+          }),
         },
         ctrl.signal,
       );
@@ -174,20 +184,25 @@ export default function AgentChat() {
   }, [agent, convId, enCours, lecture, attente, pieces, chargerListe, rafraichir, gerer, setParams, chargerDocuments]);
 
   // Pièces jointes : texte extrait dans le navigateur, envoyé avec le prochain message.
+  // Un fichier que le navigateur ne lit pas est transmis tel quel (rangé dans « Mes ressources »).
   const joindre = async (fichiers: File[]) => {
     setErreur(''); setLecture(true);
     const lus: PieceJointe[] = []; const echecs: string[] = [];
     for (const f of fichiers.slice(0, 5 - pieces.length)) {
       try {
-        lus.push(estImage(f)
-          ? { nom: f.name, format: extension(f.name) || 'image', taille: f.size, contenu: '', image: await imageReduite(f) }
-          : { nom: f.name, format: extension(f.name), taille: f.size, contenu: await extraireTexte(f) });
+        if (estImage(f)) lus.push({ nom: f.name, format: extension(f.name) || 'image', taille: f.size, contenu: '', image: await imageReduite(f) });
+        else if (lisible(f.name)) lus.push({ nom: f.name, format: extension(f.name), taille: f.size, contenu: await extraireTexte(f) });
+        else {
+          setEnvoiFichier({ nom: f.name, fait: 0, total: 1 });
+          const r = await deposerFichier(f, (fait, total) => setEnvoiFichier({ nom: f.name, fait, total }));
+          lus.push({ nom: r.titre, format: extension(f.name) || 'fichier', taille: f.size, contenu: r.piece });
+        }
       }
       catch (e) { echecs.push(e instanceof Error ? e.message : String(e)); }
     }
     if (fichiers.length > 5 - pieces.length) echecs.push('5 pièces jointes au plus par message.');
     setPieces((p) => [...p, ...lus]); if (echecs.length) setErreur(echecs.join(' · '));
-    setLecture(false); if (champFichier.current) champFichier.current.value = '';
+    setLecture(false); setEnvoiFichier(null); if (champFichier.current) champFichier.current.value = '';
   };
 
   // Mission transmise depuis l'accueil ou une suggestion.
@@ -354,12 +369,13 @@ export default function AgentChat() {
               <div className="min-w-0 flex-1">
                 <div className="overflow-hidden break-words rounded-2xl rounded-tl-md border border-neutral-200 bg-white px-4 py-3">
                   {m.media && <div className="mb-2"><MediaVue media={m.media} /></div>}
+                  {mediasDuMessage(m.content, m.medias).map((md) => <div key={md.id} className="mb-2"><MediaVue media={md} /></div>)}
                   {m.outils?.length ? (
                     <ul className="mb-2 space-y-0.5 border-b border-neutral-100 pb-2 text-xs text-neutral-500">
                       {m.outils.map((o, k) => <li key={k} className="flex items-center gap-1.5"><span aria-hidden>↳</span>{o}</li>)}
                     </ul>
                   ) : null}
-                  {m.content && <FournisseurReferences value={ouvrirReference}><Markdown texte={extraireRelais(m.content).texte} /></FournisseurReferences>}
+                  {m.content && <FournisseurReferences value={ouvrirReference}><Markdown texte={extraireRelais(sansMarqueursMedia(m.content)).texte} /></FournisseurReferences>}
                   {i === messages.length - 1 && !m.id && (enCours || attente || !m.content) && (() => {
                     // Réponse en préparation : qui travaille, et le collègue sollicité s'il y en a un.
                     const p = collegueAuTravail(m.outils, me.agents.filter((x) => x.id !== agent.id).map((x) => x.prenom));
@@ -381,7 +397,7 @@ export default function AgentChat() {
                 )}
                 {m.id && (
                   <div className="mt-1 flex flex-wrap items-center gap-0.5 text-neutral-400">
-                    <button onClick={() => copier(m.content, String(i))} className="rounded-lg p-1.5 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Copier">
+                    <button onClick={() => copier(sansMarqueursMedia(m.content), String(i))} className="rounded-lg p-1.5 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Copier">
                       {copie === String(i) ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
                     <button onClick={() => majMessage(i, 'retour', m.retour === 1 ? 0 : 1)} aria-label="Utile"
@@ -397,7 +413,7 @@ export default function AgentChat() {
                       <>
                         <BoutonsExport source={{
                           titre: conversations.find((c) => c.id === convId)?.titre ?? `${agent.metier} — ${agent.prenom}`,
-                          contenu: m.content, agent: agent.prenom, date: m.created_at, nomEspace: me.workspace.nom,
+                          contenu: sansMarqueursMedia(m.content), agent: agent.prenom, date: m.created_at, nomEspace: me.workspace.nom,
                         }} />
                         <button onClick={() => soumettreValidation(m.id!)} disabled={Boolean(soumis[m.id])}
                           aria-label="Soumettre à validation"
@@ -424,14 +440,15 @@ export default function AgentChat() {
                   <button type="button" onClick={() => setPieces((p) => p.filter((_, j) => j !== k))} aria-label={`Retirer ${x.nom}`}><X className="h-3 w-3" /></button>
                 </span>
               ))}
-              {lecture && <span role="status" aria-live="polite" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Lecture du fichier…</span>}
+              {lecture && <span role="status" aria-live="polite" className="inline-flex items-center gap-1 px-2 py-1 text-xs text-neutral-500"><Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                {envoiFichier ? `Envoi de « ${envoiFichier.nom} »${envoiFichier.total > 1 ? ` (${Math.round((envoiFichier.fait / envoiFichier.total) * 100)} %)` : ''}…` : 'Lecture du fichier…'}</span>}
             </div>
           )}
           <div className="flex items-end gap-2">
-            <input ref={champFichier} type="file" multiple accept={`${FORMATS_DOCUMENTS},${FORMATS_IMAGES}`} className="hidden"
+            <input ref={champFichier} type="file" multiple className="hidden"
               onChange={(e) => e.target.files?.length && joindre([...e.target.files])} />
             <button type="button" onClick={() => champFichier.current?.click()} disabled={lecture || enCours || pieces.length >= 5}
-              aria-label="Joindre un document ou une image" title="Joindre un document (PDF, Word, Excel, PowerPoint, CSV, texte, ZIP) ou une image (photo, capture, facture scannée)"
+              aria-label="Joindre un fichier" title="Joindre un fichier : documents (PDF, Word, Excel, PowerPoint, CSV, texte, ZIP) et images sont lus ; tout autre fichier (10 Mo max) est transmis tel quel, pour être joint à un e-mail ou déposé dans votre Drive"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 disabled:opacity-40"><Paperclip className="h-4 w-4" /></button>
             <textarea
               value={saisie} onChange={(e) => setSaisie(e.target.value)} rows={2}

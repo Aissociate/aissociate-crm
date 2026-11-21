@@ -1,5 +1,7 @@
 // « Livrables » : réponses soumises à validation. Rien ne sort sans le
 // « VALIDÉ » du propriétaire de l'espace (a_valider → validé / refusé → publié).
+import MediaVue from '../MediaVue';
+import { mediasDuMessage } from '../marqueursMedia';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, ExternalLink, FileType, History, Pencil, RotateCcw, Send, X } from 'lucide-react';
@@ -35,6 +37,7 @@ type Livrable = {
 
 const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   drive_creer_document: { avant: 'Création dans votre Drive / OneDrive au « VALIDÉ »', fait: 'Document créé dans votre espace de fichiers.', lien: 'Ouvrir le document' },
+  drive_deposer_fichier: { avant: 'Dépôt tel quel dans votre Drive / OneDrive au « VALIDÉ »', fait: 'Fichier déposé dans votre espace de fichiers.', lien: 'Ouvrir le fichier' },
   gmail_envoyer: { avant: 'Envoi depuis votre messagerie au « VALIDÉ »', fait: 'E-mail envoyé depuis votre messagerie.', lien: 'Voir l\'e-mail' },
   reseaux_publier: { avant: 'Publication sur vos réseaux sociaux au « VALIDÉ » (ou à la date programmée)', fait: 'Publication envoyée (ou programmée) sur vos réseaux sociaux.', lien: 'Voir la publication' },
   reseaux_repondre_commentaire: { avant: 'Réponse publiée sous le commentaire au « VALIDÉ »', fait: 'Réponse publiée.', lien: 'Voir' },
@@ -184,7 +187,7 @@ export default function PageLivrables() {
                         onCancel={() => setEdition(null)}
                         onSaved={(liste) => { setLivrables(liste); setEdition(null); setErreur(''); setInfo('Version enregistrée : le livrable est « à valider ».'); setFiltre('a_valider'); rafraichir(); }} />
                     ) : (
-                      <div className="max-h-[28rem] overflow-y-auto rounded-xl bg-neutral-50 p-4"><Markdown texte={l.contenu} /></div>
+                      <div className="max-h-[28rem] overflow-y-auto rounded-xl bg-neutral-50 p-4"><Markdown texte={l.contenu} />{mediasDuMessage(l.contenu).map((m) => <div key={m.id} className="mt-3"><MediaVue media={m} /></div>)}</div>
                     )}
                     {historique === l.id && l.versions?.length ? (
                       <div className="mt-3 rounded-xl border border-neutral-200 p-3">

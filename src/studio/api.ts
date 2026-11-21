@@ -31,6 +31,8 @@ export type Conversation = { id: string; agent_id: string; titre: string; update
 export type Message = {
   id?: string; role: 'user' | 'assistant'; content: string; retour?: number | null; epingle?: boolean; created_at?: string;
   media?: Media | null;
+  /** Visuels et vidéos lancés par l'agent pendant la réponse (en direct ; ensuite, repères du contenu). */
+  medias?: Media[];
   /** Actions d'outils (Drive…) menées pendant la réponse — affichage seulement. */
   outils?: string[];
   /** Pièces jointes du message (noms seulement ; le texte reste côté serveur). */
@@ -103,6 +105,8 @@ export async function discuter(
     onOutil?: (libelle: string) => void;
     /** Document HTML créé ou modifié par l'agent : à ouvrir dans le panneau de droite. */
     onDocument?: (d: { id: string; titre: string }) => void;
+    /** Visuel ou vidéo lancé par l'agent (outil creer_media) : affiché aussitôt, en cours de création. */
+    onMedia?: (m: Media) => void;
   },
   signal?: AbortSignal,
 ): Promise<{ message_id: string | null; conversation_id: string }> {
@@ -137,6 +141,7 @@ export async function discuter(
       if (ev === 'delta') cb.onDelta(String(data.text ?? ''));
       if (ev === 'outil') cb.onOutil?.(String(data.libelle ?? ''));
       if (ev === 'document') cb.onDocument?.(data as never);
+      if (ev === 'media') cb.onMedia?.(data as never);
       if (ev === 'done') fin = data as never;
     }
   }
