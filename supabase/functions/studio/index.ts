@@ -128,6 +128,7 @@ import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
 import * as consignes from "./consignes.ts";
 import * as pouvoirs from "./pouvoirs.ts";
+import * as routineChat from "./routine_outil.ts";
 import * as fichiers from "./fichiers.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
@@ -383,7 +384,7 @@ const schemaRoutinesAbsent = (e: { message?: string; code?: string } | null | un
   Boolean(e && /etapes|modele|reglages|essai_|reprise_prevue|studio_routine_passages|PGRST20[45]|42703|42P01/.test(`${e.code ?? ""} ${e.message ?? ""}`));
 /** Une seule reprise automatique après un échec, une heure plus tard. */
 const REPRISE_MS = 3_600_000;
-const ESSAI_JOURS = 7;
+const ESSAI_JOURS = routineChat.ESSAI_JOURS;
 
 type OptionsPassage = { essai?: boolean; tentative?: number; manuel?: boolean };
 
@@ -1146,6 +1147,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     sb, wsId: s.ws.id, acteur: acteurDe(s),
     agentId: agent.id, agentPrenom: agent.prenom, userId: s.sessionId === "mail" ? null : s.user.id,
     conversationId: conversationId as string, apiKey, essai: carnetEssai,
+    // Léa seule propose des routines depuis le chat (routine_outil.ts).
+    equipe: equipe.estOrchestrateur(agent.id) ? agents.map((a) => ({ id: String(a.id), prenom: String(a.prenom) })) : undefined,
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   // Les super-pouvoirs des collègues (sans leur gabarit) : Léa peut les activer en confiant une mission.
