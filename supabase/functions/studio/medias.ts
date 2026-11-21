@@ -10,6 +10,7 @@
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (cf. agent).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { rembourserMedia } from "./recharges.ts";
+import * as essai from "./essai.ts";
 
 export const MODELE_IMAGE = "meta/muse-image";
 export const MODELE_VIDEO = "minimax/hailuo-3-max";
@@ -40,8 +41,10 @@ function debutMois(): string {
 
 /** Quota mensuel par type atteint : renvoie le quota (0 = type désactivé), sinon null. Les échecs ne comptent pas. */
 export async function quotaMediaAtteint(sb: SupabaseClient, ws: Ws, type: "image" | "video"): Promise<number | null> {
-  const { data: w } = await sb.from("studio_workspaces").select("quota_images_mois, quota_videos_mois").eq("id", ws.id).single();
-  const quota = type === "image" ? w?.quota_images_mois : w?.quota_videos_mois;
+  const { data: w } = await sb.from("studio_workspaces").select("quota_images_mois, quota_videos_mois, essai_fin, abonnement_statut").eq("id", ws.id).single();
+  let quota = type === "image" ? w?.quota_images_mois : w?.quota_videos_mois;
+  // Essai gratuit : la vidéo suit la limite d'essai (studio_config essai_quota_videos, 0 par défaut).
+  if (type === "video" && w && essai.enEssai(w)) quota = essai.quotaVideosEssai(quota, (await essai.chargerLimites(sb)).videos);
   if (quota == null) return null;
   const { count } = await sb.from("studio_medias").select("id", { count: "exact", head: true })
     .eq("workspace_id", ws.id).eq("type", type).neq("statut", "echec").gte("created_at", debutMois());

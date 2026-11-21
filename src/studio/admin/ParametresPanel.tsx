@@ -30,7 +30,12 @@ const RECHARGES: { cle: string; label: string; defaut: string; pas?: string }[] 
   { cle: 'recharge_cout_image', label: '1 visuel = … crédits', defaut: '5' },
   { cle: 'recharge_cout_video', label: '1 vidéo = … crédits', defaut: '30' },
 ];
-const CLES = [...CHAMPS.map((c) => c.cle), 'onboarding_ouvert', ...CLES_CONNECTEURS, ...RECHARGES.map((r) => r.cle)];
+// Essai gratuit : garde-fous de coût, lus à chaque demande (supabase/functions/studio/essai.ts).
+const ESSAI: { cle: string; label: string; aide: string; defaut: string }[] = [
+  { cle: 'essai_connecteurs_max', label: 'Connecteurs pendant l\'essai', aide: 'Nombre d\'outils qu\'un espace en essai peut connecter. 0 = aucun avant l\'abonnement.', defaut: '1' },
+  { cle: 'essai_quota_videos', label: 'Vidéos IA pendant l\'essai', aide: '0 = la vidéo s\'ouvre à l\'abonnement. Jamais plus que le quota de l\'espace.', defaut: '0' },
+];
+const CLES = [...CHAMPS.map((c) => c.cle), 'onboarding_ouvert', ...CLES_CONNECTEURS, ...RECHARGES.map((r) => r.cle), ...ESSAI.map((e) => e.cle)];
 
 export default function ParametresPanel() {
   const [valeurs, setValeurs] = useState<Record<string, string> | null>(null);
@@ -41,7 +46,7 @@ export default function ParametresPanel() {
       .then(({ data }) => setValeurs({
         prix_connecteur_supplementaire_ht: String(TARIF_DEFAUT.prix),
         connecteurs_inclus: TARIF_DEFAUT.inclus.join(','),
-        ...Object.fromEntries(RECHARGES.map((r) => [r.cle, r.defaut])),
+        ...Object.fromEntries([...RECHARGES, ...ESSAI].map((r) => [r.cle, r.defaut])),
         ...Object.fromEntries((data ?? []).map((r) => [r.cle, String(r.valeur ?? '')])),
       }));
   }, []);
@@ -73,6 +78,22 @@ export default function ParametresPanel() {
               onChange={(e) => setValeurs({ ...valeurs, [c.cle]: e.target.value })} />
           </Field>
         ))}
+      </div>
+      <div className="space-y-3 border-t border-line pt-4">
+        <div>
+          <h4 className="font-semibold text-fg">Essai gratuit</h4>
+          <p className="text-sm text-muted">
+            Limites appliquées aussitôt à tous les espaces en essai, y compris ceux déjà ouverts. Elles tombent d'elles-mêmes dès que l'abonnement est payé.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {ESSAI.map((c) => (
+            <Field key={c.cle} label={c.label} hint={c.aide}>
+              <input type="number" min={0} step="1" className="input" value={valeurs[c.cle] ?? ''}
+                onChange={(e) => setValeurs({ ...valeurs, [c.cle]: e.target.value })} />
+            </Field>
+          ))}
+        </div>
       </div>
       <div className="space-y-3 border-t border-line pt-4">
         <div>

@@ -24,6 +24,7 @@ import * as stripe from "./stripe.ts";
 import * as cgv from "./cgv.ts";
 import * as zernio from "./zernio.ts";
 import * as recharges from "./recharges.ts";
+import { chargerLimites as essaiLimites } from "./essai.ts";
 import { AGENTS_CATALOGUE } from "./questionnaire.ts";
 import { nouveauJeton, sha256 } from "./securite.ts";
 import { bilan, ENTREPRISE, enEchec, fusionner, mailAlerte, motDePasseDuMail, reponsesFactices, type Resultat } from "./controle_rapport.ts";
@@ -228,15 +229,19 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       return `Agent ajouté, ${agents.length} agents dans l'équipe.`;
     });
 
-    await controler(res, E, "parcours.connecteur", "Un seul connecteur pendant l'essai", async () => {
+    await controler(res, E, "parcours.connecteur", "Limite de connecteurs pendant l'essai", async () => {
       const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
-      await sb.from("studio_connecteurs").insert({ workspace_id: p.wsId, type: "google", statut: "connecte", infos: { adresse: `connecteur@${DOMAINE_TEST}` } });
-      const r = await studio("connecteur_enregistrer", { token: p.token, type: "outlook", adresse: `deuxieme@${DOMAINE_TEST}`, accord: true });
+      // On remplit l'espace jusqu'à la limite réglée (essai_connecteurs_max), puis on en tente un de plus.
+      const { connecteurs: max } = await essaiLimites(sb);
+      const types = ["google", "facebook", "instagram", "linkedin", "tiktok"];
+      if (max > types.length) return { niveau: "alerte", detail: `Limite d'essai réglée à ${max} connecteurs : contrôle non joué au-delà de ${types.length}.`, diagnostic: "Limite d'essai très haute.", solution: "Vérifier studio_config essai_connecteurs_max si ce n'est pas voulu." };
+      if (max) await sb.from("studio_connecteurs").insert(types.slice(0, max).map((type, i) => ({ workspace_id: p.wsId, type, statut: "connecte", infos: { adresse: `connecteur${i}@${DOMAINE_TEST}` } })));
+      const r = await studio("connecteur_enregistrer", { token: p.token, type: "outlook", adresse: `deplus@${DOMAINE_TEST}`, accord: true });
       await sb.from("studio_connecteurs").delete().eq("workspace_id", p.wsId);
-      if (r.statut === 200) echec("Un deuxième connecteur a été accepté pendant l'essai.", "La limite d'un connecteur pendant l'essai n'est plus appliquée.", "Vérifier refusConnecteurEssai (index.ts) et facturationEspace (facturation.ts).");
+      if (r.statut === 200) echec(`Un connecteur de plus que la limite (${max}) a été accepté pendant l'essai.`, "La limite de connecteurs pendant l'essai n'est plus appliquée.", "Vérifier refusConnecteurEssai (index.ts), essai.chargerLimites (essai.ts) et facturationEspace (facturation.ts).");
       if (r.statut === 503) echec(`Contrôle impossible (HTTP 503) : ${erreurDe(r.data)}`, "Les connecteurs de l'espace n'ont pas pu être comptés (Zernio indisponible ?).", "Voir le contrôle Zernio ci-dessous.", "alerte");
-      if (r.statut !== 402) echec(`Deuxième connecteur : HTTP ${r.statut} au lieu de 402 (${erreurDe(r.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
-      return "Deuxième connecteur refusé pendant l'essai (402).";
+      if (r.statut !== 402) echec(`Connecteur au-delà de la limite : HTTP ${r.statut} au lieu de 402 (${erreurDe(r.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
+      return `Connecteur au-delà de la limite d'essai (${max}) refusé (402).`;
     });
 
     await controler(res, E, "parcours.recharge", "Page de paiement d'une recharge (Stripe)", async () => {
