@@ -34,6 +34,8 @@ import * as mcpClient from "./mcp_client.ts";
 import type { ActionMcp } from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
 import type { ActionApi } from "./api_client.ts";
+import { qualiopiActif } from "./qualiopi.ts";
+import * as qualiopiCrm from "./qualiopi_crm.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -692,6 +694,10 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
     apiClient.chargerApis(ctx.sb, ctx.wsId).catch(() => [] as apiClient.ApiChargee[]),
   ]);
   const mcp = mcpClient.definitionsMcp(serveursMcp);
+  // Conformité Qualiopi : Nora, dans l'espace de l'organisme (Aissociate) seulement.
+  const qualiopi = qualiopiActif(ctx.wsId, ctx.agentId)
+    ? qualiopiCrm.outilsQualiopi({ sb: ctx.sb, wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId })
+    : null;
   const apis = apiClient.definitionsApi(apisChargees);
   const aVeille = (nbFlux ?? 0) > 0;
   const reseaux = comptesReseaux.length > 0;
@@ -776,6 +782,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       ...(ctx.equipe?.length ? [routineChat.definitionRoutine(ctx.equipe)] : []),
       ...mcp.definitions,
       ...apis.definitions,
+      ...(qualiopi?.definitions ?? []),
     ],
     consigne: [
       consigneBase(index, arbre), CONSIGNE_DOCUMENT, CONSIGNE_ARTICLE, CONSIGNE_WEB, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
@@ -783,10 +790,12 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       ctx.equipe?.length && routineChat.CONSIGNE_ROUTINE,
       mcpClient.consigneMcp(serveursMcp),
       apiClient.consigneApi(apisChargees),
+      qualiopi?.consigne,
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
       let a: Record<string, string> = {};
       try { a = JSON.parse(argsJson || "{}"); } catch { return { resultat: "Arguments illisibles.", libelle: "Outil" }; }
+      if (qualiopi?.noms.has(nom)) return await qualiopi.executer(nom, a);
       // Outil d'un serveur MCP du client : lecture tout de suite, écriture proposée au dirigeant.
       const viaMcp = mcp.table.get(nom);
       if (viaMcp) {
