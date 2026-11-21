@@ -94,3 +94,21 @@ describe("client MCP", () => {
     expect(a).toContain("Rien n'est exécuté avant votre validation.");
   });
 });
+
+describe("actions MCP proposées au dirigeant", () => {
+  const action = {
+    type: "mcp_appel" as const, connecteur_id: "c1", serveur: "Notion", outil: "create_page", libelle: "Créer une page",
+    arguments: { titre: "CR" }, contenu: "aperçu",
+  };
+
+  it("se présentent comme une action dans l'outil, sans bouton Modifier", async () => {
+    const { titreAction, apercuAction, modifierAction } = await import("./outils.ts");
+    const { presenter } = await import("../../../src/studio/decision.ts");
+    expect(titreAction(action)).toBe("Notion — Créer une page");
+    expect(apercuAction(action)).toBe("aperçu");
+    expect(modifierAction(action, { contenu: "x" })).toHaveProperty("erreur");
+    expect(presenter({ type_action: "mcp_appel", action })).toEqual({
+      portee: "Action dans Notion", bouton: "Valider et lancer", fait: "Action exécutée dans Notion.", modifiable: false,
+    });
+  });
+});
