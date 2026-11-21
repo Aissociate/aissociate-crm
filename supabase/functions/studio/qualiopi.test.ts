@@ -4,7 +4,9 @@ import {
   periodeDe, qualiopiActif, resoudreSession, statutApresProduction,
   apercuActionQualiopi, avecLien, controleRappel, corpsHtml, estNatureEnvoi, etatQuestionnaire, lienEnvoi, MARQUEUR_LIEN, messageEnvoi,
   modifierActionQualiopi, nomPieceJointe, pieceChecklist, titreActionQualiopi, typeDocEnvoi, type ActionQualiopi, type NatureEnvoi,
+  ENVOIS, POUVOIRS_QUALIOPI, pouvoirsQualiopi,
 } from "./qualiopi.ts";
+import { rendrePouvoir } from "./pouvoirs.ts";
 import { apercuAction, modifierAction, titreAction } from "./outils.ts";
 
 const AUTRE = "5d1e0000-0000-4000-8000-000000000001";
@@ -186,5 +188,33 @@ describe("envois aux stagiaires", () => {
     expect(titreAction(a)).toBe(titreActionQualiopi(a));
     expect(apercuAction(a)).toBe(apercuActionQualiopi(a));
     expect(modifierAction(a, { objet: "x", corps: `y ${MARQUEUR_LIEN}` })).toMatchObject({ type: "qualiopi_envoyer", objet: "x" });
+  });
+});
+
+describe("super-pouvoirs Qualiopi de Nora", () => {
+  it("n'apparaissent que pour Nora dans l'espace Aissociate", () => {
+    expect(pouvoirsQualiopi(ESPACE_AISSOCIATE, "nora").map((p) => p.id)).toEqual(["qualiopi_dossier", "qualiopi_envoi", "qualiopi_rappels", "qualiopi_questionnaires", "qualiopi_point"]);
+    expect(pouvoirsQualiopi(ESPACE_AISSOCIATE, "hugo")).toEqual([]);
+    expect(pouvoirsQualiopi("5d1e0000-0000-4000-8000-000000000001", "nora")).toEqual([]);
+  });
+  it("chaque formulaire se remplit et cite les outils Qualiopi", () => {
+    for (const sp of POUVOIRS_QUALIOPI) {
+      const valeurs = Object.fromEntries(sp.champs.map((c) => [c.nom, c.options?.[0] ?? "Session test"]));
+      const r = rendrePouvoir(sp, valeurs);
+      expect("manquant" in r).toBe(false);
+      if (!("manquant" in r)) {
+        expect(r.question).toContain("qualiopi_session");
+        expect(r.question).not.toMatch(/\{\{\w+\}\}/);
+      }
+    }
+  });
+  it("le formulaire d'envoi couvre tous les envois de l'outil", () => {
+    const choix = POUVOIRS_QUALIOPI.find((p) => p.id === "qualiopi_envoi")!.champs.find((c) => c.nom === "document")!.options!;
+    expect(choix.length).toBe(Object.keys(ENVOIS).length);
+    for (const n of Object.keys(ENVOIS) as NatureEnvoi[]) expect(choix).toContain(ENVOIS[n].libelle);
+  });
+  it("aucun identifiant ne recouvre les super-pouvoirs existants de Nora", () => {
+    const ids = POUVOIRS_QUALIOPI.map((p) => p.id);
+    for (const ancien of ["annonce", "entretien", "financement"]) expect(ids).not.toContain(ancien);
   });
 });

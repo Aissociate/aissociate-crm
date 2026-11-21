@@ -8,6 +8,7 @@
 //
 // Module pur (testé par vitest) ; les accès au CRM sont dans qualiopi_crm.ts.
 import type { DefinitionOutil } from "./outils.ts";
+import type { SuperPouvoir } from "./contexte.ts";
 
 /** Espace Studio d'Aissociate (organisme de formation). Réglable par STUDIO_ESPACES_ORGANISME (liste séparée par des virgules). */
 export const ESPACE_AISSOCIATE = "cf5e5a85-57cd-4926-ad0d-9dea97cd17eb";
@@ -351,3 +352,75 @@ export const DEFINITION_ENVOIS = fn("qualiopi_proposer_envois",
 export const CONSIGNE_ENVOIS = `- qualiopi_proposer_envois prépare les envois aux stagiaires : une proposition par stagiaire, que le dirigeant valide une à une ; rien ne part avant. Donne les références renvoyées et n'annonce jamais un envoi comme fait.
 - Ordre habituel : avant la formation devis, convention, programme, convocation, livret d'accueil, puis rappel quelques jours avant ; pendant, lien d'émargement ; à la fin, attestation, certificat et questionnaire à chaud ; 30 jours après, questionnaire à froid (le CRM l'envoie seul ; toi, tu relances ceux restés sans réponse).
 - Ne propose pas d'envoi en masse par une autre voie (mailing, messagerie du Studio) pour ces documents.`;
+
+// ─── Super-pouvoirs de Nora (formulaires), espace de l'organisme seulement ──
+const DOCS_ENVOYABLES = ["Convocation", "Livret d'accueil", "Programme de formation", "Convention de formation", "Devis", "Lien d'émargement", "Rappel avant la formation", "Questionnaire à chaud", "Questionnaire à froid", "Attestation de fin de formation", "Certificat de réalisation"];
+
+export const POUVOIRS_QUALIOPI: SuperPouvoir[] = [
+  {
+    id: "qualiopi_dossier", titre: "Préparer le dossier Qualiopi d'une session", description: "Documents produits, rangés et envois prêts à valider, stagiaire par stagiaire.",
+    champs: [
+      { nom: "session", label: "Session (titre ou date)", type: "texte", requis: true },
+      { nom: "etape", label: "Étape", type: "choix", options: ["Avant la formation", "Pendant la formation", "Après la formation", "Tout le parcours"], requis: true },
+    ],
+    gabarit: `Prépare le dossier Qualiopi de la session « {{session}} », étape : {{etape}}.
+1. Retrouve la session avec qualiopi_sessions (période « toutes » si besoin), puis lis son dossier avec qualiopi_session.
+2. Produis avec qualiopi_produire les pièces manquantes de l'étape :
+   - Avant la formation : devis (s'il existe dans le CRM), convention, programme, convocations, livret d'accueil, demi-journées d'émargement.
+   - Pendant la formation : demi-journées d'émargement si elles manquent.
+   - Après la formation : attestations de fin et certificats de réalisation.
+3. Prépare les envois de l'étape avec qualiopi_proposer_envois (une proposition par stagiaire) :
+   - Avant : convention, programme, convocation, livret d'accueil, puis rappel si la formation commence dans les 7 jours.
+   - Pendant : lien d'émargement.
+   - Après : attestation de fin, certificat de réalisation, questionnaire à chaud ; questionnaire à froid pour ceux qui n'ont pas répondu 30 jours après.
+4. Termine par un tableau : stagiaire, pièces produites, envois à valider (références), points bloquants (e-mail manquant, devis ou plan absent du CRM…) et ce qu'il faut faire pour les lever.`,
+  },
+  {
+    id: "qualiopi_envoi", titre: "Envoyer un document aux stagiaires", description: "Un document ou un lien, une proposition à valider par stagiaire.",
+    champs: [
+      { nom: "session", label: "Session (titre ou date)", type: "texte", requis: true },
+      { nom: "document", label: "Document ou lien", type: "choix", options: DOCS_ENVOYABLES, requis: true },
+      { nom: "stagiaires", label: "Stagiaires (vide = tous)", type: "texte" },
+      { nom: "message", label: "Message personnel ajouté au texte type (facultatif)", type: "long" },
+    ],
+    gabarit: `Envoie « {{document}} » aux stagiaires de la session « {{session}} » (stagiaires : {{stagiaires}}).
+Message personnel à ajouter : {{message}}
+1. Retrouve la session (qualiopi_sessions) et lis son dossier (qualiopi_session).
+2. Si le document n'est pas encore produit pour un stagiaire, produis-le d'abord avec qualiopi_produire.
+3. Prépare l'envoi avec qualiopi_proposer_envois (envoi correspondant, participants : les stagiaires visés, ou « tous » si le champ est vide ou « (non précisé) » ; message : le message personnel s'il y en a un).
+4. Donne la liste des propositions à valider et, pour chaque stagiaire écarté, la raison et la marche à suivre.`,
+  },
+  {
+    id: "qualiopi_rappels", titre: "Rappels des formations à venir", description: "Un rappel par stagiaire, convocation jointe.",
+    champs: [{ nom: "horizon", label: "Formations qui commencent dans", type: "choix", options: ["3 jours", "7 jours", "14 jours"], requis: true }],
+    gabarit: `Prépare les rappels des formations qui commencent dans les {{horizon}} à venir.
+1. qualiopi_sessions (période a_venir) : garde les sessions dont le premier jour tombe dans cet horizon.
+2. Pour chacune, vérifie dans qualiopi_session que la convocation est produite (sinon produis-la avec qualiopi_produire), puis prépare les rappels avec qualiopi_proposer_envois (envoi « rappel », tous les stagiaires).
+3. Résume : session, date, nombre de rappels à valider, stagiaires écartés et pourquoi.`,
+  },
+  {
+    id: "qualiopi_questionnaires", titre: "Relancer les questionnaires", description: "Questionnaires à chaud et à froid restés sans réponse.",
+    champs: [
+      { nom: "type", label: "Questionnaires", type: "choix", options: ["À chaud et à froid", "À chaud", "À froid"], requis: true },
+      { nom: "depuis", label: "Sessions terminées depuis", type: "choix", options: ["1 mois", "3 mois", "6 mois"], requis: true },
+    ],
+    gabarit: `Relance les questionnaires ({{type}}) des sessions terminées depuis {{depuis}}.
+1. qualiopi_sessions (période terminees) : garde les sessions finies dans cette période.
+2. Pour chacune, lis qualiopi_session : repère les stagiaires sans réponse au questionnaire à chaud, et ceux sans réponse au questionnaire à froid alors que la fin date de plus de 30 jours.
+3. Prépare les envois avec qualiopi_proposer_envois (questionnaire_chaud et/ou questionnaire_froid) : un premier envoi s'il n'est jamais parti, une relance sinon. Les stagiaires qui ont déjà répondu sont écartés automatiquement.
+4. Résume par session : relances à valider, réponses déjà reçues, taux de réponse, stagiaires sans e-mail.`,
+  },
+  {
+    id: "qualiopi_point", titre: "Point de conformité Qualiopi", description: "Ce qui manque, session par session, et quoi faire.",
+    champs: [{ nom: "periode", label: "Sessions", type: "choix", options: ["À venir et en cours", "Terminées", "Toutes"], requis: true }],
+    gabarit: `Fais le point de conformité Qualiopi des sessions : {{periode}}.
+1. qualiopi_sessions avec la période correspondante (a_venir puis en_cours, terminees, ou toutes).
+2. Pour les 10 premières sessions, lis qualiopi_session.
+3. Rends un tableau : session, dates, stagiaires, pièces produites / attendues, pièces manquantes, envois restant à faire, questionnaires sans réponse.
+4. Termine par les 5 actions prioritaires (ce que tu peux faire toi-même avec tes outils, et ce qu'il faut saisir dans le CRM). Ne produis et n'envoie rien sans qu'on te le demande.`,
+  },
+];
+
+/** Super-pouvoirs à ajouter à cet agent dans cet espace (aucun hors de l'espace de l'organisme). */
+export const pouvoirsQualiopi = (wsId: string | null | undefined, agentId: string | null | undefined, espaces = espacesOrganisme()): SuperPouvoir[] =>
+  qualiopiActif(wsId, agentId, espaces) ? POUVOIRS_QUALIOPI : [];
