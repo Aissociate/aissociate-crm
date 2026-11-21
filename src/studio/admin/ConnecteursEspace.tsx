@@ -1,5 +1,5 @@
 // Connecteurs d'un espace client, côté CRM : suivi des demandes et mise en service manuelle.
-// Les secrets (mot de passe SMTP, jeton MCP) restent chiffrés : seul leur présence est affichée.
+// Les secrets (mot de passe SMTP, jeton MCP, clé d'API) restent chiffrés : seul leur présence est affichée.
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -18,12 +18,21 @@ const TON: Record<string, 'warning' | 'info' | 'success' | 'danger' | 'neutral'>
 };
 
 type Test = { enCours: true } | { ok: true; outils: { nom: string; lecture: boolean }[] } | { ok: false; erreur: string };
+/** Test d'une API : statut de la racine avec la clé, et nombre d'opérations lues dans la description OpenAPI. */
+type TestApi = { enCours: true } | { ok: boolean; statut: string; operations: number; erreur_openapi?: string } | { erreur: string };
+const estMcp = (type: string) => type === 'mcp' || type.startsWith('mcp:');
 
 export default function ConnecteursEspace({ workspaceId }: { workspaceId: string }) {
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [erreur, setErreur] = useState('');
   /** Serveurs MCP : test de connexion (outils vus) avant de passer en « Connecté ». */
   const [tests, setTests] = useState<Record<string, Test>>({});
+  const [testsApi, setTestsApi] = useState<Record<string, TestApi>>({});
+  const testerApi = async (id: string) => {
+    setTestsApi((t) => ({ ...t, [id]: { enCours: true } }));
+    const { data, error } = await supabase.functions.invoke('studio', { body: { action: 'admin_tester_api', id } });
+    setTestsApi((t) => ({ ...t, [id]: (error ? { erreur: error.message } : data) as TestApi }));
+  };
   const tester = async (id: string) => {
     setTests((t) => ({ ...t, [id]: { enCours: true } }));
     const { data, error } = await supabase.functions.invoke('studio', { body: { action: 'admin_tester_mcp', id } });
@@ -48,7 +57,7 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
       <h3 className="mb-1 font-semibold text-fg">Connecteurs</h3>
       <p className="mb-2 text-xs text-muted">
         Passer en « Connecté » une fois la connexion mise en place : l'outil apparaît alors dans le contexte des agents.
-        Serveur MCP : « Tester la connexion », puis « Connecté » : ses outils deviennent ceux des agents.
+        Serveur MCP ou API : « Tester la connexion », puis « Connecté » : les agents s'en servent (lecture directe, écriture validée par le client).
         La note est visible par le client.
       </p>
       {erreur && <p className="mb-2 text-sm text-red-600">{erreur}</p>}
@@ -57,14 +66,14 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
           {lignes.map((c) => (
             <div key={c.id} className="rounded-lg border border-line p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-fg">{LIBELLES[c.type] ?? (c.type.startsWith('app:') ? `Sur demande : ${c.infos?.libelle ?? c.type.slice(4)}` : c.type.startsWith('mcp:') ? 'Serveur MCP' : c.type)}</span>
+                <span className="font-medium text-fg">{LIBELLES[c.type] ?? (c.type.startsWith('app:') ? `Sur demande : ${c.infos?.libelle ?? c.type.slice(4)}` : c.type.startsWith('mcp:') ? 'Serveur MCP' : c.type.startsWith('api:') ? `API : ${c.infos?.nom ?? c.type.slice(4)}` : c.type)}</span>
                 <Badge tone={TON[c.statut] ?? 'neutral'}>{STATUTS.find(([k]) => k === c.statut)?.[1] ?? c.statut}</Badge>
                 {c.secret_chiffre && <Badge tone="neutral">secret chiffré enregistré</Badge>}
                 <span className="ml-auto text-xs text-muted">maj {new Date(c.updated_at).toLocaleDateString('fr-FR')}</span>
               </div>
               <dl className="mt-2 grid gap-x-4 gap-y-0.5 text-xs text-muted sm:grid-cols-2">
                 {Object.entries(c.infos ?? {}).map(([k, v]) => (
-                  <div key={k} className="truncate"><dt className="inline font-medium">{k} : </dt><dd className="inline select-all">{v}</dd></div>
+                  <div key={k} className={k === 'documentation' ? 'sm:col-span-2 line-clamp-3 whitespace-pre-wrap' : 'truncate'}><dt className="inline font-medium">{k} : </dt><dd className="inline select-all">{v}</dd></div>
                 ))}
               </dl>
               <div className="mt-2 grid gap-2 sm:grid-cols-[160px_1fr]">
@@ -75,7 +84,25 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
                   onChange={(e) => setLignes((l) => l.map((x) => (x.id === c.id ? { ...x, notes_admin: e.target.value } : x)))}
                   onBlur={(e) => maj(c.id, { notes_admin: e.target.value })} />
               </div>
-              {(c.type === 'mcp' || c.type.startsWith('mcp:')) && (() => {
+              {c.type.startsWith('api:') && (() => {
+                const t = testsApi[c.id];
+                return (
+                  <div className="mt-2 text-xs">
+                    <button type="button" className="rounded-md border border-line px-2 py-1 font-medium text-fg hover:bg-white/5 disabled:opacity-50"
+                      disabled={Boolean(t && 'enCours' in t)} onClick={() => testerApi(c.id)}>
+                      {t && 'enCours' in t ? 'Test en cours…' : 'Tester la connexion'}
+                    </button>
+                    {t && 'erreur' in t && <p className="mt-1 text-red-500">Échec : {t.erreur}</p>}
+                    {t && 'statut' in t && (
+                      <p className={`mt-1 ${t.ok ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        Racine de l'API : {t.statut}{t.ok ? '' : ' (une racine qui refuse peut être normale : vérifier avec la documentation)'}.
+                        {c.infos?.openapi && <span className="mt-0.5 block">{t.erreur_openapi ? `Description OpenAPI : ${t.erreur_openapi}` : `Description OpenAPI : ${t.operations} opération${t.operations > 1 ? 's' : ''} lue${t.operations > 1 ? 's' : ''}.`}</span>}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+              {estMcp(c.type) && (() => {
                 const t = tests[c.id];
                 return (
                   <div className="mt-2 text-xs">

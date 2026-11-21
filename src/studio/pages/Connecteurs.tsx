@@ -16,17 +16,29 @@ import { GrilleApplications, Logo, useApplications } from '../Applications';
 
 type Statut = 'demande' | 'en_cours' | 'connecte' | 'erreur' | 'desactive';
 type Connecteur = { id: string; type: string; statut: Statut; infos: Record<string, string>; secret_renseigne: boolean; notes_admin: string; updated_at: string };
-type Champ = { nom: string; label: string; aide?: string; type?: 'texte' | 'choix' | 'secret' | 'cases'; options?: string[]; requis?: boolean };
+type Champ = {
+  nom: string; label: string; aide?: string; type?: 'texte' | 'zone' | 'choix' | 'secret' | 'cases'; options?: string[]; requis?: boolean;
+  /** Libellés des options d'un choix (la valeur envoyée reste l'option). */
+  libelles?: Record<string, string>;
+  defaut?: string;
+  /** Champ affiché (et requis) seulement selon la saisie. */
+  si?: (v: Record<string, string>) => boolean;
+  max?: number;
+};
 type Def = {
   type: string; nom: string; logo: string; couleur: string; accroche: string; agents: string;
   champs: Champ[]; mode: 'assiste' | 'direct';
   /** Connexion en un clic via Zernio : messagerie (google, microsoft, email) ou réseau social. */
   zernio?: Quoi | Reseau;
-  /** Serveur MCP ajouté (et non modifié) : le serveur lui donne son propre connecteur « mcp:<nom> ». */
+  /** Serveur MCP ou API ajouté (et non modifié) : le serveur lui donne son propre connecteur « mcp:<nom> » / « api:<nom> ». */
   nouveau?: boolean;
 };
 
 const estMcp = (type: string) => type === 'mcp' || type.startsWith('mcp:');
+const estApi = (type: string) => type.startsWith('api:');
+/** Cartes à plusieurs connexions : la famille d'un type enregistré. */
+const familleDe = (type: string) => (estMcp(type) ? 'mcp' : estApi(type) ? 'api' : null);
+const avecCle = (v: Record<string, string>) => v.auth !== 'aucune';
 
 const CATALOGUE: Def[] = [
   { type: 'google', nom: 'Google', logo: 'G', couleur: '#4285F4', mode: 'assiste', zernio: 'google',
@@ -74,6 +86,20 @@ const CATALOGUE: Def[] = [
       { nom: 'url', label: 'Adresse du serveur MCP', aide: 'https://…', requis: true },
       { nom: 'jeton', label: 'Jeton d\'accès', type: 'secret', requis: true },
       { nom: 'description', label: 'À quoi sert-il ?' },
+    ] },
+  { type: 'api', nom: 'API', logo: 'API', couleur: '#0f766e', mode: 'direct',
+    accroche: 'Pour les logiciels qui ouvrent une API web (avancé)', agents: 'Vos agents interrogent cette API ; ce qui écrit vous est proposé.',
+    champs: [
+      { nom: 'nom', label: 'Nom du logiciel', aide: 'ex. Pennylane, mon ERP…', requis: true },
+      { nom: 'url', label: 'Adresse de base de l\'API', aide: 'https://api.exemple.fr/v1', requis: true },
+      { nom: 'auth', label: 'Authentification', type: 'choix', requis: true, defaut: 'bearer', options: ['bearer', 'entete', 'parametre', 'basic', 'aucune'],
+        libelles: { bearer: 'Jeton « Bearer » (le plus courant)', entete: 'Clé dans un en-tête', parametre: 'Clé dans l\'adresse', basic: 'Identifiant et mot de passe (Basic)', aucune: 'Aucune (API publique)' } },
+      { nom: 'auth_nom', label: 'Nom de l\'en-tête ou du paramètre', aide: 'ex. X-API-Key ou api_key', requis: true, si: (v) => v.auth === 'entete' || v.auth === 'parametre' },
+      { nom: 'cle', label: 'Clé d\'API', aide: 'Basic : identifiant:mot_de_passe', type: 'secret', requis: true, si: avecCle },
+      { nom: 'description', label: 'À quoi sert-elle ?' },
+      { nom: 'openapi', label: 'Description OpenAPI / Swagger (facultatif)', aide: 'https://api.exemple.fr/openapi.json' },
+      { nom: 'documentation', label: 'Mode d\'emploi pour vos agents (facultatif)', type: 'zone', max: 6000,
+        aide: 'ex. GET /clients?search=… liste les clients ; GET /factures/{id} donne une facture ; POST /devis crée un devis.' },
     ] },
 ];
 
@@ -131,7 +157,7 @@ export default function Connecteurs() {
         ? (reseaux.etat?.comptes ?? []).some((c) => c.reseau === d.zernio)
         : (messageries.etat?.boites ?? []).some((b) => b.fournisseur === fournisseurDe(d.zernio as Quoi));
     }
-    return (liste ?? []).some((c) => c.type === d.type || (d.type === 'mcp' && estMcp(c.type)));
+    return (liste ?? []).some((c) => c.type === d.type || familleDe(c.type) === d.type);
   };
   const branchesDabord = (cartes: Def[]) => [...cartes.filter(branche), ...cartes.filter((d) => !branche(d))];
   const cartesUnClic = branchesDabord(CATALOGUE.filter((d) => d.zernio && (enLigne || (d.type !== 'messagerie' && d.champs.length > 0))));
@@ -139,33 +165,41 @@ export default function Connecteurs() {
   const demandesApps = (liste ?? []).filter((c) => c.type.startsWith('app:'));
   const retour = messageries.retour ?? reseaux.retour ?? apps.retour;
 
-  /** Serveurs MCP : plusieurs par espace (« mcp » d'avant, puis « mcp:<nom> »), chacun avec son statut. */
-  const serveursMcp = (liste ?? []).filter((c) => estMcp(c.type));
-  const carteMcp = (d: Def) => (
+  /**
+   * Serveurs MCP et API : plusieurs par espace (« mcp » d'avant, puis « mcp:<nom> » ; « api:<nom> »),
+   * chacun avec son statut.
+   */
+  const carteMultiple = (d: Def) => {
+    const mcp = d.type === 'mcp';
+    const unite = mcp ? 'serveur MCP' : 'API';
+    const lignes = (liste ?? []).filter((c) => familleDe(c.type) === d.type);
+    return (
     <div key={d.type} className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-4">
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ background: d.couleur }}>{d.logo}</span>
         <div className="min-w-0">
-          <p className="font-medium">Serveurs MCP</p>
+          <p className="font-medium">{mcp ? 'Serveurs MCP' : 'API'}</p>
           <p className="truncate text-xs text-neutral-500">{d.accroche}</p>
         </div>
       </div>
-      <p className="mt-3 text-sm text-neutral-600">Vos agents lisent avec les outils de chaque serveur ; ce qui écrit leur est proposé à votre validation. Plusieurs serveurs possibles.</p>
-      {serveursMcp.length > 0 && (
+      <p className="mt-3 text-sm text-neutral-600">{mcp
+        ? 'Vos agents lisent avec les outils de chaque serveur ; ce qui écrit leur est proposé à votre validation. Plusieurs serveurs possibles.'
+        : 'Vos agents lisent vos données par l\'API ; toute création, modification ou suppression vous est proposée avant l\'envoi. Plusieurs API possibles.'}</p>
+      {lignes.length > 0 && (
         <ul className="mt-3 space-y-2">
-          {serveursMcp.map((c) => {
+          {lignes.map((c) => {
             const st = STATUTS[c.statut];
             return (
               <li key={c.id} className="rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate font-medium">{c.infos.nom || 'Serveur MCP'}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{c.infos.nom || (mcp ? 'Serveur MCP' : 'API')}</span>
                   <span className={cx('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs', st.classe)}><st.Icone className="h-3.5 w-3.5" />{st.label}</span>
                 </div>
                 <p className="truncate text-xs text-neutral-500">{c.infos.url}</p>
                 {c.notes_admin && <p className="mt-1 text-xs text-neutral-600">Aissociate : {c.notes_admin}</p>}
                 {proprietaire && (
                   <div className="mt-1 flex justify-end gap-1">
-                    <button onClick={() => setSuppression({ type: c.type, nom: c.infos.nom || 'ce serveur MCP' })} className="rounded-lg px-2 py-1 text-xs text-neutral-600 hover:bg-white hover:text-red-600">Retirer</button>
+                    <button onClick={() => setSuppression({ type: c.type, nom: c.infos.nom || `ce ${unite}` })} className="rounded-lg px-2 py-1 text-xs text-neutral-600 hover:bg-white hover:text-red-600">Retirer</button>
                     <button onClick={() => { setOuvert({ ...d, type: c.type }); }} className="rounded-lg px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-white">{c.statut === 'erreur' ? 'Ressaisir' : 'Modifier'}</button>
                   </div>
                 )}
@@ -176,16 +210,17 @@ export default function Connecteurs() {
       )}
       {proprietaire && (
         <div className="mt-auto flex justify-end pt-4">
-          <Bouton variante={serveursMcp.length ? 'clair' : 'noir'} className="px-3 py-1.5" onClick={() => setOuvert({ ...d, type: 'mcp', nouveau: true })}>
-            {serveursMcp.length ? 'Ajouter un serveur' : 'Connecter'}
+          <Bouton variante={lignes.length ? 'clair' : 'noir'} className="px-3 py-1.5" onClick={() => setOuvert({ ...d, nouveau: true })}>
+            {lignes.length ? (mcp ? 'Ajouter un serveur' : 'Ajouter une API') : 'Connecter'}
           </Bouton>
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   const carte = (d: Def) => {
-    if (d.type === 'mcp') return carteMcp(d);
+    if (d.type === 'mcp' || d.type === 'api') return carteMultiple(d);
     const c = liste?.find((x) => x.type === d.type);
     const st = c ? STATUTS[c.statut] : null;
     const enUnClic = enLigne && d.zernio;
@@ -359,20 +394,22 @@ function Formulaire({ def, existant, onClose, onSaved }: {
   // Valeurs initiales : saisie précédente, sinon cases toutes cochées.
   const [v, setV] = useState<Record<string, string>>(() => ({
     ...Object.fromEntries(def.champs.filter((c) => c.type === 'cases').map((c) => [c.nom, (c.options ?? []).join(', ')])),
+    ...Object.fromEntries(def.champs.filter((c) => c.defaut).map((c) => [c.nom, c.defaut!])),
     ...(existant?.infos ?? {}),
   }));
   const [secret, setSecret] = useState('');
   const [accord, setAccord] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState('');
-  const champSecret = def.champs.find((c) => c.type === 'secret');
+  const champs = def.champs.filter((c) => !c.si || c.si(v));
+  const champSecret = champs.find((c) => c.type === 'secret');
 
   const soumettre = async (e: FormEvent) => {
     e.preventDefault();
     setErreur(''); setEnvoi(true);
     try {
       const r = await appel<{ connecteurs: Connecteur[] }>('connecteur_enregistrer', {
-        type: def.type, infos: v, secret: secret || undefined, accord, ...(def.nouveau ? { nouveau: true } : {}),
+        type: def.type, infos: Object.fromEntries(champs.filter((c) => c.type !== 'secret').map((c) => [c.nom, v[c.nom] ?? ''])), secret: secret || undefined, accord, ...(def.nouveau ? { nouveau: true } : {}),
       });
       onSaved(r.connecteurs);
     } catch (err) { setErreur(gerer(err)); } finally { setEnvoi(false); }
@@ -384,18 +421,18 @@ function Formulaire({ def, existant, onClose, onSaved }: {
       <form onSubmit={soumettre} onClick={(e) => e.stopPropagation()} className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-2 text-lg font-semibold">
-            {estMcp(def.type) ? <Server className="h-5 w-5" /> : <Plug className="h-5 w-5" />}
+            {familleDe(def.type) || def.type === 'api' ? <Server className="h-5 w-5" /> : <Plug className="h-5 w-5" />}
             Connecter {def.nom}
           </p>
           <button type="button" onClick={onClose} aria-label="Fermer"><X className="h-5 w-5" /></button>
         </div>
-        {def.champs.map((c) => (
+        {champs.map((c) => (
           <label key={c.nom} className="block">
             <span className="mb-1 block text-sm text-neutral-700">{c.label}{c.requis && <span className="text-orange-600"> *</span>}</span>
             {c.type === 'choix' ? (
               <select className={classe} value={v[c.nom] ?? ''} onChange={(e) => setV({ ...v, [c.nom]: e.target.value })}>
-                <option value="">—</option>
-                {c.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                {!c.defaut && <option value="">—</option>}
+                {c.options?.map((o) => <option key={o} value={o}>{c.libelles?.[o] ?? o}</option>)}
               </select>
             ) : c.type === 'cases' ? (
               <div className="flex flex-wrap gap-3 pt-1">
@@ -411,7 +448,9 @@ function Formulaire({ def, existant, onClose, onSaved }: {
               </div>
             ) : c.type === 'secret' ? (
               <input type="password" className={classe} value={secret} autoComplete="new-password" onChange={(e) => setSecret(e.target.value)}
-                placeholder={existant?.secret_renseigne ? '•••••••• (inchangé si vide)' : ''} required={c.requis && !existant?.secret_renseigne} />
+                placeholder={existant?.secret_renseigne ? '•••••••• (inchangé si vide)' : c.aide ?? ''} required={c.requis && !existant?.secret_renseigne} />
+            ) : c.type === 'zone' ? (
+              <textarea rows={4} className={classe} value={v[c.nom] ?? ''} placeholder={c.aide} maxLength={c.max} required={c.requis} onChange={(e) => setV({ ...v, [c.nom]: e.target.value })} />
             ) : (
               <input className={classe} value={v[c.nom] ?? ''} placeholder={c.aide} required={c.requis} onChange={(e) => setV({ ...v, [c.nom]: e.target.value })} />
             )}

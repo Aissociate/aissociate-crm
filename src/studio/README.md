@@ -280,6 +280,19 @@ et la table `studio_nango_connexions` ne servent plus.
   appelée pendant la conversation, résultat présenté comme données tierces, journalisé (`mcp_lecture`).
   Le reste devient une décision `mcp_appel` (aperçu des paramètres, sans « Modifier ») appelée au « VALIDÉ ».
 
+## API des clients (`api_client.ts`)
+- **Plusieurs API par espace** (8 au plus) : carte « API » de Connecteurs, `connecteur_enregistrer` avec
+  `type: "api"` crée `api:<nom>`. Champs : adresse de base (https, hôte public), authentification
+  (`bearer`, `entete` + nom, `parametre` + nom, `basic` « identifiant:mot_de_passe », `aucune`), clé chiffrée,
+  description, adresse OpenAPI (JSON, facultative), mode d'emploi libre (6 000 caractères). Facturée « API ».
+- **Mise en service** : CRM › espace › Connecteurs › « Tester la connexion » (`admin_tester_api` : statut de la
+  racine avec la clé, nombre d'opérations OpenAPI lues), puis « Connecté ». Une racine en 404 peut être normale.
+- **Agents** (`outils.ts`) : un outil `api_<nom>__requete` {methode, chemin, parametres, corps} par API ;
+  la consigne donne le mode d'emploi et les opérations OpenAPI (120 max, cache 30 min). Chemin relatif
+  uniquement (pas d'adresse complète, de `..`, d'espace), redirections jamais suivies, clé masquée dans les
+  réponses (20 000 caractères max). GET / HEAD : appelés tout de suite, journalisés (`api_lecture`) ;
+  POST, PUT, PATCH, DELETE : décision `api_appel` (aperçu de la requête, sans « Modifier ») envoyée au « VALIDÉ ».
+
 ## Traitements en lots dans « Mes ressources » (`lots.ts`, `src/studio/ressources/`)
 - **Gestion groupée** : cases à cocher (et « Tout sélectionner » sur la liste affichée), barre d'actions
   `BarreSelection` → action `ressources_lot` {op: activer | desactiver | ranger | supprimer, ids (50 max)}.
