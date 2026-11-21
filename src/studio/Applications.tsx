@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Unplug } from 'lucide-react';
 import { APPLICATIONS_UN_CLIC, logoConnecteur, RESEAUX_PUBLICATION, type AppUnClic } from '@/lib/tarifConnecteurs';
+import { AgentsConnecteur, cleZernio } from './AccesAgents';
 import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { cx } from './composants';
@@ -108,6 +109,7 @@ function Tuile({ app, apps }: { app: AppUnClic; apps: Applications }) {
             {c.a_reconnecter ? <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
             <span className="truncate">{c.a_reconnecter ? `À reconnecter · ${c.nom}` : c.nom}</span>
           </p>
+          <AgentsConnecteur cle={cleZernio(c.id)} nom={`${app.nom} (${c.nom})`} />
           {proprietaire && (
             <div className="mt-1 flex flex-wrap gap-1">
               <button onClick={() => apps.connecter(app.slug, c.id)} disabled={occupe} aria-label={`Reconnecter ${c.nom}`} className={CL_ACTION}>

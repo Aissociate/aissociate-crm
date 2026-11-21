@@ -13,6 +13,7 @@ import Confirmation from '../composants/Confirmation';
 import { ComptesMessagerie, fournisseurDe, useMessageries, type Quoi } from '../Messageries';
 import { ComptesReseau, NOMS_RESEAUX, useReseaux, type Reseau } from '../ReseauxSociaux';
 import { GrilleApplications, Logo, useApplications } from '../Applications';
+import { AccesAgentsProvider, AgentsConnecteur } from '../AccesAgents';
 
 type Statut = 'demande' | 'en_cours' | 'connecte' | 'erreur' | 'desactive';
 type Connecteur = { id: string; type: string; statut: Statut; infos: Record<string, string>; secret_renseigne: boolean; notes_admin: string; updated_at: string };
@@ -119,7 +120,12 @@ const STATUTS: Record<Statut, { label: string; classe: string; Icone: typeof Clo
 
 const estReseau = (x: string): x is Reseau => x in NOMS_RESEAUX;
 
+/** Connecteurs, avec le choix des agents qui peuvent utiliser chacun (AccesAgents.tsx). */
 export default function Connecteurs() {
+  return <AccesAgentsProvider><PageConnecteurs /></AccesAgentsProvider>;
+}
+
+function PageConnecteurs() {
   const { me, gerer } = useStudio();
   const proprietaire = me.user.role === 'proprietaire';
   const messageries = useMessageries();
@@ -196,6 +202,7 @@ export default function Connecteurs() {
                   <span className={cx('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs', st.classe)}><st.Icone className="h-3.5 w-3.5" />{st.label}</span>
                 </div>
                 <p className="truncate text-xs text-neutral-500">{c.infos.url}</p>
+                <AgentsConnecteur cle={c.type} nom={c.infos.nom || unite} />
                 {c.notes_admin && <p className="mt-1 text-xs text-neutral-600">Aissociate : {c.notes_admin}</p>}
                 {proprietaire && (
                   <div className="mt-1 flex justify-end gap-1">
@@ -240,6 +247,7 @@ export default function Connecteurs() {
         ) : (
           <>
             {c?.notes_admin && <p className="mt-2 rounded-lg bg-neutral-50 px-2 py-1.5 text-xs text-neutral-600">Aissociate : {c.notes_admin}</p>}
+            {c && <AgentsConnecteur cle={c.type} nom={d.nom} />}
             <div className="mt-auto flex items-center justify-between gap-2 pt-4">
               {st ? (
                 <span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs', st.classe)}><st.Icone className="h-3.5 w-3.5" />{st.label}</span>

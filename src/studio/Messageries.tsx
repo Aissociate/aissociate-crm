@@ -3,6 +3,7 @@
 // autre messagerie (IMAP). Le serveur rattache chaque compte au profil Zernio de l'espace.
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Copy, FolderOpen, Loader2, Plus, RefreshCw, Unplug } from 'lucide-react';
+import { AgentsConnecteur, cleZernio } from './AccesAgents';
 import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { Bouton, cx } from './composants';
@@ -127,6 +128,7 @@ export function ComptesMessagerie({ m, quoi }: { m: Messageries; quoi: Quoi }) {
               </p>
             </div>
           </div>
+          <AgentsConnecteur cle={cleZernio(b.id)} nom={b.adresse || b.nom} />
           {proprietaire && (
             <div className="mt-2 flex flex-wrap gap-1">
               <button onClick={() => m.connecter(quoi, b.id)} disabled={occupe} title="Ressaisir le compte ou étendre les accès"
