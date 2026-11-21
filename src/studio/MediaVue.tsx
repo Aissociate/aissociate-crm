@@ -40,6 +40,7 @@ export default function MediaVue({ media: initial }: { media: Media }) {
     );
   }
   if (media.statut === 'echec' || !media.url) {
+    if (media.erreur === 'Ce visuel a été supprimé.') return <p className="rounded-xl bg-neutral-100 px-3 py-2 text-sm text-neutral-500">{media.erreur}</p>;
     return <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">La génération a échoué : {media.erreur ?? 'erreur inconnue'}. Relancez la mission.</p>;
   }
   return (

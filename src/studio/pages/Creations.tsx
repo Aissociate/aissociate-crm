@@ -2,16 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import MediaVue from '../MediaVue';
 import { mediasDuMessage } from '../marqueursMedia';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Download, PinOff, Pin } from 'lucide-react';
+import { Check, Copy, Download, PinOff, Pin, Trash2 } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel } from '../api';
 import { Avatar, Chargement, Markdown, Titre } from '../composants';
 import EtatVide from '../composants/EtatVide';
+import Confirmation from '../composants/Confirmation';
 import BoutonsExport from '../BoutonsExport';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 
 type Creation = { id: string; agent_id: string; content: string; created_at: string; conversation_id: string; titre: string };
-type MediaGalerie = { id: string; type: 'image' | 'video'; agent_id: string | null; prompt: string; url: string | null; created_at: string; conversation_id: string | null; dossier_id?: string | null };
+type MediaGalerie = { id: string; type: 'image' | 'video'; agent_id: string | null; prompt: string; url: string | null; created_at: string; conversation_id: string | null; dossier_id?: string | null; user_id?: string | null };
 
 export default function Creations() {
   const { me, gerer } = useStudio();
@@ -31,6 +32,21 @@ export default function Creations() {
     appel<{ creations: Creation[] }>('creations').then((r) => setListe(r.creations)).catch((e) => setErreur(gerer(e)));
     chargerMedias();
   }, [gerer, chargerMedias]);
+
+  /** Visuel ou vidéo à supprimer (confirmation), et suppression en cours. */
+  const [aSupprimer, setASupprimer] = useState<MediaGalerie | null>(null);
+  const [suppression, setSuppression] = useState(false);
+  const supprimer = async () => {
+    if (!aSupprimer) return;
+    setSuppression(true);
+    try {
+      await appel('media_supprimer', { id: aSupprimer.id });
+      setMedias((x) => x.filter((m) => m.id !== aSupprimer.id));
+      dossiers.charger();
+    } catch (e) { setErreur(gerer(e)); }
+    finally { setSuppression(false); setASupprimer(null); }
+  };
+  const peutSupprimer = (m: MediaGalerie) => me.user.role === 'proprietaire' || (m.user_id != null && m.user_id === me.user.id);
 
   const retirer = async (id: string) => {
     setListe((l) => l?.filter((c) => c.id !== id) ?? null);
@@ -72,6 +88,12 @@ export default function Creations() {
                   <a href={m.url} download target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-neutral-900">
                     <Download className="h-3.5 w-3.5" /> Télécharger
                   </a>
+                  {peutSupprimer(m) && (
+                    <button type="button" onClick={() => setASupprimer(m)} aria-label={m.type === 'video' ? 'Supprimer la vidéo' : 'Supprimer le visuel'}
+                      className="inline-flex items-center gap-1 hover:text-red-600">
+                      <Trash2 className="h-3.5 w-3.5" /> Supprimer
+                    </button>
+                  )}
                 </figcaption>
               </figure>
             ))}
@@ -113,6 +135,14 @@ export default function Creations() {
           })}
         </div>
       )}
+      <Confirmation
+        ouvert={aSupprimer !== null}
+        titre={aSupprimer?.type === 'video' ? 'Supprimer cette vidéo ?' : 'Supprimer ce visuel ?'}
+        message="Le fichier est effacé définitivement : il disparaît de Contenus et des conversations où il apparaît. Pensez à le télécharger avant si vous voulez le garder."
+        confirmer={{ label: 'Supprimer', danger: true, onClick: supprimer }}
+        annuler={{ onClick: () => setASupprimer(null) }}
+        enCours={suppression}
+      />
     </>
   );
 }
