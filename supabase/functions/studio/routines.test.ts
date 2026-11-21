@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bilanPassages, chaine, consigneDe, consigneProposition, consigneModele, enClair, erreurReglages, etapesEnregistrees, historique, MODELES, modeleDe,
-  modelesPour, normaliserEtapes, reglagesDe, resume, validerProposition, type Passage,
+  modelesPour, normaliserEtapes, propositionsDuTexte, reglagesDe, resume, validerProposition, type Passage,
 } from "./routines.ts";
 
 const prenoms = new Map([["theo", "Théo"], ["lea", "Léa"], ["sam", "Sam"], ["hugo", "Hugo"], ["ines", "Inès"], ["nora", "Nora"], ["mael", "Maël"]]);
@@ -130,6 +130,17 @@ describe("routines — historique", () => {
     expect(resume("## Bilan\n**2 factures** en retard trouvées cette semaine. Détail : …")).toBe("Bilan 2 factures en retard trouvées cette semaine.");
     expect(resume("")).toBe("");
     expect(resume("x".repeat(400)).length).toBeLessThanOrEqual(160);
+  });
+  it("part du bilan quand des messages d'avancement le précèdent", () => {
+    const cr = "Je commence par relire les deux méthodes, puis je lance la veille.\n\nVeille lue.\n\n## Compte rendu — essai\n\n**Veille :** 3 news retenues sur 48 h, chacune lue en entier. Écarté : le reste.";
+    expect(resume(cr)).toBe("Veille : 3 news retenues sur 48 h, chacune lue en entier.");
+  });
+  it("un essai qui n'a décrit ses propositions que dans le texte les compte", () => {
+    const cr = "Je lance la veille.\n\n## Bilan\n\nLes 12 textes sont acceptés sans reprise.\n\n### Ce que j'aurais proposé (rien n'est envoyé)\n1. **Un document** rangé dans Marketing.\n2. **9 publications** programmées.\n3. **Les 3 visuels**.\n\nÀ trancher : les photos.";
+    expect(propositionsDuTexte(cr)).toBe(3);
+    expect(propositionsDuTexte("Rien de neuf.")).toBe(0);
+    const h = historique([p("2026-11-21T12:20:00+04:00", { essai: true, propositions: [], compte_rendu: cr })]);
+    expect(h[0].texte).toBe("Essai : 3 propositions décrites dans le compte rendu, rien n'a été envoyé. Les 12 textes sont acceptés sans reprise.");
   });
 });
 

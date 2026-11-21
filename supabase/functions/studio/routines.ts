@@ -579,7 +579,13 @@ const heure = (iso: string) => new Date(iso).toLocaleTimeString("fr-FR", { timeZ
 
 /** Première phrase utile d'un compte rendu, sans Markdown, 160 caractères au plus. */
 export function resume(texte: string | null | undefined): string {
-  const t = String(texte ?? "").replace(/```[\s\S]*?```/g, " ").replace(/[#*_`>|]/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+  let brut = String(texte ?? "");
+  // Messages d'avancement (« Je commence par… ») puis un bilan titré : le résumé part du bilan.
+  const bilan = /^#{1,3}\s.*(?:compte[ -]rendu|bilan|r[ée]sum[ée]|synth[èe]se).*$/im.exec(brut);
+  if (bilan && bilan.index > 0 && brut.slice(0, bilan.index).trim()) {
+    brut = brut.slice(bilan.index).split("\n").filter((l) => !/^#{1,6}\s/.test(l)).join("\n");
+  }
+  const t = brut.replace(/```[\s\S]*?```/g, " ").replace(/[#*_`>|]/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .split("\n").map((l) => l.replace(/^\s*(?:[-•]|\d+[.)])\s+/, "").trim()).filter((l) => l.length > 3).join(" ").replace(/\s+/g, " ").trim();
   if (!t) return "";
   const phrase = /^(.{20,}?[.!?])(\s|$)/.exec(t)?.[1] ?? t;
@@ -587,13 +593,31 @@ export function resume(texte: string | null | undefined): string {
 }
 
 const nbPropositions = (p: Passage) => (Array.isArray(p.propositions) ? p.propositions.length : 0);
+
+/** Propositions d'un essai écrites seulement dans le compte rendu : la liste qui suit « Ce que j'aurais proposé ». */
+export function propositionsDuTexte(texte: string | null | undefined): number {
+  const lignes = String(texte ?? "").split("\n");
+  const debut = lignes.findIndex((l) => /aurai[st]?\s+(?:propos|fait|d[ée]pos)/i.test(l));
+  if (debut < 0) return 0;
+  let n = 0;
+  for (const l of lignes.slice(debut + 1)) {
+    if (/^\s*(?:\d+[.)]|[-•*])\s+\S/.test(l)) { n++; continue; }
+    if (!l.trim() || /^\s{2,}\S/.test(l)) continue;
+    if (n) break;
+  }
+  return n;
+}
 const plusieurs = (k: number, un: string, pl: string) => `${k} ${k > 1 ? pl : un}`;
 
 function phraseReussite(p: Passage): string {
   const r = resume(p.compte_rendu);
   if (p.essai) {
     const k = nbPropositions(p);
-    return [k ? `Essai : ${plusieurs(k, "proposition préparée", "propositions préparées")}, rien n'a été envoyé.` : "Essai : rien à proposer ce jour-là.", r].filter(Boolean).join(" ");
+    const decrites = k ? 0 : propositionsDuTexte(p.compte_rendu);
+    const tete = k ? `Essai : ${plusieurs(k, "proposition préparée", "propositions préparées")}, rien n'a été envoyé.`
+      : decrites ? `Essai : ${plusieurs(decrites, "proposition décrite", "propositions décrites")} dans le compte rendu, rien n'a été envoyé.`
+      : "Essai : rien à proposer ce jour-là.";
+    return [tete, r].filter(Boolean).join(" ");
   }
   const k = p.nb_livrables ?? 0;
   return [k ? `${plusieurs(k, "proposition déposée", "propositions déposées")} dans « Aujourd'hui ».` : "Rien à valider.", r].filter(Boolean).join(" ");
