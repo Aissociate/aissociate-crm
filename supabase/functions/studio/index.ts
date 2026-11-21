@@ -22,6 +22,7 @@
 // Public : invitation_ouvrir {jeton}                → lien Zernio pour l'espace de l'invitation
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
+//   fichier_deposer {jeton, index, total, morceau(base64), nom, type?} → fichier gardé tel quel dans « Mes ressources » (fichiers.ts)
 //   ressource_toggle {id, actif, confirmer? (requis pour activer une ressource sensible)} | ressource_delete {id}
 //   (ressource_add range désactivés RIB / IBAN, pièces d'identité et bulletins de paie : sensible.ts)
 //   contexte_update {contexte_entreprise}          (propriétaire)
@@ -75,7 +76,7 @@ import {
 import { lancerMedia, quotaMediaAtteint, statutMedia, urlSignee } from "./medias.ts";
 import {
   construirePrompt, selectionnerRessources, HARNESS_PERIMETRE_DEFAUT, HARNESS_REGLES_DEFAUT,
-  BUDGET_SAVOIRS, type AgentPrompt, type Champ, type Creation, type EnteteEntreprise, type Harness, type Savoir, type SuperPouvoir,
+  BUDGET_SAVOIRS, type AgentPrompt, type Creation, type EnteteEntreprise, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
 import * as veille from "./veille.ts";
@@ -126,6 +127,8 @@ import { etatsAgents, soumettreMission } from "./livrables.ts";
 import * as recharges from "./recharges.ts";
 import * as equipe from "./equipe.ts";
 import * as consignes from "./consignes.ts";
+import * as pouvoirs from "./pouvoirs.ts";
+import * as fichiers from "./fichiers.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
 import {
@@ -1006,24 +1009,9 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   if (pouvoir?.id) {
     const sp = (agent.super_pouvoirs ?? []).find((p) => p.id === pouvoir.id);
     if (!sp) return json({ error: "Super-pouvoir inconnu" }, 400);
-    const v = pouvoir.valeurs ?? {};
-    const val = (c: Champ) => {
-      const x = String(v[c.nom] ?? "").trim().slice(0, c.type === "long" ? 12000 : 500);
-      return c.type === "choix" && c.options?.length && !c.options.includes(x) ? "" : x;
-    };
-    const manquant = sp.champs.find((c) => c.requis && !val(c));
-    if (manquant) return json({ error: `Champ requis : ${manquant.label}` }, 400);
-    question = sp.gabarit.replace(/\{\{(\w+)\}\}/g, (_m, nom: string) => {
-      const c = sp.champs.find((x) => x.nom === nom);
-      return (c && val(c)) || "(non précisé)";
-    });
-    affichage = `**${sp.titre}**\n` + sp.champs.filter((c) => val(c))
-      .map((c) => `- ${c.label} : ${val(c).length > 300 ? val(c).slice(0, 300) + "…" : val(c)}`).join("\n");
-    titreConv = `${sp.titre} — ${val(sp.champs[0]) || ""}`.slice(0, 80);
-    if (sp.media === "image" || sp.media === "video") {
-      const champ = (nom: string) => { const c = sp.champs.find((x) => x.nom === nom); return c ? val(c) : undefined; };
-      media = { type: sp.media, format: champ("format"), duree: champ("duree") };
-    }
+    const rendu = pouvoirs.rendrePouvoir(sp, pouvoir.valeurs ?? {});
+    if ("manquant" in rendu) return json({ error: `Champ requis : ${rendu.manquant.label}` }, 400);
+    ({ question, affichage, titre: titreConv, media } = rendu);
   } else {
     question = String(body.message ?? "").trim().slice(0, 8000);
     if (!question && !pieces.length) return json({ error: "Message vide" }, 400);
@@ -1160,7 +1148,17 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     conversationId: conversationId as string, apiKey, essai: carnetEssai,
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, prenom: a.prenom, metier: a.metier }));
+  // Les super-pouvoirs des collègues (sans leur gabarit) : Léa peut les activer en confiant une mission.
+  const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({
+    id: a.id, prenom: a.prenom, metier: a.metier,
+    pouvoirs: (a.super_pouvoirs ?? []).map(({ id, titre, media, champs }) => ({ id, titre, media, champs })),
+  }));
+  // Super-pouvoirs média (visuel, vidéo) : l'agent les lance lui-même avec l'outil creer_media.
+  const sesMedias = pouvoirs.pouvoirsMedia(agent.super_pouvoirs);
+  if (outils && sesMedias.length) {
+    outils.definitions.push(pouvoirs.definitionMedia(sesMedias));
+    outils.consigne += `\n\n${pouvoirs.consigneMedia(sesMedias)}`;
+  }
   // Léa orchestre : elle confie des missions aux spécialistes (qui travaillent avec leurs outils),
   // relit, renvoie pour correction, puis répond. Un spécialiste joint directement garde la
   // consultation simple d'un collègue (consulter_collegue).
@@ -1218,6 +1216,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
       let answer = "";
       let usage: Usage | null = null;
       const aides: string[] = [];
+      const mediasProduits: { id: string; type: "image" | "video" }[] = [];
       try {
         emit("meta", {
           conversation_id: conversationId,
@@ -1235,6 +1234,46 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
         let total: Usage = usageVision ?? {};
         let usageVu = Boolean(usageVision);
         let nbConsultations = 0;
+        // ── Visuels et vidéos lancés par un agent (outil creer_media, ou mission de Léa) ──
+        const creerMedia = async (qui: AgentPrompt, argsJson: string): Promise<{ resultat: string; libelle: string }> => {
+          let a: Record<string, unknown> = {};
+          try { a = JSON.parse(argsJson || "{}"); } catch { /* arguments illisibles */ }
+          const sp = pouvoirs.pouvoirsMedia(qui.super_pouvoirs).find((p) => p.id === String(a.pouvoir ?? ""));
+          if (!sp) return { resultat: "Super-pouvoir média inconnu.", libelle: "Média non créé" };
+          if (mediasProduits.length >= pouvoirs.MAX_MEDIAS) return { resultat: `Limite de ${pouvoirs.MAX_MEDIAS} médias par demande atteinte.`, libelle: "Limite de médias atteinte" };
+          if (carnetEssai) return { resultat: `Mode essai : aucun ${sp.media === "video" ? "vidéo" : "visuel"} n'est créé. Indique ce que tu aurais créé.`, libelle: "Essai : média non créé" };
+          const valeurs = (a.valeurs && typeof a.valeurs === "object" ? a.valeurs : {}) as Record<string, unknown>;
+          const rendu = pouvoirs.rendrePouvoir(sp, valeurs);
+          if ("manquant" in rendu) return { resultat: `Champ requis manquant : ${rendu.manquant.nom} (${rendu.manquant.label}).`, libelle: "Média non créé" };
+          const type = rendu.media?.type ?? "image";
+          const nom = type === "image" ? "visuel" : "vidéo";
+          const quotaMedia = await quotaMediaAtteint(sb, s.ws, type);
+          if (quotaMedia === 0) return { resultat: `${type === "image" ? "Les visuels ne sont pas inclus" : "La vidéo n'est pas incluse"} dans la formule du client : dis-le-lui (il peut contacter Aissociate).`, libelle: `${nom[0].toUpperCase()}${nom.slice(1)} non inclus dans la formule` };
+          if (quotaMedia !== null) {
+            const refusCredits = await recharges.couvrable(sb, s.ws.id, type, quotaMedia);
+            if (refusCredits) return { resultat: `Quota atteint, ${nom} non créé : ${refusCredits}`, libelle: `Quota de ${nom}s atteint` };
+          }
+          const lance = await lancerMedia(sb, apiKey, {
+            wsId: s.ws.id, userId: s.user.id, agentId: qui.id, conversationId: conversationId as string,
+            type, prompt: rendu.question, format: rendu.media?.format, duree: rendu.media?.duree,
+          });
+          if ("erreur" in lance) return { resultat: `Création impossible : ${lance.erreur}`, libelle: `${nom[0].toUpperCase()}${nom.slice(1)} non créé` };
+          if (quotaMedia !== null) {
+            await recharges.puiser(sb, s.ws.id, type, acteurDe(s), lance.id);
+            const { data: etatMedia } = await sb.from("studio_medias").select("statut").eq("id", lance.id).maybeSingle();
+            if (etatMedia?.statut === "echec") await recharges.rembourserMedia(sb, lance.id);
+          }
+          mediasProduits.push({ id: lance.id, type });
+          emit("media", { id: lance.id, type, statut: "en_cours" });
+          await journaliser(sb, {
+            wsId: s.ws.id, acteur: acteurDe(s), agentId: qui.id, action: "media",
+            detail: { type, media: lance.id, conversation: conversationId, titre: rendu.titre, par_agent: true },
+          });
+          return {
+            resultat: `${type === "image" ? "Visuel" : "Vidéo"} lancé (${sp.titre}), référence ${pouvoirs.referenceMedia(lance.id)} : il s'affiche au client sous la réponse et rejoint « Mes contenus »${type === "video" ? " (quelques minutes de tournage)" : ""}. Pour le publier avec un post, donne cette référence dans medias de reseaux_proposer_publication. Description utilisée : ${rendu.question.slice(0, 400)}`,
+            libelle: `${type === "image" ? "Création du visuel" : "Tournage de la vidéo"} lancée`,
+          };
+        };
         /** consulter_collegue : le collègue répond sans outils (il ne peut pas consulter à son tour). */
         const consulter = async (argsJson: string): Promise<{ resultat: string; libelle: string }> => {
           let a: Record<string, unknown> = {};
@@ -1281,13 +1320,32 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           let a: Record<string, unknown> = {};
           try { a = JSON.parse(argsJson || "{}"); } catch { /* arguments illisibles */ }
           const collegue = agents.find((x) => x.id === String(a.agent_id ?? "") && x.id !== agent.id);
-          const consigne = String(a.consigne ?? "").trim().slice(0, 12_000);
-          if (!collegue || !consigne) return { resultat: "Spécialiste inconnu ou consigne vide.", libelle: "Mission impossible" };
+          let consigne = String(a.consigne ?? "").trim().slice(0, 12_000);
+          // Super-pouvoir du spécialiste activé par Léa : sa consigne détaillée (gabarit) cadre la mission.
+          const sp = collegue && a.pouvoir ? (collegue.super_pouvoirs ?? []).find((p) => p.id === String(a.pouvoir)) : undefined;
+          if (collegue && a.pouvoir && !sp) return { resultat: `${collegue.prenom} n'a pas de super-pouvoir « ${String(a.pouvoir)} ».`, libelle: "Super-pouvoir inconnu" };
+          if (!collegue || (!consigne && !sp)) return { resultat: "Spécialiste inconnu ou consigne vide.", libelle: "Mission impossible" };
           const refus = equipe.refusMission(nbMissions, fils.get(collegue.id)?.appels ?? 0);
           if (refus) return { resultat: refus, libelle: "Limite d'allers-retours atteinte" };
+          const valeurs = sp ? equipe.valeursMission(sp, a.valeurs, consigne) : {};
+          if (sp?.media) {
+            // Visuel ou vidéo : lancé directement au nom du spécialiste, sans tour de rédaction.
+            nbMissions++;
+            emit("outil", { libelle: `${collegue.prenom} (${collegue.metier}) travaille…` });
+            const r = await creerMedia(collegue, JSON.stringify({ pouvoir: sp.id, valeurs }));
+            if (mediasProduits.length && r.libelle.endsWith("lancée")) aides.push(`${collegue.prenom} (${collegue.metier})`);
+            return { resultat: r.resultat, libelle: `${collegue.prenom} : ${r.libelle}` };
+          }
+          if (sp) {
+            const rendu = pouvoirs.rendrePouvoir(sp, valeurs);
+            if ("manquant" in rendu) return { resultat: `Super-pouvoir « ${sp.titre} » : champ requis manquant (${rendu.manquant.nom}).`, libelle: "Mission impossible" };
+            consigne = `${rendu.question}${consigne ? `\n\nPrécisions de ${agent.prenom} :\n${consigne}` : ""}`;
+          }
           nbMissions++;
           let fil = fils.get(collegue.id);
           const reprise = Boolean(fil);
+          // Première mission : les pièces jointes du client lui sont transmises telles quelles.
+          if (!reprise && pieces.length) consigne += `\n\nDocuments joints par le client :${textePieces(pieces, 60_000)}`;
           emit("outil", { libelle: reprise ? `${collegue.prenom} reprend son travail…` : `${collegue.prenom} (${collegue.metier}) travaille…` });
           if (!fil) {
             // Le spécialiste a ses propres outils : ce qu'il prépare (notes, brouillons) lui est attribué.
@@ -1297,6 +1355,11 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               // Ses propositions portent la trace de l'agent qui lui a confié la mission (studio_livrables.confie_par).
               confiePar: agent.id, essai: carnetEssai,
             }).catch(() => null);
+            const sesMediasC = pouvoirs.pouvoirsMedia(collegue.super_pouvoirs);
+            if (sesOutils && sesMediasC.length) {
+              sesOutils.definitions.push(pouvoirs.definitionMedia(sesMediasC));
+              sesOutils.consigne += `\n\n${pouvoirs.consigneMedia(sesMediasC)}`;
+            }
             const sys = construirePrompt({
               agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
               savoirs: await chargerSavoirs(sb, collegue.id, consigne),
@@ -1359,10 +1422,12 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             }
             fil.messages.push({ role: "assistant", content: contenu, tool_calls: appelsM });
             for (const ap of appelsM.slice(0, 5)) {
-              const res = await fil.outils.executer(ap.function.name, ap.function.arguments);
+              const res = ap.function.name === pouvoirs.NOM_OUTIL_MEDIA
+                ? await creerMedia(collegue, ap.function.arguments)
+                : await fil.outils.executer(ap.function.name, ap.function.arguments);
               emit("outil", { libelle: `${collegue.prenom} : ${res.libelle}` });
-              if (res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
-              if (res.document) emit("document", res.document);
+              if ("usage" in res && res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
+              if ("document" in res && res.document) emit("document", res.document);
               fil.messages.push({ role: "tool", tool_call_id: ap.id, content: res.resultat.slice(0, 20_000) });
             }
           }
@@ -1450,7 +1515,9 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               ? await confier(a.function.arguments)
               : a.function.name === equipe.NOM_OUTIL
                 ? await consulter(a.function.arguments)
-                : await outils.executer(a.function.name, a.function.arguments);
+                : a.function.name === pouvoirs.NOM_OUTIL_MEDIA && sesMedias.length
+                  ? await creerMedia(agent, a.function.arguments)
+                  : await outils.executer(a.function.name, a.function.arguments);
             emit("outil", { libelle: res.libelle });
             // Outil payant (recherche web) : son coût rejoint celui de la réponse.
             if ("usage" in res && res.usage) { total = cumulerUsage(total, res.usage); usageVu = true; }
@@ -1472,6 +1539,9 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           const ajout = `${answer.endsWith("\n\n") ? "" : "\n\n"}${mention}`;
           answer += ajout; emit("delta", { text: ajout });
         }
+        // Visuels et vidéos lancés pendant la demande : ils restent affichés sous la réponse enregistrée.
+        const ajoutMedias = pouvoirs.ajoutMedias(answer, mediasProduits);
+        if (ajoutMedias) { answer += ajoutMedias; emit("delta", { text: ajoutMedias }); }
         const row = await insererReponse(sb, {
           conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant", content: answer,
         }, usage, model);
@@ -1502,7 +1572,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
             // Coût inconnu (flux coupé avant le fragment « usage ») : ces réponses comptent dans « sans coût ».
             await insererReponse(sb, {
               conversation_id: conversationId, workspace_id: s.ws.id, agent_id: agent.id, role: "assistant",
-              content: `${answer}\n\n_(réponse interrompue)_`,
+              content: `${answer}\n\n_(réponse interrompue)_${pouvoirs.ajoutMedias(answer, mediasProduits)}`,
             }, null, model);
           }
         } else {
@@ -2228,7 +2298,9 @@ Deno.serve(async (req: Request) => {
         const { data } = await sb.from("studio_documents").select("id, titre, type, format, contenu, actif")
           .eq("id", String(body.id)).eq("workspace_id", s.ws.id).maybeSingle();
         if (!data) return json({ error: "Ressource introuvable" }, 404);
-        return json({ ressource: data });
+        // Fichier transmis tel quel : lien de téléchargement temporaire.
+        const f = fichiers.fichierStocke(data.contenu, String(data.titre));
+        return json({ ressource: { ...data, lien: f ? await urlSignee(sb, f.chemin) : null } });
       }
 
       case "ressource_add": {
@@ -2322,8 +2394,60 @@ Deno.serve(async (req: Request) => {
       }
 
       case "ressource_delete": {
+        const { data: d } = await sb.from("studio_documents").select("titre, contenu").eq("id", String(body.id)).eq("workspace_id", s.ws.id).maybeSingle();
         await sb.from("studio_documents").delete().eq("id", String(body.id)).eq("workspace_id", s.ws.id);
+        // Fichier transmis tel quel : il quitte aussi le stockage.
+        const f = d ? fichiers.fichierStocke(d.contenu, String(d.titre)) : null;
+        if (f?.chemin.startsWith(`${s.ws.id}/`)) await sb.storage.from("studio-medias").remove([f.chemin]).catch(() => undefined);
         return json({ ok: true });
+      }
+
+      // Fichier joint au chat que le navigateur ne lit pas : gardé tel quel (fichiers.ts), rangé dans « Mes ressources ».
+      case "fichier_deposer": {
+        // Envoyé en morceaux (fichiers.MORCEAU) : les premiers sont mis de côté, le dernier recolle le tout.
+        const nom = String(body.nom ?? "").trim().slice(0, 200) || "fichier";
+        let morceau: Uint8Array;
+        try { morceau = Uint8Array.from(atob(String(body.morceau ?? "")), (c) => c.charCodeAt(0)); }
+        catch { return json({ error: "Fichier illisible." }, 400); }
+        const refusMorceau = fichiers.controleMorceau({ jeton: body.jeton, index: body.index, total: body.total, taille: morceau.length });
+        if (refusMorceau) return json({ error: refusMorceau }, 400);
+        const jeton = String(body.jeton), index = Number(body.index), total = Number(body.total);
+        const stock = sb.storage.from("studio-medias");
+        if (index < total - 1) {
+          const { error: e } = await stock.upload(fichiers.cheminMorceau(s.ws.id, jeton, index), morceau, { contentType: "application/octet-stream", upsert: true });
+          return e ? json({ error: `Stockage : ${e.message}` }, 500) : json({ ok: true, recu: index + 1 });
+        }
+        const parties: Uint8Array[] = [];
+        for (let i = 0; i < total - 1; i++) {
+          const { data: blob } = await stock.download(fichiers.cheminMorceau(s.ws.id, jeton, i));
+          if (!blob) return json({ error: "Envoi incomplet : renvoyez le fichier." }, 400);
+          parties.push(new Uint8Array(await blob.arrayBuffer()));
+        }
+        parties.push(morceau);
+        const octets = new Uint8Array(parties.reduce((n, p) => n + p.length, 0));
+        parties.reduce((pos, p) => { octets.set(p, pos); return pos + p.length; }, 0);
+        if (total > 1) await stock.remove(Array.from({ length: total - 1 }, (_, i) => fichiers.cheminMorceau(s.ws.id, jeton, i))).catch(() => undefined);
+        if (octets.length > fichiers.TAILLE_MAX) return json({ error: `« ${nom} » dépasse ${fichiers.tailleLisible(fichiers.TAILLE_MAX)}.` }, 400);
+        const mime = fichiers.mimeDe(nom, body.type as string);
+        const chemin = fichiers.cheminFichier(s.ws.id, crypto.randomUUID(), nom);
+        const { error: eStock } = await sb.storage.from("studio-medias").upload(chemin, octets, { contentType: mime, upsert: false });
+        if (eStock) return json({ error: `Stockage : ${eStock.message}` }, 500);
+        // Titre unique dans l'espace : c'est par lui que les agents désignent le fichier.
+        const { data: memes } = await sb.from("studio_documents").select("titre").eq("workspace_id", s.ws.id).like("titre", `${nom.replace(/[%_\\]/g, "")}%`).limit(50);
+        const pris = new Set((memes ?? []).map((x) => String(x.titre)));
+        let titre = nom;
+        for (let i = 2; pris.has(titre); i++) titre = nom.replace(/(\.[^.]+)?$/, ` (${i})$1`);
+        const dossierAjout = (await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id)) || null;
+        const { data, error } = await sb.from("studio_documents").insert({
+          workspace_id: s.ws.id, titre, type: "fichier", format: (nom.split(".").pop() ?? "").slice(0, 10) || null, taille: octets.length,
+          contenu: fichiers.contenuFichier({ nom: titre, chemin, mime, taille: octets.length }), created_by: s.user.id, dossier_id: dossierAjout,
+        }).select("id").single();
+        if (error || !data) {
+          await sb.storage.from("studio-medias").remove([chemin]).catch(() => undefined);
+          return json({ error: error?.message ?? "Enregistrement impossible" }, 400);
+        }
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "fichier_depose", detail: { titre, taille: octets.length, mime } });
+        return json({ ok: true, id: data.id, titre, piece: fichiers.textePiece(titre, octets.length, mime) });
       }
 
       case "rapport":

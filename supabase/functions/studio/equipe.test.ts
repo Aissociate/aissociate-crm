@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   consigne, consigneMission, definition, definitionMission, estOrchestrateur, MAX_MISSIONS, MAX_PAR_COLLEGUE, mentionAide,
   nbFactures, nettoyer, NOM_MISSION, NOM_OUTIL, ORCHESTRATEUR, perimetreOrchestrateur, PLAFOND_MISSION, refusMission,
-  relancerSansRaisonnement,
+  relancerSansRaisonnement, valeursMission,
 } from './equipe';
 
 const C = [{ id: 'seo', prenom: 'Léa', metier: 'Référencement' }, { id: 'compta', prenom: 'Marc', metier: 'Comptabilité' }];
@@ -57,5 +57,32 @@ describe('orchestration par Léa', () => {
     const c = consigneMission({ prenom: 'Léa' });
     expect(c).toContain('Mission confiée par Léa');
     expect(c).toContain('Points à confirmer');
+  });
+});
+
+describe('Léa active les super-pouvoirs des spécialistes', () => {
+  const VISUEL = {
+    id: 'visuel_ia', titre: 'Créer un visuel', media: 'image' as const,
+    champs: [
+      { nom: 'sujet', label: 'Sujet', type: 'long' as const, requis: true },
+      { nom: 'format', label: 'Format', type: 'choix' as const, requis: true, options: ['1:1', '4:5'] },
+      { nom: 'style', label: 'Style', type: 'choix' as const, options: ['Photo réaliste'] },
+    ],
+  };
+  it('propose pouvoir et valeurs, la consigne seule n\'étant plus requise', () => {
+    const p = definitionMission(C).function.parameters as { properties: Record<string, unknown>; required: string[] };
+    expect(Object.keys(p.properties)).toEqual(expect.arrayContaining(['pouvoir', 'valeurs']));
+    expect(p.required).toEqual(['agent_id']);
+  });
+  it('liste les super-pouvoirs de chaque spécialiste dans son rôle', () => {
+    const t = perimetreOrchestrateur([{ id: 'hugo', prenom: 'Hugo', metier: 'Marketing', pouvoirs: [VISUEL] }]);
+    expect(t).toContain('Super-pouvoirs : visuel_ia (Créer un visuel, visuel créé directement');
+    expect(t).toContain('active-le avec confier_mission');
+  });
+  it('complète les champs requis : la consigne pour le texte, la première option pour un choix', () => {
+    expect(valeursMission(VISUEL, { style: 'Photo réaliste' }, 'Une boulangerie au lever du jour'))
+      .toEqual({ style: 'Photo réaliste', sujet: 'Une boulangerie au lever du jour', format: '1:1' });
+    expect(valeursMission(VISUEL, { sujet: 'Vitrine', format: '4:5' }, 'ignorée')).toEqual({ sujet: 'Vitrine', format: '4:5' });
+    expect(valeursMission(VISUEL, 'pas un objet', '')).toEqual({ format: '1:1' });
   });
 });

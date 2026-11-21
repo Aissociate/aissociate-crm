@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import MediaVue from '../MediaVue';
+import { mediasDuMessage } from '../marqueursMedia';
 import { Link } from 'react-router-dom';
 import { Check, Copy, Download, PinOff, Pin } from 'lucide-react';
 import { useStudio } from '../StudioApp';
@@ -93,7 +95,7 @@ export default function Creations() {
                   <Link to={`/studio/assistants/${c.agent_id}?c=${c.conversation_id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{c.titre}</Link>
                   <span className="text-xs text-neutral-400">{new Date(c.created_at).toLocaleDateString('fr-FR')}</span>
                 </header>
-                <div className="flex-1 overflow-y-auto px-4 py-3"><Markdown texte={c.content} /></div>
+                <div className="flex-1 overflow-y-auto px-4 py-3"><Markdown texte={c.content} />{mediasDuMessage(c.content).map((m) => <div key={m.id} className="mt-3"><MediaVue media={m} /></div>)}</div>
                 <footer className="flex gap-1 border-t border-neutral-100 px-2 py-1.5 text-neutral-500">
                   <button className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-neutral-100"
                     onClick={async () => { try { await navigator.clipboard.writeText(c.content); setCopie(c.id); setTimeout(() => setCopie(null), 1500); } catch { /* refusé */ } }}>
