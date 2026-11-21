@@ -26,7 +26,8 @@ export type Ressource = { titre: string; extrait: string };
 /** Document de la base de connaissances d'un agent (commune à tous les clients). */
 export type Savoir = Ressource & { source?: string | null };
 export type Creation = { titre: string; contenu: string; date: string; agent?: string };
-export type ConnecteurActif = { type: string; libelle: string; detail?: string };
+/** `cle` : clé du connecteur au sens des accès par agent (acces.ts). */
+export type ConnecteurActif = { type: string; libelle: string; detail?: string; cle?: string };
 export type Harness = { regles?: string | null; perimetre?: string | null };
 /** Proposition de l'agent refusée par le propriétaire (raison choisie en un clic, commentaire facultatif). */
 export type Refus = { titre: string; raison: string; commentaire?: string | null; date: string };
