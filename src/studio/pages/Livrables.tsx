@@ -49,6 +49,7 @@ const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   app_youtube_video: { avant: 'Vidéo mise en ligne sur votre chaîne YouTube au « VALIDÉ »', fait: 'Vidéo envoyée à YouTube.', lien: 'Voir la vidéo' },
   app_message: { avant: 'Message WhatsApp envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
   agenda_creer: { avant: 'Création dans votre agenda (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
+  routine_creer: { avant: 'Routine créée au « VALIDÉ », en mode essai pendant 7 jours (rien n\'est envoyé)', fait: 'Routine créée en mode essai : retrouvez-la dans « Routines ».', lien: 'Voir' },
 };
 
 const STATUTS: Record<Livrable['statut'], { label: string; style: string }> = {

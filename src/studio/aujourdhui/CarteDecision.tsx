@@ -93,7 +93,9 @@ export function CarteDecision({ d, decisions, ctx }: { d: Decision; decisions: D
               <button type="button" className={CL_PRINCIPAL} onClick={() => decisions.valider(d)}>
                 <Check className="h-[18px] w-[18px]" aria-hidden /> {p.bouton}
               </button>
-              <button type="button" className={CL_SECONDAIRE} onClick={() => (d.format === 'html' ? ctx.onDocument(d) : setEdition(true))}>Modifier</button>
+              {p.modifiable !== false && (
+                <button type="button" className={CL_SECONDAIRE} onClick={() => (d.format === 'html' ? ctx.onDocument(d) : setEdition(true))}>Modifier</button>
+              )}
               <button type="button" className={CL_LIEN} onClick={() => decisions.demanderRaison(d.id)}>Refuser</button>
             </div>
           ) : (

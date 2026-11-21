@@ -58,6 +58,9 @@ active ou désactive, et des demandes prêtes à l'emploi.
 - **Écrans** : `pages/Routines.tsx` (cartes), `pages/Routine.tsx` (`/studio/routines/:id` : chaîne, panneau de
   réglage par étape, « La dernière fois », historique), `pages/NouvelleRoutine.tsx` (`/studio/routines/nouvelle` :
   demande écrite ou dictée à Léa via `routine_proposer`, ou galerie `routine_modeles`, puis `routine_creer`).
+- **Depuis le chat** (`functions/studio/routine_outil.ts`) : Léa seule a l'outil `routine_proposer` ; sa
+  proposition (mêmes contrôles que `validerProposition`) devient une décision `routine_creer` dans « Aujourd'hui »,
+  sans bouton « Modifier ». Au « VALIDÉ », la routine est créée en mode essai, comme depuis la page.
 - **Mode essai** : 7 jours à la création. Les livrables sont notés dans un carnet (`Ctx.essai`, `outils.ts`) sans
   rien envoyer ni écrire. À la fin, une décision « Mettre en route » (`routine_activer`) arrive dans
   « Aujourd'hui » ; la routine reste à l'essai tant qu'elle n'est pas validée. « Essayer sur un vrai cas » lance un

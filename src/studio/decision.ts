@@ -11,6 +11,8 @@ export type Presentation = {
   bouton: string;
   /** Phrase de confirmation une fois l'action partie. */
   fait: string;
+  /** false : pas de bouton « Modifier » (une routine se règle dans « Routines »). */
+  modifiable?: boolean;
 };
 
 const s = (n: number) => (n > 1 ? 's' : '');
@@ -89,7 +91,9 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
     case 'app_crm_note':
       return { portee: 'Votre CRM', bouton: 'Ajouter la note', fait: 'Note ajoutée dans votre CRM.' };
     case 'routine_activer':
-      return { portee: 'Votre routine', bouton: 'Mettre en route', fait: 'Routine en route : ses envois attendront toujours votre feu vert.' };
+      return { portee: 'Votre routine', bouton: 'Mettre en route', fait: 'Routine en route : ses envois attendront toujours votre feu vert.', modifiable: false };
+    case 'routine_creer':
+      return { portee: 'Nouvelle routine, en essai 7 jours', bouton: "Créer la routine à l'essai", fait: 'Routine créée en mode essai : retrouvez-la dans « Routines ».', modifiable: false };
     default:
       // Livrable sans action : un texte ou un document à relire, rien ne part de lui-même.
       return l.type_action
