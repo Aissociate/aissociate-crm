@@ -9,12 +9,12 @@ import * as bureau from "./bureau.ts";
 import * as zernio from "./zernio.ts";
 import { APPLICATIONS, estApplication } from "./applications.ts";
 
-export const TYPES = ["google", "microsoft", "facebook", "instagram", "tiktok", "linkedin", "imap", "mcp", "app"] as const;
+export const TYPES = ["google", "microsoft", "facebook", "instagram", "tiktok", "linkedin", "imap", "mcp", "api", "app"] as const;
 export const INCLUS_DEFAUT = ["google", "microsoft", "facebook", "instagram", "tiktok", "linkedin"];
 export const PRIX_DEFAUT = 9.99;
 const NOMS: Record<string, string> = {
   google: "Google Workspace", microsoft: "Outlook / Microsoft 365", facebook: "Facebook", instagram: "Instagram",
-  tiktok: "TikTok", linkedin: "LinkedIn", imap: "Autre messagerie", mcp: "Serveur MCP", app: "Application",
+  tiktok: "TikTok", linkedin: "LinkedIn", imap: "Autre messagerie", mcp: "Serveur MCP", api: "API", app: "Application",
 };
 
 export type Tarif = { prix: number; inclus: string[] };
@@ -41,6 +41,8 @@ export function typeManuel(type: string): string | null {
   if (type.startsWith("app:")) return "app";
   // Un serveur MCP par connecteur « mcp:<nom> » : chacun compte comme un connecteur MCP.
   if (type.startsWith("mcp:")) return "mcp";
+  // Pareil pour les API (« api:<nom> »).
+  if (type.startsWith("api:")) return "api";
   return (TYPES as readonly string[]).includes(type) ? type : null;
 }
 
@@ -66,7 +68,7 @@ export function actifsDepuis(comptes: Record<string, unknown>[], manuels: { type
   const zernioTypes = new Set(actifs.map((a) => a.type));
   for (const m of manuels) {
     const t = typeManuel(m.type);
-    if (!t || (t !== "app" && t !== "mcp" && t !== "imap" && zernioTypes.has(t))) continue;
+    if (!t || (t !== "app" && t !== "mcp" && t !== "api" && t !== "imap" && zernioTypes.has(t))) continue;
     const infos = (m.infos ?? {}) as Record<string, unknown>;
     const detail = String(infos.adresse || infos.expediteur || infos.nom || infos.libelle || infos.page || infos.compte || (t === "app" ? m.type.slice(4) : ""));
     actifs.push({ type: t, libelle: NOMS[t], detail });

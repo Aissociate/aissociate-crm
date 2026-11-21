@@ -13,6 +13,7 @@ import * as zernio from "./zernio.ts";
 import { APPLICATIONS, estApplication } from "./applications.ts";
 import { APPS_OUTILLEES } from "./applications_outils.ts";
 import { estTypeMcp, SERVEURS_MAX, slug, urlAutorisee } from "./mcp_client.ts";
+import { API_MAX, AUTHS, DOC_MAX, estTypeApi } from "./api_client.ts";
 
 type Def = {
   libelle: string;
@@ -52,6 +53,15 @@ export const CONNECTEURS: Record<string, Def> = {
     secret: "jeton",
     detail: (i) => `${i.nom}${i.description ? ` : ${i.description}` : ""}`,
   },
+  api: {
+    libelle: "API",
+    champs: [
+      { nom: "nom", requis: true }, { nom: "url", requis: true, max: 500 }, { nom: "auth", requis: true, max: 20 },
+      { nom: "auth_nom", max: 80 }, { nom: "description" }, { nom: "documentation", max: DOC_MAX }, { nom: "openapi", max: 500 },
+    ],
+    secret: "cle",
+    detail: (i) => `${i.nom}${i.description ? ` : ${i.description}` : ""}`,
+  },
 };
 
 const DEMANDE_APP: Def = { libelle: "Application sur demande", champs: [{ nom: "libelle", max: 120 }, { nom: "besoin", max: 1000 }] };
@@ -61,7 +71,9 @@ const DEMANDE_APP: Def = { libelle: "Application sur demande", champs: [{ nom: "
  * (« mcp » seul reste valable pour les connexions enregistrées avant).
  */
 export function defDe(type: string): Def | undefined {
-  return estTypeMcp(type) ? CONNECTEURS.mcp : CONNECTEURS[type];
+  if (estTypeMcp(type)) return CONNECTEURS.mcp;
+  if (estTypeApi(type)) return CONNECTEURS.api;
+  return type === "api" ? undefined : CONNECTEURS[type];
 }
 
 /** Connecteurs au statut « connecte », pour le prompt des agents. */
@@ -109,6 +121,12 @@ export async function enregistrerConnecteur(
     if (!s) return { erreur: "Champ requis : nom" };
     type = `mcp:${s}`;
   }
+  // Nouvelle API : un connecteur par API (« api:pennylane »). Le type « api » seul n'existe pas.
+  if (type === "api") {
+    const s = slug(String((body.infos as Record<string, unknown> | undefined)?.nom ?? ""));
+    if (!s) return { erreur: "Champ requis : nom" };
+    type = `api:${s}`;
+  }
   // Autre application demandée à Aissociate : « app:<nom> ».
   const def = /^app:[a-z0-9][a-z0-9._-]{0,79}$/.test(type) ? DEMANDE_APP : defDe(type);
   if (!def) return { erreur: "Connecteur inconnu" };
@@ -127,6 +145,18 @@ export async function enregistrerConnecteur(
       .eq("workspace_id", wsId).or("type.eq.mcp,type.like.mcp:*").neq("type", type);
     if ((count ?? 0) >= SERVEURS_MAX) return { erreur: `${SERVEURS_MAX} serveurs MCP au plus par espace.` };
   }
+  if (estTypeApi(type)) {
+    if (!urlAutorisee(infos.url ?? "")) return { erreur: "L'adresse de l'API doit commencer par https:// et viser un serveur public." };
+    if (infos.openapi && !urlAutorisee(infos.openapi)) return { erreur: "L'adresse de la description OpenAPI doit commencer par https:// et viser un serveur public." };
+    if (!(AUTHS as readonly string[]).includes(infos.auth)) return { erreur: "Mode d'authentification inconnu." };
+    if ((infos.auth === "entete" || infos.auth === "parametre") && !/^[A-Za-z0-9_.-]{1,80}$/.test(infos.auth_nom ?? "")) {
+      return { erreur: infos.auth === "entete" ? "Indiquez le nom de l'en-tête (ex. X-API-Key)." : "Indiquez le nom du paramètre (ex. api_key)." };
+    }
+    if (infos.auth !== "entete" && infos.auth !== "parametre") delete infos.auth_nom;
+    const { count } = await sb.from("studio_connecteurs").select("id", { count: "exact", head: true })
+      .eq("workspace_id", wsId).like("type", "api:*").neq("type", type);
+    if ((count ?? 0) >= API_MAX) return { erreur: `${API_MAX} API au plus par espace.` };
+  }
 
   const ligne: Record<string, unknown> = {
     workspace_id: wsId, type, infos, demande_par: userId,
@@ -135,10 +165,10 @@ export async function enregistrerConnecteur(
   };
   const secret = def.secret ? String((body.secret ?? "")).slice(0, 2000) : "";
   if (secret) ligne.secret_chiffre = await chiffrer(secret);
-  else if (def.secret) {
+  else if (def.secret && !(estTypeApi(type) && infos.auth === "aucune")) {
     // Mise à jour sans ressaisie du secret : on garde l'ancien s'il existe.
     const { data: existant } = await sb.from("studio_connecteurs").select("secret_chiffre").eq("workspace_id", wsId).eq("type", type).maybeSingle();
-    if (!existant?.secret_chiffre) return { erreur: type === "smtp" ? "Mot de passe SMTP requis" : "Jeton requis" };
+    if (!existant?.secret_chiffre) return { erreur: type === "smtp" ? "Mot de passe SMTP requis" : estTypeApi(type) ? "Clé d'API requise" : "Jeton requis" };
   }
   const { error } = await sb.from("studio_connecteurs").upsert(ligne, { onConflict: "workspace_id,type" });
   if (error) return { erreur: error.message };

@@ -14,6 +14,7 @@ export const TYPES_CONNECTEURS: { type: string; libelle: string; court: string }
   { type: 'linkedin', libelle: 'LinkedIn', court: 'LinkedIn' },
   { type: 'imap', libelle: 'Autre messagerie (OVH, IONOS, Orange…)', court: 'autre messagerie' },
   { type: 'mcp', libelle: 'Serveur MCP de votre logiciel', court: 'serveur MCP' },
+  { type: 'api', libelle: 'API de votre logiciel', court: 'API' },
   { type: 'app', libelle: 'Autre application en un clic (liste ci-dessous)', court: 'autre application' },
 ];
 
