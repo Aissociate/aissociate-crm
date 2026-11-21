@@ -1,17 +1,22 @@
 // Accès au CRM pour les super-pouvoirs Qualiopi de Nora (voir qualiopi.ts).
 // Lecture : tout de suite. Production : générateurs du CRM (qualiopi-doc,
-// generate-agefice, generate-plan, generate-devis), rangement dans la checklist. Les outils ne sont branchés que par outils.ts, et
+// generate-agefice, generate-plan, generate-devis), rangement dans la checklist.
+// Envoi : une proposition « à valider » par stagiaire, e-mail SMTP du CRM
+// (send-email) au « VALIDÉ », pièce passée à « envoyé ». Les outils ne sont branchés que par outils.ts, et
 // seulement si qualiopiActif(espace, agent).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
 import * as q from "./qualiopi.ts";
 import type { DefinitionOutil } from "./outils.ts";
-import { joursSession } from "../qualiopi-doc/modeles.ts";
+import { datesLisibles, joursSession } from "../qualiopi-doc/modeles.ts";
+import { refLivrable } from "./liaison.ts";
 
 export type CtxQualiopi = {
   sb: SupabaseClient; wsId: string; acteur: string; agentId: string;
   /** Passage de routine en mode essai : rien n'est produit ni écrit dans le CRM. */
   essai?: boolean;
+  /** Crée le livrable « à valider » (outils.ts › proposer) ; gère aussi le mode essai. */
+  proposer: (titre: string, contenu: string, action: q.ActionQualiopi, quoi: string) => Promise<Resultat>;
 };
 type Resultat = { resultat: string; libelle: string };
 
@@ -300,6 +305,153 @@ async function produire(ctx: CtxQualiopi, a: Record<string, unknown>): Promise<R
   return { resultat: `${s.titre} — ${libelle} :\n${lignes.map((l) => `- ${l}`).join("\n")}`, libelle: `Qualiopi : ${libelle}` };
 }
 
+// ─── Envois : une proposition par stagiaire, envoi SMTP du CRM au « VALIDÉ » ─
+async function organisme(sb: SupabaseClient): Promise<{ nom: string; site: string }> {
+  const [{ data: org }, { data: auto }] = await Promise.all([
+    sb.from("parametres").select("valeur").eq("cle", "organisme").maybeSingle(),
+    sb.from("parametres").select("valeur").eq("cle", "qualiopi_auto").maybeSingle(),
+  ]);
+  const site = String((auto?.valeur as { site_url?: string } | null)?.site_url || "https://aissociate.re").replace(/\/+$/, "");
+  return { nom: String((org?.valeur as { nom?: string } | null)?.nom || "Aissociate"), site };
+}
+
+/** Propositions d'envoi Qualiopi encore « à valider » pour cette session et cette nature → stagiaire → référence. */
+async function envoisEnAttente(sb: SupabaseClient, wsId: string, sessionId: string, nature: string): Promise<Map<string, string>> {
+  const { data } = await sb.from("studio_livrables").select("id, action").eq("workspace_id", wsId).eq("statut", "a_valider")
+    .eq("action->>type", "qualiopi_envoyer").eq("action->>session_id", sessionId).eq("action->>nature", nature).limit(200);
+  return new Map((data ?? []).map((l) => [String((l.action as Record<string, unknown>).participant_id), refLivrable(String(l.id))]));
+}
+
+async function proposerEnvois(ctx: CtxQualiopi, a: Record<string, unknown>): Promise<Resultat> {
+  const nature = a.envoi;
+  if (!q.estNatureEnvoi(nature)) return { resultat: `Envoi inconnu. Choix : ${Object.keys(q.ENVOIS).join(", ")}.`, libelle: "Qualiopi : envoi inconnu" };
+  const libelle = q.ENVOIS[nature].libelle;
+  const s = await trouverSession(ctx.sb, a.session_id);
+  if ("erreur" in s) return { resultat: s.erreur, libelle: "Qualiopi : session introuvable" };
+  if (nature === "rappel") {
+    const trop = q.controleRappel(s);
+    if (trop) return { resultat: `Rappel inutile : ${trop}.`, libelle: "Rappel : trop tard" };
+  }
+  const d = await chargerDossier(ctx.sb, s);
+  if (nature === "emargement" && !d.creneaux.length) {
+    return { resultat: "Aucune demi-journée d'émargement pour cette session : produis d'abord le document « emargement » (qualiopi_produire).", libelle: "Émargement : demi-journées absentes" };
+  }
+  const { choisis, inconnus } = q.choisirParticipants(d.participants, a.participants);
+  if (!choisis.length) return { resultat: "Aucun stagiaire à qui envoyer : inscrivez-les d'abord dans le CRM.", libelle: `${libelle} : aucun stagiaire` };
+  const [org, attente] = await Promise.all([organisme(ctx.sb), envoisEnAttente(ctx.sb, ctx.wsId, s.id, nature)]);
+  const dates = datesLisibles(joursSession(s.date_debut, s.date_fin, d.creneaux.map((c) => c.date)));
+  const typeDoc = q.typeDocEnvoi(nature), typeLien = q.lienEnvoi(nature);
+  const ecartes: string[] = inconnus.map((x) => `${x} : introuvable dans la session`);
+  const refs: string[] = [];
+  for (const p of choisis) {
+    const nom = q.nomStagiaire(p);
+    if (!p.email) { ecartes.push(`${nom} : pas d'adresse e-mail dans le CRM`); continue; }
+    if (attente.has(p.id)) { ecartes.push(`${nom} : proposition déjà en attente (${attente.get(p.id)})`); continue; }
+    const pieces: q.PieceCrm[] = [];
+    let docId: string | null = null;
+    if (nature === "devis") {
+      const dv = d.devis.find((x) => !!p.contact_id && x.contact_id === p.contact_id && !!x.fichier_url && x.statut !== "refuse");
+      if (!dv) { ecartes.push(`${nom} : aucun devis en PDF (qualiopi_produire document=devis, ou créer le devis dans le CRM)`); continue; }
+      pieces.push({ bucket: "devis", chemin: String(dv.fichier_url), nom: q.nomPieceJointe(`Devis ${dv.numero}`, nom) });
+    } else if (typeDoc) {
+      const ligne = q.pieceChecklist(d.checklist, typeDoc, p.id);
+      if (ligne) {
+        pieces.push({ bucket: ligne.bucket || "qualiopi", chemin: String(ligne.fichier_url), nom: q.nomPieceJointe(libelle === "Rappel avant la formation" ? "Convocation" : libelle, nom) });
+        docId = nature === "rappel" ? null : ligne.id;
+      } else if (nature !== "rappel") {
+        ecartes.push(`${nom} : ${libelle.toLowerCase()} pas encore produit(e) (qualiopi_produire)`); continue;
+      }
+    }
+    let relance = false;
+    if (typeLien === "chaud" || typeLien === "froid") {
+      const etat = q.etatQuestionnaire(typeLien, lienDe(d, p, typeLien), aRepondu(d, p, typeLien), q.finSession(s));
+      if (!etat.ok) { ecartes.push(`${nom} : ${etat.raison}`); continue; }
+      relance = etat.relance;
+    }
+    const msg = q.messageEnvoi(nature, {
+      stagiaire: nom, intitule: d.intitule, dates, lieu: s.lieu, orgNom: org.nom, message: typeof a.message === "string" ? a.message : null,
+      relance, avecPiece: pieces.length > 0, distanciel: s.modalite === "distanciel",
+    });
+    const action: q.ActionQualiopi = {
+      type: "qualiopi_envoyer", nature, session_id: s.id, session_titre: s.titre, participant_id: p.id, contact_id: p.contact_id,
+      nom, a: p.email.trim(), objet: msg.objet, corps: msg.corps, pieces, doc_id: docId, lien: typeLien, ...(relance ? { relance } : {}),
+    };
+    const r = await ctx.proposer(q.titreActionQualiopi(action), q.apercuActionQualiopi(action), action, `${libelle} à ${nom}`);
+    refs.push(`${nom} : ${r.resultat}`);
+  }
+  return {
+    resultat: [
+      `${s.titre} — ${libelle} : ${refs.length} proposition${refs.length > 1 ? "s" : ""} (une par stagiaire, à valider une à une).`,
+      ...refs.map((x) => `- ${x}`),
+      ...(ecartes.length ? ["Écartés :", ...ecartes.map((x) => `- ${x}`)] : []),
+    ].join("\n"),
+    libelle: `${libelle} : ${refs.length} à valider`,
+  };
+}
+
+/** Lien personnel du stagiaire (émargement ou questionnaire), retrouvé ou créé. */
+async function lienPersonnel(sb: SupabaseClient, a: q.ActionQualiopi, site: string): Promise<{ url: string; evaluationId?: string; statut?: string } | null> {
+  if (!a.lien) return null;
+  if (a.lien === "emargement") {
+    let { data: acces } = await sb.from("emargement_acces").select("token").eq("session_id", a.session_id).eq("participant_id", a.participant_id).maybeSingle();
+    if (!acces) {
+      const ins = await sb.from("emargement_acces").insert({ session_id: a.session_id, participant_id: a.participant_id }).select("token").single();
+      if (ins.error) throw new Error(ins.error.message);
+      acces = ins.data;
+    }
+    return { url: `${site}/emargement/${acces!.token}` };
+  }
+  const base = () => sb.from("evaluation_liens").select("id, token, statut").eq("session_id", a.session_id).eq("type", a.lien!).eq("multi", false).eq("actif", true);
+  const trouve = (a.contact_id ? (await base().eq("contact_id", a.contact_id).order("created_at", { ascending: false }).limit(1).maybeSingle()).data : null)
+    ?? (await base().ilike("destinataire_email", a.a.replace(/[%_\\]/g, "\\$&")).order("created_at", { ascending: false }).limit(1).maybeSingle()).data;
+  if (trouve && (trouve.statut === "complete" || trouve.statut === "clos")) throw new Error(`${a.nom} a déjà répondu à ce questionnaire.`);
+  if (trouve) return { url: `${site}/evaluation/${trouve.token}`, evaluationId: String(trouve.id), statut: String(trouve.statut) };
+  const { data: s } = await sb.from("sessions_formation").select("date_debut, date_fin").eq("id", a.session_id).maybeSingle();
+  const fin = s ? q.finSession(s as { date_debut: string; date_fin: string | null }) : null;
+  const ins = await sb.from("evaluation_liens").insert({
+    type: a.lien, libelle: a.lien === "chaud" ? "Évaluation de fin de formation" : "Votre formation, un mois après",
+    contact_id: a.contact_id, session_id: a.session_id, destinataire_nom: a.nom, destinataire_email: a.a,
+    formation_intitule: a.session_titre, date_fin_formation: fin, envoi_prevu_le: q.jourReunion(),
+  }).select("id, token, statut").single();
+  if (ins.error) throw new Error(ins.error.message);
+  return { url: `${site}/evaluation/${ins.data.token}`, evaluationId: String(ins.data.id), statut: "a_envoyer" };
+}
+
+/** Exécution au « VALIDÉ » (outils.ts › executerAction) : e-mail SMTP du CRM, puis rangement. */
+export async function executerEnvoi(sb: SupabaseClient, wsId: string, a: q.ActionQualiopi, livrableId?: string): Promise<{ ok: true; lien: string | null; id: string } | { ok: false; erreur: string }> {
+  if (!q.espacesOrganisme().includes(wsId.toLowerCase())) return { ok: false, erreur: "Envoi Qualiopi réservé à l'espace de l'organisme de formation." };
+  try {
+    const { data: p } = await sb.from("session_participants").select("id").eq("id", a.participant_id).eq("session_id", a.session_id).maybeSingle();
+    if (!p) return { ok: false, erreur: `${a.nom} n'est plus inscrit(e) à cette session.` };
+    const org = await organisme(sb);
+    const lien = await lienPersonnel(sb, a, org.site);
+    const texte = q.avecLien(a.corps, lien?.url ?? null);
+    const attachments = await Promise.all(a.pieces.map(async (x) => {
+      const { data } = await sb.storage.from(x.bucket).createSignedUrl(x.chemin, 7 * 86_400);
+      if (!data?.signedUrl) throw new Error(`Pièce « ${x.nom} » introuvable dans le CRM : produisez-la à nouveau.`);
+      return { filename: x.nom, url: data.signedUrl };
+    }));
+    await appelerFonction("send-email", { to: [a.a], subject: a.objet, html: q.corpsHtml(texte, lien?.url ?? null), text: texte, attachments });
+    const maintenant = new Date().toISOString();
+    if (lien?.evaluationId) {
+      await sb.from("evaluation_liens").update({ statut: lien.statut === "envoye" || lien.statut === "relance" ? "relance" : "envoye", sent_at: maintenant }).eq("id", lien.evaluationId);
+    }
+    if (a.doc_id) {
+      await sb.from("qualiopi_dossier_docs").update({ statut: "envoye" }).eq("id", a.doc_id).in("statut", ["a_generer", "genere"]);
+    }
+    // Trace en Messagerie du CRM, comme les évaluations envoyées par le cron.
+    try {
+      await sb.from("emails").insert({
+        destinataires: [a.a], copie: [], sujet: a.objet, corps: texte, statut: "envoye", canal: "email", direction: "sortant",
+        contact_id: a.contact_id, sent_at: maintenant, attachments: [],
+      });
+    } catch { /* la trace ne doit jamais faire échouer l'envoi */ }
+    return { ok: true, id: livrableId ?? a.participant_id, lien: null };
+  } catch (e) {
+    return { ok: false, erreur: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // ─── Branchement (outils.ts) ────────────────────────────────────────────────
 export type OutilsQualiopi = {
   definitions: DefinitionOutil[];
@@ -309,16 +461,17 @@ export type OutilsQualiopi = {
 };
 
 export function outilsQualiopi(ctx: CtxQualiopi): OutilsQualiopi {
-  const definitions = [...q.DEFINITIONS_LECTURE, q.DEFINITION_PRODUIRE];
+  const definitions = [...q.DEFINITIONS_LECTURE, q.DEFINITION_PRODUIRE, q.DEFINITION_ENVOIS];
   return {
     definitions,
-    consigne: [q.CONSIGNE_LECTURE, q.CONSIGNE_PRODUCTION].join("\n"),
+    consigne: [q.CONSIGNE_LECTURE, q.CONSIGNE_PRODUCTION, q.CONSIGNE_ENVOIS].join("\n"),
     noms: new Set(definitions.map((d) => d.function.name)),
     async executer(nom, a) {
       try {
         if (nom === "qualiopi_sessions") return await listerSessions(ctx, a);
         if (nom === "qualiopi_session") return await lireSession(ctx, a);
         if (nom === "qualiopi_produire") return await produire(ctx, a);
+        if (nom === "qualiopi_proposer_envois") return await proposerEnvois(ctx, a);
         return { resultat: "Outil Qualiopi inconnu.", libelle: "Qualiopi" };
       } catch (e) {
         return { resultat: `CRM injoignable (${e instanceof Error ? e.message : String(e)}). Dis-le, n'invente aucune donnée.`, libelle: "Qualiopi : erreur" };

@@ -66,4 +66,10 @@ describe('fichiers transmis tels quels', () => {
       .toBe('Envoi à 1 destinataire avec 1 pièce jointe');
     expect(presenter({ type_action: 'drive_deposer_fichier', action: { piece } } as never).bouton).toBe('Déposer le fichier');
   });
+
+  it('envoi Qualiopi : un stagiaire nommé, avec ou sans pièce jointe', () => {
+    expect(presenter({ type_action: 'qualiopi_envoyer', action: { nom: 'Jean MARTIN', pieces: [{ nom: 'Convocation.pdf' }] } }))
+      .toMatchObject({ portee: 'Envoi à Jean MARTIN avec 1 pièce jointe', bouton: 'Envoyer à Jean MARTIN' });
+    expect(presenter({ type_action: 'qualiopi_envoyer', action: { nom: 'Jean MARTIN', pieces: [] } }).portee).toBe('Envoi à Jean MARTIN');
+  });
 });

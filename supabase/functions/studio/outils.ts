@@ -34,7 +34,7 @@ import * as mcpClient from "./mcp_client.ts";
 import type { ActionMcp } from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
 import type { ActionApi } from "./api_client.ts";
-import { qualiopiActif } from "./qualiopi.ts";
+import { apercuActionQualiopi, modifierActionQualiopi, qualiopiActif, titreActionQualiopi, type ActionQualiopi } from "./qualiopi.ts";
 import * as qualiopiCrm from "./qualiopi_crm.ts";
 
 export type DefinitionOutil = {
@@ -62,7 +62,9 @@ export type ActionLivrable =
   // Outil d'un serveur MCP du client qui écrit (mcp_client.ts) : appelé au « VALIDÉ ».
   | ActionMcp
   // Requête qui écrit (POST, PUT, PATCH, DELETE) vers une API du client (api_client.ts) : envoyée au « VALIDÉ ».
-  | ActionApi;
+  | ActionApi
+  // Document ou lien Qualiopi envoyé à un stagiaire par le CRM (qualiopi.ts), espace de l'organisme seulement.
+  | ActionQualiopi;
 
 const lisibleReunion = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
 
@@ -71,6 +73,7 @@ const libelleCompte = (c: { reseau: zernio.Reseau; nom: string }) => `${zernio.N
 /** Titre affiché d'un livrable porteur d'une action. */
 export function titreAction(a: ActionLivrable): string {
   if (apps.estActionApp(a)) return apps.titreActionApp(a);
+  if (a.type === "qualiopi_envoyer") return titreActionQualiopi(a);
   if (a.type === "mailing_envoyer") return `Mailing — ${a.objet}`;
   if (a.type === "gmail_envoyer") return `E-mail — ${a.objet}`;
   if (a.type === "agenda_creer") return `Rendez-vous — ${a.titre}`;
@@ -90,6 +93,7 @@ export function titreAction(a: ActionLivrable): string {
 /** Contenu affiché d'un livrable porteur d'une action (régénéré après chaque modification). */
 export function apercuAction(a: ActionLivrable): string {
   if (apps.estActionApp(a)) return apps.apercuActionApp(a);
+  if (a.type === "qualiopi_envoyer") return apercuActionQualiopi(a);
   if (a.type === "mailing_envoyer") {
     return `**Destinataires :** ${a.liste ? `liste « ${a.liste} »` : "tous les abonnés"} (${a.destinataires} au moment de la proposition), un e-mail chacun depuis votre messagerie (45 par heure au plus), avec lien de désinscription  \n**Objet :** ${a.objet}\n\n---\n\n${a.contenu}`;
   }
@@ -131,6 +135,7 @@ export function apercuAction(a: ActionLivrable): string {
 export function modifierAction(a: ActionLivrable, champs: Record<string, unknown>): ActionLivrable | { erreur: string } {
   const txt = (k: string, max: number) => String(champs[k] ?? "").trim().slice(0, max);
   if (apps.estActionApp(a)) return apps.modifierActionApp(a, champs);
+  if (a.type === "qualiopi_envoyer") return modifierActionQualiopi(a, champs);
   if (a.type === "mailing_envoyer") {
     const objet = txt("objet", 200), contenu = txt("contenu", 50_000);
     return objet && contenu ? { ...a, objet, contenu } : { erreur: "Objet et contenu du mailing requis." };
@@ -696,7 +701,9 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const mcp = mcpClient.definitionsMcp(serveursMcp);
   // Conformité Qualiopi : Nora, dans l'espace de l'organisme (Aissociate) seulement.
   const qualiopi = qualiopiActif(ctx.wsId, ctx.agentId)
-    ? qualiopiCrm.outilsQualiopi({ sb: ctx.sb, wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, essai: Boolean(ctx.essai) })
+    ? qualiopiCrm.outilsQualiopi({ sb: ctx.sb, wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, essai: Boolean(ctx.essai),
+        // proposer est défini plus bas : appelé seulement pendant la conversation.
+        proposer: (titre, contenu, action, quoi) => proposer(titre, contenu, action, quoi) })
     : null;
   const apis = apiClient.definitionsApi(apisChargees);
   const aVeille = (nbFlux ?? 0) > 0;
@@ -1275,6 +1282,7 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       return { ok: true, id: action.tache_id, lien: null };
     }
     if (action.type === "routine_creer") return await routineChat.creerRoutineValidee(sb, wsId, action);
+    if (action.type === "qualiopi_envoyer") return await qualiopiCrm.executerEnvoi(sb, wsId, action, livrableId);
     if (action.type === "mcp_appel") {
       const s = await mcpClient.serveurDeLEspace(sb, wsId, action.connecteur_id);
       if (!s) return { ok: false, erreur: "Ce serveur MCP n'est plus relié à votre espace." };

@@ -50,6 +50,7 @@ const ACTIONS: Record<string, { avant: string; fait: string; lien: string }> = {
   app_message: { avant: 'Message WhatsApp envoyé au « VALIDÉ »', fait: 'Message envoyé.', lien: 'Voir' },
   agenda_creer: { avant: 'Création dans votre agenda (et invitations) au « VALIDÉ »', fait: 'Rendez-vous créé dans votre agenda, invitations envoyées.', lien: 'Ouvrir le rendez-vous' },
   routine_creer: { avant: 'Routine créée au « VALIDÉ », en mode essai pendant 7 jours (rien n\'est envoyé)', fait: 'Routine créée en mode essai : retrouvez-la dans « Routines ».', lien: 'Voir' },
+  qualiopi_envoyer: { avant: 'Envoi au stagiaire par la messagerie du CRM au « VALIDÉ », puis rangement dans le dossier Qualiopi', fait: 'E-mail envoyé au stagiaire ; pièce rangée « envoyée » dans le dossier Qualiopi.', lien: 'Voir' },
   mcp_appel: { avant: 'Action exécutée dans votre outil relié (serveur MCP) au « VALIDÉ »', fait: 'Action exécutée.', lien: 'Voir' },
   api_appel: { avant: 'Requête envoyée à votre logiciel (API) au « VALIDÉ »', fait: 'Requête envoyée.', lien: 'Voir' },
 };

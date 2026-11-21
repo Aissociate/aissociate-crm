@@ -174,3 +174,180 @@ export const DEFINITION_PRODUIRE = fn("qualiopi_produire",
 export const CONSIGNE_PRODUCTION = `- qualiopi_produire fabrique les documents avec les modèles du CRM (convocation, livret d'accueil, convention, programme, devis, attestation de fin, certificat de réalisation, demi-journées d'émargement) et les range aussitôt dans la checklist Qualiopi. Ne rédige jamais toi-même ces documents en texte libre : utilise l'outil.
 - Si un document dépend d'une donnée absente du CRM (pas de devis, pas de plan de formation, stagiaire sans contact), dis précisément quoi créer dans le CRM au lieu d'inventer.
 - Attestation de fin et certificat de réalisation : seulement une fois la session terminée.`;
+
+// ─── Envois aux stagiaires (une proposition « à valider » par stagiaire) ────
+export const ENVOIS = {
+  convocation: { libelle: "Convocation", piece: "convocation" },
+  livret_accueil: { libelle: "Livret d'accueil", piece: "livret_accueil" },
+  programme: { libelle: "Programme de formation", piece: "deroule_pedagogique" },
+  convention: { libelle: "Convention de formation", piece: "convention" },
+  devis: { libelle: "Devis", piece: "devis" },
+  emargement: { libelle: "Lien d'émargement", lien: "emargement" },
+  rappel: { libelle: "Rappel avant la formation", pieceFacultative: "convocation" },
+  questionnaire_chaud: { libelle: "Questionnaire à chaud", lien: "chaud" },
+  questionnaire_froid: { libelle: "Questionnaire à froid", lien: "froid" },
+  attestation_fin: { libelle: "Attestation de fin de formation", piece: "attestation_fin" },
+  certificat_realisation: { libelle: "Certificat de réalisation", piece: "certificat_realisation" },
+} as const satisfies Record<string, { libelle: string; piece?: string; pieceFacultative?: string; lien?: string }>;
+export type NatureEnvoi = keyof typeof ENVOIS;
+export const estNatureEnvoi = (x: unknown): x is NatureEnvoi => typeof x === "string" && x in ENVOIS;
+const infoEnvoi = (n: NatureEnvoi) => ENVOIS[n] as { libelle: string; piece?: string; pieceFacultative?: string; lien?: "emargement" | "chaud" | "froid" };
+
+/** Fichier du CRM joint à l'e-mail (lien signé créé au moment de l'envoi). */
+export type PieceCrm = { bucket: string; chemin: string; nom: string };
+export type ActionQualiopi = {
+  type: "qualiopi_envoyer"; nature: NatureEnvoi;
+  session_id: string; session_titre: string; participant_id: string; contact_id: string | null;
+  /** Prénom NOM du stagiaire et son adresse (relue dans le CRM au moment de la proposition). */
+  nom: string; a: string;
+  objet: string; corps: string; pieces: PieceCrm[];
+  /** Ligne de la checklist Qualiopi passée à « envoyé » après l'envoi. */
+  doc_id: string | null;
+  /** Lien personnel créé ou retrouvé au « VALIDÉ » : remplace {{lien}} dans le texte. */
+  lien: "emargement" | "chaud" | "froid" | null;
+  relance?: boolean;
+};
+export const MARQUEUR_LIEN = "{{lien}}";
+
+/** Nom lisible d'une pièce jointe : « Convocation - Jean MARTIN.pdf ». */
+export const nomPieceJointe = (libelle: string, stagiaire: string) =>
+  `${libelle} - ${stagiaire}`.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) + ".pdf";
+
+export type EtatQuestionnaire = { ok: true; relance: boolean } | { ok: false; raison: string };
+/**
+ * Un questionnaire peut-il partir ? À chaud : dès le dernier jour. À froid : 30 jours après la fin
+ * (c'est aussi l'échéance du cron du CRM). Lien déjà envoyé sans réponse : relance.
+ */
+export function etatQuestionnaire(
+  type: "chaud" | "froid", lien: { statut: string } | null | undefined, repondu: boolean, finJour: string, aujourdhui = jourReunion(),
+): EtatQuestionnaire {
+  if (repondu) return { ok: false, raison: "a déjà répondu" };
+  if (lien && (lien.statut === "complete" || lien.statut === "clos")) return { ok: false, raison: "questionnaire clos" };
+  if (lien && (lien.statut === "envoye" || lien.statut === "relance")) return { ok: true, relance: true };
+  if (type === "chaud" && aujourdhui < finJour) return { ok: false, raison: `la session n'est pas terminée (dernier jour le ${jjmmaaaa(finJour)})` };
+  const du = ajouterJours(finJour, 30);
+  if (type === "froid" && aujourdhui < du) return { ok: false, raison: `pas encore dû : le questionnaire à froid part à partir du ${jjmmaaaa(du)} (envoi automatique du CRM)` };
+  return { ok: true, relance: false };
+}
+
+/** Le rappel n'a de sens qu'avant la formation (au plus tard le premier jour). */
+export function controleRappel(s: Pick<SessionCrm, "date_debut">, aujourdhui = jourReunion()): string | null {
+  const debut = jourReunion(s.date_debut);
+  return aujourdhui > debut ? `la formation a déjà commencé (le ${jjmmaaaa(debut)})` : null;
+}
+
+export type InfosMessage = {
+  stagiaire: string; intitule: string; dates: string; lieu: string | null; orgNom: string;
+  message?: string | null; relance?: boolean; avecPiece?: boolean; distanciel?: boolean;
+};
+
+/** Objet et texte de l'e-mail, dans le ton des envois du CRM ; {{lien}} est remplacé au « VALIDÉ ». */
+export function messageEnvoi(nature: NatureEnvoi, i: InfosMessage): { objet: string; corps: string } {
+  const lieu = i.distanciel ? "à distance (le lien de connexion vous sera communiqué)" : i.lieu ? `à l'adresse suivante : ${i.lieu}` : "au lieu indiqué sur votre convocation";
+  const perso = i.message?.trim() ? `\n\n${i.message.trim()}` : "";
+  const signature = `\n\nBien cordialement,\nL'équipe ${i.orgNom}`;
+  const debut = `Bonjour ${i.stagiaire},\n\n`;
+  const piece = (quoi: string, suite = "") => `${debut}Vous trouverez ci-joint ${quoi} pour la formation « ${i.intitule} » (${i.dates.charAt(0).toLowerCase()}${i.dates.slice(1)}).${suite}${perso}${signature}`;
+  switch (nature) {
+    case "convocation":
+      return { objet: `Convocation — ${i.intitule}`, corps: piece("votre convocation", `\n\nLa formation se déroulera ${lieu}, de 09h00 à 17h00. Merci de nous signaler au plus tôt tout empêchement ou besoin d'aménagement.`) };
+    case "livret_accueil":
+      return { objet: `Livret d'accueil — ${i.intitule}`, corps: piece("le livret d'accueil", "\n\nIl présente l'organisation de la formation, vos interlocuteurs, le règlement intérieur et la procédure de réclamation.") };
+    case "programme":
+      return { objet: `Programme de formation — ${i.intitule}`, corps: piece("le programme détaillé") };
+    case "convention":
+      return { objet: `Convention de formation — ${i.intitule}`, corps: piece("la convention de formation", "\n\nMerci de nous la retourner datée et signée avant le début de la formation.") };
+    case "devis":
+      return { objet: `Devis — ${i.intitule}`, corps: piece("notre devis", "\n\nNous restons à votre disposition pour toute question.") };
+    case "attestation_fin":
+      return { objet: `Attestation de fin de formation — ${i.intitule}`, corps: piece("votre attestation de fin de formation", "\n\nMerci pour votre participation.") };
+    case "certificat_realisation":
+      return { objet: `Certificat de réalisation — ${i.intitule}`, corps: piece("le certificat de réalisation de votre formation", "\n\nConservez-le avec les documents de votre parcours.") };
+    case "emargement":
+      return {
+        objet: `Émargement — ${i.intitule}`,
+        corps: `${debut}Pour chaque demi-journée de la formation « ${i.intitule} », merci de signer votre présence en ligne :\n${MARQUEUR_LIEN}\n\nAu moment de signer, un code vous est envoyé par e-mail. Le lien reste valable plusieurs jours : si vous n'avez pas pu signer sur le moment, vous pouvez régulariser ensuite les demi-journées réellement suivies.${perso}${signature}`,
+      };
+    case "rappel":
+      return {
+        objet: `Rappel : votre formation « ${i.intitule} »`,
+        corps: `${debut}Petit rappel : votre formation « ${i.intitule} » a lieu ${i.dates.charAt(0).toLowerCase()}${i.dates.slice(1)}, de 09h00 à 17h00 (pause de 12h30 à 13h30), ${lieu}.\n\nPensez à prévoir un ordinateur portable pour les exercices pratiques.${i.avecPiece ? " Votre convocation est jointe à ce message." : ""} En cas d'empêchement ou de besoin d'aménagement, prévenez-nous au plus tôt.${perso}${signature}`,
+      };
+    case "questionnaire_chaud": {
+      const intro = "Merci d'avoir participé à la formation. Pourriez-vous prendre 5 minutes pour nous dire ce que vous en avez pensé ? Vos réponses nous servent directement à améliorer nos formations.";
+      return {
+        objet: i.relance ? `Rappel — votre avis sur la formation « ${i.intitule} »` : "Évaluation de fin de formation",
+        corps: `${debut}${i.relance ? "Sauf erreur de notre part, nous n'avons pas encore reçu votre avis. " : ""}${intro}\n\nDonner mon avis : ${MARQUEUR_LIEN}${perso}\n\nMerci,\nL'équipe ${i.orgNom}`,
+      };
+    }
+    case "questionnaire_froid": {
+      const intro = "Il y a environ un mois, vous suiviez votre formation. Où en êtes-vous ? Ce court questionnaire (5 minutes) nous permet de mesurer ce que la formation vous a réellement apporté au quotidien.";
+      return {
+        objet: i.relance ? `Rappel — votre formation « ${i.intitule} », un mois après` : "Votre formation, un mois après",
+        corps: `${debut}${i.relance ? "Nous nous permettons de vous relancer : votre retour compte beaucoup pour nous. " : ""}${intro}\n\nRépondre au questionnaire : ${MARQUEUR_LIEN}${perso}\n\nMerci,\nL'équipe ${i.orgNom}`,
+      };
+    }
+  }
+}
+
+const echapper = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+
+/** Texte de l'e-mail en HTML simple : paragraphes, lien personnel en bouton. */
+export function corpsHtml(corps: string, lien: string | null): string {
+  return corps.split(/\n{2,}/).map((para) => {
+    const html = echapper(para).replace(/\n/g, "<br/>");
+    if (lien && para.includes(lien)) {
+      const avant = echapper(para.slice(0, para.indexOf(lien))).replace(/\n/g, "<br/>").replace(/ ?: ?(<br\/>)?$/, "");
+      return `<p>${avant ? `${avant}<br/>` : ""}<a href="${echapper(lien)}" style="background:#ea6a1e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block;margin-top:6px">Ouvrir le lien</a></p><p style="font-size:12px;color:#666">Ou copiez ce lien : ${echapper(lien)}</p>`;
+    }
+    return `<p>${html}</p>`;
+  }).join("\n");
+}
+
+/** Remplace le marqueur par le lien personnel ; ajoute le lien si le texte modifié l'a perdu. */
+export function avecLien(corps: string, lien: string | null): string {
+  if (!lien) return corps;
+  return corps.includes(MARQUEUR_LIEN) ? corps.split(MARQUEUR_LIEN).join(lien) : `${corps}\n\nLien : ${lien}`;
+}
+
+export const titreActionQualiopi = (a: ActionQualiopi) => `${ENVOIS[a.nature]?.libelle ?? "Envoi"}${a.relance ? " (relance)" : ""} — ${a.nom}`.slice(0, 200);
+
+export function apercuActionQualiopi(a: ActionQualiopi): string {
+  const lien = a.lien === "emargement" ? "lien d'émargement personnel" : a.lien ? "lien personnel vers le questionnaire" : "";
+  return [
+    `**À :** ${a.nom} <${a.a}>  \n**Session :** ${a.session_titre}  \n**Objet :** ${a.objet}`,
+    a.pieces.length ? `**Pièce${a.pieces.length > 1 ? "s" : ""} jointe${a.pieces.length > 1 ? "s" : ""} :** ${a.pieces.map((p) => p.nom).join(", ")}` : "",
+    `**Envoi :** par la messagerie du CRM d'Aissociate au « VALIDÉ »${lien ? ` ; le ${lien} est créé à ce moment-là` : ""}. La pièce est rangée « envoyée » dans le dossier Qualiopi.`,
+    `---\n\n${a.corps.split(MARQUEUR_LIEN).join(`[${lien || "lien"}]`)}`,
+  ].filter(Boolean).join("\n\n");
+}
+
+export function modifierActionQualiopi(a: ActionQualiopi, champs: Record<string, unknown>): ActionQualiopi | { erreur: string } {
+  const objet = String(champs.objet ?? "").trim().slice(0, 250), corps = String(champs.corps ?? "").trim().slice(0, 20_000);
+  if (!objet || !corps) return { erreur: "Objet et texte de l'e-mail requis." };
+  if (a.lien && !corps.includes(MARQUEUR_LIEN)) return { erreur: `Gardez ${MARQUEUR_LIEN} dans le texte : il est remplacé par le lien personnel du stagiaire.` };
+  return { ...a, objet, corps };
+}
+
+/** Pièce de la checklist à joindre : celle du stagiaire, sinon celle de la session ; null si non produite. */
+export function pieceChecklist(lignes: LigneChecklist[], typeDoc: string, participantId: string): LigneChecklist | null {
+  const faite = (l: LigneChecklist) => l.type_doc === typeDoc && estFaite(l.statut) && !!l.fichier_url;
+  return lignes.find((l) => faite(l) && l.participant_id === participantId) ?? lignes.find((l) => faite(l) && !l.participant_id) ?? null;
+}
+export const typeDocEnvoi = (n: NatureEnvoi) => infoEnvoi(n).piece ?? infoEnvoi(n).pieceFacultative ?? null;
+export const lienEnvoi = (n: NatureEnvoi) => infoEnvoi(n).lien ?? null;
+
+export const DEFINITION_ENVOIS = fn("qualiopi_proposer_envois",
+  "Prépare l'envoi d'un document ou d'un lien aux stagiaires d'une session : UNE proposition « à valider » par stagiaire, envoyée par la messagerie du CRM au « VALIDÉ ». "
+  + "Documents (pièce jointe, à produire d'abord avec qualiopi_produire) : convocation, livret_accueil, programme, convention, devis, attestation_fin, certificat_realisation. "
+  + "Liens personnels créés au « VALIDÉ » : emargement, questionnaire_chaud (dès le dernier jour), questionnaire_froid (30 jours après la fin ; relance automatique si déjà envoyé sans réponse). "
+  + "rappel : rappel avant la formation (convocation jointe si elle existe). Les stagiaires sans e-mail, déjà servis ou ayant une proposition en attente sont écartés et listés.", {
+    session_id: { type: "string", description: "Identifiant de la session" },
+    envoi: { type: "string", enum: Object.keys(ENVOIS) },
+    participants: { type: "string", description: "« tous » (défaut) ou identifiants des stagiaires séparés par des virgules" },
+    message: { type: "string", description: "Phrase personnelle ajoutée au texte type (facultatif)" },
+  }, ["session_id", "envoi"]);
+
+export const CONSIGNE_ENVOIS = `- qualiopi_proposer_envois prépare les envois aux stagiaires : une proposition par stagiaire, que le dirigeant valide une à une ; rien ne part avant. Donne les références renvoyées et n'annonce jamais un envoi comme fait.
+- Ordre habituel : avant la formation devis, convention, programme, convocation, livret d'accueil, puis rappel quelques jours avant ; pendant, lien d'émargement ; à la fin, attestation, certificat et questionnaire à chaud ; 30 jours après, questionnaire à froid (le CRM l'envoie seul ; toi, tu relances ceux restés sans réponse).
+- Ne propose pas d'envoi en masse par une autre voie (mailing, messagerie du Studio) pour ces documents.`;
