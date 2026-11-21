@@ -280,6 +280,17 @@ et la table `studio_nango_connexions` ne servent plus.
   appelée pendant la conversation, résultat présenté comme données tierces, journalisé (`mcp_lecture`).
   Le reste devient une décision `mcp_appel` (aperçu des paramètres, sans « Modifier ») appelée au « VALIDÉ ».
 
+## Connecteurs réservés à certains agents (`acces.ts`, `src/studio/AccesAgents.tsx`)
+- Sous chaque connecteur de la page Connecteurs (messagerie, agenda, fichiers, réseau social, application en un
+  clic, API, serveur MCP, connexion sur mesure) : « Agents : toute l'équipe » ou « Agents : Hugo, Sam ». Le
+  propriétaire coche les agents (`acces_connecteur_regler` {cle, agents | null}) ; les membres voient le libellé.
+- Table `studio_connecteur_agents` (workspace_id, cle, agents[]) ; clé « zernio:<id du compte> » ou le type de la
+  ligne `studio_connecteurs` (« api:brevo »). Pas de ligne = toute l'équipe ; tout cocher revient à supprimer la
+  ligne ; retirer un connecteur direct efface son réglage. Table absente : toute l'équipe partout.
+- Agents : `outilsEspace` et `connecteursActifs(sb, ws, agentId)` ne donnent à un agent que ses connecteurs ;
+  en mission, le spécialiste reçoit sa propre liste. Léa voit, pour chaque spécialiste, ses « connecteurs
+  réservés » et confie ce qui en a besoin à l'un d'eux. L'exécution d'une action validée n'est pas filtrée.
+
 ## API des clients (`api_client.ts`)
 - **Plusieurs API par espace** (8 au plus) : carte « API » de Connecteurs, `connecteur_enregistrer` avec
   `type: "api"` crée `api:<nom>`. Champs : adresse de base (https, hôte public), authentification
