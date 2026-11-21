@@ -266,6 +266,22 @@ entreprise et les ressources plutôt que des champs « à compléter ».
 **Configuration :** secret Supabase `ZERNIO_API_KEY`. Les secrets `NANGO_*`, la fonction `nango-webhook`
 et la table `studio_nango_connexions` ne servent plus.
 
+## Traitements en lots dans « Mes ressources » (`lots.ts`, `src/studio/ressources/`)
+- **Gestion groupée** : cases à cocher (et « Tout sélectionner » sur la liste affichée), barre d'actions
+  `BarreSelection` → action `ressources_lot` {op: activer | desactiver | ranger | supprimer, ids (50 max)}.
+  Activer des documents sensibles exige `confirmer: true`, chaque activation est journalisée comme une par une.
+- **Import en masse** (`importMasse.ts`, testé) : fichiers, dossier entier (`webkitdirectory`) ou glisser-déposer
+  (dossiers parcourus) ; fichiers système et formats inconnus écartés, doublons (même nom, même taille)
+  ignorés, 200 fichiers par import lus deux par deux, progression puis bilan détaillé.
+- **Confier à un agent** (`ConfierLot`) : `lot_lancer` {ids, agent_id, consigne, mode: chaque | synthese}.
+  Le serveur enchaîne les étapes `lot_etape` (clé du déclencheur, une instance par étape, comme les
+  routines) : chaque étape passe par le même chemin que le chat (`executeurMail`, quotas, garde, journal),
+  document(s) joint(s) en pièces, puis la réponse est soumise en livrable (`soumis_par: "lot"`) dans
+  « Aujourd'hui ». « Un résultat par document » : 25 documents max, un passage chacun, l'un après l'autre ;
+  « Synthèse » : 12 documents max lus ensemble (120 000 caractères). Un document sensible désactivé n'est
+  jamais lu. En cas d'échec, un livrable « Traitement en lot — n non traités » fait le bilan. Limite connue :
+  une étape interrompue par l'hébergeur arrête la chaîne (rien n'est rejoué).
+
 ## Dossiers (`dossiers.ts`, `src/studio/Dossiers.tsx`)
 Arborescence par espace (`studio_dossiers`, 5 niveaux) pour ranger ressources (notes, fichiers, compétences),
 livrables et visuels (`dossier_id` sur `studio_documents`, `studio_livrables`, `studio_medias`).

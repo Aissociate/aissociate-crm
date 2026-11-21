@@ -129,6 +129,7 @@ import * as equipe from "./equipe.ts";
 import * as consignes from "./consignes.ts";
 import * as pouvoirs from "./pouvoirs.ts";
 import * as routineChat from "./routine_outil.ts";
+import * as lots from "./lots.ts";
 import * as fichiers from "./fichiers.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
@@ -229,12 +230,13 @@ const DOC_MAX = 200_000;
 // Pièces jointes du chat : 5 au plus, 60 000 caractères chacune, 120 000 au total.
 type Piece = { nom: string; format: string | null; taille: number | null; contenu: string; image?: string };
 const PIECES_TOTAL = 120_000;
-function lirePieces(v: unknown): Piece[] {
+/** `max` : 5 depuis le navigateur ; davantage pour une synthèse en lot lancée par le serveur (lots.ts). */
+function lirePieces(v: unknown, max = 5): Piece[] {
   if (!Array.isArray(v)) return [];
   let reste = PIECES_TOTAL;
   const out: Piece[] = [];
   let images = 0;
-  for (const x of v.slice(0, 5)) {
+  for (const x of v.slice(0, max)) {
     const o = (x ?? {}) as Record<string, unknown>;
     // Image : décrite par le modèle de vision avant la réponse (contenu rempli alors).
     const image = images < vision.IMAGES_MAX ? vision.imageValide(o.image) : null;
@@ -545,6 +547,74 @@ async function tachesPlanifiees(sb: SupabaseClient, cle: string): Promise<number
     lancees++;
   }
   return lancees;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lots de documents confiés à un agent (lots.ts) : une instance par étape, en chaîne
+// ─────────────────────────────────────────────────────────────────────────────
+
+type EtapeLot = {
+  ws: string; user: string; agent: string; consigne: string; mode: lots.ModeLot;
+  ids: string[]; index: number; echecs: { titre: string; erreur: string }[];
+};
+
+/** Lance l'étape suivante dans sa propre instance (la réponse revient tout de suite). */
+async function declencherLot(cle: string, etape: EtapeLot): Promise<void> {
+  await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/studio`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "lot_etape", cle, etape }),
+  }).then((r) => r.body?.cancel()).catch((e) => console.error("[studio] lot:", e instanceof Error ? e.message : String(e)));
+}
+
+/**
+ * Une étape : un document (« un résultat par document ») ou tous (« une synthèse »), lus par l'agent
+ * comme pièces jointes, la réponse soumise en livrable dans « Aujourd'hui ». Puis l'étape suivante ;
+ * à la fin, un bilan seulement s'il y a eu des échecs.
+ */
+async function executerEtapeLot(sb: SupabaseClient, cle: string, e: EtapeLot): Promise<void> {
+  const ids = e.mode === "synthese" ? e.ids : e.ids.slice(e.index, e.index + 1);
+  const { data } = await sb.from("studio_documents").select("id, titre, contenu, actif, sensible")
+    .eq("workspace_id", e.ws).in("id", ids);
+  const parId = new Map(((data ?? []) as lots.DocLot[]).map((d) => [d.id, d]));
+  const docs = ids.map((id) => parId.get(id)).filter((d): d is lots.DocLot => Boolean(d && lots.lisible(d)));
+  const titres = docs.map((d) => d.titre);
+  const objet = e.mode === "synthese" ? `Synthèse de ${ids.length} documents` : (parId.get(ids[0])?.titre ?? "Document supprimé");
+  if (!docs.length) {
+    e.echecs.push({ titre: objet, erreur: "document supprimé ou désactivé entre-temps" });
+  } else {
+    try {
+      const r = await executeurMail(sb, "tache")(e.user, {
+        agent_id: e.agent, message: lots.messageLot(e.consigne, e.mode, titres), pieces: lots.piecesLot(docs, e.mode),
+      });
+      if (!r.ok) e.echecs.push({ titre: objet, erreur: r.erreur });
+      else if (!r.message_id || !r.conversation_id) e.echecs.push({ titre: objet, erreur: "réponse vide" });
+      else {
+        await sb.from("studio_conversations").update({ titre: lots.titreLot(e.consigne, e.mode, titres) }).eq("id", r.conversation_id);
+        const l = await soumettreLivrable(sb, e.ws, "lot", r.message_id);
+        if ("erreur" in l) e.echecs.push({ titre: objet, erreur: String(l.erreur) });
+      }
+    } catch (err) {
+      e.echecs.push({ titre: objet, erreur: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  const suivant = e.index + 1;
+  if (e.mode === "chaque" && suivant < e.ids.length) {
+    await declencherLot(cle, { ...e, index: suivant });
+    return;
+  }
+  const total = e.mode === "synthese" ? 1 : e.ids.length;
+  if (e.echecs.length) {
+    await sb.from("studio_livrables").insert({
+      workspace_id: e.ws, agent_id: e.agent, soumis_par: "lot",
+      titre: `Traitement en lot — ${e.echecs.length} document${e.echecs.length > 1 ? "s" : ""} non traité${e.echecs.length > 1 ? "s" : ""}`,
+      contenu: lots.bilanEchecs(e.consigne, e.mode === "synthese" ? e.ids.length : total, e.echecs),
+    });
+  }
+  await journaliser(sb, {
+    wsId: e.ws, acteur: "lot", agentId: e.agent, action: "lot_termine",
+    detail: { mode: e.mode, documents: e.ids.length, echecs: e.echecs.length },
+  });
 }
 
 /** Tâches de l'espace, avec leur planning lisible. */
@@ -1005,7 +1075,8 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   let titreConv: string;
   let media: { type: "image" | "video"; format?: string; duree?: string } | null = null;
   // Pièces jointes : texte extrait dans le navigateur (PDF, Word, Excel, PowerPoint, CSV, texte).
-  const pieces = lirePieces(body.pieces);
+  // Les passages de fond (routines, lots) viennent du serveur seul : la synthèse d'un lot peut joindre jusqu'à 12 documents.
+  const pieces = lirePieces(body.pieces, s.sessionId === "tache" ? lots.SYNTHESE_MAX : 5);
   const pouvoir = body.pouvoir as { id?: string; valeurs?: Record<string, unknown> } | undefined;
   if (pouvoir?.id) {
     const sp = (agent.super_pouvoirs ?? []).find((p) => p.id === pouvoir.id);
@@ -1828,7 +1899,7 @@ Deno.serve(async (req: Request) => {
     const action = String(body.action ?? "");
 
     // ── Tâches planifiées (pg_cron, puis une instance par tâche) : clé du déclencheur obligatoire ──
-    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter" || action === "controle_cron" || action === "ameliorations_cron") {
+    if (action === "taches_cron" || action === "tache_executer" || action === "envois_traiter" || action === "controle_cron" || action === "ameliorations_cron" || action === "lot_etape") {
       const cle = await cleCron(sb);
       if (!cle || typeof body.cle !== "string" || body.cle.length !== cle.length || !(await egaliteSure(body.cle, cle))) {
         return json({ error: "Non autorisé" }, 401);
@@ -1836,6 +1907,14 @@ Deno.serve(async (req: Request) => {
       if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle), campagnes: await relancerEnvois(sb) });
       if (action === "controle_cron") {
         const travail = controle.executer(sb).catch((e) => console.error("[studio] contrôle du parcours :", e instanceof Error ? e.message : String(e)));
+        (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
+        return json({ ok: true });
+      }
+      if (action === "lot_etape") {
+        const etape = body.etape as EtapeLot | undefined;
+        if (!etape || !Array.isArray(etape.ids) || typeof etape.ws !== "string") return json({ error: "Étape invalide" }, 400);
+        const travail = executerEtapeLot(sb, cle, { ...etape, echecs: Array.isArray(etape.echecs) ? etape.echecs : [] })
+          .catch((e) => console.error("[studio] lot:", e instanceof Error ? e.message : String(e)));
         (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
         return json({ ok: true });
       }
@@ -2403,6 +2482,72 @@ Deno.serve(async (req: Request) => {
         const f = d ? fichiers.fichierStocke(d.contenu, String(d.titre)) : null;
         if (f?.chemin.startsWith(`${s.ws.id}/`)) await sb.storage.from("studio-medias").remove([f.chemin]).catch(() => undefined);
         return json({ ok: true });
+      }
+
+      // Gestion groupée (lots.ts) : activer, désactiver, ranger ou supprimer plusieurs ressources d'un coup.
+      case "ressources_lot": {
+        const op = lots.opGestion(body.op);
+        if (!op) return json({ error: "Opération inconnue" }, 400);
+        const ids = lots.idsValides(body.ids, lots.GESTION_MAX);
+        if ("erreur" in ids) return json({ error: ids.erreur }, 400);
+        const { data: docs } = await sb.from("studio_documents").select("id, titre, contenu, sensible, actif")
+          .eq("workspace_id", s.ws.id).in("id", ids);
+        const trouves = (docs ?? []) as { id: string; titre: string; contenu: string; sensible?: string | null; actif: boolean }[];
+        if (!trouves.length) return json({ error: "Ressources introuvables" }, 404);
+        const cibles = trouves.map((d) => d.id);
+        if (op === "activer") {
+          // Les sensibles ne s'activent qu'en connaissance de cause, comme une par une.
+          const sensibles = trouves.filter((d) => d.sensible && !d.actif);
+          if (sensibles.length && body.confirmer !== true) {
+            return json({ error: "Certaines ressources contiennent des données sensibles : confirmez pour les rendre lisibles par vos agents.", sensibles: sensibles.map((d) => d.titre) }, 409);
+          }
+          for (const d of sensibles) {
+            await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "ressource_sensible_activee", detail: { titre: d.titre, nature: d.sensible } });
+          }
+        }
+        if (op === "activer" || op === "desactiver") {
+          const { error } = await sb.from("studio_documents").update({ actif: op === "activer" }).eq("workspace_id", s.ws.id).in("id", cibles);
+          if (error) return json({ error: error.message }, 400);
+        } else if (op === "ranger") {
+          const dossier = await dossiers.dossierDeLEspace(sb, s.ws.id, body.dossier_id);
+          if (dossier === false) return json({ error: "Dossier introuvable" }, 404);
+          for (const id of cibles) {
+            const r = await dossiers.ranger(sb, s.ws.id, "ressource", id, dossier);
+            if ("erreur" in r) return json({ error: r.erreur }, 400);
+          }
+        } else {
+          const { error } = await sb.from("studio_documents").delete().eq("workspace_id", s.ws.id).in("id", cibles);
+          if (error) return json({ error: error.message }, 400);
+          // Fichiers transmis tels quels : ils quittent aussi le stockage.
+          const chemins = trouves.map((d) => fichiers.fichierStocke(d.contenu, d.titre)?.chemin)
+            .filter((c): c is string => Boolean(c?.startsWith(`${s.ws.id}/`)));
+          if (chemins.length) await sb.storage.from("studio-medias").remove(chemins).catch(() => undefined);
+        }
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "ressources_lot", detail: { op, nombre: cibles.length } });
+        return json({ ok: true, nombre: cibles.length });
+      }
+
+      // Documents confiés à un agent (lots.ts) : la chaîne d'étapes tourne côté serveur, les résultats arrivent dans « Aujourd'hui ».
+      case "lot_lancer": {
+        const agents = await agentsDuWorkspace(sb, s.ws);
+        const d = lots.demandeLot(body, agents.map((a) => String(a.id)));
+        if ("erreur" in d) return json({ error: d.erreur }, 400);
+        const { data: docs } = await sb.from("studio_documents").select("id, titre, actif, sensible")
+          .eq("workspace_id", s.ws.id).in("id", d.ids);
+        const trouves = (docs ?? []) as Pick<lots.DocLot, "id" | "titre" | "actif" | "sensible">[];
+        const lisibles = d.ids.filter((id) => trouves.some((x) => x.id === id && lots.lisible(x)));
+        const ecartes = trouves.filter((x) => !lots.lisible(x)).map((x) => x.titre);
+        if (!lisibles.length) return json({ error: "Aucun document lisible : un document sensible doit d'abord être activé pour être confié à un agent." }, 400);
+        const refus = await garde(sb, s.ws.id);
+        if (refus) return json({ error: refus.message, gouvernance: true }, refus.statut);
+        const cle = await cleCron(sb);
+        if (!cle) return json({ error: "Traitement en lot indisponible pour le moment. Contactez Aissociate." }, 503);
+        await declencherLot(cle, { ws: s.ws.id, user: s.user.id, agent: d.agent_id, consigne: d.consigne, mode: d.mode, ids: lisibles, index: 0, echecs: [] });
+        await journaliser(sb, {
+          wsId: s.ws.id, acteur: `client:${s.user.email}`, agentId: d.agent_id, action: "lot_lance",
+          detail: { mode: d.mode, documents: lisibles.length, ecartes: ecartes.length, consigne: d.consigne.slice(0, 300) },
+        });
+        return json({ ok: true, nombre: lisibles.length, ecartes });
       }
 
       // Fichier joint au chat que le navigateur ne lit pas : gardé tel quel (fichiers.ts), rangé dans « Mes ressources ».
