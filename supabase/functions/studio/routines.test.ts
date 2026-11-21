@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  bilanPassages, chaine, consigneDe, consigneModele, enClair, erreurReglages, etapesEnregistrees, historique, MODELES, modeleDe,
+  bilanPassages, chaine, consigneDe, consigneProposition, consigneModele, enClair, erreurReglages, etapesEnregistrees, historique, MODELES, modeleDe,
   modelesPour, normaliserEtapes, reglagesDe, resume, validerProposition, type Passage,
 } from "./routines.ts";
 
@@ -155,5 +155,18 @@ describe("routines — proposition de Léa", () => {
   it("relaie l'impossibilité et refuse une proposition vide", () => {
     expect(validerProposition({ impossible: "Aucun outil ne lit votre banque." }, equipe)).toEqual({ erreur: "Aucun outil ne lit votre banque." });
     expect("erreur" in validerProposition({ titre: "x", consigne: "trop court" }, equipe)).toBe(true);
+  });
+});
+
+describe("proposition de routine", () => {
+  const equipe = [{ id: "hugo", prenom: "Hugo", metier: "communication" }];
+  it("annonce les API et serveurs MCP reliés comme des outils", () => {
+    const c = consigneProposition(equipe, [], [{ nom: "Brevo", genre: "API", description: "envoi de mailing en masse" }]);
+    expect(c).toContain("Outils reliés : Brevo (API : envoi de mailing en masse).");
+    expect(c).toContain("ne part qu'après sa validation");
+  });
+  it("sans outil relié, le dit", () => {
+    expect(consigneProposition(equipe, [])).toContain("Outils reliés : aucun");
+    expect(consigneProposition(equipe, ["mail"])).not.toContain("serveurs MCP ci-dessus");
   });
 });
