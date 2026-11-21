@@ -109,9 +109,9 @@ const AGENTS: Agent[] = [
 const faqAgents = (t: TarifConnecteurs) => [
   { question: 'Est-ce un chatbot de plus ?', answer: "Non. Chaque agent est un spécialiste avec des missions cadrées (ses « super-pouvoirs »). Il connaît votre entreprise : votre fiche, vos tarifs, votre charte, les contenus que vous avez déjà validés. Si une demande sort de son métier, il ne bricole pas : il la confie au bon collègue." },
   { question: 'Combien ça coûte vraiment ?', answer: `Un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Aucuns frais de mise en place, sans engagement : vous résiliez quand vous voulez. Le calculateur de la page vous donne votre montant exact.` },
-  { question: 'Puis-je essayer avant de payer ?', answer: `Oui : ${OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt avec les agents choisis et vos identifiants arrivent par e-mail. À la fin de l'essai, vous choisissez votre abonnement ou vous arrêtez là : rien n'est facturé automatiquement.` },
+  { question: 'Puis-je essayer avant de payer ?', answer: `Oui : ${OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt avec les agents choisis et vos identifiants arrivent par e-mail. Pendant l'essai, le nombre d'outils connectés est limité et la vidéo s'ouvre avec l'abonnement. À la fin de l'essai, vous choisissez votre abonnement ou vous arrêtez là : rien n'est facturé automatiquement.` },
   { question: 'Les connecteurs sont-ils compris ?', answer: `${t.inclus.length ? `Oui pour ${enumerer(t.inclus.map((x) => libelle(x)))} (un compte de chaque). Tout autre connecteur actif` : 'Chaque connecteur actif'} (autre messagerie, serveur MCP, autre application${t.inclus.length ? ', compte supplémentaire' : ''}) coûte ${eur(t.prix)} HT par mois, uniquement tant qu'il est connecté.` },
-  { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Pour aller plus loin, notre équipe vous accompagne pendant ${OFFRE.delaiJours} jours : fiche entreprise, ressources, connecteurs et prise en main.` },
+  { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Dès votre abonnement, notre équipe vous accompagne pendant ${OFFRE.delaiJours} jours : fiche entreprise, ressources, connecteurs et prise en main.` },
   { question: 'Les agents envoient-ils des messages à ma place ?', answer: "Ils préparent, vous validez. Rien ne part vers vos clients sans votre accord. Les connecteurs (Google Workspace, Outlook, Facebook, Instagram, LinkedIn, TikTok…) permettent de préparer du contenu directement adapté à vos outils." },
   { question: 'Et mes données ?', answer: "Votre espace est cloisonné : vos données ne sont visibles que de vous et de votre équipe. Hébergement en Union européenne, mots de passe et secrets chiffrés, conformité RGPD." },
 ];
@@ -377,8 +377,8 @@ export default function AgentsIA() {
 
         {/* ── 6. Mise en place ── */}
         <section className="mx-auto max-w-6xl px-4 py-20 sm:px-8">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Vos agents travaillent dès aujourd'hui. Nous vous accompagnons {OFFRE.delaiJours} jours.</h2>
-          <p className="mt-3 max-w-2xl text-neutral-600">Votre espace s'ouvre à la fin du questionnaire. Ensuite, vous n'êtes pas seul : une équipe humaine, à La Réunion, affine tout avec vous. C'est compris dans l'abonnement.</p>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Vos agents travaillent dès aujourd'hui. À l'abonnement, nous vous accompagnons {OFFRE.delaiJours} jours.</h2>
+          <p className="mt-3 max-w-2xl text-neutral-600">Votre espace s'ouvre à la fin du questionnaire et vous l'essayez à votre rythme. Dès votre abonnement, vous n'êtes plus seul : une équipe humaine, à La Réunion, affine tout avec vous. C'est compris dans l'abonnement.</p>
           <ol className="mt-10 grid gap-5 md:grid-cols-3">
             {PAS_A_PAS.map((p, i) => (
               <li key={p.t} className="rounded-2xl border border-neutral-200 bg-white p-6">
@@ -405,7 +405,7 @@ export default function AgentsIA() {
                   ['Votre base de connaissances', 'Tarifs, plaquettes, charte, FAQ : lus par les agents avant chaque mission.'],
                   ['Visuels et vidéos IA', 'Générés à la demande, rangés dans votre galerie, prêts à publier.'],
                   ['Les connecteurs', `${inclusCourt ? `${inclusCourt} inclus ; les autres` : 'Chaque connecteur'} à ${eur(tarif.prix)} HT / mois (détail ci-dessous).`],
-                  ['L\'accompagnement humain', `Mise en place et prise en main avec vous pendant ${OFFRE.delaiJours} jours, sans frais, support à La Réunion.`],
+                  ['L\'accompagnement humain', `Mise en place et prise en main avec vous pendant ${OFFRE.delaiJours} jours à compter de votre abonnement, sans frais, support à La Réunion.`],
                   [`${OFFRE.essaiJours} jours d'essai gratuit`, 'Sans carte bancaire. Rien n\'est facturé automatiquement à la fin de l\'essai.'],
                 ].map(([t, d]) => (
                   <li key={t} className="flex gap-3 rounded-xl border border-neutral-200 p-4">
