@@ -7,6 +7,7 @@ import Confirmation from '../composants/Confirmation';
 import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 import BarreSelection from '../ressources/BarreSelection';
+import ConfierLot from '../ressources/ConfierLot';
 import { PARALLELE, fichiersDuDepot, parPaquets, phraseBilan, trierFichiers, type Bilan } from '../ressources/importMasse';
 
 type Ajout = { id: string; sensible: { type: string; message: string } | null };
@@ -18,7 +19,8 @@ const NATURES: Record<NonNullable<Ressource['sensible']>, string> = {
 const taille = (o: number | null) => (o == null ? '' : o > 1e6 ? `${(o / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(o / 1e3))} Ko`);
 
 export default function Ressources() {
-  const { gerer, rafraichir } = useStudio();
+  const { gerer, rafraichir, me } = useStudio();
+  const [confier, setConfier] = useState(false);
   const [onglet, setOnglet] = useState<'fichier' | 'note'>('fichier');
   const [liste, setListe] = useState<Ressource[] | null>(null);
   const [recherche, setRecherche] = useState('');
@@ -53,7 +55,7 @@ export default function Ressources() {
   const toutCoche = visibles.length > 0 && choisies.length === visibles.length;
   const cocher = (id: string) => setCoches((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toutBasculer = () => setCoches(toutCoche ? new Set() : new Set(visibles.map((r) => r.id)));
-  useEffect(() => { setCoches(new Set()); }, [onglet, filtre]);
+  useEffect(() => { setCoches(new Set()); setConfier(false); }, [onglet, filtre]);
 
   /** Import en masse (importMasse.ts) : tri, lecture deux par deux, progression, puis bilan. */
   const [progression, setProgression] = useState<{ faits: number; total: number; nom: string } | null>(null);
@@ -222,9 +224,16 @@ export default function Ressources() {
       )}
       {choisies.length > 0 && (
         <BarreSelection choisies={choisies} options={dossiers.options} gerer={gerer}
-          onVider={() => setCoches(new Set())}
+          onConfier={me.agents.length ? () => setConfier(true) : undefined}
+          onVider={() => { setCoches(new Set()); setConfier(false); }}
           onErreur={(m) => { setErreur(m); charger(); }}
           onFini={async (m) => { setErreur(''); setInfo(m); setCoches(new Set()); await charger(); dossiers.charger(); rafraichir(); }} />
+      )}
+      {confier && choisies.length > 0 && (
+        <ConfierLot choisies={choisies} agents={me.agents} gerer={gerer}
+          restantes={me.stats.quota_mois != null ? me.stats.quota_mois - me.stats.demandes_mois : null}
+          onFermer={() => setConfier(false)}
+          onLance={(m) => { setInfo(m); setConfier(false); setCoches(new Set()); }} />
       )}
       {liste !== null && visibles.length > 0 && (
         <label className="mb-2 inline-flex min-h-[36px] items-center gap-2 px-1 text-sm text-neutral-600">
