@@ -14,6 +14,7 @@ import { APPLICATIONS, estApplication } from "./applications.ts";
 import { APPS_OUTILLEES } from "./applications_outils.ts";
 import { estTypeMcp, SERVEURS_MAX, slug, urlAutorisee } from "./mcp_client.ts";
 import { API_MAX, AUTHS, DOC_MAX, estTypeApi } from "./api_client.ts";
+import { chargerAcces, cleZernio, filtrer, type Acces } from "./acces.ts";
 
 type Def = {
   libelle: string;
@@ -76,30 +77,36 @@ export function defDe(type: string): Def | undefined {
   return type === "api" ? undefined : CONNECTEURS[type];
 }
 
-/** Connecteurs au statut « connecte », pour le prompt des agents. */
-export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promise<ConnecteurActif[]> {
-  const [{ data }, comptes] = await Promise.all([
+/**
+ * Connecteurs au statut « connecte », pour le prompt des agents. Avec `agentId` : seulement ceux
+ * que cet agent peut utiliser (connecteurs réservés, acces.ts) ; sans : tous (« Mon équipe »).
+ */
+export async function connecteursActifs(sb: SupabaseClient, wsId: string, agentId?: string): Promise<ConnecteurActif[]> {
+  const [{ data: lignes }, tousComptes, reglesAcces] = await Promise.all([
     sb.from("studio_connecteurs").select("type, infos").eq("workspace_id", wsId).eq("statut", "connecte"),
     // Connexions en un clic (Zernio) de CET espace : messageries et réseaux sociaux.
     zernio.zernioConfigure() ? zernio.comptesBruts(wsId).catch(() => []) : Promise.resolve([] as Record<string, unknown>[]),
+    agentId ? chargerAcces(sb, wsId).catch(() => new Map() as Acces) : Promise.resolve(new Map() as Acces),
   ]);
+  const comptes = filtrer(tousComptes, (a) => cleZernio(String(a._id)), reglesAcces, agentId);
+  const data = filtrer(lignes ?? [], (c) => String(c.type), reglesAcces, agentId);
   const enUnClic: ConnecteurActif[] = comptes.flatMap((a): ConnecteurActif[] => {
     const b = bureau.versBoite(a);
     if (b) {
       return [{
-        type: `zernio:${b.fournisseur}`, libelle: `${bureau.NOMS_FOURNISSEURS[b.fournisseur]} (${b.zones.map((z) => bureau.NOMS_ZONES[z]).join(", ")})`,
+        type: `zernio:${b.fournisseur}`, cle: cleZernio(b.id), libelle: `${bureau.NOMS_FOURNISSEURS[b.fournisseur]} (${b.zones.map((z) => bureau.NOMS_ZONES[z]).join(", ")})`,
         detail: [b.adresse, b.a_reconnecter ? "à reconnecter" : "connecté par le client"].filter(Boolean).join(" · "),
       }];
     }
     if (estApplication(a.platform)) {
       // Outils dans applications_outils.ts ; sans outil, l'agent ne doit pas prétendre y agir.
-      return [{ type: `zernio:${a.platform}`, libelle: APPLICATIONS[a.platform].nom, detail: `${String(a.displayName || a.username || "compte relié")} · ${APPS_OUTILLEES.includes(a.platform) ? "reliée par le client : utilise les outils app_* indiqués plus bas" : "reliée par le client ; tu n'as pas d'outil pour y lire ni y agir : dis-le si on te le demande"}` }];
+      return [{ type: `zernio:${a.platform}`, cle: cleZernio(String(a._id)), libelle: APPLICATIONS[a.platform].nom, detail: `${String(a.displayName || a.username || "compte relié")} · ${APPS_OUTILLEES.includes(a.platform) ? "reliée par le client : utilise les outils app_* indiqués plus bas" : "reliée par le client ; tu n'as pas d'outil pour y lire ni y agir : dis-le si on te le demande"}` }];
     }
     if (!zernio.estReseau(a.platform)) return [];
-    return [{ type: `zernio:${a.platform}`, libelle: zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "connecté par le client") }];
+    return [{ type: `zernio:${a.platform}`, cle: cleZernio(String(a._id)), libelle: zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "connecté par le client") }];
   });
-  return [...enUnClic, ...(data ?? []).filter((c) => defDe(c.type)).map((c) => ({
-    type: c.type, libelle: defDe(c.type)!.libelle,
+  return [...enUnClic, ...data.filter((c) => defDe(c.type)).map((c) => ({
+    type: c.type, cle: String(c.type), libelle: defDe(c.type)!.libelle,
     detail: defDe(c.type)!.detail?.((c.infos ?? {}) as Record<string, string>),
   }))];
 }

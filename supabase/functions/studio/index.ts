@@ -1200,7 +1200,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     sb.from("studio_messages").select("content, created_at, agent_id, studio_conversations!inner(titre)")
       .eq("workspace_id", s.ws.id).eq("epingle", true).is("media_id", null)
       .order("created_at", { ascending: false }).limit(6),
-    connecteursActifs(sb, s.ws.id),
+    connecteursActifs(sb, s.ws.id, agent.id),
     chargerHarness(sb),
     // Papier à en-tête (« Mon entreprise ») : coordonnées officielles données aux agents.
     sb.from("studio_workspaces").select("entete, logo_chemin").eq("id", s.ws.id).maybeSingle(),
@@ -1449,7 +1449,9 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               sesOutils.consigne += `\n\n${pouvoirs.consigneMedia(sesMediasC)}`;
             }
             const sys = construirePrompt({
-              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
+              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, harness, aujourdhui, entete, logo,
+              // Ses connecteurs à lui : un connecteur réservé à d'autres agents n'y figure pas (acces.ts).
+              connecteurs: await connecteursActifs(sb, s.ws.id, collegue.id).catch(() => connecteurs),
               savoirs: await chargerSavoirs(sb, collegue.id, consigne),
               refus: await refusRecents(sb, s.ws.id, collegue.id),
             }) + (sesOutils ? `\n\n${sesOutils.consigne}` : "") + "\n\n" + equipe.consigneMission(agent);
