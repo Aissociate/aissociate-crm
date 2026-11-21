@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Plus, Search, ShieldAlert, StickyNote, Trash2, Upload, X } from 'lucide-react';
+import { FileText, FolderUp, Plus, Search, ShieldAlert, StickyNote, Trash2, Upload, X } from 'lucide-react';
 import { useStudio } from '../StudioApp';
 import { appel, type Ressource } from '../api';
 import { Bouton, Chargement, Interrupteur, Titre, cx } from '../composants';
@@ -7,6 +7,7 @@ import Confirmation from '../composants/Confirmation';
 import { FORMATS_DOCUMENTS, extension, extraireTexte } from '../extraction';
 import { BarreDossiers, ChoixDossier, dansFiltre, useDossiers, type Filtre } from '../Dossiers';
 import BarreSelection from '../ressources/BarreSelection';
+import { PARALLELE, fichiersDuDepot, parPaquets, phraseBilan, trierFichiers, type Bilan } from '../ressources/importMasse';
 
 type Ajout = { id: string; sensible: { type: string; message: string } | null };
 const NATURES: Record<NonNullable<Ressource['sensible']>, string> = {
@@ -54,20 +55,42 @@ export default function Ressources() {
   const toutBasculer = () => setCoches(toutCoche ? new Set() : new Set(visibles.map((r) => r.id)));
   useEffect(() => { setCoches(new Set()); }, [onglet, filtre]);
 
+  /** Import en masse (importMasse.ts) : tri, lecture deux par deux, progression, puis bilan. */
+  const [progression, setProgression] = useState<{ faits: number; total: number; nom: string } | null>(null);
+  const [bilan, setBilan] = useState<Bilan | null>(null);
+  const [survol, setSurvol] = useState(false);
   const importer = async (fichiers: File[]) => {
-    setErreur(''); setAvis([]); setImport(true);
-    const echecs: string[] = [], sensibles: string[] = [];
-    for (const f of fichiers) {
+    if (import_) return;
+    setErreur(''); setAvis([]); setBilan(null); setImport(true);
+    const tri = trierFichiers(fichiers, (liste ?? []).filter((r) => r.type === 'fichier').map((r) => ({ titre: r.titre, taille: r.taille })));
+    const b: Bilan = { importes: 0, sensibles: [], echecs: [], refuses: tri.refuses, doublons: tri.doublons, enTrop: tri.enTrop };
+    let faits = 0;
+    setProgression({ faits: 0, total: tri.aLire.length, nom: '' });
+    await parPaquets(tri.aLire, PARALLELE, async (f) => {
+      setProgression((p) => p && { ...p, nom: f.name });
       try {
         const contenu = await extraireTexte(f);
         const r = await appel<Ajout>('ressource_add', { titre: f.name, contenu, type: 'fichier', format: extension(f.name), taille: f.size, dossier_id: dossierAjout });
-        if (r.sensible) sensibles.push(`${f.name} — ${r.sensible.message}`);
-      } catch (e) { echecs.push(gerer(e)); }
-    }
-    if (echecs.length) setErreur(echecs.join(' · '));
-    setAvis(sensibles);
+        b.importes++;
+        if (r.sensible) b.sensibles.push(`${f.name} — ${r.sensible.message}`);
+      } catch (e) { b.echecs.push(`${f.name} — ${gerer(e)}`); }
+      faits++;
+      setProgression((p) => p && { ...p, faits });
+    });
+    setProgression(null);
+    // Un seul fichier sans souci : pas besoin de bilan, la liste parle d'elle-même.
+    if (fichiers.length === 1 && !b.echecs.length && !b.refuses.length && !b.doublons.length) setAvis(b.sensibles);
+    else setBilan(b);
     await charger(); rafraichir();
-    setImport(false); if (fichier.current) fichier.current.value = '';
+    setImport(false);
+    if (fichier.current) fichier.current.value = '';
+    if (dossierFichiers.current) dossierFichiers.current.value = '';
+  };
+  const dossierFichiers = useRef<HTMLInputElement>(null);
+  const deposer = async (e: React.DragEvent) => {
+    e.preventDefault(); setSurvol(false);
+    if (onglet !== 'fichier' || import_) return;
+    importer(await fichiersDuDepot(e.dataTransfer));
   };
 
   const enregistrerNote = async () => {
@@ -97,7 +120,15 @@ export default function Ressources() {
   };
 
   return (
-    <>
+    <div className="relative"
+      onDragOver={(e) => { if (onglet === 'fichier' && e.dataTransfer.types.includes('Files')) { e.preventDefault(); setSurvol(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSurvol(false); }}
+      onDrop={deposer}>
+      {survol && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-neutral-900 bg-white/85 text-base font-medium">
+          Déposez vos fichiers ou un dossier entier pour les importer
+        </div>
+      )}
       <Titre sous="Vos agents s'appuient sur les ressources activées pour répondre avec vos vraies informations.">Mes ressources</Titre>
 
       <div className="mb-5 flex gap-6 border-b border-neutral-200">
@@ -121,13 +152,44 @@ export default function Ressources() {
         {onglet === 'fichier' ? (
           <>
             <input ref={fichier} type="file" multiple accept={FORMATS_DOCUMENTS} className="hidden" onChange={(e) => e.target.files?.length && importer([...e.target.files])} />
-            <Bouton onClick={() => fichier.current?.click()} disabled={import_}><Upload className="h-4 w-4" /> {import_ ? 'Lecture…' : 'Importer'}</Bouton>
+            {/* Dossier entier : le navigateur donne tous les fichiers qu'il contient, sous-dossiers compris. */}
+            <input ref={dossierFichiers} type="file" multiple className="hidden"
+              {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+              onChange={(e) => e.target.files?.length && importer([...e.target.files])} />
+            <Bouton onClick={() => fichier.current?.click()} disabled={import_}><Upload className="h-4 w-4" /> {import_ ? 'Lecture…' : 'Importer des fichiers'}</Bouton>
+            <button type="button" onClick={() => dossierFichiers.current?.click()} disabled={import_}
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm hover:bg-neutral-50 disabled:opacity-50">
+              <FolderUp className="h-4 w-4" /> Importer un dossier
+            </button>
           </>
         ) : (
           <Bouton onClick={() => setNote({ titre: '', contenu: '' })}><Plus className="h-4 w-4" /> Nouvelle note</Bouton>
         )}
       </div>
-      {onglet === 'fichier' && <p className="mb-4 text-xs text-neutral-500">Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument, CSV, texte, archive ZIP (15 Mo max). Le texte est extrait dans votre navigateur.</p>}
+      {onglet === 'fichier' && <p className="mb-4 text-xs text-neutral-500">Formats acceptés : PDF, Word, Excel, PowerPoint, OpenDocument, CSV, texte, archive ZIP (15 Mo max par fichier). Glissez aussi des fichiers ou un dossier entier sur la page. Le texte est extrait dans votre navigateur.</p>}
+      {progression && (
+        <div className="mb-4 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm" role="status" aria-live="polite">
+          <p>Lecture {progression.faits} / {progression.total}{progression.nom ? ` — ${progression.nom}` : ''}</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100">
+            <div className="h-full bg-neutral-900 transition-all" style={{ width: `${progression.total ? (100 * progression.faits) / progression.total : 0}%` }} />
+          </div>
+        </div>
+      )}
+      {bilan && (
+        <div className={cx('mb-4 rounded-xl border px-3 py-2 text-sm', bilan.echecs.length || bilan.sensibles.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900')} role="status">
+          <div className="flex items-start gap-2">
+            <p className="flex-1 font-medium">{phraseBilan(bilan)}</p>
+            <button onClick={() => setBilan(null)} aria-label="Fermer le bilan"><X className="h-4 w-4" /></button>
+          </div>
+          {[['En échec', bilan.echecs], ['Sensibles (non lus par vos agents tant que vous ne les activez pas)', bilan.sensibles],
+            ['Formats non pris en charge', bilan.refuses], ['Déjà présents', bilan.doublons]].map(([titre, l]) => (l as string[]).length > 0 && (
+            <details key={titre as string} className="mt-1">
+              <summary className="cursor-pointer">{titre as string} ({(l as string[]).length})</summary>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">{(l as string[]).slice(0, 50).map((x) => <li key={x}>{x}</li>)}</ul>
+            </details>
+          ))}
+        </div>
+      )}
       {erreur && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{erreur}</p>}
       {avis.length > 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
@@ -219,6 +281,6 @@ export default function Ressources() {
         confirmer={{ label: 'Activer quand même', danger: true, onClick: async () => { const r = activation; setActivation(null); if (r) await basculer(r, true, true); } }}
         annuler={{ onClick: () => setActivation(null) }}
       />
-    </>
+    </div>
   );
 }
