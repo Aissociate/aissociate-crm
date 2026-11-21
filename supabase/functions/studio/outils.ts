@@ -916,7 +916,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
               ?? (data ?? []).find((x) => x.titre.toLowerCase().includes(cible.toLowerCase()));
             if (l) { id = l.id; nomCible = l.titre; }
           } else {
-            const { data } = await ctx.sb.from("studio_medias").select("id, prompt").eq("workspace_id", ctx.wsId).eq("statut", "pret")
+            const { data } = await ctx.sb.from("studio_medias").select("id, prompt").eq("workspace_id", ctx.wsId).eq("statut", "pret").not("chemin", "is", null)
               .ilike("prompt", `%${cible.replace(/[%_\\]/g, "")}%`).order("created_at", { ascending: false }).limit(1).maybeSingle();
             if (data) { id = data.id; nomCible = String(data.prompt ?? "").slice(0, 60); }
           }
@@ -1070,9 +1070,10 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const texte = String(a.texte ?? "").trim().slice(0, 5000), medias = zernio.mediasValides(adresses);
           if (medias === null) return { resultat: "Adresse de média invalide (https publique, ou référence media:… d'un visuel créé).", libelle: "Publication non préparée" };
           const { data: trouves } = studio.length
-            ? await ctx.sb.from("studio_medias").select("id, type, statut").eq("workspace_id", ctx.wsId).in("id", studio)
-            : { data: [] as { id: string; type: string; statut: string }[] };
-          const visuels = studio.map((id) => (trouves ?? []).find((m) => m.id === id)).filter((m) => m && m.statut !== "echec")
+            ? await ctx.sb.from("studio_medias").select("id, type, statut, chemin").eq("workspace_id", ctx.wsId).in("id", studio)
+            : { data: [] as { id: string; type: string; statut: string; chemin: string | null }[] };
+          // Échoué ou supprimé (prêt sans fichier) : inutilisable.
+          const visuels = studio.map((id) => (trouves ?? []).find((m) => m.id === id)).filter((m) => m && m.statut !== "echec" && !(m.statut === "pret" && !m.chemin))
             .map((m) => ({ id: m!.id, type: m!.type === "video" ? "video" as const : "image" as const }));
           if (visuels.length < studio.length) return { resultat: "Visuel introuvable ou dont la création a échoué : vérifie la référence media:… (ou crée-le d'abord).", libelle: "Publication non préparée" };
           const erreur = zernio.controlePublication(choisis.map((c) => c!.reseau), texte, [...medias, ...visuels.map((v) => v.id)]);
@@ -1326,7 +1327,7 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       const liens: string[] = [];
       for (const v of action.visuels ?? []) {
         const { data: m } = await sb.from("studio_medias").select("statut, chemin").eq("id", v.id).eq("workspace_id", wsId).maybeSingle();
-        if (!m || m.statut === "echec") return { ok: false, erreur: "Le visuel de cette publication a échoué ou a été supprimé : demandez-en un nouveau." };
+        if (!m || m.statut === "echec" || (m.statut === "pret" && !m.chemin)) return { ok: false, erreur: "Le visuel de cette publication a échoué ou a été supprimé : demandez-en un nouveau." };
         if (m.statut !== "pret" || !m.chemin) return { ok: false, erreur: "Le visuel est encore en cours de création : validez à nouveau dans une minute." };
         const { data: signe } = await sb.storage.from("studio-medias").createSignedUrl(String(m.chemin), dureeLien(action.programme));
         if (!signe?.signedUrl) return { ok: false, erreur: "Lien du visuel impossible à préparer." };
