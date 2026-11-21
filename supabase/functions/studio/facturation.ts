@@ -39,6 +39,8 @@ export function typeManuel(type: string): string | null {
   if (type === "outlook") return "microsoft";
   if (type === "smtp") return "imap";
   if (type.startsWith("app:")) return "app";
+  // Un serveur MCP par connecteur « mcp:<nom> » : chacun compte comme un connecteur MCP.
+  if (type.startsWith("mcp:")) return "mcp";
   return (TYPES as readonly string[]).includes(type) ? type : null;
 }
 
