@@ -562,7 +562,7 @@ export function consigneDe(t: RoutineBrute & { consigne: string }, prenoms: Map<
 }
 
 /** Avertissement ajouté à la consigne d'un passage en mode essai. */
-export const AVIS_ESSAI = "MODE ESSAI : ce passage montre au dirigeant ce que la routine aurait fait. Fais le travail normalement : tes propositions sont notées pour lui, mais rien n'est soumis, enregistré ni envoyé. Termine par la liste de ce que tu aurais proposé.";
+export const AVIS_ESSAI = "MODE ESSAI : ce passage montre au dirigeant ce que la routine aurait fait. Fais le travail normalement et appelle tes outils de proposition comme d'habitude (publication, document, e-mail…) : en essai, ils notent la proposition pour le dirigeant sans rien soumettre, enregistrer ni envoyer. Les visuels et vidéos ne sont pas créés en essai : décris celui que tu aurais créé, et ne retiens pas une proposition pour cette seule raison (une publication qui exige une image, comme Instagram, peut rester dans ta liste finale). Termine par la liste de ce que tu aurais proposé.";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Historique : « Ce qui s'est passé »
