@@ -17,9 +17,19 @@ const TON: Record<string, 'warning' | 'info' | 'success' | 'danger' | 'neutral'>
   demande: 'warning', en_cours: 'info', connecte: 'success', erreur: 'danger', desactive: 'neutral',
 };
 
+type Test = { enCours: true } | { ok: true; outils: { nom: string; lecture: boolean }[] } | { ok: false; erreur: string };
+
 export default function ConnecteursEspace({ workspaceId }: { workspaceId: string }) {
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [erreur, setErreur] = useState('');
+  /** Serveurs MCP : test de connexion (outils vus) avant de passer en « Connecté ». */
+  const [tests, setTests] = useState<Record<string, Test>>({});
+  const tester = async (id: string) => {
+    setTests((t) => ({ ...t, [id]: { enCours: true } }));
+    const { data, error } = await supabase.functions.invoke('studio', { body: { action: 'admin_tester_mcp', id } });
+    const r = (error ? { ok: false, erreur: error.message } : data) as Test;
+    setTests((t) => ({ ...t, [id]: r }));
+  };
 
   const charger = useCallback(async () => {
     const { data, error } = await db.from('studio_connecteurs').select('*').eq('workspace_id', workspaceId).order('created_at');
@@ -38,6 +48,7 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
       <h3 className="mb-1 font-semibold text-fg">Connecteurs</h3>
       <p className="mb-2 text-xs text-muted">
         Passer en « Connecté » une fois la connexion mise en place : l'outil apparaît alors dans le contexte des agents.
+        Serveur MCP : « Tester la connexion », puis « Connecté » : ses outils deviennent ceux des agents.
         La note est visible par le client.
       </p>
       {erreur && <p className="mb-2 text-sm text-red-600">{erreur}</p>}
@@ -64,6 +75,23 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
                   onChange={(e) => setLignes((l) => l.map((x) => (x.id === c.id ? { ...x, notes_admin: e.target.value } : x)))}
                   onBlur={(e) => maj(c.id, { notes_admin: e.target.value })} />
               </div>
+              {(c.type === 'mcp' || c.type.startsWith('mcp:')) && (() => {
+                const t = tests[c.id];
+                return (
+                  <div className="mt-2 text-xs">
+                    <button type="button" className="rounded-md border border-line px-2 py-1 font-medium text-fg hover:bg-white/5 disabled:opacity-50"
+                      disabled={Boolean(t && 'enCours' in t)} onClick={() => tester(c.id)}>
+                      {t && 'enCours' in t ? 'Test en cours…' : 'Tester la connexion'}
+                    </button>
+                    {t && 'ok' in t && (t.ok ? (
+                      <p className="mt-1 text-emerald-500">
+                        Répond : {t.outils.length} outil{t.outils.length > 1 ? 's' : ''} ({t.outils.filter((o) => o.lecture).length} en lecture directe, les autres proposés au client avant exécution).
+                        <span className="mt-0.5 block text-muted">{t.outils.map((o) => `${o.nom}${o.lecture ? '' : ' ✎'}`).join(', ')}</span>
+                      </p>
+                    ) : <p className="mt-1 text-red-500">Échec : {t.erreur}</p>)}
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>

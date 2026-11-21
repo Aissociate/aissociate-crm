@@ -63,7 +63,7 @@ export function urlAutorisee(brut: string): URL | null {
   return u;
 }
 
-const LECTURE = /^(get|list|lister|search|rechercher|find|read|lire|fetch|query|fiche|statistiques|stats|describe|count|show|consulter|voir)(_|-|$)/i;
+const LECTURE = /^(get|list|lister|search|rechercher|find|read|lire|fetch|query|fiche|statistiques|stats|describe|count|show|consulter|voir|ask|lookup|retrieve|browse|inspect|explain)(_|-|$)/i;
 
 /** Lecture sans risque : annoncée par le serveur, ou nom explicite quand il ne dit rien. */
 export function estLecture(o: OutilMcp): boolean {
