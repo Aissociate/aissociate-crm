@@ -94,6 +94,11 @@ export function presenter(l: Decidable, maintenant = new Date()): Presentation {
       return { portee: 'Votre routine', bouton: 'Mettre en route', fait: 'Routine en route : ses envois attendront toujours votre feu vert.', modifiable: false };
     case 'routine_creer':
       return { portee: 'Nouvelle routine, en essai 7 jours', bouton: "Créer la routine à l'essai", fait: 'Routine créée en mode essai : retrouvez-la dans « Routines ».', modifiable: false };
+    case 'mcp_appel': {
+      // Outil d'un serveur MCP relié par le client, qui écrit : exécuté tel que montré.
+      const serveur = typeof a.serveur === 'string' && a.serveur ? a.serveur : 'votre outil';
+      return { portee: `Action dans ${serveur}`, bouton: 'Valider et lancer', fait: `Action exécutée dans ${serveur}.`, modifiable: false };
+    }
     default:
       // Livrable sans action : un texte ou un document à relire, rien ne part de lui-même.
       return l.type_action

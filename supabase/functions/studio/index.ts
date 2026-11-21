@@ -130,6 +130,7 @@ import * as consignes from "./consignes.ts";
 import * as pouvoirs from "./pouvoirs.ts";
 import * as routineChat from "./routine_outil.ts";
 import * as lots from "./lots.ts";
+import * as mcpClient from "./mcp_client.ts";
 import * as fichiers from "./fichiers.ts";
 import * as vision from "./vision.ts";
 import { accumulerAppels, appelsValides, cumulerUsage, refusOutils, type AppelOutil } from "./flux.ts";
@@ -1738,6 +1739,12 @@ async function admin(sb: SupabaseClient, action: string, body: Record<string, un
   if (action === "admin_modeles") return await listerModeles(sb);
   // Contrôle du parcours client à la demande (l'e-mail d'alerte part seulement si demandé).
   if (action === "admin_controle") return json(await controle.executer(sb, { envoyer: body.envoyer === true }));
+  // Serveur MCP d'un client : on vérifie qu'il répond et ce qu'il expose avant de le passer en « Connecté ».
+  if (action === "admin_tester_mcp") {
+    const s = await mcpClient.serveurDeLEspace(sb, null, String(body.id ?? "")).catch(() => null);
+    if (!s) return json({ error: "Serveur MCP introuvable ou jeton illisible" }, 404);
+    return json(await mcpClient.tester(s));
+  }
   if (action === "admin_liaison") {
     const wsId = String(body.workspace_id ?? "");
     const { data: w } = await sb.from("studio_workspaces").select("id, nom, liaison_inbox_id").eq("id", wsId).maybeSingle();
@@ -1949,7 +1956,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Administration CRM ──
     if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_connexions",
-      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs", "admin_controle"].includes(action)) {
+      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs", "admin_controle", "admin_tester_mcp"].includes(action)) {
       const managerId = await estManager(req);
       if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body, managerId);

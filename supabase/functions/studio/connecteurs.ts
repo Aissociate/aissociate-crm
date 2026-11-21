@@ -12,6 +12,7 @@ import * as bureau from "./bureau.ts";
 import * as zernio from "./zernio.ts";
 import { APPLICATIONS, estApplication } from "./applications.ts";
 import { APPS_OUTILLEES } from "./applications_outils.ts";
+import { estTypeMcp, SERVEURS_MAX, slug, urlAutorisee } from "./mcp_client.ts";
 
 type Def = {
   libelle: string;
@@ -55,6 +56,14 @@ export const CONNECTEURS: Record<string, Def> = {
 
 const DEMANDE_APP: Def = { libelle: "Application sur demande", champs: [{ nom: "libelle", max: 120 }, { nom: "besoin", max: 1000 }] };
 
+/**
+ * Définition d'un type de connecteur. Plusieurs serveurs MCP par espace : « mcp:<nom> »
+ * (« mcp » seul reste valable pour les connexions enregistrées avant).
+ */
+export function defDe(type: string): Def | undefined {
+  return estTypeMcp(type) ? CONNECTEURS.mcp : CONNECTEURS[type];
+}
+
 /** Connecteurs au statut « connecte », pour le prompt des agents. */
 export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promise<ConnecteurActif[]> {
   const [{ data }, comptes] = await Promise.all([
@@ -77,9 +86,9 @@ export async function connecteursActifs(sb: SupabaseClient, wsId: string): Promi
     if (!zernio.estReseau(a.platform)) return [];
     return [{ type: `zernio:${a.platform}`, libelle: zernio.NOMS_RESEAUX[a.platform], detail: String(a.displayName || a.username || "connecté par le client") }];
   });
-  return [...enUnClic, ...(data ?? []).filter((c) => CONNECTEURS[c.type]).map((c) => ({
-    type: c.type, libelle: CONNECTEURS[c.type].libelle,
-    detail: CONNECTEURS[c.type].detail?.((c.infos ?? {}) as Record<string, string>),
+  return [...enUnClic, ...(data ?? []).filter((c) => defDe(c.type)).map((c) => ({
+    type: c.type, libelle: defDe(c.type)!.libelle,
+    detail: defDe(c.type)!.detail?.((c.infos ?? {}) as Record<string, string>),
   }))];
 }
 
@@ -93,9 +102,15 @@ export async function listerConnecteurs(sb: SupabaseClient, wsId: string) {
 export async function enregistrerConnecteur(
   sb: SupabaseClient, wsId: string, userId: string, body: Record<string, unknown>,
 ): Promise<{ ok: true } | { erreur: string }> {
-  const type = String(body.type ?? "");
+  let type = String(body.type ?? "");
+  // Nouveau serveur MCP : un connecteur par serveur, nommé d'après l'outil (« mcp:notion »).
+  if (type === "mcp" && body.nouveau === true) {
+    const s = slug(String((body.infos as Record<string, unknown> | undefined)?.nom ?? ""));
+    if (!s) return { erreur: "Champ requis : nom" };
+    type = `mcp:${s}`;
+  }
   // Autre application demandée à Aissociate : « app:<nom> ».
-  const def = /^app:[a-z0-9][a-z0-9._-]{0,79}$/.test(type) ? DEMANDE_APP : CONNECTEURS[type];
+  const def = /^app:[a-z0-9][a-z0-9._-]{0,79}$/.test(type) ? DEMANDE_APP : defDe(type);
   if (!def) return { erreur: "Connecteur inconnu" };
   if (body.accord !== true) return { erreur: "Merci de cocher votre accord pour la mise en place de la connexion." };
   const brut = (body.infos ?? {}) as Record<string, unknown>;
@@ -106,7 +121,12 @@ export async function enregistrerConnecteur(
     if (v) infos[c.nom] = v;
   }
   if (type === "smtp" && !/^\d{2,5}$/.test(infos.port ?? "")) return { erreur: "Port SMTP invalide" };
-  if (type === "mcp" && !/^https:\/\//i.test(infos.url ?? "")) return { erreur: "L'URL du serveur MCP doit commencer par https://" };
+  if (estTypeMcp(type) && !urlAutorisee(infos.url ?? "")) return { erreur: "L'adresse du serveur MCP doit commencer par https:// et viser un serveur public." };
+  if (estTypeMcp(type)) {
+    const { count } = await sb.from("studio_connecteurs").select("id", { count: "exact", head: true })
+      .eq("workspace_id", wsId).or("type.eq.mcp,type.like.mcp:*").neq("type", type);
+    if ((count ?? 0) >= SERVEURS_MAX) return { erreur: `${SERVEURS_MAX} serveurs MCP au plus par espace.` };
+  }
 
   const ligne: Record<string, unknown> = {
     workspace_id: wsId, type, infos, demande_par: userId,

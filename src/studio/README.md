@@ -266,6 +266,20 @@ entreprise et les ressources plutôt que des champs « à compléter ».
 **Configuration :** secret Supabase `ZERNIO_API_KEY`. Les secrets `NANGO_*`, la fonction `nango-webhook`
 et la table `studio_nango_connexions` ne servent plus.
 
+## Serveurs MCP des clients (`mcp_client.ts`)
+- **Plusieurs serveurs par espace** (8 au plus) : un connecteur `mcp:<nom>` chacun (`connecteur_enregistrer` avec
+  `nouveau: true` le nomme d'après l'outil) ; l'ancien type `mcp` reste lu. Adresse https vers un hôte public
+  seulement (pas de réseau local ni d'IP privée), jeton chiffré (`securite.ts`), facturé comme un connecteur MCP.
+- **Mise en service** : le client remplit la carte « Serveurs MCP » (statut « demande ») ; dans le CRM, fiche de
+  l'espace › Connecteurs › « Tester la connexion » (`admin_tester_mcp` : outils vus, lecture ou écriture), puis
+  « Connecté ». Toute modification par le client repasse en « demande ».
+- **Transport** : HTTP streamable (POST JSON-RPC, réponse JSON ou SSE, `Mcp-Session-Id`), `initialize` puis
+  `tools/list` (cache 5 min par connecteur) et `tools/call` ; jeton en `Authorization: Bearer`.
+- **Agents** (`outils.ts`) : outils `mcp_<serveur>__<outil>` (40 par serveur), consigne listant les serveurs et
+  ceux injoignables. Lecture (`readOnlyHint`, ou nom get/list/search/rechercher/fiche/ask… sans annotation) :
+  appelée pendant la conversation, résultat présenté comme données tierces, journalisé (`mcp_lecture`).
+  Le reste devient une décision `mcp_appel` (aperçu des paramètres, sans « Modifier ») appelée au « VALIDÉ ».
+
 ## Traitements en lots dans « Mes ressources » (`lots.ts`, `src/studio/ressources/`)
 - **Gestion groupée** : cases à cocher (et « Tout sélectionner » sur la liste affichée), barre d'actions
   `BarreSelection` → action `ressources_lot` {op: activer | desactiver | ranger | supprimer, ids (50 max)}.
