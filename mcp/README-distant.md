@@ -3,7 +3,7 @@
 Serveur MCP **hébergé** (Edge Function `mcp`), joignable de n'importe où :
 
 ```
-https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/mcp
+https://api.aissociate.re/functions/v1/mcp
 ```
 
 Même catalogue que l'assistant du CRM (`supabase/functions/_shared/agent/`) :
@@ -62,7 +62,7 @@ personnalisé : le jeton passe donc dans l'URL.
 
 1. *Paramètres › Connecteurs › Ajouter un connecteur personnalisé*.
 2. Nom : `CRM AIssociate` ; URL :
-   `https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/mcp?jeton=crm_mcp_…`
+   `https://api.aissociate.re/functions/v1/mcp?jeton=crm_mcp_…`
    (bouton « URL pour claude.ai » du CRM). Laisser les champs OAuth vides.
 3. Activer le connecteur dans la conversation.
 
@@ -83,7 +83,7 @@ pont `mcp-remote` dans `claude_desktop_config.json` :
       "command": "npx",
       "args": [
         "-y", "mcp-remote",
-        "https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/mcp",
+        "https://api.aissociate.re/functions/v1/mcp",
         "--header", "Authorization:${CRM_MCP_TOKEN}"
       ],
       "env": { "CRM_MCP_TOKEN": "Bearer crm_mcp_…" }
@@ -101,7 +101,7 @@ Redémarrer Claude Desktop.) Le même bloc fonctionne dans Claude Code :
 
 Nœud **MCP Client Tool** (branché sur un nœud *AI Agent*) :
 
-- *Endpoint* : `https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/mcp`
+- *Endpoint* : `https://api.aissociate.re/functions/v1/mcp`
 - *Server Transport* : **HTTP Streamable**
 - *Authentication* : **Bearer Auth**, credential = le jeton `crm_mcp_…`
 - *Tools to include* : tous, ou une sélection (ex. lectures seulement).
@@ -112,7 +112,7 @@ autres, à valider à la main.
 ## Vérifier à la main
 
 ```bash
-curl -s https://vkirutbpxzybucuiyjnb.supabase.co/functions/v1/mcp \
+curl -s https://api.aissociate.re/functions/v1/mcp \
   -H "Authorization: Bearer crm_mcp_…" -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -123,9 +123,10 @@ Sans jeton, avec un jeton inconnu, expiré ou révoqué : **401**.
 ## Technique
 
 - `supabase/functions/mcp/index.ts` : transport HTTP, sans état (POST JSON-RPC
-  → réponse `application/json` ; GET → 405). Déploiement :
-  `npx --yes supabase functions deploy mcp --project-ref vkirutbpxzybucuiyjnb --use-api --no-verify-jwt`
-  (`--no-verify-jwt` : le jeton n'est pas un JWT, la fonction l'authentifie elle-même).
+  → réponse `application/json` ; GET → 405). Depuis le 18/11/2026 la fonction
+  tourne sur le VPS (conteneur `aissociate-functions`, voir `deploy/README.md`), derrière
+  `https://api.aissociate.re/functions/v1/mcp`. Elle est déclarée publique côté API
+  (le jeton n'est pas un JWT, la fonction l'authentifie elle-même).
 - `supabase/functions/_shared/mcp_jeton.ts` : vérification du jeton, session courte.
 - `supabase/functions/_shared/mcp_protocole.ts` : JSON-RPC / MCP.
 - `supabase/migrations/20261014100000_mcp_jetons.sql` : table, RLS, RPC
