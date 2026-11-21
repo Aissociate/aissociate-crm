@@ -87,7 +87,7 @@ import { consigneTache, egaliteSure, libellePlanning, MODELES_TACHES, planningVa
 import {
   AVIS_ESSAI, bilanPassages, chaine, consigneDe, consigneModele, consigneProposition, enClair, erreurReglages, etapesEnregistrees,
   historique, modeleDe, modelesPour, NOMS_CAPACITES, reglagesDe, TONS, validerProposition,
-  type Capacite, type Passage, type RoutineBrute,
+  type Capacite, type Passage, type RoutineBrute, type ServiceRelie,
 } from "./routines.ts";
 import { extraireJson } from "./ameliorations_regles.ts";
 
@@ -683,6 +683,17 @@ async function capacitesEspace(sb: SupabaseClient, wsId: string): Promise<Capaci
   return c;
 }
 
+/** API et serveurs MCP « connecté » de l'espace, pour proposer des routines qui s'en servent. */
+async function servicesRelies(sb: SupabaseClient, wsId: string): Promise<ServiceRelie[]> {
+  const { data } = await sb.from("studio_connecteurs").select("type, infos").eq("workspace_id", wsId).eq("statut", "connecte")
+    .or("type.eq.mcp,type.like.mcp:*,type.like.api:*");
+  return (data ?? []).map((c) => {
+    const i = (c.infos ?? {}) as Record<string, string>;
+    const api = String(c.type).startsWith("api:");
+    return { nom: i.nom || String(c.type).replace(/^(api|mcp):?/, "") || "Serveur MCP", genre: api ? "API" as const : "serveur MCP" as const, description: i.description };
+  });
+}
+
 /** Une routine telle que l'affiche l'écran Routine. */
 function vueRoutine(t: Record<string, unknown>, prenoms: Map<string, string>, passages: Passage[]) {
   const m = modeleDe(t.modele);
@@ -807,8 +818,9 @@ async function proposerRoutine(sb: SupabaseClient, s: Session, demande: string) 
   if (texte.length < 8) return { erreur: "Décrivez la tâche en une phrase." };
   const refus = await garde(sb, s.ws.id);
   if (refus) return { erreur: refus.message };
-  const [agents, capacites, { data: aiRow }] = await Promise.all([
-    agentsDuWorkspace(sb, s.ws), capacitesEspace(sb, s.ws.id), sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle(),
+  const [agents, capacites, services, { data: aiRow }] = await Promise.all([
+    agentsDuWorkspace(sb, s.ws), capacitesEspace(sb, s.ws.id), servicesRelies(sb, s.ws.id).catch(() => [] as ServiceRelie[]),
+    sb.from("parametres").select("valeur").eq("cle", "ai").maybeSingle(),
   ]);
   const ai = (aiRow?.valeur ?? {}) as Record<string, string>;
   const apiKey = (Deno.env.get("OPENROUTER_API_KEY") || ai.openrouter_key || "").trim();
@@ -822,7 +834,7 @@ async function proposerRoutine(sb: SupabaseClient, s: Session, demande: string) 
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "X-Title": "Aissociate Studio - routines" },
       body: JSON.stringify({
         model: modele, temperature: 0.2, max_tokens: 4000,
-        messages: [{ role: "system", content: consigneProposition(equipeDispo, capacites) }, { role: "user", content: texte }],
+        messages: [{ role: "system", content: consigneProposition(equipeDispo, capacites, services) }, { role: "user", content: texte }],
       }),
       signal: AbortSignal.timeout(90_000),
     });

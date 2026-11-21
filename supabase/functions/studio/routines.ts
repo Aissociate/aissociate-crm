@@ -648,7 +648,14 @@ export type Proposition = {
 };
 
 /** Consigne donnée au modèle pour proposer une routine (pas un prompt d'agent). */
-export function consigneProposition(agents: { id: string; prenom: string; metier: string }[], capacites: Capacite[]): string {
+/** Service relié par le client (API ou serveur MCP « connecté ») : les agents s'en servent pendant la routine. */
+export type ServiceRelie = { nom: string; genre: "API" | "serveur MCP"; description?: string };
+
+export function consigneProposition(agents: { id: string; prenom: string; metier: string }[], capacites: Capacite[], services: ServiceRelie[] = []): string {
+  const outils = [
+    ...capacites.map((c) => NOMS_CAPACITES[c]),
+    ...services.map((s) => `${s.nom} (${s.genre}${s.description ? ` : ${s.description.replace(/\s+/g, " ").slice(0, 150)}` : ""})`),
+  ];
   return [
     "Tu es Léa, coordinatrice d'une équipe d'agents IA au service d'un dirigeant de petite entreprise à La Réunion.",
     "Le dirigeant décrit une tâche qu'il ne veut plus faire lui-même. Propose une routine : une chaîne de 2 à 6 étapes, chacune une phrase courte dont le sujet est un agent de l'équipe (« Théo repère… »), exécutée à des jours et heures fixes.",
@@ -656,7 +663,8 @@ export function consigneProposition(agents: { id: string; prenom: string; metier
     "Équipe disponible (n'utilise que ces identifiants) :",
     ...agents.map((a) => `- ${a.id} : ${a.prenom}, ${a.metier}`),
     "",
-    `Outils reliés : ${capacites.length ? capacites.map((c) => NOMS_CAPACITES[c]).join(", ") : "aucun (les agents peuvent seulement rédiger, chercher sur le web et ranger des notes)"}.`,
+    `Outils reliés : ${outils.length ? outils.join(", ") : "aucun (les agents peuvent seulement rédiger, chercher sur le web et ranger des notes)"}.`,
+    ...(services.length ? ["Les API et serveurs MCP ci-dessus sont utilisables par tous les agents : ils y lisent directement ; ce qui y crée, modifie ou envoie est proposé au dirigeant et ne part qu'après sa validation. Nomme le service dans l'étape concernée (« Hugo envoie la newsletter par Brevo »)."] : []),
     "Les agents ne peuvent ni payer, ni envoyer de SMS, ni lire un compte bancaire. N'invente aucun outil.",
     "",
     "Règles :",
