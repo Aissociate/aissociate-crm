@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  AGENT_QUALIOPI, ajouterJours, avancement, choisirParticipants, ESPACE_AISSOCIATE, espacesOrganisme, finSession, jourReunion,
-  periodeDe, qualiopiActif, resoudreSession,
+  AGENT_QUALIOPI, ajouterJours, avancement, choisirParticipants, controleProduction, DEFINITION_PRODUIRE, ESPACE_AISSOCIATE, estDocument, espacesOrganisme, finSession, jourReunion,
+  periodeDe, qualiopiActif, resoudreSession, statutApresProduction,
 } from "./qualiopi.ts";
 
 const AUTRE = "5d1e0000-0000-4000-8000-000000000001";
@@ -76,5 +76,27 @@ describe("avancement de la checklist", () => {
       { type_doc: "convocation", statut: "a_generer" }, { type_doc: "emargement", statut: "signe" }, { type_doc: "livret_suivi", statut: "non_applicable" },
     ]);
     expect(av).toEqual({ faites: 2, total: 4, manquantes: ["Convocation"] });
+  });
+});
+
+describe("production", () => {
+  const s = { date_debut: "2026-11-20T05:00:00Z", date_fin: "2026-11-21T13:00:00Z" };
+  it("attestation et certificat attendent la fin de la session", () => {
+    expect(controleProduction("attestation_fin", s, "2026-11-20")).toContain("pas terminée");
+    expect(controleProduction("attestation_fin", s, "2026-11-21")).toBeNull(); // le dernier jour, remise en fin de formation
+    expect(controleProduction("certificat_realisation", s, "2026-11-20")).toContain("21/11/2026");
+    expect(controleProduction("attestation_fin", s, "2026-11-22")).toBeNull();
+    expect(controleProduction("convocation", s, "2026-11-01")).toBeNull();
+  });
+  it("ne fait jamais reculer une pièce déjà envoyée ou signée", () => {
+    expect(statutApresProduction("a_generer")).toBe("genere");
+    expect(statutApresProduction("envoye")).toBe("envoye");
+    expect(statutApresProduction("signe")).toBe("signe");
+  });
+  it("l'outil de production propose tous les documents demandés", () => {
+    const docs = (DEFINITION_PRODUIRE.function.parameters as { properties: { document: { enum: string[] } } }).properties.document.enum;
+    for (const d of ["devis", "programme", "convention", "convocation", "livret_accueil", "emargement", "attestation_fin", "certificat_realisation"]) expect(docs).toContain(d);
+    expect(estDocument("convocation")).toBe(true);
+    expect(estDocument("bulletin")).toBe(false);
   });
 });

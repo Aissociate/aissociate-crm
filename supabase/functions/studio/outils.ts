@@ -696,7 +696,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const mcp = mcpClient.definitionsMcp(serveursMcp);
   // Conformité Qualiopi : Nora, dans l'espace de l'organisme (Aissociate) seulement.
   const qualiopi = qualiopiActif(ctx.wsId, ctx.agentId)
-    ? qualiopiCrm.outilsQualiopi({ sb: ctx.sb, wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId })
+    ? qualiopiCrm.outilsQualiopi({ sb: ctx.sb, wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, essai: Boolean(ctx.essai) })
     : null;
   const apis = apiClient.definitionsApi(apisChargees);
   const aVeille = (nbFlux ?? 0) > 0;
