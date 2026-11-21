@@ -26,6 +26,8 @@ const OFFRE = {
   // Abonnement mensuel HT : prix du 1er, 2e, … 5e agent (dégressif jusqu'à -50 %). Aucuns frais de mise en place.
   // Mêmes montants que PALIERS_AGENTS (supabase/functions/studio/stripe.ts) et OFFRE (studio-demo).
   mensuelParRang: [149, 131, 112, 93, 74.5],
+  // Paiement à l'année : 12 mois pour le prix de 10 (MOIS_FACTURES_AN dans stripe.ts, OFFRE dans studio-demo).
+  moisFacturesAn: 10,
   delaiJours: 15,
   essaiJours: 7,              // essai gratuit ouvert à la fin du questionnaire (studio_config essai_jours)
   // Connecteurs inclus et prix des autres : réglés dans CRM › Studio IA › Paramètres,
@@ -108,7 +110,7 @@ const AGENTS: Agent[] = [
 
 const faqAgents = (t: TarifConnecteurs) => [
   { question: 'Est-ce un chatbot de plus ?', answer: "Non. Chaque agent est un spécialiste avec des missions cadrées (ses « super-pouvoirs »). Il connaît votre entreprise : votre fiche, vos tarifs, votre charte, les contenus que vous avez déjà validés. Si une demande sort de son métier, il ne bricole pas : il la confie au bon collègue." },
-  { question: 'Combien ça coûte vraiment ?', answer: `Un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Aucuns frais de mise en place, sans engagement : vous résiliez quand vous voulez. Le calculateur de la page vous donne votre montant exact.` },
+  { question: 'Combien ça coûte vraiment ?', answer: `Un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Aucuns frais de mise en place, sans engagement : vous résiliez quand vous voulez. Si vous préférez payer à l'année, vous réglez ${OFFRE.moisFacturesAn} mois pour 12 (${12 - OFFRE.moisFacturesAn} mois offerts), en une fois. Le calculateur de la page vous donne votre montant exact.` },
   { question: 'Puis-je essayer avant de payer ?', answer: `Oui : ${OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt avec les agents choisis et vos identifiants arrivent par e-mail. À la fin de l'essai, vous choisissez votre abonnement ou vous arrêtez là : rien n'est facturé automatiquement.` },
   { question: 'Les connecteurs sont-ils compris ?', answer: `${t.inclus.length ? `Oui pour ${enumerer(t.inclus.map((x) => libelle(x)))} (un compte de chaque). Tout autre connecteur actif` : 'Chaque connecteur actif'} (autre messagerie, serveur MCP, autre application${t.inclus.length ? ', compte supplémentaire' : ''}) coûte ${eur(t.prix)} HT par mois, uniquement tant qu'il est connecté.` },
   { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Pour aller plus loin, notre équipe vous accompagne pendant ${OFFRE.delaiJours} jours : fiche entreprise, ressources, connecteurs et prise en main.` },
@@ -130,6 +132,7 @@ export default function AgentsIA() {
   const [etat, setEtat] = useState<'saisie' | 'envoi' | 'ok' | 'erreur'>('saisie');
   const [erreur, setErreur] = useState('');
   const [faqOuverte, setFaqOuverte] = useState<number | null>(0);
+  const [annuel, setAnnuel] = useState(false);
   // Anti-spam : champ piège invisible + temps minimal de saisie (trigger base en renfort).
   const [piege, setPiege] = useState('');
   const [ouvertLe] = useState(() => Date.now());
@@ -167,7 +170,7 @@ export default function AgentsIA() {
       email: email || null, phone: tel, company: societe || null,
       request_type: 'Studio IA (agents IA)',
       message: `Demande d'appel de 20 min — Studio IA. Entreprise : ${societe}. Agents envisagés : ${equipe}. `
-        + `Estimation affichée : ${eur(calcul.mensuel)} HT/mois.`,
+        + `Estimation affichée : ${annuel ? `${eur(calcul.mensuel * OFFRE.moisFacturesAn)} HT/an (paiement annuel)` : `${eur(calcul.mensuel)} HT/mois`}.`,
       source: window.location.pathname, status: 'new',
     }]);
     if (error) { setErreur(error.message); setEtat('erreur'); return; }
@@ -442,9 +445,20 @@ export default function AgentsIA() {
                           </div>
                         ))}
                       </div>
+                      <div className="flex rounded-lg bg-neutral-100 p-1 text-sm" role="group" aria-label="Rythme de paiement">
+                        {[false, true].map((an) => (
+                          <button key={String(an)} type="button" onClick={() => setAnnuel(an)} aria-pressed={annuel === an}
+                            className={`flex-1 rounded-md px-3 py-1.5 transition-colors ${annuel === an ? 'bg-white font-semibold text-neutral-900 shadow-sm' : 'text-neutral-600 hover:text-neutral-900'}`}>
+                            {an ? `À l'année (${12 - OFFRE.moisFacturesAn} mois offerts)` : 'Au mois'}
+                          </button>
+                        ))}
+                      </div>
                       <div className="flex items-end justify-between border-t border-neutral-200 pt-3">
                         <dt className="font-semibold">Abonnement</dt>
-                        <dd className="text-3xl font-semibold">{eur(calcul.mensuel)}<span className="text-sm font-normal text-neutral-500"> HT / mois</span></dd>
+                        <dd className="text-right text-3xl font-semibold">
+                          {eur(annuel ? calcul.mensuel * OFFRE.moisFacturesAn : calcul.mensuel)}<span className="text-sm font-normal text-neutral-500"> HT / {annuel ? 'an' : 'mois'}</span>
+                          {annuel && <span className="block text-sm font-normal text-neutral-500">au lieu de {eur(calcul.mensuel * 12)}, payé en une fois</span>}
+                        </dd>
                       </div>
                       <p className="text-xs text-neutral-500">
                         {inclusCourt && <>Connecteurs inclus : {inclusCourt}. </>}Autre connecteur actif : + {eur(tarif.prix)} HT / mois chacun.
@@ -458,7 +472,7 @@ export default function AgentsIA() {
                   <p className="mt-2 text-center text-xs text-neutral-500">Sans carte bancaire. Vous choisissez vos agents dans le questionnaire.</p>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-neutral-500">
-                  Montants HT. Abonnement mensuel sans engagement, résiliable à tout moment depuis votre espace.
+                  Montants HT. Abonnement mensuel sans engagement, résiliable à tout moment depuis votre espace. À l'année : {OFFRE.moisFacturesAn} mois payés pour 12, réglés d'avance.
                 </p>
               </div>
             </div>
