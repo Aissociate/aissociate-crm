@@ -28,6 +28,8 @@ import { colonneSensibleAbsente, detecterSensible, type Sensible } from "./sensi
 import * as fichiersBruts from "./fichiers.ts";
 import type { PieceStockee } from "./fichiers.ts";
 import { completerReferences, dureeLien, marqueurMedia, separerMedias } from "./pouvoirs.ts";
+import * as routineChat from "./routine_outil.ts";
+import type { ActionRoutine } from "./routine_outil.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -48,7 +50,9 @@ export type ActionLivrable =
   // Applications reliées en un clic (applications_outils.ts) : blog, CRM, YouTube, WhatsApp.
   | apps.ActionApp
   // Fin du mode essai d'une routine : la mettre en route pour de vrai (décision dans « Aujourd'hui »).
-  | { type: "routine_activer"; tache_id: string; titre: string; contenu: string };
+  | { type: "routine_activer"; tache_id: string; titre: string; contenu: string }
+  // Routine proposée par Léa depuis le chat (routine_outil.ts) : créée en mode essai au « VALIDÉ ».
+  | ActionRoutine;
 
 const lisibleReunion = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
 
@@ -60,7 +64,7 @@ export function titreAction(a: ActionLivrable): string {
   if (a.type === "mailing_envoyer") return `Mailing — ${a.objet}`;
   if (a.type === "gmail_envoyer") return `E-mail — ${a.objet}`;
   if (a.type === "agenda_creer") return `Rendez-vous — ${a.titre}`;
-  if (a.type === "routine_activer") return `Routine — ${a.titre}`;
+  if (a.type === "routine_activer" || a.type === "routine_creer") return `Routine — ${a.titre}`;
   if (a.type === "drive_deposer_fichier") return `Dépôt — ${a.titre}`;
   if (a.type === "reseaux_repondre_commentaire") return `Réponse ${zernio.NOMS_RESEAUX[a.compte.reseau]} — ${a.texte.replace(/\s+/g, " ").slice(0, 50)}`;
   if (a.type === "reseaux_envoyer_message") return `Message ${zernio.NOMS_RESEAUX[a.compte.reseau]} à ${a.destinataire}`;
@@ -147,6 +151,7 @@ export function modifierAction(a: ActionLivrable, champs: Record<string, unknown
     return texte ? { ...a, texte } : { erreur: "Le texte ne peut pas être vide." };
   }
   if (a.type === "routine_activer") return { erreur: "Cette décision ne se modifie pas : mettez la routine en route, ou réglez-la dans « Routines »." };
+  if (a.type === "routine_creer") return { erreur: "Validez la routine telle quelle (elle démarre en essai), puis réglez ses jours, heures et étapes dans « Routines » ; ou refusez-la en disant à Léa quoi changer." };
   if (a.type === "drive_deposer_fichier") return { erreur: "Un fichier déposé tel quel ne se modifie pas : validez-le ou refusez-le." };
   const titre = txt("titre", 200) || a.titre, contenu = txt("contenu", 100_000);
   if (!contenu) return { erreur: "Le document ne peut pas être vide." };
@@ -632,6 +637,8 @@ type Ctx = {
   confiePar?: string | null;
   /** Passage de routine en mode essai : les propositions sont notées ici ; rien n'est soumis, enregistré ni envoyé. */
   essai?: CarnetEssai | null;
+  /** Équipe de l'espace : donnée à Léa seule, qui peut alors proposer des routines (routine_proposer). */
+  equipe?: { id: string; prenom: string }[];
 };
 
 /** Ce qu'une routine en essai aurait proposé (historique « Ce qui s'est passé »). */
@@ -749,10 +756,12 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       ...DEFINITIONS_BASE, ...DEFINITIONS_DOCUMENT, DEFINITION_ARTICLE, DEFINITION_RECHERCHE, DEFINITION_WEB, DEFINITION_AJOUT_FLUX, ...(aVeille ? DEFINITIONS_VEILLE : []), ...(fichiers ? DEFINITIONS_FICHIERS : []),
       ...(mail ? [...DEFINITIONS_MAIL, ...DEFINITIONS_MAILING] : []), ...(cal ? DEFINITIONS_AGENDA : []), ...(reseaux ? DEFINITIONS_RESEAUX : []),
       ...apps.definitionsApps(comptesApps),
+      ...(ctx.equipe?.length ? [routineChat.definitionRoutine(ctx.equipe)] : []),
     ],
     consigne: [
       consigneBase(index, arbre), CONSIGNE_DOCUMENT, CONSIGNE_ARTICLE, CONSIGNE_WEB, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
       cal && CONSIGNE_AGENDA, reseaux && consigneReseaux(comptesReseaux), apps.consigneApps(comptesApps),
+      ctx.equipe?.length && routineChat.CONSIGNE_ROUTINE,
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
       let a: Record<string, string> = {};
@@ -761,6 +770,11 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
         return { resultat: "Mode essai : rien n'est enregistré. Indique dans ton compte rendu ce que tu aurais enregistré.", libelle: "Essai : non enregistré" };
       }
       try {
+        if (nom === routineChat.NOM_OUTIL_ROUTINE && ctx.equipe?.length) {
+          const action = routineChat.actionRoutine(a as Record<string, unknown>, ctx.equipe, ctx.userId ?? null);
+          if ("erreur" in action) return { resultat: `Routine non proposée : ${action.erreur}`, libelle: "Routine à reformuler" };
+          return await proposer(titreAction(action), action.contenu, action, `Le lancement en essai de la routine « ${action.titre} »`);
+        }
         if (nom === "ressource_lire") {
           const titre = String(a.titre ?? "").trim();
           const base = () => ctx.sb.from("studio_documents").select("titre, contenu").eq("workspace_id", ctx.wsId).eq("actif", true);
@@ -1186,6 +1200,7 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       if (error || !data) return { ok: false, erreur: error?.message ?? "Routine introuvable : elle a peut-être été supprimée." };
       return { ok: true, id: action.tache_id, lien: null };
     }
+    if (action.type === "routine_creer") return await routineChat.creerRoutineValidee(sb, wsId, action);
     if (action.type === "mailing_envoyer") {
       if (!livrableId) return { ok: false, erreur: "Livrable inconnu" };
       const n = await mailing.mettreEnFile(sb, wsId, livrableId, action.liste);
