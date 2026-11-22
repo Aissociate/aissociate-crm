@@ -168,7 +168,10 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
   `essai_fin` = +7 jours (`essai_jours`), mot de passe provisoire envoyé par e-mail depuis contact@aissociate.re
   (serveur SMTP du CRM ; secrets `STUDIO_SMTP_USERNAME` / `STUDIO_SMTP_PASSWORD` de la boîte contact@ si le
   serveur refuse cet expéditeur pour la boîte du CRM ; dernier repli : expéditeur du CRM, réponses vers contact@). Échec d'envoi : espace créé, `studio_onboarding.identifiants_envoyes_le` vide.
-- Pendant l'essai : quotas habituels, un seul connecteur (Zernio ou manuel). Après : seules les actions de
+- Pendant l'essai : quotas habituels, sauf deux garde-fous réglés dans CRM › Studio IA › Paramètres et lus à
+  chaque demande (`studio_config`) : `essai_connecteurs_max` (1 par défaut, Zernio ou manuel) et
+  `essai_quota_videos` (0 par défaut : la vidéo s'ouvre à l'abonnement). Rien n'est écrit sur l'espace : dès
+  l'abonnement payé, ses quotas reprennent seuls. L'accompagnement de 15 jours démarre à l'abonnement. Après : seules les actions de
   `ACTIONS_APRES_ESSAI` répondent (Mon périmètre, abonnement, mot de passe, CGV, en-tête) ; missions par e-mail
   et tâches planifiées s'arrêtent. Un abonnement payé lève le blocage et passe l'offre en « essentiel ».
 - CGV : livrables désignés par `studio_config.cgv_livrables` (ids, dans l'ordre). Version = empreinte des textes ;

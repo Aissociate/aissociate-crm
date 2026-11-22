@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIONS_APRES_ESSAI, enEssai, essaiTermine, joursRestants } from './essai';
+import { ACTIONS_APRES_ESSAI, enEssai, essaiTermine, joursRestants, limitesEssai, messageConnecteur, quotaVideosEssai } from './essai';
 import { parametresTaxe, tvaReunion } from './stripe';
 import { titreCgv } from './cgv';
 
@@ -22,6 +22,25 @@ describe('essai gratuit', () => {
   it('laisse ouvert l\'abonnement mais pas les agents une fois terminé', () => {
     expect(ACTIONS_APRES_ESSAI.has('abonnement_souscrire')).toBe(true);
     expect(ACTIONS_APRES_ESSAI.has('chat')).toBe(false);
+  });
+  it('lit les limites d\'essai des Paramètres, avec repli sur un connecteur et aucune vidéo', () => {
+    expect(limitesEssai({})).toEqual({ connecteurs: 1, videos: 0 });
+    expect(limitesEssai({ essai_connecteurs_max: '3', essai_quota_videos: '2' })).toEqual({ connecteurs: 3, videos: 2 });
+    expect(limitesEssai({ essai_connecteurs_max: '0', essai_quota_videos: '' })).toEqual({ connecteurs: 0, videos: 0 });
+    expect(limitesEssai({ essai_connecteurs_max: '-2', essai_quota_videos: 'abc' })).toEqual({ connecteurs: 1, videos: 0 });
+    expect(limitesEssai({ essai_connecteurs_max: '1.5' })).toEqual({ connecteurs: 1, videos: 0 });
+  });
+  it('ne donne jamais plus de vidéos en essai que le quota de l\'espace', () => {
+    expect(quotaVideosEssai(5, 0)).toBe(0);
+    expect(quotaVideosEssai(5, 2)).toBe(2);
+    expect(quotaVideosEssai(1, 2)).toBe(1);
+    expect(quotaVideosEssai(0, 2)).toBe(0);
+    expect(quotaVideosEssai(null, 2)).toBe(2);
+  });
+  it('annonce la limite de connecteurs dans les mots du réglage', () => {
+    expect(messageConnecteur(1)).toContain('un seul outil');
+    expect(messageConnecteur(3)).toContain('3 outils');
+    expect(messageConnecteur(0)).toContain('ne peuvent pas encore');
   });
 });
 

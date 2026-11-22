@@ -972,7 +972,8 @@ async function etatLiaison(sb: SupabaseClient, wsId: string, avecExpediteurs: bo
 async function refusConnecteurEssai(sb: SupabaseClient, s: Session): Promise<string | null> {
   if (!essai.enEssai(s.ws)) return null;
   const f = await facturationEspace(sb, s.ws.id);
-  return f.lignes.length >= essai.CONNECTEURS_ESSAI ? essai.MESSAGE_CONNECTEUR : null;
+  const { connecteurs: max } = await essai.chargerLimites(sb);
+  return f.lignes.length >= max ? essai.messageConnecteur(max) : null;
 }
 
 /** Abonnement en ligne de l'espace (Mon périmètre) : ce qui est facturé et ce que l'équipe compte aujourd'hui. */
@@ -1160,6 +1161,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   if (media) {
     const quotaMedia = await quotaMediaAtteint(sb, s.ws, media.type);
     if (quotaMedia !== null) {
+      if (quotaMedia === 0 && media.type === "video" && essai.enEssai(s.ws)) return json({ error: essai.MESSAGE_VIDEO }, 403);
       if (quotaMedia === 0) return json({ error: media.type === "image" ? "Les visuels ne sont pas inclus dans votre formule. Contactez Aissociate." : "La vidéo n'est pas incluse dans votre formule. Contactez Aissociate." }, 403);
       const refusCredits = await recharges.couvrable(sb, s.ws.id, media.type, quotaMedia);
       if (refusCredits) return json({ error: refusCredits, recharge: true }, 429);
@@ -1339,6 +1341,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           const type = rendu.media?.type ?? "image";
           const nom = type === "image" ? "visuel" : "vidéo";
           const quotaMedia = await quotaMediaAtteint(sb, s.ws, type);
+          if (quotaMedia === 0 && type === "video" && essai.enEssai(s.ws)) return { resultat: "La vidéo n'est pas comprise dans l'essai gratuit du client : dis-lui qu'elle sera disponible dès son abonnement (« Mon périmètre »).", libelle: "Vidéo disponible à l'abonnement" };
           if (quotaMedia === 0) return { resultat: `${type === "image" ? "Les visuels ne sont pas inclus" : "La vidéo n'est pas incluse"} dans la formule du client : dis-le-lui (il peut contacter Aissociate).`, libelle: `${nom[0].toUpperCase()}${nom.slice(1)} non inclus dans la formule` };
           if (quotaMedia !== null) {
             const refusCredits = await recharges.couvrable(sb, s.ws.id, type, quotaMedia);
@@ -2653,6 +2656,10 @@ Deno.serve(async (req: Request) => {
           recharges.etat(sb, s.ws.id),
         ]);
         const ouverts = new Set(agents.map((a) => a.id));
+        // Essai gratuit : la jauge des vidéos montre la limite d'essai, pas le quota de l'espace.
+        const maxVideos = essai.enEssai(s.ws)
+          ? essai.quotaVideosEssai(w?.quota_videos_mois, (await essai.chargerLimites(sb)).videos)
+          : w?.quota_videos_mois ?? null;
         return json({
           ...etat, offre: s.ws.offre, expire_le: s.ws.expire_le,
           budget_utilise_pct: etat.budget_ia_jour_eur ? Math.min(100, Math.round((depense / etat.budget_ia_jour_eur) * 100)) : null,
@@ -2660,7 +2667,7 @@ Deno.serve(async (req: Request) => {
           quotas: {
             demandes: { utilise: demandes, max: s.ws.quota_messages_mois },
             images: { utilise: (medias ?? []).filter((m) => m.type === "image").length, max: w?.quota_images_mois ?? null },
-            videos: { utilise: (medias ?? []).filter((m) => m.type === "video").length, max: w?.quota_videos_mois ?? null },
+            videos: { utilise: (medias ?? []).filter((m) => m.type === "video").length, max: maxVideos },
             utilisateurs: { max: w?.max_utilisateurs ?? null },
           },
           recharges: { ...credits, paiement_en_ligne: stripe.stripeConfigure() },
