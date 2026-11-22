@@ -9,7 +9,7 @@ import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  PageHeader, Button, Badge, Card, StatCard, EmptyState, Spinner, SearchSelect,
+  PageHeader, Button, Badge, Card, StatCard, EmptyState, Spinner, SearchSelect, TONE_BADGE,
 } from '@/components/ui';
 import type { SearchOption } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
@@ -29,7 +29,8 @@ import type { Bucket } from '@/lib/storage';
 // L'Espace documentaire (procédures, modèles, preuves de l'organisme) vit ici.
 const EspaceDocumentaire = lazy(() => import('@/pages/Documents'));
 
-const TABS = ['referentiel', 'dossiers', 'questionnaires', 'documents', 'modeles'] as const;
+// « Pièces par session » d'abord : c'est là qu'on produit les documents au quotidien.
+const TABS = ['dossiers', 'referentiel', 'questionnaires', 'documents', 'modeles'] as const;
 type Tab = typeof TABS[number];
 
 const CONFORMITES: QualiopiConformite[] = ['conforme', 'a_completer', 'non_applicable', 'a_verifier'];
@@ -39,7 +40,7 @@ export default function Qualiopi() {
   const { session } = useAuth();
   // Onglet dans l'URL (?onglet=…) : la recherche globale renvoie sur « documents ».
   const [params, setParams] = useSearchParams();
-  const tab: Tab = TABS.find((t) => t === params.get('onglet')) ?? 'referentiel';
+  const tab: Tab = TABS.find((t) => t === params.get('onglet')) ?? 'dossiers';
   const setTab = (t: Tab) => setParams((p) => { p.set('onglet', t); return p; }, { replace: true });
   const [exporting, setExporting] = useState(false);
 
@@ -70,12 +71,9 @@ export default function Qualiopi() {
       if (error) throw error;
       const url = (data as { url?: string })?.url;
       if (url) window.open(url, '_blank', 'noopener');
-      else alert("Export généré, mais aucun lien retourné. Vérifiez le déploiement de la fonction « qualiopi-export ».");
+      else alert("L'export a été lancé mais aucun lien n'est revenu. Réessayez ; si cela persiste, signalez-le dans Développement.");
     } catch (e) {
-      alert(
-        "Export indisponible : déployez l'Edge Function « qualiopi-export ». " +
-        (e instanceof Error ? e.message : ''),
-      );
+      alert("L'export n'a pas abouti. " + (e instanceof Error ? e.message : ''));
     } finally {
       setExporting(false);
     }
@@ -100,30 +98,23 @@ export default function Qualiopi() {
   return (
     <div>
       <PageHeader
-        title="Conformité Qualiopi"
-        subtitle="Référentiel National Qualité — preuves d'audit (7 critères / 32 indicateurs)"
+        title="Qualiopi"
+        subtitle={`Indicateurs conformes avec preuve : ${stats.conformes} sur ${stats.total - stats.na} (${stats.pct} %)`}
         actions={
-          <Button onClick={exportZip} disabled={exporting}>
+          <Button variant="secondary" onClick={exportZip} disabled={exporting} title="Toutes les preuves de l'année, rangées par indicateur">
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Exporter le ZIP d'audit
+            Exporter le dossier d'audit
           </Button>
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <StatCard label="Conformité réelle" value={`${stats.pct}%`} icon={<ShieldCheck className="h-5 w-5" />} hint={`${stats.conformes}/${stats.total - stats.na} indicateurs applicables (preuve requise)`} />
-        <StatCard label="Conformes avec preuve" value={stats.conformes} icon={<CheckCircle2 className="h-5 w-5" />} />
-        <StatCard label="À compléter" value={stats.aCompleter} icon={<AlertTriangle className="h-5 w-5" />} hint={stats.sansPreuve > 0 ? `dont ${stats.sansPreuve} « conforme » sans preuve` : undefined} />
-        <StatCard label="Non applicables" value={stats.na} icon={<FileCheck2 className="h-5 w-5" />} />
-      </div>
-
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
         {([
-          ['referentiel', 'Référentiel', ShieldCheck],
-          ['dossiers', 'Dossiers de formation', FolderArchive],
+          ['dossiers', 'Pièces par session', FolderArchive],
+          ['referentiel', 'Référentiel (32 indicateurs)', ShieldCheck],
           ['questionnaires', 'Positionnement & évaluations', MessageSquare],
           ['documents', "Documents de l'organisme", FileCheck2],
-          ['modeles', 'Modèles de documents', FileText],
+          ['modeles', 'Modèles', FileText],
         ] as [Tab, string, typeof ShieldCheck][]).map(([id, label, Icon]) => (
           <button
             key={id}
@@ -137,6 +128,15 @@ export default function Qualiopi() {
           </button>
         ))}
       </div>
+
+      {tab === 'referentiel' && (
+        <div className="mb-6 grid gap-4 sm:grid-cols-4">
+          <StatCard label="Conformité réelle" value={`${stats.pct}%`} icon={<ShieldCheck className="h-5 w-5" />} hint={`${stats.conformes}/${stats.total - stats.na} indicateurs applicables (preuve requise)`} />
+          <StatCard label="Conformes avec preuve" value={stats.conformes} icon={<CheckCircle2 className="h-5 w-5" />} />
+          <StatCard label="À compléter" value={stats.aCompleter} icon={<AlertTriangle className="h-5 w-5" />} hint={stats.sansPreuve > 0 ? `dont ${stats.sansPreuve} « conforme » sans preuve` : undefined} />
+          <StatCard label="Non applicables" value={stats.na} icon={<FileCheck2 className="h-5 w-5" />} />
+        </div>
+      )}
 
       {tab === 'referentiel' && (
         <Referentiel
@@ -372,6 +372,9 @@ function Dossiers({ userId }: { userId: string | null }) {
   const modeles = useCollection<QualiopiModeleDoc>('qualiopi_modeles_doc');
   const [openSession, setOpenSession] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [vue, setVue] = useState<'a_completer' | 'completes' | 'toutes'>('a_completer');
+  // Production en série des pièces d'une session.
+  const [lot, setLot] = useState<{ session: string; fait: number; total: number } | null>(null);
 
   // Types de pièces disposant d'un modèle .docx actif → publipostage possible.
   const modelTypes = new Set(modeles.data.filter((m) => m.actif && m.fichier_url).map((m) => m.type_doc));
@@ -397,27 +400,76 @@ function Dossiers({ userId }: { userId: string | null }) {
     docs.refresh();
   };
   // Publipostage sur modèle .docx si dispo, sinon génération pdf-lib générique.
-  const generateDoc = async (id: string, typeDoc: string) => {
+  // Renvoie le message d'erreur, ou null si la pièce est produite.
+  const produire = async (id: string, typeDoc: string): Promise<string | null> => {
     const fn = modelTypes.has(typeDoc) ? 'qualiopi-doc-tpl' : 'qualiopi-doc';
-    setBusy(id);
     try {
       const { data, error } = await supabase.functions.invoke(fn, { body: { docId: id } });
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-      docs.refresh();
+      return null;
     } catch (e) {
-      alert("Génération indisponible : déployez l'Edge Function « " + fn + " ». " + (e instanceof Error ? e.message : ''));
-    } finally { setBusy(null); }
+      return e instanceof Error ? e.message : 'erreur inconnue';
+    }
+  };
+  const generateDoc = async (id: string, typeDoc: string) => {
+    setBusy(id);
+    const err = await produire(id, typeDoc);
+    setBusy(null);
+    if (err) alert(`La pièce n'a pas pu être générée. ${err}`);
+    docs.refresh();
+  };
+  const generable = (d: QualiopiDossierDoc) => GENERABLE_DOC_TYPES.has(d.type_doc) || modelTypes.has(d.type_doc);
+  // Toutes les pièces encore « à générer » de la session, l'une après l'autre.
+  const genererTout = async (sessionId: string, liste: QualiopiDossierDoc[]) => {
+    const echecs: string[] = [];
+    setLot({ session: sessionId, fait: 0, total: liste.length });
+    for (let i = 0; i < liste.length; i++) {
+      const err = await produire(liste[i].id, liste[i].type_doc);
+      if (err) echecs.push(`${liste[i].libelle} : ${err}`);
+      setLot({ session: sessionId, fait: i + 1, total: liste.length });
+    }
+    setLot(null);
+    docs.refresh();
+    if (echecs.length) alert(`${liste.length - echecs.length} pièce(s) générée(s), ${echecs.length} en échec :\n${echecs.slice(0, 8).join('\n')}`);
+  };
+  // Une pièce « envoyée » attend encore sa signature : elle n'est pas faite.
+  // Une pièce « non applicable » ne doit pas empêcher une session d'être complète.
+  const FAITS = ['valide', 'recu', 'signe', 'genere', 'non_applicable'];
+  const complete = (sessionId: string) => {
+    const l = docs.data.filter((d) => d.session_id === sessionId);
+    return l.length > 0 && l.every((d) => FAITS.includes(d.statut));
   };
 
   if (sessions.loading) return <div className="flex justify-center py-16"><Spinner /></div>;
   if (sessions.data.length === 0) return <EmptyState title="Aucune session de formation" message="Créez une session dans le Calendrier : sa checklist Qualiopi est créée et se coche seule à mesure que les documents existent." />;
 
+  const nbCompletes = sessions.data.filter((s) => complete(s.id)).length;
+  const affichees = sessions.data.filter((s) => vue === 'toutes' || (vue === 'completes') === complete(s.id));
+
   return (
     <div className="space-y-3">
-      {sessions.data.map((s) => {
+      <div className="flex flex-wrap items-center gap-1.5">
+        {([
+          ['a_completer', 'À compléter', sessions.data.length - nbCompletes],
+          ['completes', 'Complètes', nbCompletes],
+          ['toutes', 'Toutes', sessions.data.length],
+        ] as const).map(([cle, label, n]) => {
+          const actif = vue === cle;
+          return (
+            <button key={cle} onClick={() => setVue(cle)} aria-pressed={actif} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition', actif ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'border-line text-muted hover:bg-surface-2 hover:text-fg')}>
+              {label} <span className="text-xs tabular-nums opacity-70">{n}</span>
+            </button>
+          );
+        })}
+        <p className="ml-auto text-xs text-muted">Une session, ses apprenants, les pièces attendues. Devis, conventions, positionnements et émargements du dossier client se cochent seuls.</p>
+      </div>
+      {affichees.length === 0 && <EmptyState title={vue === 'a_completer' ? 'Toutes les sessions sont complètes' : 'Aucune session'} />}
+      {affichees.map((s) => {
         const sDocs = docs.data.filter((d) => d.session_id === s.id);
-        const done = sDocs.filter((d) => ['valide', 'recu', 'signe', 'genere'].includes(d.statut)).length;
+        const done = sDocs.filter((d) => FAITS.includes(d.statut)).length;
+        const aProduire = sDocs.filter((d) => d.statut === 'a_generer' && generable(d));
+        const enLot = lot?.session === s.id;
         const pct = sDocs.length ? Math.round((done / sDocs.length) * 100) : 0;
         const parts = participants.data.filter((p) => p.session_id === s.id);
         const collectifs = sDocs.filter((d) => !d.participant_id);
@@ -428,7 +480,7 @@ function Dossiers({ userId }: { userId: string | null }) {
               <FolderArchive className="h-5 w-5 shrink-0 text-brand-500" />
               <div className="flex-1">
                 <p className="font-semibold text-fg">{s.titre}</p>
-                <p className="text-xs text-muted">{formatDate(s.date_debut)} · {parts.length} apprenant(s) · {sDocs.length} pièces</p>
+                <p className="text-xs text-muted">{formatDate(s.date_debut)} · {parts.length} apprenant(s) · {sDocs.length === 0 ? 'pièces à préparer' : `${done} pièce(s) sur ${sDocs.length}`}</p>
               </div>
               <div className="hidden w-40 sm:block">
                 <div className="h-2 overflow-hidden rounded-full bg-surface-2">
@@ -443,13 +495,23 @@ function Dossiers({ userId }: { userId: string | null }) {
               <div className="border-t border-line px-5 py-4">
                 {sDocs.length === 0 ? (
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-muted">Dossier non provisionné.</p>
+                    <p className="text-sm text-muted">La liste des pièces de cette session n'est pas encore créée.</p>
                     <Button onClick={() => prepare(s.id)} disabled={busy === s.id}>
-                      {busy === s.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Préparer le dossier
+                      {busy === s.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Créer la liste des pièces
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {aProduire.length > 0 && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-brand-500/5 px-3 py-2">
+                        <p className="text-sm text-fg">
+                          {enLot ? `Génération en cours : ${lot!.fait} sur ${lot!.total}…` : `${aProduire.length} pièce(s) peuvent être générées automatiquement.`}
+                        </p>
+                        <Button onClick={() => void genererTout(s.id, aProduire)} disabled={!!lot || !!busy}>
+                          {enLot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Tout générer
+                        </Button>
+                      </div>
+                    )}
                     <DocGroup title="Documents collectifs" docs={collectifs} busy={busy} modelTypes={modelTypes} onGenerate={generateDoc} onUpload={uploadDoc} onStatut={setDocStatut} />
                     {parts.map((p) => (
                       <DocGroup
@@ -464,7 +526,7 @@ function Dossiers({ userId }: { userId: string | null }) {
                       />
                     ))}
                     <Button variant="ghost" className="text-xs" onClick={() => prepare(s.id)} disabled={busy === s.id}>
-                      <RefreshCw className="h-3.5 w-3.5" /> Re-synchroniser la checklist
+                      <RefreshCw className="h-3.5 w-3.5" /> Actualiser la liste (nouveaux apprenants, pièces déjà produites)
                     </Button>
                   </div>
                 )}
@@ -493,18 +555,17 @@ function DocGroup({
           const canGenerate = GENERABLE_DOC_TYPES.has(d.type_doc) || modelTypes.has(d.type_doc);
           return (
           <div key={d.id} className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2 last:border-0">
-            <span className="flex-1 text-sm text-fg">{d.libelle}</span>
-            {modelTypes.has(d.type_doc) && <Badge tone="info">modèle</Badge>}
-            <Badge tone={DOC_STATUT_TONES[d.statut]}>{DOC_STATUT_LABELS[d.statut]}</Badge>
-            {d.source === 'auto' && <Badge tone="neutral">auto</Badge>}
+            <span className="min-w-[180px] flex-1 text-sm text-fg" title={d.source === 'auto' ? 'Cochée automatiquement depuis le dossier client' : undefined}>{d.libelle}</span>
             {d.fichier_url && <FileLink bucket={(d.bucket ?? 'qualiopi') as Bucket} value={d.fichier_url} />}
             {canGenerate && (
-              <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => onGenerate(d.id, d.type_doc)} disabled={busy === d.id}>
-                {busy === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Générer
+              <Button variant="ghost" className="h-8 py-0 text-xs" onClick={() => onGenerate(d.id, d.type_doc)} disabled={busy === d.id}
+                title={modelTypes.has(d.type_doc) ? 'Généré à partir de votre modèle Word' : 'Généré en PDF'}>
+                {busy === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {d.fichier_url ? 'Régénérer' : 'Générer'}
               </Button>
             )}
-            <FileUpload bucket="qualiopi" label="Téléverser" onUploaded={(v) => onUpload(d.id, v)} />
-            <select value={d.statut} onChange={(e) => onStatut(d.id, e.target.value as QualiopiDocStatut)} className="input h-8 w-auto py-0 text-xs">
+            <FileUpload bucket="qualiopi" label={d.fichier_url ? 'Remplacer' : 'Déposer'} onUploaded={(v) => onUpload(d.id, v)} />
+            <select value={d.statut} onChange={(e) => onStatut(d.id, e.target.value as QualiopiDocStatut)} aria-label={`Statut de ${d.libelle}`}
+              className={cn('h-8 w-auto rounded-full border-0 px-2.5 py-0 text-xs font-medium', TONE_BADGE[DOC_STATUT_TONES[d.statut]])}>
               {DOC_STATUTS.map((s) => <option key={s} value={s}>{DOC_STATUT_LABELS[s]}</option>)}
             </select>
           </div>
@@ -552,7 +613,7 @@ function Questionnaires() {
         <p className="text-sm text-fg">
           Le test de positionnement et les évaluations à chaud et à froid s'envoient depuis le dossier client
           (étapes « Montage » et « Clôture »). Chaque réponse coche automatiquement la pièce correspondante
-          dans « Dossiers de formation ».
+          dans « Pièces par session ».
         </p>
         {aVenir.length > 0 && (
           <p className="mt-2 text-sm text-muted">{aVenir.length} évaluation(s) programmée(s), pas encore envoyée(s).</p>

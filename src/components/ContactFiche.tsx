@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText, Bot, History, ContactRound } from 'lucide-react';
+import { X, Mail, Phone, Building2, User, Pencil, CircleCheck as CheckCircle2, Circle as XCircle, Calendar, Tag, TableProperties, NotebookPen, Save, Target, ClipboardList, TrendingUp, FolderKanban, CalendarDays, ListChecks, Coins, Plus, Trash2, FolderLock, FileText, Bot, History, Briefcase, Info, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -68,26 +68,15 @@ interface Props {
 export default function ContactFiche({ contact: c, entreprises, financeurs, profiles, onClose, onEdit, onUpdated }: Props) {
   const { session } = useAuth();
   const [composeOpen, setComposeOpen] = useState(false);
-  // Trois vues dans le même panneau : la fiche, l'historique complet et
-  // l'assistant IA branché sur ce contact.
-  const [tab, setTab] = useState<'fiche' | 'historique' | 'assistant'>('fiche');
-  useEffect(() => { setTab('fiche'); }, [c.id]);
+  // Cinq vues dans le même panneau. « Suivi » est celle qu'on ouvre pour traiter
+  // un lead (quoi faire, qualification, notes) ; « Affaires » regroupe ce qui a
+  // été vendu ou monté ; « Détails » range les champs qu'on remplit rarement.
+  type Vue = 'suivi' | 'affaires' | 'details' | 'historique' | 'assistant';
+  const [tab, setTab] = useState<Vue>('suivi');
+  useEffect(() => { setTab('suivi'); }, [c.id]);
   const entreprise = entreprises.find((e) => e.id === c.entreprise_id);
   const financeur = financeurs.find((f) => f.id === c.financeur_id);
   const owner = profiles.find((p) => p.id === c.owner_id);
-
-  // ── Notes éditable ────────────────────────────────────────────────────────────
-  const [notesValue, setNotesValue] = useState(c.notes ?? '');
-  const [notesDirty, setNotesDirty] = useState(false);
-  const [notesSaving, setNotesSaving] = useState(false);
-
-  const handleNotesSave = async () => {
-    setNotesSaving(true);
-    await supabase.from('contacts').update({ notes: notesValue || null }).eq('id', c.id);
-    setNotesSaving(false);
-    setNotesDirty(false);
-    onUpdated();
-  };
 
   // ── Statut transverse (pipeline / dossiers / sessions) ───────────────────────
   const [opps, setOpps] = useState<Opportunite[]>([]);
@@ -176,7 +165,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
   // ── Champs de suivi éditables ───────────────────────────────────────────────
   const [form, setForm] = useState({
     statut_entreprise: c.statut_entreprise ?? '', ville: c.ville ?? '', effectif: c.effectif ?? '',
-    siret: c.siret ?? '', autres: c.autres ?? '',
+    siret: c.siret ?? '', autres: c.autres ?? '', notes: c.notes ?? '',
     email2: c.email2 ?? '', email2_libelle: c.email2_libelle ?? '',
     email3: c.email3 ?? '', email3_libelle: c.email3_libelle ?? '',
     besoin_resume: c.besoin_resume ?? '', formation_envisagee: c.formation_envisagee ?? '',
@@ -328,8 +317,14 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     await supabase.from('contact_actions').delete().eq('id', a.id);
     setActions((p) => p.filter((x) => x.id !== a.id));
   };
-  const derniere = actions.find((a) => a.faite);
-  const prochaine = [...actions].reverse().find((a) => !a.faite);
+  // Les actions réalisées s'accumulent : on n'en montre que les dernières.
+  const [toutesFaites, setToutesFaites] = useState(false);
+  // Tri fait ici plutôt que supposé : à faire, la plus ancienne (donc la plus
+  // en retard) d'abord ; fait, la plus récente d'abord.
+  const aFaire = sortActions(actions.filter((a) => !a.faite)).reverse();
+  const faites = sortActions(actions.filter((a) => a.faite));
+  const derniere = faites[0];
+  const prochaine = aFaire[0];
   const now = new Date();
   const CHECKLIST: { key: keyof Contact; label: string }[] = [
     { key: 'eligibilite_verifiee', label: 'Éligibilité vérifiée' },
@@ -359,6 +354,45 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     contact_financeur: 'brand',
   };
 
+  const aujourdhui = ymd(new Date());
+  const quand = (a: ContactAction) => `${jourCourt(a.date_action)} ${formatDate(a.date_action)}${shortHeure(a.heure_action) ? ` · ${shortHeure(a.heure_action)}` : ''}`;
+  const titreSection = 'text-xs font-semibold uppercase tracking-wider text-muted';
+  const enregistre = (champ: string) => savedField === champ && <span className="text-xs font-normal normal-case text-emerald-600">enregistré ✓</span>;
+
+  // Une ligne du journal, avec son édition en place.
+  const ligneAction = (a: ContactAction) => {
+    const retard = !a.faite && a.date_action < aujourdhui;
+    return (
+      <li key={a.id} className={cn('rounded-lg border px-2.5 py-1.5 text-sm', retard ? 'border-red-500/40 bg-red-500/5' : 'border-line')}>
+        <div className="flex items-center gap-2">
+          <button onClick={() => toggleAction(a)} title={a.faite ? 'Réalisée (non modifiable)' : 'Marquer comme réalisée'}
+            className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', a.faite ? 'bg-emerald-500 text-white' : 'border border-line text-transparent hover:border-emerald-500 hover:text-emerald-500')}>
+            <CheckCircle2 className="h-3 w-3" />
+          </button>
+          <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
+          <span className="min-w-0 flex-1 text-fg">{a.description}</span>
+          <span className={cn('shrink-0 text-xs', retard ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted')}>{retard ? 'en retard · ' : ''}{quand(a)}</span>
+          <button onClick={() => setEditAction(editAction?.id === a.id ? null : a)} title="Modifier cette action" className="rounded p-0.5 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
+          <button onClick={() => removeAction(a)} title="Supprimer cette action" className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+        </div>
+        {editAction?.id === a.id && (
+          <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
+            <select className="input w-[90px] py-1.5" value={editAction.type} onChange={(e) => setEditAction({ ...editAction, type: e.target.value })}>
+              {/* Le type d'origine reste proposé s'il ne fait plus partie des choix. */}
+              {[...new Set([...ACTION_TYPES, editAction.type])].map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <input className="input min-w-[140px] flex-1 py-1.5" value={editAction.description} onChange={(e) => setEditAction({ ...editAction, description: e.target.value })} />
+            <input className="input w-[130px] py-1.5" type="date" value={editAction.date_action} onChange={(e) => setEditAction({ ...editAction, date_action: e.target.value })} />
+            <input className="input w-[90px] py-1.5" type="time" value={shortHeure(editAction.heure_action)} onChange={(e) => setEditAction({ ...editAction, heure_action: e.target.value })} title="Heure" />
+            <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={editAction.faite} onChange={(e) => setEditAction({ ...editAction, faite: e.target.checked })} /> Réalisée</label>
+            <button onClick={saveEditAction} className="btn-secondary py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> Enregistrer</button>
+            <button onClick={() => setEditAction(null)} className="py-1.5 text-sm text-muted hover:text-fg">Annuler</button>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -370,61 +404,75 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
       {/* Panel — élargi pour accueillir l'historique et le chat IA */}
       <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col bg-surface shadow-2xl animate-slide-in-right">
 
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-line p-5">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-base font-bold text-brand-600 dark:text-brand-400">
-              {initials(c.nom, c.prenom)}
+        {/* En-tête : qui c'est, où il en est, comment le joindre */}
+        <div className="border-b border-line p-5 pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-base font-bold text-brand-600 dark:text-brand-400">
+                {initials(c.nom, c.prenom)}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-tight text-fg">
+                  {c.civilite && <span className="font-normal text-muted">{c.civilite} </span>}
+                  {fullName(c.prenom, c.nom)}
+                </h2>
+                {(c.fonction || entreprise) && (
+                  <p className="truncate text-sm text-muted">
+                    {c.fonction}{c.fonction && entreprise ? ' · ' : ''}
+                    {entreprise && <Link to={`/entreprises?open=${entreprise.id}`} onClick={onClose} title="Ouvrir la fiche entreprise" className="text-brand-600 hover:underline dark:text-brand-400">{entreprise.raison_sociale}</Link>}
+                  </p>
+                )}
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <Badge tone={TYPE_TONE[c.type] ?? 'neutral'}>{CONTACT_TYPE_LABELS[c.type]}</Badge>
+                  <select value={cc.statut_prospect ?? ''} onChange={(e) => patch({ statut_prospect: e.target.value || null })}
+                    title="Statut de qualification"
+                    className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg">
+                    {/* Un statut hérité d'un import reste affiché même s'il n'est plus proposé. */}
+                    {[...new Set([...STATUTS_PROSPECT, cc.statut_prospect ?? ''])].map((s) => <option key={s} value={s}>{s || '— statut —'}</option>)}
+                  </select>
+                  <span className="text-xs text-muted">
+                    {owner ? `Suivi par ${fullName(owner.prenom, owner.nom)}` : c.type === 'prospect' ? <span className="text-amber-600">Non affecté</span> : null}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-fg leading-tight">
-                {c.civilite && <span className="text-muted font-normal">{c.civilite} </span>}
-                {fullName(c.prenom, c.nom)}
-              </h2>
-              {c.fonction && <p className="text-sm text-muted">{c.fonction}</p>}
-              <Badge className="mt-1" tone={TYPE_TONE[c.type] ?? 'neutral'}>
-                {CONTACT_TYPE_LABELS[c.type]}
-              </Badge>
+            <div className="flex shrink-0 items-center gap-1">
+              <EspaceClientButton contactId={c.id} />
+              <button
+                onClick={() => { onClose(); onEdit(c); }}
+                className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
+                title="Modifier le contact (nom, coordonnées, entreprise, tags)"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button onClick={onClose} title="Fermer" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg">
+                <X className="h-5 w-5" />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setTab('assistant')}
-              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
-              title="Ouvrir l'assistant IA sur cette fiche"
-            >
-              <Bot className="h-4 w-4" />
+
+          {/* Joindre le contact : les deux gestes de la journée */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {c.telephone && (
+              <a href={`tel:${c.telephone}`} className="btn-secondary py-1.5 text-sm"><Phone className="h-4 w-4" /> {c.telephone}</a>
+            )}
+            <button onClick={() => setComposeOpen(true)} className="btn-secondary py-1.5 text-sm" title="Envoyer un e-mail ou un WhatsApp">
+              <Mail className="h-4 w-4" /> Écrire
             </button>
-            <button
-              onClick={() => setComposeOpen(true)}
-              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
-              title="Envoyer un e-mail / WhatsApp"
-            >
-              <Mail className="h-4 w-4" />
-            </button>
-            <EspaceClientButton contactId={c.id} />
-            <button
-              onClick={() => { onClose(); onEdit(c); }}
-              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-brand-600"
-              title="Modifier"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            {c.email
+              ? <a href={`mailto:${c.email}`} className="min-w-0 truncate text-sm text-muted hover:text-brand-600">{c.email}</a>
+              : !c.telephone && <span className="text-sm italic text-muted">Aucune coordonnée renseignée</span>}
           </div>
         </div>
 
-        {/* Onglets : Fiche · Historique · Assistant IA */}
-        <div className="flex border-b border-line px-5" role="tablist">
+        {/* Onglets */}
+        <div className="flex overflow-x-auto border-b border-line px-5" role="tablist">
           {([
-            { cle: 'fiche', label: 'Fiche', icone: <ContactRound className="h-4 w-4" /> },
-            { cle: 'historique', label: 'Historique', icone: <History className="h-4 w-4" /> },
-            { cle: 'assistant', label: 'Assistant IA', icone: <Bot className="h-4 w-4" /> },
+            { cle: 'suivi', label: 'Suivi', icone: <ClipboardList className="h-4 w-4" />, n: aFaire.length },
+            { cle: 'affaires', label: 'Affaires', icone: <Briefcase className="h-4 w-4" />, n: opps.length + dossiers.length },
+            { cle: 'details', label: 'Détails', icone: <Info className="h-4 w-4" />, n: 0 },
+            { cle: 'historique', label: 'Historique', icone: <History className="h-4 w-4" />, n: 0 },
+            { cle: 'assistant', label: 'Assistant IA', icone: <Bot className="h-4 w-4" />, n: 0 },
           ] as const).map((t) => (
             <button
               key={t.cle}
@@ -432,13 +480,14 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               aria-selected={tab === t.cle}
               onClick={() => setTab(t.cle)}
               className={cn(
-                'flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition',
+                'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition',
                 tab === t.cle
                   ? 'border-brand-500 text-brand-600 dark:text-brand-400'
                   : 'border-transparent text-muted hover:border-line hover:text-fg',
               )}
             >
               {t.icone} {t.label}
+              {t.n > 0 && <span className="rounded-full bg-surface-2 px-1.5 text-[11px] tabular-nums text-muted">{t.n}</span>}
             </button>
           ))}
         </div>
@@ -464,193 +513,103 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
           />
         )}
 
-        {/* Corps */}
-        {tab === 'fiche' && (
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        {/* ── Suivi : quoi faire, où en est le besoin, notes ── */}
+        {tab === 'suivi' && (
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">
 
-          {/* Coordonnées */}
-          <section className="rounded-xl border border-line bg-surface-2/40 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Coordonnées</h3>
-            <div className="space-y-3">
-              {c.email ? (
-                <InfoRow icon={<Mail className="h-4 w-4" />} label="E-mail"
-                  value={
-                    <span className="flex flex-wrap items-center gap-2">
-                      <a href={`mailto:${c.email}`} className="text-brand-600 hover:underline dark:text-brand-400">{c.email}</a>
-                      <button onClick={() => setComposeOpen(true)}
-                        className="inline-flex items-center gap-1 rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-600 transition hover:bg-brand-500/20 dark:text-brand-400">
-                        <Mail className="h-3 w-3" /> Écrire
-                      </button>
-                    </span>
-                  }
-                />
-              ) : null}
-              {/* Adresses complémentaires : autres services de l'organisation. */}
-              {([['email2', 'email2_libelle'], ['email3', 'email3_libelle']] as const).map(([champ, libelle]) =>
-                cc[champ] ? (
-                  <InfoRow key={champ} icon={<Mail className="h-4 w-4" />} label={cc[libelle] || 'Autre e-mail'}
-                    value={<a href={`mailto:${cc[champ]}`} className="text-brand-600 hover:underline dark:text-brand-400">{cc[champ]}</a>}
-                  />
-                ) : null,
-              )}
-              {c.telephone ? (
-                <InfoRow icon={<Phone className="h-4 w-4" />} label="Téléphone"
-                  value={<a href={`tel:${c.telephone}`} className="text-brand-600 hover:underline dark:text-brand-400">{c.telephone}</a>}
-                />
-              ) : null}
-              {!c.email && !c.telephone && (
-                <p className="text-sm text-muted italic">Aucune coordonnée renseignée</p>
-              )}
-              {entreprise ? (
-                <InfoRow icon={<Building2 className="h-4 w-4" />} label="SIRET (entreprise)"
-                  value={entreprise.siret || <span className="italic text-muted">non renseigné sur la fiche entreprise</span>} />
-              ) : (
-                <div>
-                  <label className="label">SIRET (client) {savedField === 'siret' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
-                  <input className="input" placeholder="N° SIRET du client — utilisé sur le devis / plan si aucune entreprise n'est reliée"
-                    value={form.siret} onChange={(e) => editField('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
-                </div>
-              )}
-              {/* Deux adresses complémentaires, chacune avec son libellé : une
-                  organisation peut avoir plusieurs services interlocuteurs. */}
-              {([['email2', 'email2_libelle'], ['email3', 'email3_libelle']] as const).map(([champ, libelle], i) => (
-                <div key={champ} className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="label">E-mail complémentaire {i + 1} {savedField === champ && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
-                    <input className="input" type="email" placeholder="adresse@exemple.fr"
-                      value={form[champ]} onChange={(e) => editField(champ, e.target.value)} onBlur={(e) => blurSave(champ, e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">À quoi correspond cette adresse</label>
-                    <input className="input" placeholder="ex. comptabilité, service formation…"
-                      value={form[libelle]} onChange={(e) => editField(libelle, e.target.value)} onBlur={(e) => blurSave(libelle, e.target.value)} />
-                  </div>
-                </div>
-              ))}
-              <div>
-                <label className="label">Autres coordonnées {savedField === 'autres' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</label>
-                <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
-                  value={form.autres} onChange={(e) => editField('autres', e.target.value)} onBlur={(e) => blurSave('autres', e.target.value)} />
+          <section>
+            <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
+              <div className={cn('rounded-lg p-2.5', prochaine ? (prochaine.date_action < aujourdhui ? 'bg-red-500/10' : 'bg-amber-500/10') : 'bg-surface-2')}>
+                <p className={cn(prochaine && prochaine.date_action < aujourdhui ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400')}>
+                  {prochaine && prochaine.date_action < aujourdhui ? 'Prochaine action — en retard' : 'Prochaine action'}
+                </p>
+                <p className="text-sm font-medium text-fg">{prochaine ? prochaine.description : 'Aucune action prévue'}</p>
+                {prochaine && <p className="text-muted">{quand(prochaine)}</p>}
+              </div>
+              <div className="rounded-lg bg-surface-2 p-2.5">
+                <p className="text-muted">Dernier contact</p>
+                <p className="text-sm font-medium text-fg">{derniere ? derniere.description : 'Jamais contacté'}</p>
+                {derniere && <p className="text-muted">{quand(derniere)}</p>}
               </div>
             </div>
-          </section>
 
-          {/* Relations */}
-          {(entreprise || financeur || owner) && (
-            <section>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Relations</h3>
-              <div className="space-y-3">
-                {entreprise && (
-                  <InfoRow icon={<Building2 className="h-4 w-4" />} label="Entreprise"
-                    value={<Link to={`/entreprises?open=${entreprise.id}`} onClick={onClose} title="Ouvrir la fiche entreprise" className="text-brand-600 hover:underline dark:text-brand-400">{entreprise.raison_sociale}</Link>} />
-                )}
-                {financeur && (
-                  <InfoRow icon={<Tag className="h-4 w-4" />} label="Financeur" value={financeur.nom} />
-                )}
-                {owner && (
-                  <InfoRow icon={<User className="h-4 w-4" />} label="Conseiller affecté"
-                    value={fullName(owner.prenom, owner.nom)}
-                  />
-                )}
-                {!owner && c.type === 'prospect' && (
-                  <InfoRow icon={<User className="h-4 w-4" />} label="Conseiller affecté"
-                    value={<span className="text-amber-600">Non affecté</span>}
-                  />
-                )}
+            {/* Nouvelle action : un raccourci remplit la ligne, on ajuste, on ajoute. */}
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {QUICK_ACTIONS.map((qa) => (
+                  <button key={qa.label} onClick={qa.run} className="rounded-full border border-amber-500/30 bg-surface px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-500/15 dark:text-amber-400">
+                    {qa.label}
+                  </button>
+                ))}
               </div>
-            </section>
-          )}
+              <div className="flex flex-wrap items-end gap-2">
+                <select className="input w-[90px] py-1.5" aria-label="Type d'action" value={na.type} onChange={(e) => setNa({ ...na, type: e.target.value })}>{ACTION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+                <input className="input min-w-[140px] flex-1 py-1.5" placeholder="Qu'avez-vous fait, ou que reste-t-il à faire ?" value={na.description} onChange={(e) => setNa({ ...na, description: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addAction()} />
+                <input className="input w-[130px] py-1.5" type="date" aria-label="Date" value={na.date_action} onChange={(e) => setNa((n) => ({ ...n, date_action: e.target.value, faite: e.target.value > ymd(new Date()) ? false : n.faite }))} />
+                <input className="input w-[90px] py-1.5" type="time" value={na.heure_action} onChange={(e) => setNa({ ...na, heure_action: e.target.value })} title="Heure" />
+                <label className="flex items-center gap-1.5 text-xs text-muted" title={na.date_action > ymd(new Date()) ? 'Une action datée dans le futur ne peut pas être déjà réalisée' : undefined}><input type="checkbox" checked={na.faite} disabled={na.date_action > ymd(new Date())} onChange={(e) => setNa({ ...na, faite: e.target.checked })} /> Déjà faite</label>
+                <button onClick={addAction} disabled={!na.description.trim()} className="btn-primary py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
+              </div>
+            </div>
+
+            <h3 className={cn(titreSection, 'mb-2 mt-4')}>À faire ({aFaire.length})</h3>
+            {aFaire.length === 0
+              ? <p className="text-sm text-muted">Rien de prévu. Planifiez la prochaine action pour ne pas perdre ce contact de vue.</p>
+              : <ul className="space-y-1.5">{aFaire.map(ligneAction)}</ul>}
+
+            {faites.length > 0 && (
+              <>
+                <h3 className={cn(titreSection, 'mb-2 mt-4')}>Fait ({faites.length})</h3>
+                <ul className="space-y-1.5">{(toutesFaites ? faites : faites.slice(0, 3)).map(ligneAction)}</ul>
+                {faites.length > 3 && (
+                  <button onClick={() => setToutesFaites((v) => !v)} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-fg">
+                    <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', toutesFaites && 'rotate-180')} />
+                    {toutesFaites ? 'Réduire' : `Voir tout (${faites.length})`}
+                  </button>
+                )}
+              </>
+            )}
+          </section>
 
           {/* Qualification */}
           <section className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2"><Target className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Qualification</h3></div>
-              <select value={cc.statut_prospect ?? ''} onChange={(e) => patch({ statut_prospect: e.target.value || null })}
-                className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg">
-                {STATUTS_PROSPECT.map((s) => <option key={s} value={s}>{s || '— statut —'}</option>)}
-              </select>
-            </div>
+            <div className="mb-3 flex items-center gap-2"><Target className="h-4 w-4 text-muted" /><h3 className={titreSection}>Qualification</h3>{savedField && savedField !== 'notes' && <span className="text-xs text-emerald-600">enregistré ✓</span>}</div>
             <div className="space-y-2">
               <div><label className="label">Besoin résumé</label><textarea className="input" rows={2} value={form.besoin_resume} onChange={(e) => editField('besoin_resume', e.target.value)} onBlur={(e) => blurSave('besoin_resume', e.target.value)} /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => editField('ville', e.target.value)} onBlur={(e) => blurSave('ville', e.target.value)} /></div>
                 <div><label className="label">Formation envisagée</label><input className="input" value={form.formation_envisagee} onChange={(e) => editField('formation_envisagee', e.target.value)} onBlur={(e) => blurSave('formation_envisagee', e.target.value)} /></div>
-                <div><label className="label">Financement envisagé</label><input className="input" value={form.financement_envisage} onChange={(e) => editField('financement_envisage', e.target.value)} onBlur={(e) => blurSave('financement_envisage', e.target.value)} /></div>
-                <div><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => editField('interet', e.target.value)} onBlur={(e) => blurSave('interet', e.target.value)} /></div>
+                <div><label className="label">Financement envisagé</label><input className="input" placeholder="CPF, OPCO, AGEFICE…" value={form.financement_envisage} onChange={(e) => editField('financement_envisage', e.target.value)} onBlur={(e) => blurSave('financement_envisage', e.target.value)} /></div>
+                <div><label className="label">Ville / Région</label><input className="input" placeholder="ex. Saint-Denis / Nord" value={form.ville} onChange={(e) => editField('ville', e.target.value)} onBlur={(e) => blurSave('ville', e.target.value)} /></div>
                 <div><label className="label">Effectif</label><input className="input" value={form.effectif} onChange={(e) => editField('effectif', e.target.value)} onBlur={(e) => blurSave('effectif', e.target.value)} /></div>
-                <div><label className="label">SIRET</label><input className="input" placeholder="14 chiffres" value={form.siret} onChange={(e) => editField('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} /></div>
+                <div className="col-span-2"><label className="label">Intérêt</label><input className="input" value={form.interet} onChange={(e) => editField('interet', e.target.value)} onBlur={(e) => blurSave('interet', e.target.value)} /></div>
               </div>
-              <p className="text-xs text-muted">Enregistrement automatique pendant la saisie et à la fermeture de la fiche {savedField && <span className="text-emerald-600">— enregistré ✓</span>}</p>
             </div>
           </section>
 
-          {/* Suivi des actions */}
-          <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-            <div className="mb-3 flex items-center gap-2"><ClipboardList className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Suivi des actions</h3></div>
-            {(derniere || prochaine) && (
-              <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-surface-2 p-2"><p className="text-muted">Dernière action</p><p className="font-medium text-fg">{derniere ? `${derniere.description} · ${jourCourt(derniere.date_action)} ${formatDate(derniere.date_action)}${shortHeure(derniere.heure_action) ? ` ${shortHeure(derniere.heure_action)}` : ''}` : '—'}</p></div>
-                <div className="rounded-lg bg-amber-500/10 p-2"><p className="text-amber-700 dark:text-amber-400">Prochaine action</p><p className="font-medium text-fg">{prochaine ? `${prochaine.description} · ${jourCourt(prochaine.date_action)} ${formatDate(prochaine.date_action)}${shortHeure(prochaine.heure_action) ? ` ${shortHeure(prochaine.heure_action)}` : ''}` : '—'}</p></div>
-              </div>
-            )}
-            <ul className="space-y-1.5">
-              {actions.map((a) => (
-                <li key={a.id} className="rounded-lg border border-line px-2.5 py-1.5 text-sm">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => toggleAction(a)} title={a.faite ? 'Réalisée (non modifiable)' : 'Marquer comme réalisée'}
-                      className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', a.faite ? 'bg-emerald-500 text-white' : 'border border-line text-transparent hover:border-emerald-500')}>
-                      <CheckCircle2 className="h-3 w-3" />
-                    </button>
-                    <Badge className="bg-surface-2 text-muted">{a.type}</Badge>
-                    <span className="flex-1 text-fg">{a.description}</span>
-                    <span className="shrink-0 text-xs text-muted">{jourCourt(a.date_action)} {formatDate(a.date_action)}{shortHeure(a.heure_action) ? ` · ${shortHeure(a.heure_action)}` : ''}</span>
-                    <button onClick={() => setEditAction(editAction?.id === a.id ? null : a)} title="Modifier cette action" className="rounded p-0.5 text-muted hover:text-brand-600"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => removeAction(a)} title="Supprimer cette action" className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
-                  </div>
-                  {editAction?.id === a.id && (
-                    <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
-                      <select className="input w-[90px] py-1.5" value={editAction.type} onChange={(e) => setEditAction({ ...editAction, type: e.target.value })}>
-                        {/* Le type d'origine reste proposé s'il ne fait plus partie des choix. */}
-                        {[...new Set([...ACTION_TYPES, editAction.type])].map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      <input className="input min-w-[140px] flex-1 py-1.5" value={editAction.description} onChange={(e) => setEditAction({ ...editAction, description: e.target.value })} />
-                      <input className="input w-[130px] py-1.5" type="date" value={editAction.date_action} onChange={(e) => setEditAction({ ...editAction, date_action: e.target.value })} />
-                      <input className="input w-[90px] py-1.5" type="time" value={shortHeure(editAction.heure_action)} onChange={(e) => setEditAction({ ...editAction, heure_action: e.target.value })} title="Heure" />
-                      <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={editAction.faite} onChange={(e) => setEditAction({ ...editAction, faite: e.target.checked })} /> Réalisée</label>
-                      <button onClick={saveEditAction} className="btn-secondary py-1.5 text-sm"><Save className="h-3.5 w-3.5" /> Enregistrer</button>
-                      <button onClick={() => setEditAction(null)} className="py-1.5 text-sm text-muted hover:text-fg">Annuler</button>
-                    </div>
-                  )}
-                </li>
-              ))}
-              {actions.length === 0 && <li className="text-sm text-muted">Aucune action enregistrée.</li>}
-            </ul>
-            {/* Actions rapides : planifient un rappel horodaté ou consignent une action faite */}
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {QUICK_ACTIONS.map((qa) => (
-                <button key={qa.label} onClick={qa.run} className="rounded-full border border-amber-500/30 bg-amber-500/5 px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-500/15 dark:text-amber-400">
-                  {qa.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 p-2">
-              <select className="input w-[90px] py-1.5" value={na.type} onChange={(e) => setNa({ ...na, type: e.target.value })}>{ACTION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
-              <input className="input min-w-[140px] flex-1 py-1.5" placeholder="Description…" value={na.description} onChange={(e) => setNa({ ...na, description: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addAction()} />
-              <input className="input w-[130px] py-1.5" type="date" value={na.date_action} onChange={(e) => setNa((n) => ({ ...n, date_action: e.target.value, faite: e.target.value > ymd(new Date()) ? false : n.faite }))} />
-              <input className="input w-[90px] py-1.5" type="time" value={na.heure_action} onChange={(e) => setNa({ ...na, heure_action: e.target.value })} title="Heure" />
-              <label className="flex items-center gap-1.5 text-xs text-muted" title={na.date_action > ymd(new Date()) ? 'Une action datée dans le futur ne peut pas être déjà réalisée' : undefined}><input type="checkbox" checked={na.faite} disabled={na.date_action > ymd(new Date())} onChange={(e) => setNa({ ...na, faite: e.target.checked })} /> Réalisée</label>
-              <button onClick={addAction} disabled={!na.description.trim()} className="btn-secondary py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Ajouter</button>
-            </div>
+          {/* Notes : même enregistrement automatique que le reste de la fiche */}
+          <section>
+            <div className="mb-2 flex items-center gap-2"><NotebookPen className="h-4 w-4 text-muted" /><h3 className={titreSection}>Notes</h3>{enregistre('notes')}</div>
+            <textarea
+              className="input min-h-[88px] resize-y text-sm"
+              placeholder="Observations, rappels, informations de suivi…"
+              value={form.notes}
+              onChange={(e) => editField('notes', e.target.value)}
+              onBlur={(e) => blurSave('notes', e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted">Tout s'enregistre seul pendant la saisie et à la fermeture de la fiche.</p>
           </section>
 
           {/* Conversations enregistrées depuis la Capture mobile (masqué s'il n'y en a pas) */}
           <ConversationsContact contactId={c.id} />
+        </div>
+        )}
 
-          {/* Pipeline, Sessions, Dossiers & Coffre — regroupés dans un même cadre */}
-          <section className="space-y-5 rounded-xl border border-line bg-surface-2/40 p-4">
-          {/* Pipeline */}
-          <div>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Pipeline</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{opps.length}</span><button onClick={() => setAddPanel(addPanel === 'opp' ? null : 'opp')} title="Ajouter une opportunité" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
+        {/* ── Affaires : opportunités, sessions, dossiers, documents ── */}
+        {tab === 'affaires' && (
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">
+          {/* Opportunités */}
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted" /><h3 className={titreSection}>Opportunités ({opps.length})</h3></div><button onClick={() => setAddPanel(addPanel === 'opp' ? null : 'opp')} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"><Plus className="h-3.5 w-3.5" /> Ajouter</button></div>
             {opps.length === 0 ? <p className="text-sm text-muted">Aucune opportunité.</p> : (
               <ul className="space-y-1.5">{opps.map((o) => (
                 <li key={o.id} className="flex items-center justify-between rounded-lg border border-line px-2.5 py-1.5 text-sm">
@@ -668,11 +627,32 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                 </div>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Sessions (placées avant Dossiers) */}
-          <div>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Sessions</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{sessions.length}</span><button onClick={() => setCalOpen((v) => !v)} title={calOpen ? 'Masquer le calendrier' : 'Positionner sur une session'} className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
+          {/* Dossiers */}
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className={titreSection}>Dossiers ({dossiers.length})</h3></div><div className="flex items-center gap-3"><Link to={`/devis?contact=${c.id}`} onClick={onClose} title="Le dossier du client est créé ou retrouvé avec le devis" className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"><Plus className="h-3.5 w-3.5" /> Devis</Link><button onClick={() => setAddPanel(addPanel === 'doss' ? null : 'doss')} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"><Plus className="h-3.5 w-3.5" /> Dossier</button></div></div>
+            {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
+              <ul className="space-y-1.5">{dossiers.map((d) => (
+                <li key={d.id}>
+                  <Link to={`/dossiers/${d.id}`} onClick={onClose} title="Ouvrir le dossier" className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm hover:border-brand-300 hover:bg-surface-2">
+                    <span className="min-w-0 truncate text-fg">{d.intitule}</span>
+                    <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
+                  </Link>
+                </li>))}
+              </ul>
+            )}
+            {addPanel === 'doss' && (
+              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
+                <input className="input" placeholder="Intitulé du dossier" value={newDoss.intitule} onChange={(e) => setNewDoss({ intitule: e.target.value })} />
+                <button onClick={addDoss} disabled={busy || !newDoss.intitule.trim()} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Créer</button>
+              </div>
+            )}
+          </section>
+
+          {/* Sessions */}
+          <section>
+            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-muted" /><h3 className={titreSection}>Sessions ({sessions.length})</h3></div><button onClick={() => setCalOpen((v) => !v)} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">{calOpen ? 'Masquer le calendrier' : 'Positionner sur une session'}</button></div>
             {sessions.length === 0 ? <p className="text-sm text-muted">Aucune session.</p> : (
               <ul className="space-y-1.5">{sessions.map((s) => {
                 const passee = new Date(s.date_debut) < now;
@@ -683,49 +663,28 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                   </li>);
               })}</ul>
             )}
-          </div>
-
-          {/* Calendrier miniature : positionne le contact sur une session et
-              répercute la mise à jour sur la fiche et le pipeline. */}
-          {calOpen && (
-            <MiniCalendrierContact
-              contact={cc}
-              sessions={allSessions}
-              participants={participations}
-              opportunites={opps}
-              actions={actions}
-              onChanged={() => { loadRefs(); onUpdated(); }}
-              onNavigate={onClose}
-            />
-          )}
-
-          {/* Dossiers */}
-          <div>
-            <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><FolderKanban className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Dossiers</h3></div><div className="flex items-center gap-2"><span className="text-xs text-muted">{dossiers.length}</span><button onClick={() => setAddPanel(addPanel === 'doss' ? null : 'doss')} title="Créer un dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><Plus className="h-3.5 w-3.5" /></button></div></div>
-            {dossiers.length === 0 ? <p className="text-sm text-muted">Aucun dossier.</p> : (
-              <ul className="space-y-1.5">{dossiers.map((d) => (
-                <li key={d.id} className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
-                  <span className="min-w-0 truncate text-fg">{d.intitule}</span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <Badge tone={DOSSIER_STATUT_TONES[d.statut]}>{DOSSIER_STATUT_LABELS[d.statut]}</Badge>
-                    <Link to={`/dossiers/${d.id}`} onClick={onClose} title="Ouvrir le dossier" className="rounded p-0.5 text-muted hover:text-brand-600"><FileText className="h-3.5 w-3.5" /></Link>
-                  </span>
-                </li>))}
-              </ul>
-            )}
-            {addPanel === 'doss' && (
-              <div className="mt-2 flex gap-2 rounded-lg border border-line bg-surface-2 p-2">
-                <input className="input" placeholder="Intitulé du dossier" value={newDoss.intitule} onChange={(e) => setNewDoss({ intitule: e.target.value })} />
-                <button onClick={addDoss} disabled={busy || !newDoss.intitule.trim()} className="btn-primary shrink-0 py-1.5 text-sm"><Plus className="h-3.5 w-3.5" /> Créer</button>
+            {/* Calendrier miniature : positionne le contact sur une session et
+                répercute la mise à jour sur la fiche et le pipeline. */}
+            {calOpen && (
+              <div className="mt-3">
+                <MiniCalendrierContact
+                  contact={cc}
+                  sessions={allSessions}
+                  participants={participations}
+                  opportunites={opps}
+                  actions={actions}
+                  onChanged={() => { loadRefs(); onUpdated(); }}
+                  onNavigate={onClose}
+                />
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Coffre de documents */}
-          <div>
+          {/* Documents du contact */}
+          <section>
             <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2"><FolderLock className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Coffre — documents</h3></div>
-              <div className="flex items-center gap-2"><span className="text-xs text-muted">{coffre.length}</span><FileUpload bucket="coffre" label="Ajouter" onUploaded={(v, f) => addDoc(v, f?.name)} /></div>
+              <div className="flex items-center gap-2"><FolderLock className="h-4 w-4 text-muted" /><h3 className={titreSection}>Documents ({coffre.length})</h3></div>
+              <FileUpload bucket="coffre" label="Ajouter" onUploaded={(v, f) => addDoc(v, f?.name)} />
             </div>
             {coffre.length === 0 ? <p className="text-sm text-muted">Aucun document. Téléversez pièces, justificatifs, échanges…</p> : (
               <ul className="space-y-1.5">{coffre.map((d) => (
@@ -734,17 +693,64 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                   <span className="flex shrink-0 items-center gap-1">
                     <span className="text-xs text-muted">{formatDate(d.created_at)}</span>
                     <FileLink bucket="coffre" value={d.fichier_url} />
-                    <button onClick={() => removeDoc(d)} className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => removeDoc(d)} title="Supprimer ce document" className="rounded p-0.5 text-muted hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                   </span>
                 </li>))}
               </ul>
             )}
-          </div>
+          </section>
+        </div>
+        )}
+
+        {/* ── Détails : ce qu'on remplit rarement ── */}
+        {tab === 'details' && (
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">
+
+          {/* Coordonnées complémentaires */}
+          <section className="rounded-xl border border-line bg-surface-2/40 p-4">
+            <h3 className={cn(titreSection, 'mb-1')}>Coordonnées complémentaires</h3>
+            <p className="mb-3 text-xs text-muted">Nom, e-mail principal, téléphone, entreprise et tags se changent avec le crayon en haut de la fiche.</p>
+            <div className="space-y-3">
+              {/* Deux adresses complémentaires, chacune avec son libellé : une
+                  organisation peut avoir plusieurs services interlocuteurs. */}
+              {([['email2', 'email2_libelle'], ['email3', 'email3_libelle']] as const).map(([champ, libelle], i) => (
+                <div key={champ} className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">Autre e-mail {i + 1} {enregistre(champ)}</label>
+                    <input className="input" type="email" placeholder="adresse@exemple.fr"
+                      value={form[champ]} onChange={(e) => editField(champ, e.target.value)} onBlur={(e) => blurSave(champ, e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label">À quoi correspond cette adresse</label>
+                    <input className="input" placeholder="ex. comptabilité, service formation…"
+                      value={form[libelle]} onChange={(e) => editField(libelle, e.target.value)} onBlur={(e) => blurSave(libelle, e.target.value)} />
+                  </div>
+                </div>
+              ))}
+              <div>
+                <label className="label">Autres coordonnées {enregistre('autres')}</label>
+                <textarea className="input" rows={2} placeholder="Téléphones / e-mails supplémentaires…"
+                  value={form.autres} onChange={(e) => editField('autres', e.target.value)} onBlur={(e) => blurSave('autres', e.target.value)} />
+              </div>
+              {entreprise ? (
+                <InfoRow icon={<Building2 className="h-4 w-4" />} label="SIRET (entreprise)"
+                  value={entreprise.siret || <span className="italic text-muted">non renseigné sur la fiche entreprise</span>} />
+              ) : (
+                <div>
+                  <label className="label">SIRET {enregistre('siret')}</label>
+                  <input className="input" placeholder="14 chiffres — repris sur le devis et le plan si aucune entreprise n'est reliée"
+                    value={form.siret} onChange={(e) => editField('siret', e.target.value)} onBlur={(e) => blurSave('siret', e.target.value)} />
+                </div>
+              )}
+              {financeur && <InfoRow icon={<Tag className="h-4 w-4" />} label="Financeur" value={financeur.nom} />}
+              <InfoRow icon={<User className="h-4 w-4" />} label="Conseiller affecté"
+                value={owner ? fullName(owner.prenom, owner.nom) : <span className="text-amber-600">Non affecté</span>} />
+            </div>
           </section>
 
           {/* Checklist conformité */}
           <section className="rounded-xl border border-line bg-surface-2/40 p-4">
-            <div className="mb-3 flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Checklist conformité dossier</h3></div>
+            <div className="mb-3 flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted" /><h3 className={titreSection}>Checklist conformité dossier</h3></div>
             <div className="mb-2"><label className="label">Date fixée</label><input className="input" type="date" value={cc.date_fixee ?? ''} onChange={(e) => patch({ date_fixee: e.target.value || null })} /></div>
             <div className="space-y-1.5">{CHECKLIST.map((item) => (
               <label key={String(item.key)} className="flex items-center gap-2 text-sm text-fg">
@@ -755,7 +761,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
 
           {/* Commissions */}
           <section className="rounded-xl border border-line bg-surface-2/40 p-4">
-            <div className="mb-3 flex items-center gap-2"><Coins className="h-4 w-4 text-muted" /><h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Commissions</h3></div>
+            <div className="mb-3 flex items-center gap-2"><Coins className="h-4 w-4 text-muted" /><h3 className={titreSection}>Commissions</h3></div>
             <div className="grid grid-cols-2 gap-2">
               <div><label className="label">Date formation</label><input className="input" type="date" value={form.date_formation ?? ''} onChange={(e) => setFf('date_formation', e.target.value)} /></div>
               <div><label className="label">Assiette (€)</label><input className="input" type="number" value={form.assiette_commission ?? ''} onChange={(e) => setFf('assiette_commission', e.target.value)} /></div>
@@ -770,7 +776,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
 
           {/* RGPD + dates */}
           <section>
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Informations</h3>
+            <h3 className={cn(titreSection, 'mb-3')}>Informations</h3>
             <div className="space-y-3">
               <InfoRow
                 icon={c.rgpd_consent ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
@@ -783,30 +789,22 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
             </div>
           </section>
 
-          {/* Notes texte libre */}
-          {c.notes && metaEntries.length === 0 && parsedNotes.length === 0 && (
-            <section>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">Notes</h3>
-              <p className="whitespace-pre-wrap rounded-lg bg-surface-2 p-3 text-sm text-fg leading-relaxed">{c.notes}</p>
-            </section>
-          )}
-
           {/* Données importées (metadata structuré ou notes parsées) */}
           {(metaEntries.length > 0 || parsedNotes.length > 0) && (
             <section>
               <div className="mb-3 flex items-center gap-2">
                 <TableProperties className="h-4 w-4 text-muted" />
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Données importées</h3>
+                <h3 className={titreSection}>Données importées</h3>
               </div>
               <div className="overflow-hidden rounded-lg border border-line">
                 <table className="w-full text-sm">
                   <tbody className="divide-y divide-line">
                     {(metaEntries.length > 0 ? metaEntries : parsedNotes).map(([key, val]) => (
                       <tr key={key} className="hover:bg-surface-2">
-                        <td className="w-2/5 px-3 py-2 text-xs font-medium text-muted align-top">
+                        <td className="w-2/5 px-3 py-2 align-top text-xs font-medium text-muted">
                           {key.replace(/_/g, ' ').replace(/\?+/g, '?')}
                         </td>
-                        <td className="px-3 py-2 text-fg align-top break-words">
+                        <td className="break-words px-3 py-2 align-top text-fg">
                           {String(val)}
                         </td>
                       </tr>
@@ -821,59 +819,6 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
               </p>
             </section>
           )}
-
-          {/* Notes conseiller */}
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <NotebookPen className="h-4 w-4 text-muted" />
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Notes conseiller</h3>
-              </div>
-              {notesDirty && (
-                <button
-                  onClick={handleNotesSave}
-                  disabled={notesSaving}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/20 dark:text-brand-400"
-                >
-                  <Save className="h-3 w-3" />
-                  {notesSaving ? 'Sauvegarde…' : 'Sauvegarder'}
-                </button>
-              )}
-            </div>
-            <textarea
-              className="input min-h-[88px] resize-y text-sm"
-              placeholder="Observations, rappels, informations de suivi…"
-              value={notesValue}
-              onChange={(e) => { setNotesValue(e.target.value); setNotesDirty(true); }}
-            />
-            {!notesDirty && (
-              <p className="mt-1 text-xs text-muted">Modifiez pour sauvegarder</p>
-            )}
-          </section>
-        </div>
-        )}
-
-        {/* Pied (vue Fiche uniquement : sauvegarde des notes + édition) */}
-        {tab === 'fiche' && (
-        <div className="border-t border-line px-5 py-3 flex items-center justify-between gap-2">
-          <div>
-            {notesDirty && (
-              <button
-                onClick={handleNotesSave}
-                disabled={notesSaving}
-                className="btn-primary text-sm py-2"
-              >
-                <Save className="mr-1.5 h-3.5 w-3.5" />
-                {notesSaving ? 'Sauvegarde…' : 'Sauvegarder les notes'}
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => { onClose(); onEdit(c); }}
-            className="btn-secondary text-sm"
-          >
-            <Pencil className="mr-1.5 h-3.5 w-3.5" /> Modifier ce contact
-          </button>
         </div>
         )}
       </div>

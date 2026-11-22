@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Users } from 'lucide-react';
 import { differenceInCalendarDays } from 'date-fns';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState, type Tone } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState, ActionMenu } from '@/components/ui';
 import { CONTACT_TYPE_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
-import { fullName, formatDate, ymdLocal, prochaineHeureOuvrable } from '@/lib/utils';
+import { cn, fullName, formatDate, ymdLocal, prochaineHeureOuvrable } from '@/lib/utils';
 import {
   importProspectsFile, parseSpreadsheetWithHeaders, importContactsMapped,
   guessMapping, CONTACT_IMPORT_FIELDS, type ColumnMapping,
@@ -133,6 +133,9 @@ export default function Contacts() {
   const [affFilter, setAffFilter] = useState<string>('');
   const [tagFilter, setTagFilter] = useState<string>('');
   const [statutFilter, setStatutFilter] = useState<string>('');
+  // Filtre de suivi : qui relancer en premier.
+  const [suiviFilter, setSuiviFilter] = useState<'' | 'retard' | 'sans' | 'jamais'>('');
+  const [importsOpen, setImportsOpen] = useState(false);
   // Pagination (côté client, sur le résultat filtré)
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -216,7 +219,7 @@ export default function Contacts() {
   }, [cibleFiche, data]);
 
   // Retour à la première page dès qu'un filtre / la recherche / la taille change
-  useEffect(() => { setPage(1); }, [q, typeFilter, affFilter, tagFilter, statutFilter, pageSize, sort.col, sort.dir]);
+  useEffect(() => { setPage(1); }, [q, typeFilter, affFilter, tagFilter, statutFilter, suiviFilter, pageSize, sort.col, sort.dir]);
 
   const [distributing, setDistributing] = useState(false);
   // Sélection multiple + répartition round-robin (managers)
@@ -452,19 +455,40 @@ export default function Contacts() {
     if (!confirm(`Supprimer le contact ${fullName(c.prenom, c.nom)} ?`)) return;
     const { error } = await supabase.from('contacts').delete().eq('id', c.id);
     if (error) { alert(error.message); return; }
+    setOpen(false);
     refresh();
   };
 
   const allTags = [...new Set(data.flatMap((c) => c.tags ?? []))].sort();
 
-  const filtered = data.filter((c) => {
-    const matchQ = `${c.nom} ${c.prenom} ${c.email}`.toLowerCase().includes(q.toLowerCase());
-    const matchType = !typeFilter || c.type === typeFilter;
+  const entrepriseDe = (c: Contact) => entreprises.data.find((e) => e.id === c.entreprise_id)?.raison_sociale ?? '';
+  // Recherche sans accents ni casse, sur le nom, l'e-mail, le téléphone et l'entreprise.
+  const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const chiffres = (v: string) => v.replace(/\D/g, '');
+  const needle = norm(q.trim());
+  const needleTel = chiffres(q);
+  const matchSuivi = (c: Contact) => {
+    if (!suiviFilter) return true;
+    if (suiviFilter === 'retard') return !!nextAction[c.id] && nextAction[c.id].date_action < TODAY;
+    if (suiviFilter === 'sans') return !nextAction[c.id];
+    return !lastInteraction[c.id];
+  };
+  // Tout sauf le type : sert aussi aux compteurs des pastilles de type.
+  const horsType = data.filter((c) => {
+    const matchQ = !needle
+      || norm(`${c.nom ?? ''} ${c.prenom ?? ''} ${c.email ?? ''} ${entrepriseDe(c)}`).includes(needle)
+      || (needleTel.length >= 4 && chiffres(c.telephone ?? '').includes(needleTel));
     const matchAff = !affFilter || (affFilter === 'non' ? !c.owner_id : c.owner_id === affFilter);
     const matchTag = !tagFilter || (c.tags ?? []).includes(tagFilter);
     const matchStatut = !statutFilter || (c.statut_prospect ?? '') === statutFilter;
-    return matchQ && matchType && matchAff && matchTag && matchStatut;
+    return matchQ && matchAff && matchTag && matchStatut && matchSuivi(c);
   });
+  const filtered = typeFilter ? horsType.filter((c) => c.type === typeFilter) : horsType;
+  const parType = (t: ContactType) => horsType.filter((c) => c.type === t).length;
+  // Pastilles : les types réellement présents (et celui qui est sélectionné).
+  const typesAffiches = TYPES.filter((t) => t === typeFilter || data.some((c) => c.type === t));
+  const filtresActifs = [q, affFilter, tagFilter, statutFilter, suiviFilter].filter(Boolean).length;
+  const effacerFiltres = () => { setQ(''); setAffFilter(''); setTagFilter(''); setStatutFilter(''); setSuiviFilter(''); };
 
   // Tri optionnel par colonne (Nom / Type / Affectation)
   const sortKey = (c: Contact) => {
@@ -489,18 +513,38 @@ export default function Contacts() {
 
   const set = (k: keyof Contact, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Décompte « dernière interaction » — prospects uniquement.
-  const interactionCell = (c: Contact) => {
-    if (c.type !== 'prospect') return <span className="text-muted/50">—</span>;
+  // Suivi d'un contact, en une cellule : ce qu'il faut faire, puis depuis quand
+  // on ne lui a pas parlé. Une absence d'action n'est signalée que sur un prospect.
+  const suiviCell = (c: Contact) => {
+    const na = nextAction[c.id];
     const la = lastInteraction[c.id];
-    if (!la) return <Badge tone="warning"><Clock className="mr-1 h-3 w-3" />Jamais</Badge>;
-    const days = differenceInCalendarDays(new Date(), new Date(`${la.date_action}T00:00:00`));
-    const tone: Tone = days <= 7 ? 'success' : days <= 14 ? 'warning' : 'danger';
-    const label = days <= 0 ? "Aujourd'hui" : days === 1 ? 'Hier' : `Il y a ${days} j`;
+    const retard = !!na && na.date_action < TODAY;
+    const jours = la ? differenceInCalendarDays(new Date(), new Date(`${la.date_action}T00:00:00`)) : null;
+    const dernier = jours === null ? 'Jamais contacté' : jours <= 0 ? "Contacté aujourd'hui" : jours === 1 ? 'Contacté hier' : `Contacté il y a ${jours} j`;
     return (
-      <span title={`Dernière action réalisée : ${la.description} · ${formatDate(la.date_action)}`}>
-        <Badge tone={tone}><Clock className="mr-1 h-3 w-3" />{label}</Badge>
-      </span>
+      <div className="flex flex-col gap-1 text-xs">
+        {na ? (
+          <span className={cn('flex items-center gap-1.5', retard ? 'font-medium text-red-600 dark:text-red-400' : 'text-fg')} title={na.description}>
+            <span className={cn('shrink-0 rounded px-1 tabular-nums', retard ? 'bg-red-500/10' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300')}>{formatDate(na.date_action, 'dd/MM')}</span>
+            <span className="max-w-[190px] truncate">{na.description}</span>
+          </span>
+        ) : c.type === 'prospect' ? (
+          <span className="font-medium text-amber-600 dark:text-amber-400">Aucune action prévue</span>
+        ) : null}
+        {(c.type === 'prospect' || la) && (
+          <span className="text-muted" title={la ? `${la.description} · ${formatDate(la.date_action)}` : undefined}>{dernier}</span>
+        )}
+        {(stageOf[c.id] || nextSession[c.id]) && (
+          <div className="flex flex-wrap gap-1">
+            {stageOf[c.id] && <Badge tone="brand">{OPP_STAGE_LABELS[stageOf[c.id]] ?? stageOf[c.id]}</Badge>}
+            {nextSession[c.id] && (
+              <Badge tone={nextSession[c.id].date_debut >= TODAY ? 'warning' : 'success'}>
+                {nextSession[c.id].date_debut >= TODAY ? 'Session ' : 'Réalisée '}{formatDate(nextSession[c.id].date_debut, 'dd/MM')}
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -508,31 +552,21 @@ export default function Contacts() {
     <div>
       <PageHeader
         title="Contacts"
-        subtitle="Prospects, apprenants et interlocuteurs (CRM 4.1)"
+        subtitle="Cliquez sur une ligne pour ouvrir la fiche du contact"
         actions={
           <>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importFile} />
-            <Button variant="secondary" onClick={() => fileRef.current?.click()} disabled={importing}>
-              <FileSpreadsheet className={`h-4 w-4 ${importing ? 'animate-pulse' : ''}`} />
-              {importing ? 'Import…' : 'Importer CSV'}
-            </Button>
             <input ref={mapFileRef} type="file" accept=".csv" className="hidden" onChange={openMapping} />
-            <Button variant="secondary" onClick={() => mapFileRef.current?.click()} disabled={importing} title="Importer un CSV en choisissant le mapping des colonnes">
-              <Columns3 className="h-4 w-4" /> Importer (mapping)
-            </Button>
-            {isManager && (
-              <Button variant="secondary" onClick={importProspects} disabled={importing} title="Depuis le Google Sheet configuré">
-                <DownloadCloud className="h-4 w-4" /> Sheets
-              </Button>
-            )}
-            <Button variant="secondary" onClick={() => setDoublonsOpen(true)} title="Détecter et fusionner les contacts en doublon">
-              <Undo2 className="h-4 w-4 rotate-90" /> Doublons
-            </Button>
-            {isManager && (
-              <Button variant="secondary" onClick={() => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }} title="Saisir une demande comme le formulaire public (création ou mise à jour)">
-                <ClipboardList className="h-4 w-4" /> Saisie (formulaire)
-              </Button>
-            )}
+            <ActionMenu
+              items={[
+                { label: 'Importer un fichier CSV', hint: 'Vous choisissez à quoi correspond chaque colonne', icon: <Columns3 className="h-4 w-4" />, onClick: () => mapFileRef.current?.click(), disabled: importing },
+                { label: 'Import rapide de prospects (CSV)', hint: 'Colonnes reconnues seules, répartition entre conseillers', icon: <FileSpreadsheet className="h-4 w-4" />, onClick: () => fileRef.current?.click(), disabled: importing },
+                { label: 'Récupérer les prospects du Google Sheet', icon: <DownloadCloud className="h-4 w-4" />, onClick: importProspects, disabled: importing, hidden: !isManager },
+                { label: `Annuler un import récent (${batches.data.length})`, icon: <Undo2 className="h-4 w-4" />, onClick: () => setImportsOpen(true), hidden: batches.data.length === 0 },
+                { label: 'Fusionner les doublons', icon: <Users className="h-4 w-4" />, onClick: () => setDoublonsOpen(true) },
+                { label: 'Saisir une demande reçue', hint: 'Comme le formulaire du site : crée ou met à jour le contact', icon: <ClipboardList className="h-4 w-4" />, onClick: () => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }, hidden: !isManager },
+              ]}
+            />
             <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>
           </>
         }
@@ -544,7 +578,7 @@ export default function Contacts() {
           <span className="flex-1"><strong>{nonAffectes}</strong> prospect(s) non affecté(s).</span>
           <button onClick={() => { setAffFilter('non'); setTypeFilter('prospect'); }} className="font-medium underline-offset-2 hover:underline">Afficher</button>
           <Button variant="secondary" onClick={openRoundRobin} disabled={distributing}>
-            <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Répartir (round-robin)'}
+            <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Répartir entre les conseillers'}
           </Button>
         </div>
       )}
@@ -562,7 +596,7 @@ export default function Contacts() {
             <UserCheck className="h-4 w-4" /> Attribuer
           </Button>
           <Button variant="secondary" onClick={openRoundRobin} disabled={distributing}>
-            <UserCheck className="h-4 w-4" /> Répartir (round-robin)
+            <UserCheck className="h-4 w-4" /> Répartir
           </Button>
           <span className="mx-1 text-muted">·</span>
           <select className="input max-w-[170px] py-1 text-xs" value={bulkType} onChange={(e) => setBulkType(e.target.value as ContactType)} title="Type cible">
@@ -575,58 +609,67 @@ export default function Contacts() {
         </div>
       )}
 
-      {/* Imports récents annulables (lots persistants en base) */}
-      {batches.data.length > 0 && (
-        <div className="mb-4 rounded-lg border border-line bg-surface-2 px-3 py-2">
-          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted"><Undo2 className="h-3.5 w-3.5" /> Imports récents — annulables</p>
-          <div className="flex flex-col gap-1.5">
-            {batches.data.slice(0, 5).map((b) => (
-              <div key={b.id} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-fg"><strong>{b.count}</strong> contact(s) créé(s)</span>
-                <span className="text-xs text-muted">{b.source === 'csv_mapping' ? 'CSV (mapping)' : 'CSV'} · {formatDate(b.created_at, 'dd/MM/yyyy HH:mm')}</span>
-                <button onClick={() => undoBatch(b)} disabled={importing} className="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50">
-                  <Undo2 className="h-3.5 w-3.5" /> Annuler
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Type de contact : une pastille par type présent, avec son effectif */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {[...typesAffiches.map((t) => ({ cle: t as string, label: CONTACT_TYPE_LABELS[t], n: parType(t) })), { cle: '', label: 'Tous', n: horsType.length }].map((p) => (
+          <button
+            key={p.cle || 'tous'}
+            onClick={() => setTypeFilter(p.cle)}
+            aria-pressed={typeFilter === p.cle}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition',
+              typeFilter === p.cle
+                ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                : 'border-line text-muted hover:bg-surface-2 hover:text-fg',
+            )}
+          >
+            {p.label} <span className="text-xs tabular-nums opacity-70">{p.n}</span>
+          </button>
+        ))}
+      </div>
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
-          <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input pl-9" placeholder="Nom, e-mail, téléphone, entreprise…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <select className="input max-w-[220px]" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-          <option value="">Tous les types</option>
-          {TYPES.map((t) => <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>)}
+        <select className="input max-w-[210px]" value={suiviFilter} onChange={(e) => setSuiviFilter(e.target.value as typeof suiviFilter)} title="Qui relancer en premier">
+          <option value="">Tout le suivi</option>
+          <option value="retard">Action en retard</option>
+          <option value="sans">Aucune action prévue</option>
+          <option value="jamais">Jamais contacté</option>
         </select>
         {isManager && (
-          <select className="input max-w-[220px]" value={affFilter} onChange={(e) => setAffFilter(e.target.value)}>
-            <option value="">Toutes affectations</option>
+          <select className="input max-w-[210px]" value={affFilter} onChange={(e) => setAffFilter(e.target.value)}>
+            <option value="">Tous les conseillers</option>
             <option value="non">Non affectés</option>
             {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
           </select>
         )}
         {statutsPresents.length > 0 && (
-          <select className="input max-w-[200px]" value={statutFilter} onChange={(e) => setStatutFilter(e.target.value)}>
-            <option value="">Tous les statuts (qualif.)</option>
+          <select className="input max-w-[190px]" value={statutFilter} onChange={(e) => setStatutFilter(e.target.value)}>
+            <option value="">Tous les statuts</option>
             {statutsPresents.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         )}
         {allTags.length > 0 && (
-          <select className="input max-w-[200px]" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+          <select className="input max-w-[190px]" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
             <option value="">Tous les tags</option>
             {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
+        )}
+        {filtresActifs > 0 && (
+          <button onClick={effacerFiltres} className="text-sm font-medium text-muted underline-offset-2 hover:text-fg hover:underline">Effacer les filtres</button>
         )}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
       ) : filtered.length === 0 ? (
-        <EmptyState title="Aucun contact" message="Créez votre premier contact pour démarrer." />
+        <EmptyState
+          title={data.length === 0 ? 'Aucun contact' : 'Aucun contact ne correspond'}
+          message={data.length === 0 ? 'Créez votre premier contact pour démarrer.' : 'Changez de type ou effacez les filtres pour élargir la liste.'}
+        />
       ) : (
         <>
         <Table head={
@@ -635,12 +678,10 @@ export default function Contacts() {
               <th className="px-4 py-3 w-0"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} title="Tout sélectionner (résultat filtré, toutes pages)" /></th>
             )}
             <th className="px-4 py-3"><button onClick={() => toggleSort('nom')} className="inline-flex items-center gap-1 hover:text-fg">Nom <span className="text-xs text-muted">{sortArrow('nom')}</span></button></th>
-            <th className="px-4 py-3"><button onClick={() => toggleSort('type')} className="inline-flex items-center gap-1 hover:text-fg">Type <span className="text-xs text-muted">{sortArrow('type')}</span></button></th>
             <th className="px-4 py-3">Coordonnées</th>
-            <th className="px-4 py-3"><button onClick={() => toggleSort('aff')} className="inline-flex items-center gap-1 hover:text-fg">Affectation <span className="text-xs text-muted">{sortArrow('aff')}</span></button></th>
-            <th className="px-4 py-3" title="Temps écoulé depuis la dernière action réalisée (prospects)">Dernière interaction</th>
-            <th className="px-4 py-3">Pilotage</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className="px-4 py-3"><button onClick={() => toggleSort('aff')} className="inline-flex items-center gap-1 hover:text-fg">Conseiller <span className="text-xs text-muted">{sortArrow('aff')}</span></button></th>
+            <th className="px-4 py-3" title="Prochaine action prévue, puis dernier contact réalisé">Suivi</th>
+            <th className="px-4 py-3 w-0"></th>
           </tr>
         }>
           {paged.map((c) => (
@@ -655,8 +696,14 @@ export default function Contacts() {
                 </td>
               )}
               <td className="px-4 py-3 font-medium text-fg">
-                {fullName(c.prenom, c.nom)}
-                {c.fonction && <span className="block text-xs font-normal text-muted">{c.fonction}</span>}
+                <span className="flex flex-wrap items-center gap-2">
+                  {fullName(c.prenom, c.nom)}
+                  {!typeFilter && <Badge tone="brand">{CONTACT_TYPE_LABELS[c.type]}</Badge>}
+                  {c.statut_prospect && <Badge tone="neutral">{c.statut_prospect}</Badge>}
+                </span>
+                {(c.fonction || entrepriseDe(c)) && (
+                  <span className="block text-xs font-normal text-muted">{[c.fonction, entrepriseDe(c)].filter(Boolean).join(' · ')}</span>
+                )}
                 {(c.tags ?? []).length > 0 && (
                   <span className="mt-1 flex flex-wrap gap-1">
                     {(c.tags ?? []).map((t) => (
@@ -667,10 +714,9 @@ export default function Contacts() {
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3"><Badge tone="brand">{CONTACT_TYPE_LABELS[c.type]}</Badge></td>
-              <td className="px-4 py-3 text-muted">
+              <td className="px-4 py-3 text-muted" onClick={(e) => { if ((e.target as HTMLElement).closest('a')) e.stopPropagation(); }}>
+                {c.telephone && <a href={`tel:${c.telephone}`} title="Appeler" className="flex w-fit items-center gap-1 text-xs hover:text-brand-600"><Phone className="h-3 w-3" />{c.telephone}</a>}
                 {c.email && <span className="flex items-center gap-1 text-xs"><Mail className="h-3 w-3" />{c.email}</span>}
-                {c.telephone && <span className="flex items-center gap-1 text-xs"><Phone className="h-3 w-3" />{c.telephone}</span>}
                 {!c.email && !c.telephone && <span className="text-xs">—</span>}
               </td>
               <td className="px-4 py-3">
@@ -698,30 +744,10 @@ export default function Contacts() {
                   <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge tone="warning">Non affecté</Badge>}</span>
                 )}
               </td>
-              <td className="px-4 py-3">{interactionCell(c)}</td>
-              <td className="px-4 py-3 text-xs">
-                <div className="flex flex-col gap-1">
-                  {nextAction[c.id] ? (
-                    <span className={`flex items-center gap-1 ${nextAction[c.id].date_action < TODAY ? 'text-red-600 dark:text-red-400' : 'text-muted'}`}
-                      title={nextAction[c.id].description}>
-                      <span className="rounded bg-amber-500/15 px-1 text-amber-700 dark:text-amber-300">{formatDate(nextAction[c.id].date_action, 'dd/MM')}</span>
-                      <span className="max-w-[140px] truncate">{nextAction[c.id].description}</span>
-                    </span>
-                  ) : <span className="text-muted/60">—</span>}
-                  <div className="flex flex-wrap gap-1">
-                    {stageOf[c.id] && <Badge tone="brand">{OPP_STAGE_LABELS[stageOf[c.id]] ?? stageOf[c.id]}</Badge>}
-                    {nextSession[c.id] && (
-                      <Badge tone={nextSession[c.id].date_debut >= TODAY ? 'warning' : 'success'}>
-                        {nextSession[c.id].date_debut >= TODAY ? 'Session ' : 'Réalisée '}{formatDate(nextSession[c.id].date_debut, 'dd/MM')}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </td>
+              <td className="px-4 py-3">{suiviCell(c)}</td>
               <td className="px-4 py-3">
-                <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => openEdit(c)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(c)} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => openEdit(c)} title="Modifier le contact" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                 </div>
               </td>
             </tr>
@@ -746,7 +772,7 @@ export default function Contacts() {
 
       {/* Répartition round-robin (cibles = sélection ou prospects non affectés) */}
       <Modal
-        open={rrOpen} onClose={() => setRrOpen(false)} title="Répartir en round-robin"
+        open={rrOpen} onClose={() => setRrOpen(false)} title="Répartir entre les conseillers"
         footer={
           <>
             <Button variant="secondary" onClick={() => setRrOpen(false)}>Annuler</Button>
@@ -784,6 +810,9 @@ export default function Contacts() {
         title={form.id ? 'Modifier le contact' : 'Nouveau contact'}
         footer={
           <>
+            {form.id && (
+              <Button variant="danger" className="mr-auto" onClick={() => void remove(form as Contact)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
+            )}
             <Button variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
             <Button onClick={save} disabled={saving || !form.nom}>{saving ? 'Enregistrement…' : 'Enregistrer'}</Button>
           </>
@@ -822,10 +851,31 @@ export default function Contacts() {
         </div>
       </Modal>
 
+      {/* Imports récents : chacun peut être annulé (lots gardés en base) */}
+      <Modal
+        open={importsOpen} onClose={() => setImportsOpen(false)} title="Imports récents"
+        footer={<Button variant="secondary" onClick={() => setImportsOpen(false)}>Fermer</Button>}
+      >
+        <p className="mb-3 text-sm text-muted">Annuler un import supprime les contacts qu'il a créés. Ceux qu'il a seulement mis à jour ne changent pas.</p>
+        {batches.data.length === 0 ? <p className="text-sm text-muted">Aucun import à annuler.</p> : (
+          <ul className="space-y-2">
+            {batches.data.slice(0, 10).map((b) => (
+              <li key={b.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                <span className="text-fg"><strong>{b.count}</strong> contact(s) créé(s)</span>
+                <span className="text-xs text-muted">{formatDate(b.created_at, 'dd/MM/yyyy HH:mm')}</span>
+                <button onClick={() => undoBatch(b)} disabled={importing} className="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50">
+                  <Undo2 className="h-3.5 w-3.5" /> Annuler cet import
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+
       {/* Saisie interne — reprend le formulaire public (/formulaire) */}
       <Modal
         open={intakeOpen} onClose={() => setIntakeOpen(false)} wide
-        title="Saisie d'une demande (formulaire)"
+        title="Saisir une demande reçue"
         footer={
           <>
             {intakeMsg && <span className="mr-auto text-sm text-emerald-600">{intakeMsg}</span>}
@@ -868,7 +918,7 @@ export default function Contacts() {
       {/* Import CSV — mapping des colonnes */}
       <Modal
         open={mapOpen} onClose={() => setMapOpen(false)} wide
-        title="Importer un CSV — mapping des colonnes"
+        title="Importer un fichier CSV"
         footer={<>
           <Button variant="secondary" onClick={() => setMapOpen(false)}>Annuler</Button>
           <Button onClick={runMappedImport} disabled={importing || (!mapping.nom && !mapping.nom_complet)}>

@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { Plus, Trash2, Pencil, FileDown, Loader as Loader2, ReceiptText } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Trash2, FileDown, Loader as Loader2, ReceiptText, Search, FolderKanban } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
-import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect, type Tone } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, SearchSelect, TONE_BADGE, type Tone } from '@/components/ui';
 import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
-import { formatDate, fullName, formatMoney } from '@/lib/utils';
+import { cn, formatDate, fullName, formatMoney } from '@/lib/utils';
 import { ensureDossierClient } from '@/lib/dossierClient';
 import type { Devis, DevisLigne, DevisStatut, Contact, Entreprise, Financeur, Formation, Dossier, Profile } from '@/lib/database.types';
 
@@ -45,6 +46,8 @@ export default function Devis() {
   const [lines, setLines] = useState<Ligne[]>([emptyLigne()]);
   const [saving, setSaving] = useState(false);
   const [genId, setGenId] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [statutFilter, setStatutFilter] = useState<DevisStatut | ''>('');
 
   const setF = (k: keyof typeof form, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const cName = (id: string | null) => { const c = contacts.data.find((x) => x.id === id); return c ? fullName(c.prenom, c.nom) : '—'; };
@@ -65,6 +68,32 @@ export default function Devis() {
     const { data: lg } = await supabase.from('devis_lignes').select('*').eq('devis_id', d.id).order('ordre');
     setLines((lg ?? []).length ? (lg as DevisLigne[]).map((l) => ({ designation: l.designation, description: l.description ?? '', quantite: l.quantite, unite: l.unite, prix_unitaire_ht: l.prix_unitaire_ht })) : [emptyLigne()]);
     setOpen(true);
+  };
+
+  // Arrivée depuis un dossier ou une fiche : /devis?contact=…&dossier=… ouvre un
+  // devis pré-rempli, /devis?ouvrir=… ouvre un devis existant.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const ouvrir = params.get('ouvrir');
+    const contactId = params.get('contact');
+    if (!ouvrir && !contactId) return;
+    if (loading || contacts.loading || dossiers.loading) return;
+    if (ouvrir) {
+      const d = data.find((x) => x.id === ouvrir);
+      if (d) void openEdit(d);
+    } else if (contactId) {
+      openNew();
+      setForm((f) => ({ ...f, contact_id: contactId, dossier_id: params.get('dossier') ?? '' }));
+    }
+    setParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, contacts.loading, dossiers.loading, params]);
+
+  // Changer le statut depuis la liste : un devis envoyé puis accepté se note en un geste.
+  const changerStatut = async (d: Devis, statut: DevisStatut) => {
+    const { error } = await supabase.from('devis').update({ statut }).eq('id', d.id);
+    if (error) { alert(error.message); return; }
+    refresh();
   };
 
   const addLigne = () => setLines((l) => [...l, emptyLigne()]);
@@ -132,9 +161,8 @@ export default function Devis() {
       if (error) throw new Error(await functionErrorMessage(error));
       if ((res as { error?: string })?.error) throw new Error((res as { error?: string }).error);
       refresh();
-      alert('PDF du devis généré.');
     } catch (err) {
-      alert(`Génération indisponible : déployez l'Edge Function « generate-devis ». ${err instanceof Error ? err.message : ''}`);
+      alert(`Le PDF n'a pas pu être généré. ${err instanceof Error ? err.message : ''}`);
     } finally {
       setGenId(null);
     }
@@ -144,39 +172,78 @@ export default function Devis() {
     if (!confirm(`Supprimer le devis ${d.numero} ?`)) return;
     const { error } = await supabase.from('devis').delete().eq('id', d.id);
     if (error) { alert(error.message); return; }
+    setOpen(false);
     refresh();
   };
 
+  const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const cherches = data.filter((d) => !q.trim() || norm(`${d.numero} ${d.objet ?? ''} ${cName(d.contact_id)}`).includes(norm(q.trim())));
+  const filtres = statutFilter ? cherches.filter((d) => d.statut === statutFilter) : cherches;
+  const statutsPresents = (Object.keys(STATUT_LABELS) as DevisStatut[]).filter((s) => s === statutFilter || data.some((d) => d.statut === s));
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+
   return (
     <div>
-      <PageHeader title="Devis" subtitle="Devis Aissociate → Client (HT, norme française) — à transmettre au financeur" actions={<Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau devis</Button>} />
+      <PageHeader title="Devis" subtitle="Devis HT, à transmettre au client ou à son financeur" actions={<Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau devis</Button>} />
+
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {[...statutsPresents.map((s) => ({ cle: s as DevisStatut | '', label: STATUT_LABELS[s], n: cherches.filter((d) => d.statut === s).length })), { cle: '' as DevisStatut | '', label: 'Tous', n: cherches.length }].map((p) => (
+          <button key={p.cle || 'tous'} onClick={() => setStatutFilter(p.cle)} aria-pressed={statutFilter === p.cle}
+            className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition',
+              statutFilter === p.cle ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'border-line text-muted hover:bg-surface-2 hover:text-fg')}>
+            {p.label} <span className="text-xs tabular-nums opacity-70">{p.n}</span>
+          </button>
+        ))}
+      </div>
+      <div className="relative mb-4 max-w-sm">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
+        <input className="input pl-9" placeholder="Numéro, objet, client…" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
-      ) : data.length === 0 ? (
-        <EmptyState title="Aucun devis" message="Créez un devis à transmettre au client ou au financeur." />
+      ) : filtres.length === 0 ? (
+        <EmptyState
+          title={data.length === 0 ? 'Aucun devis' : 'Aucun devis ne correspond'}
+          message={data.length === 0 ? 'Créez un devis à transmettre au client ou au financeur.' : 'Changez de statut ou videz la recherche.'}
+        />
       ) : (
         <Table head={
           <tr>
-            <th className="px-4 py-3">Numéro</th><th className="px-4 py-3">Client</th>
-            <th className="px-4 py-3">Créateur devis</th><th className="px-4 py-3">Conseiller affecté</th>
+            <th className="px-4 py-3">Devis</th><th className="px-4 py-3">Client</th>
             <th className="px-4 py-3">Date</th><th className="px-4 py-3 text-right">Total HT</th>
-            <th className="px-4 py-3">Statut</th><th className="px-4 py-3 text-right">Actions</th>
+            <th className="px-4 py-3">Statut</th><th className="px-4 py-3 text-right">PDF et dossier</th>
           </tr>
         }>
-          {data.map((d) => (
-            <tr key={d.id} className="hover:bg-surface-2">
-              <td className="px-4 py-3 font-medium text-fg">{d.numero}</td>
-              <td className="px-4 py-3 text-muted">{cName(d.contact_id)}</td>
-              <td className="px-4 py-3 text-muted">{uName(d.owner_id)}</td>
-              <td className="px-4 py-3 text-muted">{conseillerName(d.contact_id)}</td>
-              <td className="px-4 py-3 text-muted">{formatDate(d.date_emission)}</td>
-              <td className="px-4 py-3 text-right text-fg">{formatMoney(d.total_ht)}</td>
-              <td className="px-4 py-3"><Badge tone={STATUT_TONES[d.statut]}>{STATUT_LABELS[d.statut]}</Badge></td>
+          {filtres.map((d) => {
+            const perime = d.statut === 'envoye' && !!d.date_validite && d.date_validite < aujourdhui;
+            return (
+            <tr key={d.id} className="cursor-pointer hover:bg-surface-2" onClick={() => void openEdit(d)} title="Ouvrir le devis">
               <td className="px-4 py-3">
-                <div className="flex justify-end gap-1">
+                <span className="font-medium text-fg">{d.numero}</span>
+                {d.objet && <span className="block max-w-[260px] truncate text-xs text-muted" title={d.objet}>{d.objet}</span>}
+              </td>
+              <td className="px-4 py-3">
+                <span className="text-fg">{cName(d.contact_id)}</span>
+                <span className="block text-xs text-muted" title={`Devis créé par ${uName(d.owner_id)}`}>Conseiller : {conseillerName(d.contact_id)}</span>
+              </td>
+              <td className="px-4 py-3 text-muted">
+                {formatDate(d.date_emission)}
+                {perime && <span className="block text-xs font-medium text-amber-600 dark:text-amber-400">validité dépassée le {formatDate(d.date_validite!)}</span>}
+              </td>
+              <td className="px-4 py-3 text-right font-medium text-fg">{formatMoney(d.total_ht)}</td>
+              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <select
+                  className={cn('rounded-full border-0 px-2.5 py-1 text-xs font-medium', TONE_BADGE[STATUT_TONES[d.statut]])}
+                  value={d.statut} onChange={(e) => void changerStatut(d, e.target.value as DevisStatut)} aria-label={`Statut du devis ${d.numero}`}
+                >
+                  {(Object.keys(STATUT_LABELS) as DevisStatut[]).map((s) => <option key={s} value={s}>{STATUT_LABELS[s]}</option>)}
+                </select>
+              </td>
+              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-1">
                   {d.fichier_url && <FileLink bucket="devis" value={d.fichier_url} />}
-                  <button onClick={() => generate(d.id)} disabled={genId === d.id} title="Générer le PDF" className="rounded p-1.5 text-muted hover:text-brand-600">{genId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}</button>
+                  <button onClick={() => generate(d.id)} disabled={genId === d.id} title={d.fichier_url ? 'Régénérer le PDF' : 'Générer le PDF'} className="rounded p-1.5 text-muted hover:text-brand-600">{genId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}</button>
                   <AddToDossierButton
                     contactId={d.contact_id} dossiers={dossiers.data} fichierUrl={d.fichier_url} sourceBucket="devis"
                     pieceLibelle="Devis signé" documentLabel="devis" onDone={() => { dossiers.refresh(); refresh(); }}
@@ -186,12 +253,14 @@ export default function Devis() {
                       return error?.message ?? null;
                     }}
                   />
-                  <button onClick={() => openEdit(d)} className="rounded p-1.5 text-muted hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(d)} className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  {d.dossier_id && (
+                    <Link to={`/dossiers/${d.dossier_id}`} title="Ouvrir le dossier client" className="rounded p-1.5 text-muted hover:text-brand-600"><FolderKanban className="h-4 w-4" /></Link>
+                  )}
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </Table>
       )}
 
@@ -200,6 +269,7 @@ export default function Devis() {
         title={editing ? `Devis ${editing.numero}` : 'Nouveau devis'}
         footer={
           <>
+            {editing && <Button variant="danger" className="mr-auto" onClick={() => void remove(editing)}><Trash2 className="h-4 w-4" /> Supprimer</Button>}
             <Button variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
             <Button variant="secondary" onClick={save} disabled={saving || !form.contact_id}>Enregistrer</Button>
             <Button onClick={saveAndGenerate} disabled={saving || !form.contact_id}><FileDown className="h-4 w-4" /> Enregistrer + PDF</Button>
@@ -224,15 +294,15 @@ export default function Devis() {
                 placeholder="Rechercher un financeur…" emptyLabel="— Aucun —"
               />
             </Field>
-            <Field label="Dossier lié" hint="Vide = dossier client créé/retrouvé automatiquement">
+            <Field label="Dossier lié" hint="Laissez vide : le dossier du client est créé ou retrouvé tout seul">
               <SearchSelect
                 value={form.dossier_id}
                 onChange={(v) => setF('dossier_id', v)}
                 options={dossiers.data.map((d) => ({ value: d.id, label: `${d.reference} — ${d.intitule}` }))}
-                placeholder="Rechercher un dossier…" emptyLabel="— Auto (au nom du prospect) —"
+                placeholder="Rechercher un dossier…" emptyLabel="— Automatique —"
               />
             </Field>
-            <Field label="Formation concernée" hint="Clé du dossier client (prospect + formation)">
+            <Field label="Formation concernée" hint="Sert à retrouver le bon dossier du client">
               <SearchSelect
                 value={form.formation_id}
                 onChange={(v) => setF('formation_id', v)}

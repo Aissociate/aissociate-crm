@@ -1,6 +1,6 @@
 import { type ReactNode, type ButtonHTMLAttributes, useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Loader2, Inbox, Search, ChevronDown, Check } from 'lucide-react';
+import { X, Loader2, Inbox, Search, ChevronDown, Check, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -278,6 +278,52 @@ export function SearchSelect({
         document.body,
       )}
     </>
+  );
+}
+
+// Menu d'actions secondaires : garde l'en-tête d'une page à un seul bouton
+// principal, le reste se range derrière « Plus ».
+export type ActionMenuItem = {
+  label: string; icon?: ReactNode; onClick: () => void;
+  hint?: string; hidden?: boolean; disabled?: boolean; danger?: boolean;
+};
+
+export function ActionMenu({ label = 'Plus', items }: { label?: string; items: ActionMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const shown = items.filter((i) => !i.hidden);
+  if (shown.length === 0) return null;
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" className="btn-secondary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <MoreHorizontal className="h-4 w-4" /> {label}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-30 mt-1 w-72 rounded-lg border border-line bg-surface py-1 shadow-xl">
+          {shown.map((i) => (
+            <button
+              key={i.label} type="button" role="menuitem" disabled={i.disabled}
+              onClick={() => { setOpen(false); i.onClick(); }}
+              className={cn('flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2 disabled:opacity-50', i.danger ? 'text-red-600' : 'text-fg')}
+            >
+              {i.icon && <span className="mt-0.5 shrink-0 text-muted">{i.icon}</span>}
+              <span className="min-w-0">
+                <span className="block">{i.label}</span>
+                {i.hint && <span className="block text-xs text-muted">{i.hint}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -161,7 +161,7 @@ export default function PlansFormation() {
     setOpen(true);
   };
 
-  // Pre-remplit le plan a partir d'une formation du catalogue (4.3)
+  // Pre-remplit le plan a partir d'une formation du catalogue
   const applyFormation = (id: string) => {
     set('formation_id', id || null);
     const f = formations.data.find((x) => x.id === id);
@@ -219,7 +219,7 @@ export default function PlansFormation() {
     <div>
       <PageHeader
         title="Plans de formation"
-        subtitle="Génération de plans sur mesure à partir du catalogue (4.3)"
+        subtitle="Génération de plans sur mesure à partir du catalogue"
         actions={<Button onClick={openNew}><Wand2 className="h-4 w-4" /> Générer un plan</Button>}
       />
 
