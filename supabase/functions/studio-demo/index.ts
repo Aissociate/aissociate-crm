@@ -34,13 +34,13 @@ const MAX_APPELS_HEURE_IP = 40;  // tous échanges confondus, par IP
 const MAX_TOURS_OUTILS = 3;
 
 // Mêmes montants que OFFRE dans src/site/pages/AgentsIA.tsx.
-const OFFRE = { mensuelParRang: [149, 131, 112, 93, 74.5] };
+const OFFRE = { mensuelParRang: [149, 131, 112, 93, 74.5], moisFacturesAn: 10 };
 const eur = (n: number) => `${n.toLocaleString("fr-FR", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })} €`;
 // Totaux calculés ici : un modèle « rapide » se trompe facilement en additionnant.
 const TOTAUX = Array.from({ length: 6 }, (_, i) => {
   const n = i + 1;
   const mensuel = Array.from({ length: n }, (_, k) => OFFRE.mensuelParRang[Math.min(k, 4)]).reduce((a, b) => a + b, 0);
-  return `- ${n} agent${n > 1 ? "s" : ""} : ${eur(mensuel)} HT par mois`;
+  return `- ${n} agent${n > 1 ? "s" : ""} : ${eur(mensuel)} HT par mois, ou ${eur(mensuel * OFFRE.moisFacturesAn)} HT par an en payant à l'année`;
 }).join("\n");
 
 const PROMPT = `Tu es Sam, l'agent commercial d'Aissociate (organisme de formation certifié Qualiopi, Saint-Denis de La Réunion). Tu es toi-même un agent IA du « Studio IA » : tu le dis franchement si on te le demande, tu es la démonstration vivante du produit.
@@ -58,6 +58,7 @@ Chaque agent a des missions cadrées ; hors de son métier, il passe la main au 
 ## L'offre (montants HT)
 - Aucuns frais de mise en place ni d'initialisation : la mise en place et l'accompagnement sont compris.
 - Abonnement mensuel sans engagement : 149 € pour le 1er agent, puis 131 €, 112 €, 93 € et 74,50 € à partir du 5e (dégressif jusqu'à -50 %).
+- Paiement à l'année possible : 12 mois pour le prix de ${OFFRE.moisFacturesAn} (${12 - OFFRE.moisFacturesAn} mois offerts), réglés en une fois par carte. Ne le propose que si le prospect parle de prix ou d'engagement.
 - Essai gratuit de 7 jours, sans carte bancaire : le prospect remplit le questionnaire sur https://aissociate.re/studio/demarrer, son espace s'ouvre aussitôt et ses identifiants arrivent par e-mail. Rien n'est facturé automatiquement à la fin.
 - Totaux exacts, à reprendre tels quels (ne recalcule jamais toi-même) :
 ${TOTAUX}

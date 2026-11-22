@@ -23,6 +23,8 @@ type Abonnement = {
   actuels: { agents: number; connecteurs: number | null };
   prix_connecteur: number; tva_pourcent: number | null; test: boolean; estimation_ht: number;
   agent_suivant_ht?: number; premier_agent_ht?: number; dernier_palier_ht?: number;
+  // Abonnement payé à l'année : montant de l'année (null = mensuel), prix de l'année à souscrire, mois facturés sur 12.
+  annuel_ht?: number | null; estimation_annuelle_ht?: number; mois_factures_an?: number;
 };
 const OFFRES: Record<string, string> = { essai: 'Essai gratuit', essentiel: 'Essentiel', pro: 'Pro', sur_mesure: 'Sur mesure' };
 const STATUTS: Record<string, string> = {
@@ -80,14 +82,16 @@ export default function PagePerimetre() {
   }, []);
 
   /** Actions qui renvoient vers une page Stripe (paiement, portail). */
-  const versStripe = async (action: string) => {
+  const versStripe = async (action: string, params: Record<string, unknown> = {}) => {
     setEnvoi(true); setErreur('');
+    const annuel = p?.abonnement?.annuel_ht != null;
     try {
-      const r = await appel<{ url?: string; ok?: boolean }>(action);
+      const r = await appel<{ url?: string; ok?: boolean }>(action, params);
       if (r.url) { window.location.href = r.url; return; }
       await charger();
       setEnvoi(false);
-      setMerci('Abonnement mis à jour : la différence est calculée au prorata sur votre prochaine facture.');
+      setMerci(annuel ? 'Abonnement mis à jour : la différence jusqu\'à votre prochaine échéance est facturée aujourd\'hui, au prorata.'
+        : 'Abonnement mis à jour : la différence est calculée au prorata sur votre prochaine facture.');
     } catch (e) { setErreur(gerer(e)); setEnvoi(false); }
     setMajAbo(false);
   };
@@ -134,15 +138,24 @@ export default function PagePerimetre() {
   const carteAbonnement = p.abonnement && (() => {
         const a = p.abonnement;
         const enCours = a.statut != null && EN_COURS.includes(a.statut);
+        const annuel = enCours && a.annuel_ht != null;
+        const moisOfferts = 12 - (a.mois_factures_an ?? 10);
         const ecart = enCours && a.actuels.connecteurs != null
           && (a.factures.agents !== a.actuels.agents || a.factures.connecteurs !== a.actuels.connecteurs);
         return (
           <Carte>
             <div className="flex flex-wrap items-start gap-6">
               <div className="min-w-[12rem]">
-                <p className="flex items-center gap-2 font-semibold"><CreditCard className="h-5 w-5 text-neutral-500" />Abonnement mensuel
+                <p className="flex items-center gap-2 font-semibold"><CreditCard className="h-5 w-5 text-neutral-500" />{annuel ? 'Abonnement annuel' : 'Abonnement mensuel'}
                   {a.test && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700">mode test</span>}</p>
-                <p className="mt-2 text-3xl font-semibold">{eur(enCours && a.mensuel_ht != null ? Number(a.mensuel_ht) : a.estimation_ht)}<span className="text-base font-normal text-neutral-400"> HT / mois</span></p>
+                {annuel ? (
+                  <>
+                    <p className="mt-2 text-3xl font-semibold">{eur(Number(a.annuel_ht))}<span className="text-base font-normal text-neutral-400"> HT / an</span></p>
+                    {a.mensuel_ht != null && <p className="mt-1 text-xs text-neutral-500">soit {eur(Number(a.mensuel_ht))} HT par mois</p>}
+                  </>
+                ) : (
+                  <p className="mt-2 text-3xl font-semibold">{eur(enCours && a.mensuel_ht != null ? Number(a.mensuel_ht) : a.estimation_ht)}<span className="text-base font-normal text-neutral-400"> HT / mois</span></p>
+                )}
                 <p className="mt-1 text-xs text-neutral-500">
                   {a.statut ? STATUTS[a.statut] ?? a.statut : 'Aucun abonnement en cours'}
                   {enCours && a.fin ? ` · prochaine échéance le ${new Date(a.fin).toLocaleDateString('fr-FR')}` : ''}
@@ -151,10 +164,12 @@ export default function PagePerimetre() {
               <div className="min-w-0 flex-1 text-sm text-neutral-600">
                 <p>
                   {enCours ? `Facturé : ${a.factures.agents ?? 0} agent${(a.factures.agents ?? 0) > 1 ? 's' : ''}` : `${a.actuels.agents} agent${a.actuels.agents > 1 ? 's' : ''}`}
-                  {(enCours ? a.factures.connecteurs : a.actuels.connecteurs) ? ` + ${enCours ? a.factures.connecteurs : a.actuels.connecteurs} connecteur(s) supplémentaire(s) à ${eur(a.prix_connecteur)}` : ''}
+                  {(enCours ? a.factures.connecteurs : a.actuels.connecteurs) ? ` + ${enCours ? a.factures.connecteurs : a.actuels.connecteurs} connecteur(s) supplémentaire(s) à ${eur(a.prix_connecteur)} par mois` : ''}
                   {` · ${tvaTexte(a.tva_pourcent)}.`}
                 </p>
-                <p className="mt-1 text-neutral-500">{eur(a.premier_agent_ht ?? 149)} HT le premier agent, puis dégressif jusqu'à {eur(a.dernier_palier_ht ?? 74.5)} à partir du cinquième. Sans frais de mise en place, sans engagement : paiement par carte chaque mois, factures et résiliation depuis votre espace de paiement.</p>
+                <p className="mt-1 text-neutral-500">{eur(a.premier_agent_ht ?? 149)} HT le premier agent, puis dégressif jusqu'à {eur(a.dernier_palier_ht ?? 74.5)} à partir du cinquième. {annuel
+                  ? ` Vous payez à l'année : 12 mois pour le prix de ${a.mois_factures_an ?? 10}, par carte, une fois par an. Factures et résiliation depuis votre espace de paiement.`
+                  : ` Sans frais de mise en place, sans engagement : paiement par carte chaque mois, factures et résiliation depuis votre espace de paiement.${!enCours && a.estimation_annuelle_ht ? ` À l'année : ${moisOfferts} mois offerts, payés en une fois.` : ''}`}</p>
                 {ecart && (
                   <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
                     Votre équipe a changé : {a.actuels.agents} agent{a.actuels.agents > 1 ? 's' : ''}{a.actuels.connecteurs ? ` et ${a.actuels.connecteurs} connecteur(s) supplémentaire(s)` : ''} aujourd'hui.
@@ -168,9 +183,16 @@ export default function PagePerimetre() {
                         <Bouton variante="clair" disabled={envoi} onClick={() => versStripe('abonnement_gerer')}>Gérer mon abonnement</Bouton>
                       </>
                     ) : (
-                      <Bouton variante="noir" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire')}>
-                        S'abonner par carte · {eur(a.estimation_ht)} HT / mois
-                      </Bouton>
+                      <>
+                        <Bouton variante="noir" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire')}>
+                          S'abonner par carte · {eur(a.estimation_ht)} HT / mois
+                        </Bouton>
+                        {a.estimation_annuelle_ht ? (
+                          <Bouton variante="clair" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire', { periode: 'an' })}>
+                            Payer à l'année · {eur(a.estimation_annuelle_ht)} HT / an ({moisOfferts} mois offerts)
+                          </Bouton>
+                        ) : null}
+                      </>
                     )}
                   </div>
                 ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace gère l'abonnement.</p>}
@@ -317,6 +339,7 @@ export default function PagePerimetre() {
         message={(() => {
           const a = p.abonnement;
           const plus = a?.agent_suivant_ht != null ? eur(a.agent_suivant_ht) : null;
+          if (a?.statut && EN_COURS.includes(a.statut) && a.annuel_ht != null) return `Votre abonnement annuel augmente${a.agent_suivant_ht != null ? ` de ${eur(a.agent_suivant_ht * (a.mois_factures_an ?? 10))} HT par an` : ''} ; la part jusqu'à votre prochaine échéance est facturée aujourd'hui, au prorata.`;
           if (a?.statut && EN_COURS.includes(a.statut)) return `Votre abonnement augmente${plus ? ` de ${plus} HT par mois` : ''} ; la différence pour le mois en cours est calculée au prorata sur votre prochaine facture.`;
           if (me.essai && !essaiFini) return `L'agent est disponible tout de suite, sans frais pendant l'essai.${plus ? ` Il ajoutera ${plus} HT par mois à votre abonnement si vous vous abonnez.` : ''}`;
           return `L'agent rejoint votre équipe.${plus ? ` Il ajoute ${plus} HT par mois à votre abonnement.` : ''}`;
@@ -328,7 +351,9 @@ export default function PagePerimetre() {
       <Confirmation
         ouvert={majAbo}
         titre="Mettre à jour votre abonnement ?"
-        message={p.abonnement ? `Nouveau montant : ${eur(p.abonnement.estimation_ht)} HT par mois. La différence pour le mois en cours est calculée au prorata sur votre prochaine facture.` : ''}
+        message={!p.abonnement ? '' : p.abonnement.annuel_ht != null
+          ? `Nouveau montant : ${eur(p.abonnement.estimation_annuelle_ht ?? 0)} HT par an. La différence jusqu'à votre prochaine échéance est facturée aujourd'hui, au prorata.`
+          : `Nouveau montant : ${eur(p.abonnement.estimation_ht)} HT par mois. La différence pour le mois en cours est calculée au prorata sur votre prochaine facture.`}
         confirmer={{ label: 'Mettre à jour', onClick: () => versStripe('abonnement_synchroniser') }}
         annuler={{ onClick: () => setMajAbo(false) }}
         enCours={envoi}

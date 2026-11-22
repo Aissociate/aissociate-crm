@@ -148,6 +148,12 @@ Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux 
 - Abonnement mensuel : agents ouverts au tarif dégressif (prix `studio_agents_v2`, paliers 149 → 74,50 € HT, sans frais de mise en place)
   + connecteurs facturés (`studio_connecteur_<centimes>`), TVA fixe 8,5 % (La Réunion). Portail client Stripe
   (carte, factures, résiliation en fin de période) ; « Mettre à jour mon abonnement » aligne les quantités au prorata.
+- Abonnement annuel : 12 mois pour le prix de 10 (`MOIS_FACTURES_AN`), payés d'avance, choisi à la souscription
+  (`abonnement_souscrire { periode: "an" }`). Prix `studio_agents_v2_an` et `studio_connecteur_<centimes>_an`
+  (Stripe n'accepte qu'une périodicité par abonnement). Un ajout en cours d'année est facturé aussitôt au prorata
+  (`always_invoice`). `studio_workspaces.abonnement_annuel` (migration `20261125100000`) porte le montant de l'année,
+  vide pour un mensuel ; `abonnement_mensuel` garde l'équivalent par mois. Pas encore de bascule mensuel ↔ annuel
+  pour un abonnement en cours : elle se fait à la main dans Stripe.
 - Le compte Stripe est partagé avec d'autres produits : tout porte `metadata.app = "studio"`, le portail a sa propre
   configuration, et le webhook du Studio (événements `checkout.session.*`, `customer.subscription.*`) pointe vers
   cette fonction (en-tête `Stripe-Signature`).

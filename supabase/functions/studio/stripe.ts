@@ -1,5 +1,8 @@
 // Paiement en ligne Stripe du Studio : recharges de crédits (paiement unique) et
-// abonnement mensuel (agents au tarif dégressif + connecteurs au-delà des inclus).
+// abonnement mensuel ou annuel (agents au tarif dégressif + connecteurs au-delà des inclus).
+// Annuel : 12 mois pour le prix de 10 (MOIS_FACTURES_AN), payés d'avance. Stripe n'accepte
+// qu'une périodicité par abonnement : les connecteurs d'un abonnement annuel sont annuels aussi,
+// et tout ajout en cours d'année est facturé aussitôt au prorata (sinon il attendrait un an).
 //
 // Compte Stripe PARTAGÉ avec d'autres produits d'Aissociate : tout objet du Studio porte
 // metadata.app = "studio", et le Studio a son propre webhook (cette fonction, en-tête
@@ -27,7 +30,14 @@ const LIBELLE_BANCAIRE = "AISSOCIATE STUDIO IA";
 // Changer un montant impose une nouvelle clé (un prix Stripe ne se modifie pas) : v1 = 99 €, v2 = 149 €.
 export const PALIERS_AGENTS = [14900, 13100, 11200, 9300, 7450];
 export const CLE_AGENTS = "studio_agents_v2";
-export const cleConnecteur = (centimes: number) => `studio_connecteur_${centimes}`;
+export type Periode = "mois" | "an";
+/** Abonnement annuel : nombre de mois facturés pour douze (2 mois offerts). */
+export const MOIS_FACTURES_AN = 10;
+export const CLE_AGENTS_AN = `${CLE_AGENTS}_an`;
+export const periodeDe = (v: unknown): Periode => v === "an" ? "an" : "mois";
+const facteur = (p: Periode) => p === "an" ? MOIS_FACTURES_AN : 1;
+/** Clé du prix d'un connecteur : toujours le prix MENSUEL en centimes, suffixe _an pour l'annuel. */
+export const cleConnecteur = (centimes: number, periode: Periode = "mois") => `studio_connecteur_${centimes}${periode === "an" ? "_an" : ""}`;
 const TOLERANCE_S = 300;
 /** Statuts où l'abonnement existe encore chez Stripe (pas de nouvelle souscription). */
 export const STATUTS_EN_COURS = ["active", "trialing", "past_due", "unpaid", "incomplete", "paused"];
@@ -51,11 +61,16 @@ export function formulaire(o: Record<string, unknown>): string {
   return p.toString();
 }
 
-/** Montant mensuel HT (en euros) pour n agents, paliers dégressifs cumulés. */
-export function montantAgents(n: number): number {
+/** Montant HT (en euros) par période pour n agents, paliers dégressifs cumulés. */
+export function montantAgents(n: number, periode: Periode = "mois"): number {
   let t = 0;
   for (let i = 0; i < Math.max(0, Math.floor(n)); i++) t += PALIERS_AGENTS[Math.min(i, PALIERS_AGENTS.length - 1)];
-  return t / 100;
+  return t * facteur(periode) / 100;
+}
+
+/** Montant HT par période d'un abonnement à souscrire (agents + connecteurs au prix mensuel donné). */
+export function montantAbonnement(agents: number, connecteurs: number, prixConnecteur: number, periode: Periode = "mois"): number {
+  return Math.round((montantAgents(agents, periode) + connecteurs * Math.round(prixConnecteur * 100) * facteur(periode) / 100) * 100) / 100;
 }
 
 /** Taux fixe de La Réunion (974…) ; sinon TVA calculée par Stripe Tax. */
@@ -93,16 +108,22 @@ export async function verifierSignature(secret: string, entete: string | null, c
 type Article = { id: string; quantity?: number; price?: { id?: string; lookup_key?: string | null; unit_amount?: number | null }; current_period_end?: number };
 type Abonnement = { id: string; status: string; customer: string; metadata?: Record<string, string>; current_period_end?: number; items?: { data: Article[] } };
 
-/** Lecture d'un abonnement Stripe : quantités d'agents et de connecteurs, montant HT, fin de période. */
+/**
+ * Lecture d'un abonnement Stripe : quantités d'agents et de connecteurs, périodicité, montant HT
+ * de la période (`montant_ht`), son équivalent par mois (`mensuel_ht`) et fin de période.
+ */
 export function lireAbonnement(a: Abonnement) {
   const articles = a.items?.data ?? [];
-  const agents = articles.find((x) => x.price?.lookup_key === CLE_AGENTS);
+  const agents = articles.find((x) => x.price?.lookup_key === CLE_AGENTS || x.price?.lookup_key === CLE_AGENTS_AN);
+  const periode: Periode = agents?.price?.lookup_key === CLE_AGENTS_AN ? "an" : "mois";
   const conn = articles.find((x) => String(x.price?.lookup_key ?? "").startsWith("studio_connecteur_"));
   const nAgents = agents?.quantity ?? 0, nConn = conn?.quantity ?? 0;
   const fin = a.current_period_end ?? articles[0]?.current_period_end;
+  // Le prix Stripe d'un connecteur annuel est déjà annuel : pas de facteur ici.
+  const montant = Math.round((montantAgents(nAgents, periode) + nConn * (conn?.price?.unit_amount ?? 0) / 100) * 100) / 100;
   return {
     agents: nAgents, connecteurs: nConn, articleAgents: agents?.id ?? null, articleConnecteurs: conn?.id ?? null,
-    montant_ht: Math.round((montantAgents(nAgents) + nConn * (conn?.price?.unit_amount ?? 0) / 100) * 100) / 100,
+    periode, montant_ht: montant, mensuel_ht: periode === "an" ? Math.round(montant / 12 * 100) / 100 : montant,
     fin: fin ? new Date(fin * 1000).toISOString() : null,
   };
 }
@@ -138,20 +159,23 @@ async function tauxTva(): Promise<string> {
 }
 
 /** Prix récurrent repéré par sa lookup_key, créé avec son produit s'il n'existe pas. */
-async function prix(lookup: string, nomProduit: string, def: Record<string, unknown>): Promise<string> {
+async function prix(lookup: string, nomProduit: string, def: Record<string, unknown>, periode: Periode = "mois"): Promise<string> {
   const l = await appel<{ data: { id: string }[] }>("GET", "/prices", { lookup_keys: [lookup], active: true, limit: 1 });
   if (l.data[0]) return l.data[0].id;
   const produit = await appel<{ id: string }>("POST", "/products", { name: nomProduit, statement_descriptor: LIBELLE_BANCAIRE, metadata: { app: "studio" } }, `studio-produit-${lookup}-libelle`);
   return (await appel<{ id: string }>("POST", "/prices", {
-    product: produit.id, currency: "eur", lookup_key: lookup, recurring: { interval: "month" }, tax_behavior: "exclusive", metadata: { app: "studio" }, ...def,
+    product: produit.id, currency: "eur", lookup_key: lookup, recurring: { interval: periode === "an" ? "year" : "month" }, tax_behavior: "exclusive", metadata: { app: "studio" }, ...def,
   }, `studio-prix-${lookup}`)).id;
 }
 
-const prixAgents = () => prix(CLE_AGENTS, "Studio IA — agents (abonnement mensuel)", {
+const prixAgents = (periode: Periode = "mois") => prix(periode === "an" ? CLE_AGENTS_AN : CLE_AGENTS, `Studio IA — agents (abonnement ${periode === "an" ? "annuel" : "mensuel"})`, {
   billing_scheme: "tiered", tiers_mode: "graduated",
-  tiers: PALIERS_AGENTS.map((c, i) => ({ up_to: i === PALIERS_AGENTS.length - 1 ? "inf" : i + 1, unit_amount: c })),
-});
-const prixConnecteur = (centimes: number) => prix(cleConnecteur(centimes), "Studio IA — connecteur supplémentaire", { unit_amount: centimes });
+  tiers: PALIERS_AGENTS.map((c, i) => ({ up_to: i === PALIERS_AGENTS.length - 1 ? "inf" : i + 1, unit_amount: c * facteur(periode) })),
+}, periode);
+const prixConnecteur = (centimes: number, periode: Periode = "mois") => prix(
+  cleConnecteur(centimes, periode), `Studio IA — connecteur supplémentaire${periode === "an" ? " (annuel)" : ""}`,
+  { unit_amount: centimes * facteur(periode) }, periode,
+);
 
 /** Client Stripe de l'espace (créé au premier paiement, coordonnées de « Mon entreprise ») et sa zone de TVA. */
 async function clientStripe(sb: SupabaseClient, wsId: string, email: string): Promise<{ id: string; reunion: boolean }> {
@@ -189,11 +213,11 @@ export async function sessionRecharge(sb: SupabaseClient, p: { wsId: string; ema
   return s.url;
 }
 
-/** Page de souscription de l'abonnement mensuel (agents + connecteurs supplémentaires). */
-export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; agents: number; connecteurs: number; prixConnecteur: number }) {
-  const centimes = Math.round(p.prixConnecteur * 100);
+/** Page de souscription de l'abonnement, mensuel ou annuel (agents + connecteurs supplémentaires). */
+export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; agents: number; connecteurs: number; prixConnecteur: number; periode?: Periode }) {
+  const centimes = Math.round(p.prixConnecteur * 100), periode = p.periode ?? "mois";
   const [client, pa, pc] = await Promise.all([
-    clientStripe(sb, p.wsId, p.email), prixAgents(), p.connecteurs > 0 ? prixConnecteur(centimes) : Promise.resolve(""),
+    clientStripe(sb, p.wsId, p.email), prixAgents(periode), p.connecteurs > 0 ? prixConnecteur(centimes, periode) : Promise.resolve(""),
   ]);
   const fixe = !TAXE_AUTOMATIQUE || client.reunion;
   const taxe = parametresTaxe(fixe, fixe ? await tauxTva() : null);
@@ -202,7 +226,7 @@ export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; e
     mode: "subscription", customer: client.id, locale: "fr", ...taxe.session,
     line_items: [{ price: pa, quantity: p.agents }, ...(p.connecteurs > 0 ? [{ price: pc, quantity: p.connecteurs }] : [])],
     subscription_data: { metadata: meta, ...(fixe ? { default_tax_rates: taxe.lignes.tax_rates } : {}), description: "Studio IA — Aissociate" },
-    metadata: { ...meta, nature: "abonnement" },
+    metadata: { ...meta, nature: "abonnement", periode },
     success_url: `${p.origine}/studio/perimetre?paiement=abonnement`,
     cancel_url: `${p.origine}/studio/perimetre?paiement=annule`,
   });
@@ -225,17 +249,20 @@ export async function sessionPortail(sb: SupabaseClient, p: { wsId: string; emai
   return (await appel<{ url: string }>("POST", "/billing_portal/sessions", { customer: client, configuration: config, return_url: `${p.origine}/studio/perimetre`, locale: "fr" })).url;
 }
 
-/** Aligne l'abonnement sur l'équipe actuelle (prorata au jour près). */
+/**
+ * Aligne l'abonnement sur l'équipe actuelle (prorata au jour près), dans sa périodicité.
+ * Mensuel : le prorata rejoint la prochaine facture. Annuel : il est facturé aussitôt.
+ */
 export async function synchroniser(sb: SupabaseClient, wsId: string, agents: number, connecteurs: number, prixConn: number) {
   const { data: w } = await sb.from("studio_workspaces").select("stripe_abonnement").eq("id", wsId).single();
   if (!w?.stripe_abonnement) throw new Error("Aucun abonnement en ligne pour cet espace.");
   const a = lireAbonnement(await appel<Abonnement>("GET", `/subscriptions/${w.stripe_abonnement}`));
   const items: Record<string, unknown>[] = [];
   if (a.articleAgents) items.push({ id: a.articleAgents, quantity: agents });
-  else items.push({ price: await prixAgents(), quantity: agents });
+  else items.push({ price: await prixAgents(a.periode), quantity: agents });
   if (a.articleConnecteurs) items.push(connecteurs > 0 ? { id: a.articleConnecteurs, quantity: connecteurs } : { id: a.articleConnecteurs, deleted: true });
-  else if (connecteurs > 0) items.push({ price: await prixConnecteur(Math.round(prixConn * 100)), quantity: connecteurs });
-  const maj = await appel<Abonnement>("POST", `/subscriptions/${w.stripe_abonnement}`, { items, proration_behavior: "create_prorations" });
+  else if (connecteurs > 0) items.push({ price: await prixConnecteur(Math.round(prixConn * 100), a.periode), quantity: connecteurs });
+  const maj = await appel<Abonnement>("POST", `/subscriptions/${w.stripe_abonnement}`, { items, proration_behavior: a.periode === "an" ? "always_invoice" : "create_prorations" });
   await enregistrerAbonnement(sb, maj);
   return lireAbonnement(maj);
 }
@@ -248,8 +275,12 @@ async function enregistrerAbonnement(sb: SupabaseClient, a: Abonnement) {
   await sb.from("studio_workspaces").update({
     stripe_abonnement: a.id, stripe_client: a.customer, abonnement_statut: a.status, abonnement_fin: l.fin,
     abonnement_agents: enCours ? l.agents : null, abonnement_connecteurs: enCours ? l.connecteurs : null,
-    ...(enCours && a.status !== "incomplete" ? { abonnement_mensuel: l.montant_ht } : {}),
+    ...(enCours && a.status !== "incomplete" ? { abonnement_mensuel: l.mensuel_ht } : {}),
   }).eq("id", wsId);
+  // Montant de l'année payée d'avance (vide = abonnement mensuel). Mise à jour à part : si la colonne
+  // manque (migration 20261125100000 non appliquée), l'abonnement payé reste enregistré ci-dessus.
+  const { error } = await sb.from("studio_workspaces").update({ abonnement_annuel: enCours && l.periode === "an" ? l.montant_ht : null }).eq("id", wsId);
+  if (error) console.error("[studio] abonnement_annuel :", error.message);
   // Abonnement payé : l'espace d'essai devient un espace client (formule Essentiel).
   if (["active", "trialing"].includes(a.status)) {
     await sb.from("studio_workspaces").update({ offre: "essentiel" }).eq("id", wsId).eq("offre", "essai");

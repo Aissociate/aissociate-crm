@@ -981,8 +981,16 @@ async function etatAbonnement(sb: SupabaseClient, wsId: string, nbAgents: number
     sb.from("studio_workspaces").select("abonnement_statut, abonnement_fin, abonnement_agents, abonnement_connecteurs, abonnement_mensuel, entete").eq("id", wsId).maybeSingle(),
     facturationEspace(sb, wsId),
   ]);
+  // Lue à part : la colonne peut manquer (migration 20261125100000), l'abonnement reste alors affiché en mensuel.
+  const { data: an } = await sb.from("studio_workspaces").select("abonnement_annuel").eq("id", wsId).maybeSingle();
+  const annuel = (an as { abonnement_annuel?: number | string | null } | null)?.abonnement_annuel;
+  const nbConn = conn.erreur ? 0 : conn.nb_factures;
   return {
     statut: w?.abonnement_statut ?? null, fin: w?.abonnement_fin ?? null, mensuel_ht: w?.abonnement_mensuel ?? null,
+    // Abonnement payé à l'année : montant HT de l'année (null = mensuel) ; et ce que coûterait l'année aujourd'hui.
+    annuel_ht: annuel != null ? Number(annuel) : null,
+    estimation_annuelle_ht: stripe.montantAbonnement(nbAgents, nbConn, conn.tarif.prix, "an"),
+    mois_factures_an: stripe.MOIS_FACTURES_AN,
     factures: { agents: w?.abonnement_agents ?? null, connecteurs: w?.abonnement_connecteurs ?? null },
     actuels: { agents: nbAgents, connecteurs: conn.erreur ? null : conn.nb_factures },
     prix_connecteur: conn.tarif.prix, test: stripe.modeTest(),
@@ -2706,7 +2714,7 @@ Deno.serve(async (req: Request) => {
         if (w?.abonnement_statut && stripe.STATUTS_EN_COURS.includes(String(w.abonnement_statut)) && w.abonnement_statut !== "incomplete") {
           return json({ error: "Un abonnement est déjà en place : gérez-le depuis « Gérer mon abonnement »." }, 409);
         }
-        return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: equipe.nbFactures(agents), connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix }) });
+        return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: equipe.nbFactures(agents), connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix, periode: stripe.periodeDe(body.periode) }) });
       }
 
       // Le propriétaire ouvre lui-même un agent de plus ; l'abonnement en cours suit (prorata).
