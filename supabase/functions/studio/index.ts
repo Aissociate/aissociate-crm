@@ -58,6 +58,7 @@
 //           (écriture : propriétaire ; une routine créée démarre en essai 7 jours, puis une décision « la mettre en route ? »)
 //   cron    taches_cron relance aussi une fois, une heure plus tard, un passage en échec (reprise_prevue)
 //   cron    controle_cron {cle} (pg_cron quotidien) → contrôle du parcours client, alerte e-mail si problème (controle.ts)
+//   admin   admin_harnais {workspace_id} → (re)génère le harnais métier de l'espace par l'IA, en arrière-plan (harnais.ts)
 //   cron    ameliorations_cron {cle} (pg_cron quotidien) → propositions d'amélioration tirées des conversations, déposées dans CRM › Développement (ameliorations.ts)
 //   cron    taches_cron {cle} (pg_cron horaire) → tache_executer {cle, id} par tâche échue, chacune dans sa propre instance
 // Veille, contacts et mailings (veille.ts, mailing.ts) :
@@ -78,6 +79,7 @@ import {
   construirePrompt, selectionnerRessources, HARNESS_PERIMETRE_DEFAUT, HARNESS_REGLES_DEFAUT,
   BUDGET_SAVOIRS, type AgentPrompt, type Creation, type EnteteEntreprise, type Harness, type Savoir, type SuperPouvoir,
 } from "./contexte.ts";
+import { BUDGET_PACK_SAVOIRS, lirePack, type PackMetier } from "./metier.ts";
 import { connecteursActifs, enregistrerConnecteur, listerConnecteurs } from "./connecteurs.ts";
 import * as veille from "./veille.ts";
 import * as mailing from "./mailing.ts";
@@ -117,6 +119,7 @@ import { facturationEspace, facturationEspaces, tarifConnecteurs } from "./factu
 import * as stripe from "./stripe.ts";
 import * as controle from "./controle.ts";
 import * as ameliorations from "./ameliorations.ts";
+import * as harnais from "./harnais.ts";
 import * as courriel from "./courriel.ts";
 import * as essai from "./essai.ts";
 import * as cgv from "./cgv.ts";
@@ -157,6 +160,37 @@ async function chargerSavoirs(sb: SupabaseClient, agentId: string, question: str
     (recents ?? []).map((d) => ({ titre: String(d.titre), source: d.source as string | null, extrait: String(d.contenu).slice(0, 3000) })),
     BUDGET_SAVOIRS,
   );
+}
+
+/**
+ * Pack métier de l'espace (metier.ts) : dernière version publiée de son pack, ou la version
+ * fixée, avec les documents du pack utiles à la question. null sans pack, et tant que la
+ * migration studio_packs_metier n'est pas appliquée (colonnes absentes : erreur ignorée).
+ */
+async function chargerPack(sb: SupabaseClient, wsId: string, question: string): Promise<PackMetier | null> {
+  try {
+    const { data: w, error } = await sb.from("studio_workspaces").select("pack_code, pack_version").eq("id", wsId).maybeSingle();
+    if (error || !w?.pack_code) return null;
+    const base = sb.from("studio_packs_metier").select("id, code, nom, version, regles, relais, fiche_type, vocabulaire, cadres")
+      .eq("code", String(w.pack_code)).eq("statut", "publie");
+    const { data: p } = await (w.pack_version
+      ? base.eq("version", Number(w.pack_version)).limit(1)
+      : base.order("version", { ascending: false }).limit(1)).maybeSingle();
+    if (!p) return null;
+    const [{ data: trouves }, { data: recents }] = await Promise.all([
+      sb.rpc("studio_recherche_pack_savoirs", { p_pack: p.id, p_question: question.slice(0, 500), p_limite: 3 }),
+      sb.from("studio_pack_savoirs").select("titre, source, contenu")
+        .eq("pack_id", p.id).eq("actif", true).order("updated_at", { ascending: false }).limit(6),
+    ]);
+    const savoirs = selectionnerRessources<Savoir>(
+      ((trouves ?? []) as Savoir[]).map((t) => ({ titre: t.titre, source: t.source, extrait: t.extrait })),
+      (recents ?? []).map((d) => ({ titre: String(d.titre), source: d.source as string | null, extrait: String(d.contenu).slice(0, 3000) })),
+      BUDGET_PACK_SAVOIRS,
+    );
+    return lirePack(p as Record<string, unknown>, savoirs);
+  } catch {
+    return null;
+  }
 }
 
 type Usage = { cost?: number; prompt_tokens?: number; completion_tokens?: number };
@@ -1214,7 +1248,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
     (trouves ?? []) as { titre: string; extrait: string }[],
     (recents ?? []).map((d) => ({ titre: d.titre, extrait: String(d.contenu).slice(0, 4000) })),
   );
-  const savoirs = await chargerSavoirs(sb, agent.id, question);
+  const [savoirs, pack] = await Promise.all([chargerSavoirs(sb, agent.id, question), chargerPack(sb, s.ws.id, question)]);
   const prenoms = new Map(agents.map((a) => [a.id, a.prenom]));
   const creations: Creation[] = (gardes ?? []).map((m) => ({
     titre: (m.studio_conversations as unknown as { titre: string }).titre,
@@ -1256,7 +1290,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
   const orchestre = equipe.estOrchestrateur(agent.id);
   const missions = orchestre && Boolean(outils) && collegues.length > 0;
   const systemeBase = construirePrompt({
-    agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo,
+    agent, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, savoirs, aujourdhui, entete, logo, pack,
     refus: await refusRecents(sb, s.ws.id, agent.id),
     perimetre: orchestre ? equipe.perimetreOrchestrateur(outils ? collegues : []) : undefined,
   });
@@ -1378,7 +1412,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           nbConsultations++;
           emit("outil", { libelle: `${collegue.prenom} est consulté…` });
           const sys = construirePrompt({
-            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
+            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo, pack,
             savoirs: await chargerSavoirs(sb, collegue.id, q),
           }) + "\n\n" + equipe.consigneConsulte(agent);
           const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -1452,7 +1486,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
               sesOutils.consigne += `\n\n${pouvoirs.consigneMedia(sesMediasC)}`;
             }
             const sys = construirePrompt({
-              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo,
+              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo, pack,
               savoirs: await chargerSavoirs(sb, collegue.id, consigne),
               refus: await refusRecents(sb, s.ws.id, collegue.id),
             }) + (sesOutils ? `\n\n${sesOutils.consigne}` : "") + "\n\n" + equipe.consigneMission(agent);
@@ -1761,6 +1795,20 @@ async function admin(sb: SupabaseClient, action: string, body: Record<string, un
     if (!s) return json({ error: "Serveur MCP introuvable ou jeton illisible" }, 404);
     return json(await mcpClient.tester(s));
   }
+  // Harnais métier : (re)génération par l'IA, en arrière-plan ; le CRM relit harnais_statut.
+  if (action === "admin_harnais") {
+    const wsId = String(body.workspace_id ?? "");
+    const { data: w, error } = await sb.from("studio_workspaces").select("id, secteur, harnais_statut, harnais_maj").eq("id", wsId).maybeSingle();
+    if (error) return json({ error: "Migration des harnais métier non appliquée ?" }, 400);
+    if (!w) return json({ error: "Espace introuvable" }, 404);
+    if (!String(w.secteur ?? "").trim()) return json({ error: "Renseignez d'abord le secteur d'activité de l'espace." }, 400);
+    if (w.harnais_statut === "en_cours" && w.harnais_maj && Date.now() - new Date(String(w.harnais_maj)).getTime() < 30 * 60_000) {
+      return json({ error: "Une génération est déjà en cours pour cet espace." }, 409);
+    }
+    await sb.from("studio_workspaces").update({ harnais_statut: "en_cours", harnais_maj: new Date().toISOString(), harnais_erreur: null }).eq("id", wsId);
+    harnais.lancer(sb, wsId, { verrouPose: true });
+    return json({ ok: true, harnais_statut: "en_cours" });
+  }
   if (action === "admin_tester_api") {
     const a = await apiClient.apiDeLEspace(sb, null, String(body.id ?? "")).catch(() => null);
     if (!a) return json({ error: "API introuvable ou clé illisible" }, 404);
@@ -1932,7 +1980,9 @@ Deno.serve(async (req: Request) => {
       if (!cle || typeof body.cle !== "string" || body.cle.length !== cle.length || !(await egaliteSure(body.cle, cle))) {
         return json({ error: "Non autorisé" }, 401);
       }
-      if (action === "taches_cron") return json({ lancees: await tachesEchues(sb, cle), campagnes: await relancerEnvois(sb) });
+      if (action === "taches_cron") {
+        return json({ lancees: await tachesEchues(sb, cle), campagnes: await relancerEnvois(sb), harnais: await harnais.rattraper(sb) });
+      }
       if (action === "controle_cron") {
         const travail = controle.executer(sb).catch((e) => console.error("[studio] contrôle du parcours :", e instanceof Error ? e.message : String(e)));
         (globalThis as unknown as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil(travail);
@@ -1977,7 +2027,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Administration CRM ──
     if (["admin_create_user", "admin_set_password", "admin_modeles", "admin_harness_defaut", "admin_rapport", "admin_connexions",
-      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs", "admin_controle", "admin_tester_mcp", "admin_tester_api"].includes(action)) {
+      "admin_invitation", "admin_provisionner", "admin_suspendre", "admin_journal", "admin_liaison", "admin_facturation_connecteurs", "admin_controle", "admin_tester_mcp", "admin_tester_api", "admin_harnais"].includes(action)) {
       const managerId = await estManager(req);
       if (!managerId) return json({ error: "Réservé aux managers du CRM" }, 403);
       return await admin(sb, action, body, managerId);

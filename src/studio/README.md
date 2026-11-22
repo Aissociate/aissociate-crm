@@ -128,6 +128,27 @@ un fichier PDF, TXT, MD ou CSV.
 - Le client voit seulement les titres et références consultés, jamais le contenu brut.
 - Si la migration `20261112100000_studio_savoirs.sql` n'est pas appliquée, la fonction continue de tourner, sans base.
 
+## Harnais métier généré par l'IA (`harnais.ts`, `harnais_regles.ts`, `metier.ts`) — voir `docs/studio-packs-metier.md`
+Le harnais est le savoir du **secteur du client** (boulangerie, courtage…) et le **cadre d'exercice de chaque agent**
+dans ce métier. À ne pas confondre avec la base de connaissances ci-dessus, qui est le savoir de la **fonction de l'agent**.
+- **Génération automatique** dès que le secteur (question A2) est renseigné : `provisionner` → `harnais.apresCreation`,
+  en arrière-plan. Deux passes OpenRouter (`parametres.ai.model_harnais`, sinon `anthropic/claude-sonnet-4.5`) :
+  génération, puis relecture critique (sources douteuses → « Bonne pratique du secteur (à vérifier) », règles fausses
+  corrigées, faits inventés retirés). Contrôle du résultat : `nettoyerHarnais`. Environ 7 000 tokens par passe.
+- Résultat : règles sourcées, cas de relais, informations à connaître, vocabulaire, 4 à 6 fiches de référence, un cadre
+  par agent actif, 10 questions d'évaluation. Enregistré comme pack `ws-<id espace>` (nouvelle version, l'ancienne
+  archivée) et branché aussitôt (`pack_code`). Trace : `job_runs` (`studio-harnais`), journal de l'espace (`harnais_genere`).
+- Statut sur l'espace (`harnais_statut`) : vide = à générer (rattrapage par `taches_cron`, 2 espaces par passage),
+  `en_cours`, `pret`, `echec` (+ `harnais_erreur`), `a_lancer` (espaces antérieurs à la migration et espaces du contrôle
+  quotidien : seulement depuis le CRM).
+- CRM › Studio IA clients › un espace : statut, bouton « Générer le harnais » / « Régénérer » (`admin_harnais`), aperçu
+  (règles, relais, cadres, corrections de la relecture, coût) ; le menu « Pack métier » permet de choisir à la place un
+  pack de catalogue écrit à la main (`boulangerie` v1, fourni par la migration).
+- `chargerPack` (index.ts) ajoute le bloc « Ton contexte métier » (et le cadre de l'agent concerné) à tous les agents,
+  y compris en consultation et en mission, entre les savoirs de l'agent et la fiche entreprise ; fiches dans un budget
+  de 6 000 caractères (`studio_recherche_pack_savoirs`).
+- Sans la migration `20261125100000_studio_packs_metier.sql`, ou sans harnais, le prompt est identique à avant.
+
 ## Exports Word / PDF et papier à en-tête
 Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux boutons : **Word** et **PDF**.
 - `exportDoc.ts` (module pur, testé) convertit le Markdown en blocs. Il produit le HTML imprimable du PDF et le `.docx`.

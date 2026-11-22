@@ -9,6 +9,7 @@ import { nettoyerHtml } from "./html.ts";
 import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Reponses } from "./questionnaire.ts";
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
 import * as courriel from "./courriel.ts";
+import * as harnais from "./harnais.ts";
 import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 import { deciderLivrable as decider, raisonRefus, RAISONS_REFUS } from "./livrables.ts";
 import type { Refus } from "./contexte.ts";
@@ -238,6 +239,9 @@ export async function provisionner(sb: SupabaseClient, body: Record<string, unkn
   }
   await sb.from("studio_credentials").insert({ user_id: u.id, password_hash: await hasherMotDePasse(motDePasse), doit_changer: true });
   await sb.from("studio_onboarding").update({ statut: "provisionnee", workspace_id: ws.id, traite_par: managerId }).eq("id", d.id);
+  // Harnais métier généré par l'IA à partir du secteur (A2), en arrière-plan (harnais.ts).
+  await harnais.apresCreation(sb, ws.id, String(d.email), String(reponses.A2 ?? "").trim() || null)
+    .catch((e) => console.error("[studio] harnais à la création :", e instanceof Error ? e.message : String(e)));
   await journaliser(sb, {
     wsId: ws.id, acteur: "crm", action: "espace_cree",
     detail: { demande: d.id, agents, score: d.score, drapeaux: d.drapeaux },
