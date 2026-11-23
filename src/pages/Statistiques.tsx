@@ -46,7 +46,7 @@ export default function Statistiques() {
     <div>
       <PageHeader
         title="Statistiques & reporting"
-        subtitle={isManager ? 'Indicateurs collectifs de l\'activité (4.8)' : 'Vos indicateurs individuels (4.8)'}
+        subtitle={isManager ? 'Indicateurs collectifs de l\'activité' : 'Vos indicateurs individuels (4.8)'}
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

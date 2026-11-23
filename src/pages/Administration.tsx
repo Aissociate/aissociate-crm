@@ -95,7 +95,7 @@ export default function Administration() {
 
   return (
     <div>
-      <PageHeader title="Administration" subtitle="Gestion des utilisateurs, financeurs et traçabilité (4.9)"
+      <PageHeader title="Administration" subtitle="Gestion des utilisateurs, financeurs et traçabilité"
         actions={<>
           {/* Test de recrutement « Commercial indépendant – Agents IA » (public/recrutement/index.html) :
               les candidats le passent sur /recrutement/, la direction colle leur code dossier dans l'espace recruteur. */}

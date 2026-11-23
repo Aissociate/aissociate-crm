@@ -239,7 +239,7 @@ export default function Parametres() {
 
   return (
     <div>
-      <PageHeader title="Paramètres" subtitle="Organisme, messagerie et secrets d'intégration (4.7 / 4.9)" />
+      <PageHeader title="Paramètres" subtitle="Organisme, messagerie et secrets d'intégration" />
 
       {/* Statut des intégrations / secrets requis */}
       <Card className="mb-6">

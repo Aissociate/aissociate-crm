@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Phone, Settings2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Phone, Settings2, ArrowUp, ArrowDown, Search, BellRing } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Spinner } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Spinner, SearchSelect } from '@/components/ui';
 import ContactFiche from '@/components/ContactFiche';
 import { usePipelineColonnes, ecrireColonnesPipeline, cleDepuisLibelle, type PipelineColonne } from '@/lib/pipeline';
-import { formatMoney, fullName } from '@/lib/utils';
+import { cn, formatMoney, fullName } from '@/lib/utils';
 import type { Opportunite, OpportuniteStage, Contact, ContactAction, Entreprise, Financeur, Profile } from '@/lib/database.types';
 
 const empty = (): Partial<Opportunite> => ({
@@ -67,9 +67,20 @@ export default function Pipeline() {
     const p = id ? profiles.data.find((x) => x.id === id) : null;
     return p ? fullName(p.prenom, p.nom) : '';
   };
-  const visibles = conseillerId
-    ? data.filter((o) => (conseillerId === 'aucun' ? !conseillerDe(o) : conseillerDe(o) === conseillerId))
-    : data;
+  // Recherche (contact, affaire, société) et vue « à relancer ».
+  const [q, setQ] = useState('');
+  const [aRelancer, setARelancer] = useState(false);
+  // Gagné et Perdu s'accumulent sans fin : colonnes repliées tant qu'on ne les ouvre pas.
+  const [closOuvert, setClosOuvert] = useState(false);
+  const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const texteDe = (o: Opportunite) => {
+    const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
+    const ent = entreprises.data.find((x) => x.id === (o.entreprise_id ?? contact?.entreprise_id));
+    return norm(`${contact?.prenom ?? ''} ${contact?.nom ?? ''} ${o.titre ?? ''} ${ent?.raison_sociale ?? ''}`);
+  };
+  const filtrees = data
+    .filter((o) => !conseillerId || (conseillerId === 'aucun' ? !conseillerDe(o) : conseillerDe(o) === conseillerId))
+    .filter((o) => !q.trim() || texteDe(o).includes(norm(q.trim())));
 
   // ── Stand-by : dérivé des actions à faire du contact ────────────────────────
   /**
@@ -87,6 +98,17 @@ export default function Pipeline() {
       .sort();
     return dues[0] ?? null;
   };
+  /** Alerte d'échéance de la carte : retard, ou absence totale d'action. */
+  const alerteDe = (o: Opportunite): string | null => {
+    if (o.stage === 'gagne' || o.stage === 'perdu') return null;
+    const prochaine = prochaineAction(o.contact_id);
+    if (!prochaine) return 'aucune action prévue';
+    return prochaine < ymd(new Date()) ? `action en retard depuis le ${jjmm(prochaine)}` : null;
+  };
+  const ouvertes = filtrees.filter((o) => o.stage !== 'gagne' && o.stage !== 'perdu');
+  const nbARelancer = ouvertes.filter((o) => alerteDe(o)).length;
+  const visibles = aRelancer ? filtrees.filter((o) => alerteDe(o)) : filtrees;
+
   // ── Plusieurs opportunités pour un même contact ─────────────────────────────
   // Le titre d'une carte est le NOM DU CONTACT : deux opportunités d'un même
   // contact donnaient deux cartes d'apparence identique dans deux colonnes, et
@@ -105,13 +127,6 @@ export default function Pipeline() {
     return soeurs.length > 1 ? `${soeurs.findIndex((x) => x.id === o.id) + 1}/${soeurs.length}` : null;
   };
 
-  /** Alerte d'échéance de la carte : retard, ou absence totale d'action. */
-  const alerteDe = (o: Opportunite): string | null => {
-    if (o.stage === 'gagne' || o.stage === 'perdu') return null;
-    const prochaine = prochaineAction(o.contact_id);
-    if (!prochaine) return 'aucune action prévue';
-    return prochaine < ymd(new Date()) ? `action en retard depuis le ${jjmm(prochaine)}` : null;
-  };
   /** Colonne d'affichage. Une carte posée à la main (colonne_manuelle) reste où
    *  l'utilisateur l'a mise ; le calcul stand-by automatique ne s'applique
    *  qu'aux cartes jamais déplacées. */
@@ -286,27 +301,47 @@ export default function Pipeline() {
     <div>
       <PageHeader
         title="Pipeline commercial"
-        subtitle="Suivi des opportunités de la qualification à la signature (4.1) — glissez une carte où vous voulez, y compris en stand-by et entre deux cartes"
+        subtitle="Glissez une carte d'une colonne à l'autre. Sans action prévue pour le contact, l'affaire passe en stand-by."
         actions={
-          <div className="flex items-center gap-2">
-            <select
-              className="input max-w-[15rem] py-1.5 text-sm" value={conseillerId}
-              onChange={(e) => setConseillerId(e.target.value)}
-              title="Filtrer les opportunités par conseiller affecté au contact"
-            >
-              <option value="">Tous les conseillers</option>
-              {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
-              <option value="aucun">— Non affecté —</option>
-            </select>
+          <>
             {isManager && (
               <Button variant="secondary" onClick={ouvrirColonnes} title="Ajouter, renommer, réordonner ou supprimer les colonnes du pipeline">
                 <Settings2 className="h-4 w-4" /> Colonnes
               </Button>
             )}
             <Button onClick={() => { setForm(empty()); setOpen(true); }}><Plus className="h-4 w-4" /> Nouvelle opportunité</Button>
-          </div>
+          </>
         }
       />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
+          <input className="input pl-9" placeholder="Contact, affaire, société…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <select
+          className="input max-w-[15rem]" value={conseillerId}
+          onChange={(e) => setConseillerId(e.target.value)}
+          title="Filtrer les opportunités par conseiller affecté au contact"
+        >
+          <option value="">Tous les conseillers</option>
+          {profiles.data.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
+          <option value="aucun">— Non affecté —</option>
+        </select>
+        <button
+          onClick={() => setARelancer((v) => !v)} aria-pressed={aRelancer}
+          title="Affaires ouvertes dont le contact n'a aucune action prévue, ou une action en retard"
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition',
+            aRelancer ? 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400' : 'border-line text-muted hover:bg-surface-2 hover:text-fg',
+          )}
+        >
+          <BellRing className="h-4 w-4" /> À relancer <span className="text-xs tabular-nums opacity-70">{nbARelancer}</span>
+        </button>
+        <span className="ml-auto text-sm text-muted">
+          <strong className="text-fg">{ouvertes.length}</strong> affaire(s) en cours · <strong className="text-fg">{formatMoney(ouvertes.reduce((s, o) => s + Number(o.montant ?? 0), 0))}</strong>
+        </span>
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
@@ -317,10 +352,13 @@ export default function Pipeline() {
             const total = items.reduce((s, o) => s + Number(o.montant ?? 0), 0);
             const standby = stage === 'standby30' || stage === 'standby90';
             const cible = !!dragId && over?.col === stage;
+            // Affaires closes : repliées par défaut, mais on peut toujours y déposer une carte.
+            const clos = stage === 'gagne' || stage === 'perdu';
+            const replie = clos && !closOuvert && !q.trim();
             return (
               <div
                 key={stage}
-                className="flex w-60 shrink-0 flex-col"
+                className={cn('flex shrink-0 flex-col', replie ? 'w-44' : 'w-60')}
                 onDragOver={(e) => {
                   if (!dragId) return;
                   e.preventDefault(); // sans quoi le dépôt est refusé par le navigateur
@@ -340,11 +378,19 @@ export default function Pipeline() {
                   <span className={`truncate text-sm font-semibold ${standby ? 'text-red-600 dark:text-red-400' : 'text-fg'}`}>{libelleColonne(stage)}</span>
                   <span className="rounded-full bg-surface-2 px-1.5 text-[11px] leading-4 text-muted">{items.length}</span>
                   <span className="ml-auto shrink-0 text-xs tabular-nums text-muted">{formatMoney(total)}</span>
+                  {clos && closOuvert && (
+                    <button onClick={() => setClosOuvert(false)} className="shrink-0 text-[11px] font-medium text-muted underline-offset-2 hover:text-fg hover:underline">Replier</button>
+                  )}
                 </div>
                 {/* Une seule classe de fond : deux `bg-*` concurrentes se départagent
                     par l'ordre du CSS généré, pas par l'ordre d'écriture. */}
                 <div className={`flex-1 space-y-1.5 rounded-xl p-1.5 transition-colors ${cible ? 'bg-brand-500/10 ring-2 ring-brand-500' : 'bg-surface-2'}`}>
-                  {items.map((o, pos) => {
+                  {replie && items.length > 0 && (
+                    <button onClick={() => setClosOuvert(true)} className="w-full rounded-lg px-2 py-4 text-center text-xs font-medium text-muted hover:bg-surface hover:text-fg">
+                      {cible ? 'Déposer ici' : `Afficher (${items.length})`}
+                    </button>
+                  )}
+                  {!replie && items.map((o, pos) => {
                     const idx = ordreEtapes.indexOf(o.stage);
                     const traitAvant = cible && over?.index === pos && dragId !== o.id;
                     const contact = o.contact_id ? contacts.data.find((x) => x.id === o.contact_id) : null;
@@ -405,7 +451,10 @@ export default function Pipeline() {
                           <span className="shrink-0 text-sm font-semibold tabular-nums text-brand-600 dark:text-brand-400">{formatMoney(Number(o.montant))}</span>
                         </div>
                         {/* Ligne 2 : société · conseiller */}
-                        {sousTitre && <p className="truncate text-xs text-muted" title={sousTitre}>{sousTitre}</p>}
+                        <p className="flex items-baseline gap-2 text-xs text-muted">
+                          <span className="min-w-0 flex-1 truncate" title={sousTitre}>{sousTitre}</span>
+                          {Number(o.probabilite) > 0 && <span className="shrink-0 tabular-nums" title="Probabilité de signature">{o.probabilite} %</span>}
+                        </p>
                         {/* Ligne 3 : intitulé de l'affaire (le titre de la carte est le
                             contact). Mis en avant quand le contact a plusieurs affaires :
                             c'est la seule chose qui distingue les cartes entre elles. */}
@@ -414,14 +463,6 @@ export default function Pipeline() {
                         )}
                         {/* Étape réelle en stand-by, et rappel d'une échéance dépassée. */}
                         {rappel && <p className="truncate text-xs font-medium text-red-600 dark:text-red-400" title={rappel}>{rappel}</p>}
-
-                        {/* Probabilité : jauge fine plutôt qu'une ligne de texte */}
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-line" title={`${o.probabilite} % de probabilité`}>
-                            <div className="h-full rounded-full bg-brand-500/70" style={{ width: `${Math.min(100, Math.max(0, Number(o.probabilite) || 0))}%` }} />
-                          </div>
-                          <span className="shrink-0 text-[11px] tabular-nums text-muted">{o.probabilite} %</span>
-                        </div>
 
                         {/* Barre d'outils : discrète au repos, visible au survol ou au
                             focus clavier. Toujours visible sur écran tactile (pas de survol). */}
@@ -446,7 +487,7 @@ export default function Pipeline() {
                     );
                   })}
                   {/* Trait d'insertion en fin de colonne */}
-                  {cible && over?.index === items.length && items.length > 0 && (
+                  {!replie && cible && over?.index === items.length && items.length > 0 && (
                     <div className="h-0.5 rounded-full bg-brand-500" />
                   )}
                   {items.length === 0 && (
@@ -472,27 +513,40 @@ export default function Pipeline() {
         }
       >
         <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2"><Field label="Titre" required><input className="input" value={form.titre ?? ''} onChange={(e) => set('titre', e.target.value)} /></Field></div>
+          <div className="col-span-2">
+            <Field label="Contact" hint="La carte du pipeline porte son nom">
+              <SearchSelect
+                value={form.contact_id ?? ''} onChange={(v) => set('contact_id', v || null)}
+                options={contacts.data.map((c) => ({ value: c.id, label: fullName(c.prenom, c.nom), sub: c.email ?? undefined }))}
+                placeholder="Rechercher un contact (nom, e-mail)…" emptyLabel="— Aucun —"
+              />
+            </Field>
+          </div>
+          <div className="col-span-2"><Field label="Intitulé de l'affaire" required><input className="input" placeholder="ex. Formation IA pour 3 salariés" value={form.titre ?? ''} onChange={(e) => set('titre', e.target.value)} /></Field></div>
           <Field label="Montant (€)"><input className="input" type="number" value={form.montant ?? 0} onChange={(e) => set('montant', e.target.value)} /></Field>
-          <Field label="Probabilité (%)"><input className="input" type="number" min={0} max={100} value={form.probabilite ?? 0} onChange={(e) => set('probabilite', e.target.value)} /></Field>
           <Field label="Étape"><select className="input" value={form.stage} onChange={(e) => set('stage', e.target.value as OpportuniteStage)}>
             {colonnes.map((c) => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
           </select></Field>
-          <Field label="Clôture prévue"><input className="input" type="date" value={form.date_cloture_prev ?? ''} onChange={(e) => set('date_cloture_prev', e.target.value || null)} /></Field>
-          <Field label="Contact"><select className="input" value={form.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
-            <option value="">—</option>
-            {contacts.data.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}
-          </select></Field>
-          <Field label="Entreprise"><select className="input" value={form.entreprise_id ?? ''} onChange={(e) => set('entreprise_id', e.target.value || null)}>
-            <option value="">—</option>
-            {entreprises.data.map((e) => <option key={e.id} value={e.id}>{e.raison_sociale}</option>)}
-          </select></Field>
-          <Field label="Financeur"><select className="input" value={form.financeur_id ?? ''} onChange={(e) => set('financeur_id', e.target.value || null)}>
-            <option value="">—</option>
-            {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
-          </select></Field>
-          <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field></div>
         </div>
+        <details className="mt-4 rounded-lg border border-line px-3 py-2" open={!!(form.entreprise_id || form.financeur_id || form.date_cloture_prev || form.notes)}>
+          <summary className="cursor-pointer text-sm font-medium text-muted hover:text-fg">Plus de détails</summary>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <Field label="Probabilité (%)"><input className="input" type="number" min={0} max={100} value={form.probabilite ?? 0} onChange={(e) => set('probabilite', e.target.value)} /></Field>
+            <Field label="Clôture prévue"><input className="input" type="date" value={form.date_cloture_prev ?? ''} onChange={(e) => set('date_cloture_prev', e.target.value || null)} /></Field>
+            <Field label="Entreprise">
+              <SearchSelect
+                value={form.entreprise_id ?? ''} onChange={(v) => set('entreprise_id', v || null)}
+                options={entreprises.data.map((e) => ({ value: e.id, label: e.raison_sociale }))}
+                placeholder="Rechercher une entreprise…" emptyLabel="— Celle du contact —"
+              />
+            </Field>
+            <Field label="Financeur"><select className="input" value={form.financeur_id ?? ''} onChange={(e) => set('financeur_id', e.target.value || null)}>
+              <option value="">—</option>
+              {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+            </select></Field>
+            <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field></div>
+          </div>
+        </details>
       </Modal>
 
       {/* Gestion des colonnes du pipeline */}
