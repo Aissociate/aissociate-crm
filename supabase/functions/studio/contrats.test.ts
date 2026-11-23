@@ -14,10 +14,10 @@ describe('grille des contrats', () => {
   it('avenants et remise CDI lissée (2 mois offerts)', () => {
     const ch = normaliser({ contrat: 'partiel', cdi: true, heures: 2, badges: 1, expert: true });
     const b = bulletin(ch);
-    expect(b.brut_ht).toBe(59 + 19.8 + 4.9 + 19.9);
-    expect(b.remise_cdi_ht).toBe(17.27);
-    expect(b.mensuel_ht).toBe(86.33);
-    expect(b.annuel_ht).toBe(1036);
+    expect(b.brut_ht).toBe(59 + 39.8 + 9.9 + 29.9);
+    expect(b.remise_cdi_ht).toBe(23.1);
+    expect(b.mensuel_ht).toBe(115.5);
+    expect(b.annuel_ht).toBe(1386);
     expect(droits(ch)).toMatchObject({ heures: 115, quota_messages_mois: 2300, connecteurs_max: 4, expert: true });
   });
 
@@ -38,5 +38,6 @@ describe('grille des contrats', () => {
     const relu = choixDepuisArticles(a.map((x) => ({ lookup_key: clePrix(x.element, ch.cdi), quantite: x.quantite })));
     expect(relu).toEqual(ch);
     expect(choixDepuisArticles([{ lookup_key: 'studio_agents_v2', quantite: 2 }])).toBeNull();
+    expect(choixDepuisArticles([{ lookup_key: 'studio_v3_contrat_plein_mois', quantite: 1 }])?.contrat).toBe('plein');
   });
 });
