@@ -60,6 +60,7 @@ import SiteBlogArticle from '@/site/pages/BlogArticle';
 import SiteAides from '@/site/pages/AidesFormation';
 import SiteContact from '@/site/pages/Contact';
 import SiteAffiliation from '@/site/pages/Affiliation';
+import SiteAffiliationTest from '@/site/pages/AffiliationTest';
 import SiteFormulaire from '@/site/pages/Formulaire';
 import SiteMentionsLegales from '@/site/pages/MentionsLegales';
 import SiteConfidentialite from '@/site/pages/Confidentialite';
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="/aides-formation" element={<SiteAides />} />
         <Route path="/contact" element={<SiteContact />} />
         <Route path="/affiliation" element={<SiteAffiliation />} />
+        <Route path="/affiliation/test" element={<SiteAffiliationTest />} />
         <Route path="/formulaire" element={<SiteFormulaire />} />
         <Route path="/mentions-legales" element={<SiteMentionsLegales />} />
         <Route path="/confidentialite" element={<SiteConfidentialite />} />

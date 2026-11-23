@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ArrowRight, BadgeCheck, Briefcase, Calculator, Check, GraduationCap, Handshake, Megaphone,
   MonitorSmartphone, Repeat, Users, Building2,
@@ -13,6 +14,7 @@ import { CONTRATS } from '../../../supabase/functions/studio/contrats';
  * Programme partenaires (/affiliation) : recrutement d'apporteurs d'affaires pour le Studio IA.
  * Commission : 30 % du montant HT encaissé les 12 premiers mois d'un client, puis 10 % tant qu'il reste abonné.
  * Les candidatures arrivent dans contact_requests (type « Partenariat (affiliation) »), comme les autres demandes du site.
+ * Les commerciaux indépendants ont un bouton à part vers le test commercial noté (/affiliation/test).
  */
 const TAUX_AN_1 = 0.3;
 const TAUX_ENSUITE = 0.1;
@@ -250,6 +252,20 @@ export default function Affiliation() {
                 <p className="mt-2 text-sm text-neutral-600">{texte}</p>
               </div>
             ))}
+          </div>
+          {/* Seul accès au test commercial : les autres profils passent par le formulaire de candidature. */}
+          <div className="mt-px flex flex-col gap-6 bg-neutral-950 p-6 text-white sm:p-8 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="font-mono text-xs font-medium uppercase tracking-[0.16em] text-orange-400">Commerciaux indépendants</p>
+              <h3 className="mt-2 text-2xl font-semibold">Vous prospectez et signez pour vivre ?</h3>
+              <p className="mt-2 max-w-2xl text-neutral-300">
+                Votre candidature passe par un test commercial en ligne de 20 à 25 minutes : profil, mises en situation, calculs et réponses écrites.
+              </p>
+            </div>
+            <Link to="/affiliation/test"
+              className="inline-flex shrink-0 items-center gap-2 bg-orange-500 px-6 py-3 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400">
+              Passer le test commercial <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </section>
 
