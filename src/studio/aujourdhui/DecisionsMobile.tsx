@@ -79,7 +79,7 @@ export default function DecisionsMobile({ decisions, ctx }: { decisions: Decisio
             {p.portee && <div><Portee texte={p.portee} /></div>}
             {edition === d.id ? (
               <EditeurLivrable id={d.id} titre={d.titre} contenu={d.contenu} action={d.action} gerer={ctx.gerer}
-                onCancel={() => setEdition(null)} onSaved={() => { setEdition(null); decisions.charger(); }} />
+                onCancel={() => setEdition(null)} onSaved={() => { setEdition(null); void decisions.charger(); }} />
             ) : <Apercu d={d} onDocument={ctx.onDocument} compact />}
             <p className="flex items-center gap-2 text-sm text-[#B24A0C]"><Lock className="h-4 w-4 shrink-0" aria-hidden /> Rien ne part sans votre accord.</p>
           </article>

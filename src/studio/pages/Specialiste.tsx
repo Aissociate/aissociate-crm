@@ -150,7 +150,7 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
           onMeta: (m) => { acceptee.current = true; setPartie({ conversation: m.conversation_id }); setEnvoi(false); },
           onDelta: () => { /* le texte se lit dans la conversation ou dans « Aujourd'hui » */ },
         });
-        rafraichir();
+        void rafraichir();
       }
     } catch (e) {
       // Refus avant le départ (quota, champ manquant, suspension) : on le dit ; après, l'erreur est dans la conversation.
@@ -185,7 +185,7 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
   }
 
   return (
-    <form className="flex flex-col gap-[18px]" onSubmit={(e) => { e.preventDefault(); if (!manquant && !envoi) lancer(); }}>
+    <form className="flex flex-col gap-[18px]" onSubmit={(e) => { e.preventDefault(); if (!manquant && !envoi) void lancer(); }}>
       <div className="flex flex-col gap-1">
         <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B24A0C]">Pouvoir spécial</p>
         <h2 className="text-[23px] font-bold leading-tight">{pouvoir.titre}</h2>

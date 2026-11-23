@@ -84,7 +84,7 @@ export async function capturerViaPartage(): Promise<Blob | null> {
       const video = document.createElement('video');
       video.srcObject = stream;
       video.onloadedmetadata = () => {
-        video.play();
+        void video.play();
         setTimeout(() => {
           const scale = Math.min(1, 1600 / video.videoWidth);
           const canvas = document.createElement('canvas');

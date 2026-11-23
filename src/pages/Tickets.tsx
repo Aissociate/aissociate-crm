@@ -47,6 +47,8 @@ const createSchema = z.object({
 });
 type CreateForm = z.infer<typeof createSchema>;
 
+// Sert seulement à déduire le type AdminForm.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const adminSchema = z.object({
   statut: z.enum(['ouvert', 'en_cours', 'resolu', 'refuse']),
   admin_note: z.string().optional(),
@@ -400,7 +402,7 @@ export default function Tickets() {
     [rawTickets, profileMap, voteMap],
   );
 
-  const refresh = () => { refreshTickets(); refreshVotes(); };
+  const refresh = () => { void refreshTickets(); void refreshVotes(); };
 
   // Filtrage
   const byType = tickets.filter((t) => t.type === activeTab);

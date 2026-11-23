@@ -88,7 +88,7 @@ export default function Conseillers() {
     }).eq('id', selected.id);
     setHrSaving(false);
     if (error) { alert(error.message); return; }
-    profiles.refresh();
+    void profiles.refresh();
   };
 
   const addDoc = async () => {
@@ -102,14 +102,14 @@ export default function Conseillers() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setDocOpen(false); setDocForm({ titre: '', categorie: '', fichier_url: '' });
-    coffre.refresh();
+    void coffre.refresh();
   };
 
   const removeDoc = async (d: ConseillerDocument) => {
     if (!confirm(`Retirer « ${d.titre} » du coffre ?`)) return;
     const { error } = await supabase.from('conseiller_documents').delete().eq('id', d.id);
     if (error) { alert(error.message); return; }
-    coffre.refresh();
+    void coffre.refresh();
   };
 
   if (loading) return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;

@@ -758,7 +758,7 @@ export default function Positionnement() {
       <ConventionPositionnementModal
         open={conventionOpen} onClose={() => setConventionOpen(false)}
         repondants={repondantsChoisis} positionnements={reponses.data}
-        onLie={() => { reponses.refresh(); plans.refresh(); plansPdf.refresh(); }}
+        onLie={() => { void reponses.refresh(); void plans.refresh(); void plansPdf.refresh(); }}
         contacts={contacts.data}
         dossiers={dossiers.data} sessions={sessions.data}
       />

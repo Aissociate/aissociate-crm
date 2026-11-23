@@ -49,7 +49,7 @@ export default function BarreSelection({ choisies, options, gerer, onFini, onErr
         <FolderInput className="h-4 w-4" aria-hidden />
         <span className="sr-only">Ranger la sélection dans un dossier</span>
         <select value="" disabled={enCours} className="bg-transparent outline-none"
-          onChange={(e) => { const v = e.target.value; if (v) lancer('ranger', { dossier_id: v === '__racine' ? null : v }); }}>
+          onChange={(e) => { const v = e.target.value; if (v) void lancer('ranger', { dossier_id: v === '__racine' ? null : v }); }}>
           <option value="">Ranger dans…</option>
           <option value="__racine">Hors dossier</option>
           {options.map((o) => <option key={o.id} value={o.id}>{o.chemin}</option>)}

@@ -54,7 +54,7 @@ export default function OnboardingPanel({ onProvisionne }: { onProvisionne: () =
     setDemandes((data ?? []) as Demande[]);
     setOuvert(cfg ? cfg.valeur !== 'false' : null);
   }, []);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const lien = `${window.location.origin}/studio/demarrer`;
   return (

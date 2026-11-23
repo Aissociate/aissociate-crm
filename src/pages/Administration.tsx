@@ -32,18 +32,18 @@ export default function Administration() {
   const approveUser = async (p: Profile, approve: boolean) => {
     const { error } = await supabase.from('profiles').update({ approved: approve, actif: approve }).eq('id', p.id);
     if (error) { alert(error.message); return; }
-    profiles.refresh();
+    void profiles.refresh();
   };
 
   const changeRole = async (p: Profile, role: UserRole) => {
     const { error } = await supabase.from('profiles').update({ role }).eq('id', p.id);
     if (error) { alert(error.message); return; }
-    profiles.refresh();
+    void profiles.refresh();
   };
   const toggleActif = async (p: Profile) => {
     const { error } = await supabase.from('profiles').update({ actif: !p.actif }).eq('id', p.id);
     if (error) { alert(error.message); return; }
-    profiles.refresh();
+    void profiles.refresh();
   };
 
   // Suppression d'un compte : passe par l'Edge Function admin-users (service role).
@@ -66,7 +66,7 @@ export default function Administration() {
       return;
     }
     setDelUser(null);
-    profiles.refresh();
+    void profiles.refresh();
   };
 
   const saveFin = async () => {
@@ -76,13 +76,13 @@ export default function Administration() {
       : await supabase.from('financeurs').insert(payload);
     if (error) { alert(error.message); return; }
     setFinOpen(false);
-    financeurs.refresh();
+    void financeurs.refresh();
   };
   const removeFin = async (f: Financeur) => {
     if (!confirm(`Supprimer le financeur ${f.nom} ?`)) return;
     const { error } = await supabase.from('financeurs').delete().eq('id', f.id);
     if (error) { alert(error.message); return; }
-    financeurs.refresh();
+    void financeurs.refresh();
   };
 
   const TABS: { key: Tab; label: string; icon: typeof Users; badge?: number }[] = [

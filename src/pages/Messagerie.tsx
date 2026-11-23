@@ -203,7 +203,7 @@ export default function Messagerie() {
       : await q.eq('id', assignTarget.id);
     if (error) { alert(error.message); return; }
     setAssignTarget(null);
-    refresh();
+    void refresh();
   };
 
   // Statut SMTP (bandeau) + horodatage de la dernière synchronisation IMAP,
@@ -222,7 +222,6 @@ export default function Messagerie() {
     // Le cron tourne toutes les 5 min : on rafraîchit l'indicateur régulièrement.
     const t = setInterval(() => void loadSyncInfo(), 60000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [view, setView] = useState<View>('conversations');
@@ -324,14 +323,14 @@ export default function Messagerie() {
     if (!confirm('Supprimer ce message ?')) return;
     const { error } = await supabase.from('emails').delete().eq('id', e.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   // Lu / non lu : permet de remettre un message dans les « à traiter ».
   const toggleLu = async (e: Email) => {
     const { error } = await supabase.from('emails').update({ lu: !e.lu }).eq('id', e.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const syncInbox = async () => {
@@ -348,7 +347,7 @@ export default function Messagerie() {
     const n = (result.data as { imported?: number; skipped?: number; error?: string } | null);
     void loadSyncInfo();
     if (n?.error) { alert(`Réception : ${n.error}`); return; }
-    refresh();
+    void refresh();
     alert(`${n?.imported ?? 0} nouveau(x) message(s) importé(s).${n?.skipped ? ` ${n.skipped} ignoré(s) (expéditeur inconnu).` : ''}`);
   };
 
@@ -502,7 +501,7 @@ export default function Messagerie() {
         .insert({ cle: c.key, closed_by: session?.user.id ?? null });
       if (error) { alert(error.message); return; }
     }
-    closes.refresh();
+    void closes.refresh();
   };
 
   // Sélection (par conversation -> tous ses messages)
@@ -519,7 +518,7 @@ export default function Messagerie() {
     const { error } = await supabase.from('emails').delete().in('id', ids);
     if (error) { alert(error.message); return; }
     setSelection(new Set());
-    refresh();
+    void refresh();
   };
 
   // Pastille canal (e-mail / WhatsApp)

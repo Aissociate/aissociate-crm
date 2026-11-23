@@ -23,7 +23,7 @@ export default function ResetPassword() {
       if (event === 'PASSWORD_RECOVERY') setReady(true);
     });
     // Si la session est déjà établie (rechargement de page), on autorise aussi.
-    supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getSession().then(({ data }) => {
       if (data.session) setReady(true);
     });
     return () => sub.subscription.unsubscribe();

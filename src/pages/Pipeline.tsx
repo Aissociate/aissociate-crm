@@ -175,7 +175,7 @@ export default function Pipeline() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   /** Flèches ← → : étape précédente/suivante, carte épinglée en fin de colonne. */
@@ -185,7 +185,7 @@ export default function Pipeline() {
     const { error } = await supabase.from('opportunites')
       .update({ stage: next, colonne_manuelle: next, position: null }).eq('id', o.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   // ── Glisser-déposer ─────────────────────────────────────────────────────────
@@ -228,14 +228,14 @@ export default function Pipeline() {
     const results = await Promise.all(updates);
     const err = results.find((r) => r.error)?.error;
     if (err) alert(err.message);
-    refresh();
+    void refresh();
   };
 
   const remove = async (o: Opportunite) => {
     if (!confirm(`Supprimer l'opportunité « ${o.titre} » ?`)) return;
     const { error } = await supabase.from('opportunites').delete().eq('id', o.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   // ── Gestion des colonnes (managers) ─────────────────────────────────────────

@@ -7,7 +7,7 @@
 //   en BCC (par lots), via l'API transactionnelle Brevo (clé : secret
 //   BREVO_API_KEY ou Paramètres → Brevo).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 
 const SITE_URL = "https://aissociate.re";
 
@@ -124,7 +124,7 @@ function buildHtml(opts: { senderName: string; intro: string; headerImage: strin
 }
 
 // Destinataires (contacts avec e-mail, RGPD optionnel), HORS désinscrits, dédupliqués.
-async function recipients(sb: ReturnType<typeof createClient>, rgpdOnly: boolean): Promise<string[]> {
+async function recipients(sb: SupabaseClient, rgpdOnly: boolean): Promise<string[]> {
   let q = sb.from("contacts").select("email, rgpd_consent").not("email", "is", null).eq("newsletter_unsubscribed", false);
   if (rgpdOnly) q = q.eq("rgpd_consent", true);
   const { data } = await q;
@@ -140,7 +140,7 @@ async function recipients(sb: ReturnType<typeof createClient>, rgpdOnly: boolean
 const unsubUrl = (sbUrl: string, token: string) => `${sbUrl}/functions/v1/newsletter-unsubscribe?t=${token}`;
 
 // Map e-mail (minuscule) -> jeton de désinscription, pour les contacts NON désinscrits.
-async function tokenMap(sb: ReturnType<typeof createClient>): Promise<Map<string, string>> {
+async function tokenMap(sb: SupabaseClient): Promise<Map<string, string>> {
   const { data } = await sb.from("contacts").select("email, unsubscribe_token").not("email", "is", null).eq("newsletter_unsubscribed", false);
   const m = new Map<string, string>();
   for (const c of (data ?? []) as { email?: string; unsubscribe_token?: string }[]) {
@@ -151,14 +151,14 @@ async function tokenMap(sb: ReturnType<typeof createClient>): Promise<Map<string
 }
 
 // Verrou anti-concurrence du drain (UPDATE conditionnel atomique).
-async function acquireDrainLock(sb: ReturnType<typeof createClient>): Promise<boolean> {
+async function acquireDrainLock(sb: SupabaseClient): Promise<boolean> {
   const now = new Date().toISOString();
   const until = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   const { data } = await sb.from("newsletter_drain_lock").update({ locked_until: until })
     .eq("id", 1).or(`locked_until.is.null,locked_until.lt.${now}`).select("id");
   return (data?.length ?? 0) > 0;
 }
-async function releaseDrainLock(sb: ReturnType<typeof createClient>): Promise<void> {
+async function releaseDrainLock(sb: SupabaseClient): Promise<void> {
   await sb.from("newsletter_drain_lock").update({ locked_until: null }).eq("id", 1);
 }
 
@@ -184,7 +184,7 @@ async function brevoSendBatch(brevo: BrevoCfg, subject: string, baseHtml: string
 }
 
 // E-mails déjà envoyés aujourd'hui (toutes éditions) — quota Brevo/jour partagé.
-async function sentTodayCount(sb: ReturnType<typeof createClient>): Promise<number> {
+async function sentTodayCount(sb: SupabaseClient): Promise<number> {
   const startOfDay = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").toISOString();
   const { count } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true })
     .eq("status", "sent").gte("sent_at", startOfDay);
@@ -192,7 +192,7 @@ async function sentTodayCount(sb: ReturnType<typeof createClient>): Promise<numb
 }
 
 // Met à jour le statut d'une édition selon l'état de sa file (en_cours/envoye).
-async function updateNlStatut(sb: ReturnType<typeof createClient>, nlId: string): Promise<void> {
+async function updateNlStatut(sb: SupabaseClient, nlId: string): Promise<void> {
   const { count: pending } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true }).eq("newsletter_id", nlId).eq("status", "pending");
   const { count: sentC } = await sb.from("newsletter_queue").select("id", { count: "exact", head: true }).eq("newsletter_id", nlId).eq("status", "sent");
   const done = (pending ?? 0) === 0;
@@ -206,7 +206,7 @@ async function updateNlStatut(sb: ReturnType<typeof createClient>, nlId: string)
 // Draine la file dans la limite du quota du jour (plafond Brevo global au compte),
 // FIFO par created_at, par lots de 90, en regroupant par édition. Sérialisé par
 // verrou, avec jeton de désinscription par destinataire et retry borné (3).
-async function drainQueue(sb: ReturnType<typeof createClient>, brevo: BrevoCfg, dailyLimit: number, sbUrl: string): Promise<{ sent: number; remaining: number }> {
+async function drainQueue(sb: SupabaseClient, brevo: BrevoCfg, dailyLimit: number, sbUrl: string): Promise<{ sent: number; remaining: number }> {
   if (!brevo.apiKey || !brevo.senderEmail) return { sent: 0, remaining: 0 };
   if (!(await acquireDrainLock(sb))) return { sent: 0, remaining: 0 };
   try {
@@ -259,7 +259,7 @@ async function drainQueue(sb: ReturnType<typeof createClient>, brevo: BrevoCfg, 
 // Met une édition en file (tous ses destinataires) puis envoie l'allocation du
 // jour. Garde-fou : refuse si la base dépasse dailyLimit * 7 (300×7 par défaut).
 async function enqueueAndDrain(
-  sb: ReturnType<typeof createClient>, nlId: string, rgpdOnly: boolean, brevo: BrevoCfg, dailyLimit: number, sbUrl: string,
+  sb: SupabaseClient, nlId: string, rgpdOnly: boolean, brevo: BrevoCfg, dailyLimit: number, sbUrl: string,
 ): Promise<{ total?: number; sentNow?: number; queued?: number; days?: number; error?: string }> {
   if (!brevo.apiKey || !brevo.senderEmail) return { error: "Configuration Brevo incomplète (Paramètres → Brevo)." };
   const list = await recipients(sb, rgpdOnly);

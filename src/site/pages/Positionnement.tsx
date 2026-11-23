@@ -64,7 +64,7 @@ export default function Positionnement() {
 
   useEffect(() => {
     let vivant = true;
-    (async () => {
+    void (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('positionnement', {
           body: { action: 'get', token },

@@ -38,13 +38,13 @@ export default function BlogAdmin() {
     const { error } = await supabase.from('blog_categories').insert({ name, slug: slugify(name) });
     if (error) { alert(error.message); return; }
     setNewCat('');
-    categories.refresh();
+    void categories.refresh();
   };
   const removeCat = async (id: string) => {
     if (!confirm('Supprimer cette catégorie ? Les articles liés seront détachés.')) return;
     const { error } = await supabase.from('blog_categories').delete().eq('id', id);
     if (error) { alert(error.message); return; }
-    categories.refresh(); refresh();
+    void categories.refresh(); void refresh();
   };
   const catName = (id: string | null) => categories.data.find((c) => c.id === id)?.name ?? '—';
 
@@ -70,21 +70,21 @@ export default function BlogAdmin() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const togglePublish = async (a: BlogArticle) => {
     const next = !a.published;
     const { error } = await supabase.from('blog_articles').update({ published: next, published_at: next ? new Date().toISOString() : null }).eq('id', a.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const remove = async (a: BlogArticle) => {
     if (!confirm(`Supprimer l'article « ${a.title} » ?`)) return;
     const { error } = await supabase.from('blog_articles').delete().eq('id', a.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const generate = async () => {
@@ -94,7 +94,7 @@ export default function BlogAdmin() {
       if (error) throw new Error(await functionErrorMessage(error));
       if ((res as { error?: string })?.error) throw new Error((res as { error?: string }).error);
       setGenOpen(false); setSubject(''); setPublishGen(false);
-      categories.refresh(); refresh();
+      void categories.refresh(); void refresh();
       alert(`Article généré : ${(res as { article?: { title?: string } })?.article?.title ?? 'OK'}`);
     } catch (err) {
       alert(`Génération indisponible : déployez l'Edge Function « generate-article » et configurez la clé OpenRouter (Paramètres › IA). ${err instanceof Error ? err.message : ''}`);
@@ -208,7 +208,7 @@ export default function BlogAdmin() {
       <Modal open={catOpen} onClose={() => setCatOpen(false)} title="Catégories du blog" footer={<Button variant="secondary" onClick={() => setCatOpen(false)}>Fermer</Button>}>
         <div className="space-y-3">
           <div className="flex gap-2">
-            <input className="input" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="Nouvelle catégorie" onKeyDown={(e) => { if (e.key === 'Enter') addCat(); }} />
+            <input className="input" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="Nouvelle catégorie" onKeyDown={(e) => { if (e.key === 'Enter') void addCat(); }} />
             <Button onClick={addCat} disabled={!newCat.trim()}><Plus className="h-4 w-4" /> Ajouter</Button>
           </div>
           {categories.data.length === 0 ? (

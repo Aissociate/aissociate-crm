@@ -37,7 +37,7 @@ export default function ConnexionsEspace({ workspaceId, nomEspace, emailDefaut }
     try { setEtat(await studio<Etat>({ action: 'admin_connexions', workspace_id: workspaceId })); }
     catch (e) { setErreur(e instanceof Error ? e.message : String(e)); }
   }, [workspaceId]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
   useEffect(() => { setEmail(emailDefaut); }, [emailDefaut]);
 
   const envoyer = async () => {

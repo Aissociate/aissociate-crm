@@ -147,7 +147,7 @@ export default function Qualiopi() {
           coverage={coverage}
           loading={indicateurs.loading}
           userId={session?.user.id ?? null}
-          onRefresh={() => { indicateurs.refresh(); preuves.refresh(); documents.refresh(); dossierDocs.refresh(); }}
+          onRefresh={() => { void indicateurs.refresh(); void preuves.refresh(); void documents.refresh(); void dossierDocs.refresh(); }}
         />
       )}
       {tab === 'dossiers' && <Dossiers />}
@@ -384,18 +384,18 @@ function Dossiers() {
     const { error } = await supabase.rpc('qualiopi_prepare_session', { p_session: sessionId });
     setBusy(null);
     if (error) { alert(error.message); return; }
-    docs.refresh();
+    void docs.refresh();
   };
 
   const setDocStatut = async (id: string, statut: QualiopiDocStatut) => {
     await supabase.from('qualiopi_dossier_docs').update({ statut }).eq('id', id);
-    docs.refresh();
+    void docs.refresh();
   };
   const uploadDoc = async (id: string, value: string) => {
     await supabase.from('qualiopi_dossier_docs').update({ fichier_url: value, statut: 'recu' }).eq('id', id);
     // Fichier téléversé ici = bucket « qualiopi » (colonne absente tant que la migration n'est pas passée : sans effet).
     await supabase.from('qualiopi_dossier_docs').update({ bucket: 'qualiopi' }).eq('id', id);
-    docs.refresh();
+    void docs.refresh();
   };
   // Publipostage sur modèle .docx si dispo, sinon génération pdf-lib générique.
   // Renvoie le message d'erreur, ou null si la pièce est produite.
@@ -415,7 +415,7 @@ function Dossiers() {
     const err = await produire(id, typeDoc);
     setBusy(null);
     if (err) alert(`La pièce n'a pas pu être générée. ${err}`);
-    docs.refresh();
+    void docs.refresh();
   };
   const generable = (d: QualiopiDossierDoc) => GENERABLE_DOC_TYPES.has(d.type_doc) || modelTypes.has(d.type_doc);
   // Toutes les pièces encore « à générer » de la session, l'une après l'autre.
@@ -428,7 +428,7 @@ function Dossiers() {
       setLot({ session: sessionId, fait: i + 1, total: liste.length });
     }
     setLot(null);
-    docs.refresh();
+    void docs.refresh();
     if (echecs.length) alert(`${liste.length - echecs.length} pièce(s) générée(s), ${echecs.length} en échec :\n${echecs.slice(0, 8).join('\n')}`);
   };
   // Une pièce « envoyée » attend encore sa signature : elle n'est pas faite.
@@ -640,11 +640,11 @@ function Modeles() {
 
   const setModele = async (type_doc: string, patch: Partial<QualiopiModeleDoc>) => {
     await supabase.from('qualiopi_modeles_doc').update(patch).eq('type_doc', type_doc);
-    modeles.refresh();
+    void modeles.refresh();
   };
   const onUpload = async (type_doc: string, value: string) => {
     await supabase.from('qualiopi_modeles_doc').update({ fichier_url: value, actif: true }).eq('type_doc', type_doc);
-    modeles.refresh();
+    void modeles.refresh();
   };
 
   if (modeles.loading) return <div className="flex justify-center py-16"><Spinner /></div>;

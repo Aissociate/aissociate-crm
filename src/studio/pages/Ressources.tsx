@@ -42,7 +42,7 @@ export default function Ressources() {
     try { setListe((await appel<{ ressources: Ressource[] }>('ressources')).ressources); }
     catch (e) { setErreur(gerer(e)); }
   }, [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const visibles = useMemo(() => (liste ?? []).filter((r) => r.type === onglet
     && dansFiltre(dossiers.dossiers, filtre, r.dossier_id)
@@ -83,7 +83,7 @@ export default function Ressources() {
     // Un seul fichier sans souci : pas besoin de bilan, la liste parle d'elle-même.
     if (fichiers.length === 1 && !b.echecs.length && !b.refuses.length && !b.doublons.length) setAvis(b.sensibles);
     else setBilan(b);
-    await charger(); rafraichir();
+    await charger(); void rafraichir();
     setImport(false);
     if (fichier.current) fichier.current.value = '';
     if (dossierFichiers.current) dossierFichiers.current.value = '';
@@ -92,7 +92,7 @@ export default function Ressources() {
   const deposer = async (e: React.DragEvent) => {
     e.preventDefault(); setSurvol(false);
     if (onglet !== 'fichier' || import_) return;
-    importer(await fichiersDuDepot(e.dataTransfer));
+    void importer(await fichiersDuDepot(e.dataTransfer));
   };
 
   const enregistrerNote = async () => {
@@ -100,7 +100,7 @@ export default function Ressources() {
     try {
       const r = await appel<Ajout>('ressource_add', { titre: note.titre, contenu: note.contenu, type: 'note', dossier_id: dossierAjout });
       setAvis(r.sensible ? [`${note.titre} — ${r.sensible.message}`] : []);
-      setNote(null); await charger(); rafraichir();
+      setNote(null); await charger(); void rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -108,15 +108,15 @@ export default function Ressources() {
     // Une ressource sensible ne s'active qu'après confirmation (le serveur l'exige aussi).
     if (actif && r.sensible && !confirmer) { setActivation(r); return; }
     setListe((l) => l?.map((x) => (x.id === r.id ? { ...x, actif } : x)) ?? null);
-    try { await appel('ressource_toggle', { id: r.id, actif, confirmer }); rafraichir(); }
-    catch (e) { setErreur(gerer(e)); charger(); }
+    try { await appel('ressource_toggle', { id: r.id, actif, confirmer }); void rafraichir(); }
+    catch (e) { setErreur(gerer(e)); void charger(); }
   };
 
   const supprimer = (r: Ressource) => setSuppression(r);
   const confirmerSuppression = async () => {
     if (!suppression) return;
     setEnvoiSuppr(true);
-    try { await appel('ressource_delete', { id: suppression.id }); await charger(); rafraichir(); }
+    try { await appel('ressource_delete', { id: suppression.id }); await charger(); void rafraichir(); }
     catch (e) { setErreur(gerer(e)); }
     finally { setEnvoiSuppr(false); setSuppression(null); }
   };
@@ -143,7 +143,7 @@ export default function Ressources() {
       </div>
 
       <BarreDossiers dossiers={dossiers.dossiers} filtre={filtre} onFiltre={setFiltre} gerer={gerer}
-        onChange={() => { dossiers.charger(); charger(); }} />
+        onChange={() => { void dossiers.charger(); void charger(); }} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2">
@@ -226,8 +226,8 @@ export default function Ressources() {
         <BarreSelection choisies={choisies} options={dossiers.options} gerer={gerer}
           onConfier={me.agents.length ? () => setConfier(true) : undefined}
           onVider={() => { setCoches(new Set()); setConfier(false); }}
-          onErreur={(m) => { setErreur(m); charger(); }}
-          onFini={async (m) => { setErreur(''); setInfo(m); setCoches(new Set()); await charger(); dossiers.charger(); rafraichir(); }} />
+          onErreur={(m) => { setErreur(m); void charger(); }}
+          onFini={async (m) => { setErreur(''); setInfo(m); setCoches(new Set()); await charger(); void dossiers.charger(); void rafraichir(); }} />
       )}
       {confier && choisies.length > 0 && (
         <ConfierLot choisies={choisies} agents={me.agents} gerer={gerer}
@@ -268,7 +268,7 @@ export default function Ressources() {
               <span className="hidden text-sm text-neutral-500 md:block">{[r.studio_users?.prenom, r.studio_users?.nom].filter(Boolean).join(' ')}</span>
               <span className="hidden w-28 text-right text-sm text-neutral-500 sm:block">{new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
               <ChoixDossier options={dossiers.options} valeur={r.dossier_id ?? null} quoi="ressource" id={r.id} gerer={gerer}
-                onRange={(d) => { setListe((l) => l?.map((x) => (x.id === r.id ? { ...x, dossier_id: d } : x)) ?? null); dossiers.charger(); }} />
+                onRange={(d) => { setListe((l) => l?.map((x) => (x.id === r.id ? { ...x, dossier_id: d } : x)) ?? null); void dossiers.charger(); }} />
               <Interrupteur actif={r.actif} onChange={(v) => basculer(r, v)} label={`Utilisée par les agents : ${r.titre}`} />
               <button onClick={() => supprimer(r)} aria-label="Supprimer" className="p-1 text-neutral-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
             </div>

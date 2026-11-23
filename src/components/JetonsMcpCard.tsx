@@ -45,7 +45,7 @@ export function JetonsMcpCard() {
     setJetons((data ?? []) as Jeton[]);
     setLoading(false);
   };
-  useEffect(() => { charger(); }, []);
+  useEffect(() => { void charger(); }, []);
 
   const creer = async () => {
     if (!libelle.trim()) return;
@@ -55,14 +55,14 @@ export function JetonsMcpCard() {
     if (error) { alert(error.message); return; }
     setNouveau(data?.jeton ?? null);
     setLibelle('');
-    charger();
+    void charger();
   };
 
   const revoquer = async (j: Jeton) => {
     if (!confirm(`Révoquer le jeton « ${j.libelle} » ? Les outils qui l'utilisent seront refusés immédiatement.`)) return;
     const { error } = await supabase.rpc('revoquer_jeton_mcp', { p_id: j.id });
     if (error) { alert(error.message); return; }
-    charger();
+    void charger();
   };
 
   const copier = async (texte: string, cle: string) => {

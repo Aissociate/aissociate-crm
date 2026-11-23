@@ -176,14 +176,14 @@ export default function Calendrier() {
       setForm((f) => ({ ...f, id: data.id })); // passe en mode édition pour les participants
     }
     setSaving(false);
-    refresh();
+    void refresh();
   };
 
   const removeSession = async (id: string) => {
     if (!confirm('Supprimer cette session et ses participants ?')) return;
     await supabase.from('sessions_formation').delete().eq('id', id);
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const addParticipant = async () => {

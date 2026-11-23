@@ -45,7 +45,7 @@ export default function PapierEntete() {
 
   const enregistrer = async () => {
     setEtat('envoi'); setErreur('');
-    try { await appel('entete_update', { entete: v }); chargerEntete(true); setEtat('ok'); }
+    try { await appel('entete_update', { entete: v }); void chargerEntete(true); setEtat('ok'); }
     catch (e) { setErreur(gerer(e)); setEtat(''); }
   };
 
@@ -56,13 +56,13 @@ export default function PapierEntete() {
     try {
       const r = await appel<{ logo_url: string }>('entete_logo', { fichier: await enBase64(f), type: f.type });
       setDonnees((d) => (d ? { ...d, logo_url: r.logo_url } : d));
-      chargerEntete(true);
+      void chargerEntete(true);
     } catch (e) { setErreur(gerer(e)); }
     finally { if (fichier.current) fichier.current.value = ''; }
   };
 
   const retirerLogo = async () => {
-    try { await appel('entete_logo', { supprimer: true }); setDonnees((d) => (d ? { ...d, logo_url: null } : d)); chargerEntete(true); }
+    try { await appel('entete_logo', { supprimer: true }); setDonnees((d) => (d ? { ...d, logo_url: null } : d)); void chargerEntete(true); }
     catch (e) { setErreur(gerer(e)); }
   };
 

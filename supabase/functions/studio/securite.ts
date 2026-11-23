@@ -10,8 +10,9 @@ function b64(bytes: Uint8Array): string {
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s);
 }
-// Uint8Array<ArrayBuffer> explicite : Web Crypto refuse le type générique (SharedArrayBuffer possible).
-function unb64(s: string): Uint8Array<ArrayBuffer> {
+// Type de retour déduit (Uint8Array adossé à un ArrayBuffer) : Web Crypto refuse le type générique
+// (SharedArrayBuffer possible) et `Uint8Array<ArrayBuffer>` n'existe pas avant TypeScript 5.7 (Deno 2.1).
+function unb64(s: string) {
   const bin = atob(s);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
@@ -21,7 +22,7 @@ function hex(bytes: Uint8Array): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function pbkdf2(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<Uint8Array> {
+async function pbkdf2(password: string, salt: ReturnType<typeof unb64>, iterations: number): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256);
   return new Uint8Array(bits);

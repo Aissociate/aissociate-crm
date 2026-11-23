@@ -92,7 +92,7 @@ export default function Devis() {
   const changerStatut = async (d: Devis, statut: DevisStatut) => {
     const { error } = await supabase.from('devis').update({ statut }).eq('id', d.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const addLigne = () => setLines((l) => [...l, emptyLigne()]);
@@ -144,7 +144,7 @@ export default function Devis() {
     if (rows.length) await supabase.from('devis_lignes').insert(rows);
     setSaving(false);
     setOpen(false);
-    refresh();
+    void refresh();
     return devisId;
   };
 
@@ -159,7 +159,7 @@ export default function Devis() {
       const { data: res, error } = await supabase.functions.invoke('generate-devis', { body: { devisId: id } });
       if (error) throw new Error(await functionErrorMessage(error));
       if ((res as { error?: string })?.error) throw new Error((res as { error?: string }).error);
-      refresh();
+      void refresh();
     } catch (err) {
       alert(`Le PDF n'a pas pu être généré. ${err instanceof Error ? err.message : ''}`);
     } finally {
@@ -172,7 +172,7 @@ export default function Devis() {
     const { error } = await supabase.from('devis').delete().eq('id', d.id);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -245,7 +245,7 @@ export default function Devis() {
                   <button onClick={() => generate(d.id)} disabled={genId === d.id} title={d.fichier_url ? 'Régénérer le PDF' : 'Générer le PDF'} className="rounded p-1.5 text-muted hover:text-brand-600">{genId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}</button>
                   <AddToDossierButton
                     contactId={d.contact_id} dossiers={dossiers.data} fichierUrl={d.fichier_url} sourceBucket="devis"
-                    pieceLibelle="Devis signé" documentLabel="devis" onDone={() => { dossiers.refresh(); refresh(); }}
+                    pieceLibelle="Devis signé" documentLabel="devis" onDone={() => { void dossiers.refresh(); void refresh(); }}
                     // Sans PDF généré, le bouton relie simplement le devis au dossier.
                     lierDossier={async (dos) => {
                       const { error } = await supabase.from('devis').update({ dossier_id: dos.id }).eq('id', d.id);

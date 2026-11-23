@@ -95,7 +95,7 @@ export default function PlansFormation() {
         userId: session?.user.id ?? null,
         contactId: p.contact_id, entrepriseId: p.entreprise_id, financeurId: p.financeur_id,
       });
-      pdfs.refresh();
+      void pdfs.refresh();
       alert('PDF généré et enregistré.');
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
@@ -117,7 +117,7 @@ export default function PlansFormation() {
       if (error) throw new Error(await functionErrorMessage(error));
       const err = (res as { error?: string } | null)?.error;
       if (err) throw new Error(err);
-      pdfs.refresh();
+      void pdfs.refresh();
       // La convention est conclue avec l'entreprise : on annonce l'effectif
       // retenu, pour que l'oubli d'un stagiaire se voie avant l'envoi.
       const label = AGEFICE_DOCS.find((d) => d.kind === kind)?.label;
@@ -148,7 +148,7 @@ export default function PlansFormation() {
   const removePdf = async (d: PlanPdf) => {
     if (!confirm(`Supprimer le PDF « ${d.titre} » ?`)) return;
     await supabase.from('plan_pdfs').delete().eq('id', d.id);
-    pdfs.refresh();
+    void pdfs.refresh();
   };
 
   const openNew = () => { setForm(empty()); setContenuText(''); setOpen(true); };
@@ -205,14 +205,14 @@ export default function PlansFormation() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const remove = async (p: PlanFormation) => {
     if (!confirm(`Supprimer le plan « ${p.nom} » ?`)) return;
     const { error } = await supabase.from('plans_formation').delete().eq('id', p.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   return (
@@ -271,7 +271,7 @@ export default function PlansFormation() {
                     fichierUrl={pdfs.data.find((d) => d.plan_id === p.id)?.fichier_url ?? null}
                     sourceBucket="plans"
                     pieceLibelle="Programme de formation" documentLabel="plan de formation"
-                    onDone={() => { dossiers.refresh(); refresh(); }}
+                    onDone={() => { void dossiers.refresh(); void refresh(); }}
                     lierDossier={async (dos) => {
                       const { error } = await supabase.from('plans_formation').update({ dossier_id: dos.id }).eq('id', p.id);
                       return error?.message ?? null;

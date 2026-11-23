@@ -42,7 +42,7 @@ export function useDecisions(gerer: (e: unknown) => string, rafraichir: () => Pr
     try { setDonnees(await appel<Reponse>('aujourdhui')); setErreur(''); }
     catch (e) { setErreur(gerer(e)); }
   }, [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const suite = (id: string, s: Suite | null) => setSuites((x) => {
     const y = { ...x };
@@ -68,7 +68,7 @@ export function useDecisions(gerer: (e: unknown) => string, rafraichir: () => Pr
         suite(d.id, null);
         setErreur(gerer(e));
       }
-      rafraichir();
+      void rafraichir();
     };
     minuteries.current.set(d.id, { id: setTimeout(envoyer, DELAI_ANNULATION), envoyer });
     suite(d.id, { etat: 'envoi' });
@@ -90,14 +90,14 @@ export function useDecisions(gerer: (e: unknown) => string, rafraichir: () => Pr
       suite(id, { etat: 'refuse', raison });
       setErreur('');
     } catch (e) { suite(id, null); setErreur(gerer(e)); }
-    rafraichir();
+    void rafraichir();
   };
 
   /** Revenir sur un refus : le livrable repasse « à valider ». */
   const annulerRefus = async (id: string) => {
     try { await appel('livrable_decider', { id, statut: 'a_valider' }); suite(id, null); setOuverte(id); setErreur(''); }
     catch (e) { setErreur(gerer(e)); }
-    rafraichir();
+    void rafraichir();
   };
 
   const decisions = donnees?.decisions ?? [];

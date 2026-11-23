@@ -44,7 +44,7 @@ export default function EspaceClient() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('espace-client', { body: { action: 'get', token } });
         if (error) throw new Error('Espace indisponible');

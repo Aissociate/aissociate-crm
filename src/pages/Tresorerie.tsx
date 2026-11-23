@@ -242,7 +242,6 @@ export default function Tresorerie() {
       soldeFinal: cumul,
       moisNegatif: rows.find((r) => r.solde < 0) ?? null,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horizon, encaissements.data, charges.data, conf?.solde_initial, conf?.date_solde, nonPlanifie.rows, inclureNonPlanifie]);
 
   // ── Échéancier (modale) ────────────────────────────────────────────────────

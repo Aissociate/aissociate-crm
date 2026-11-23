@@ -767,10 +767,12 @@ function vueRoutine(t: Record<string, unknown>, prenoms: Map<string, string>, pa
 
 async function listerRoutines(sb: SupabaseClient, wsId: string) {
   let migree = true;
-  let { data, error } = await sb.from("studio_taches").select(SELECT_ROUTINE).eq("workspace_id", wsId).order("created_at");
+  // `colonnes: string` : les deux lectures (avec ou sans colonnes de routine) ont le même type.
+  const lire = (colonnes: string) => sb.from("studio_taches").select(colonnes).eq("workspace_id", wsId).order("created_at");
+  let { data, error } = await lire(SELECT_ROUTINE);
   if (error && schemaRoutinesAbsent(error)) {
     migree = false;
-    ({ data, error } = await sb.from("studio_taches").select(SELECT_TACHE).eq("workspace_id", wsId).order("created_at"));
+    ({ data, error } = await lire(SELECT_TACHE));
   }
   const lignes = (data ?? []) as unknown as Record<string, unknown>[];
   const ids = lignes.map((t) => String(t.id));

@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(async ({ data }) => {
+    void supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
       if (data.session?.user) await loadProfile(data.session.user.id);
       setLoading(false);
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       if (newSession?.user) {
-        (async () => { await loadProfile(newSession.user.id); })();
+        void (async () => { await loadProfile(newSession.user.id); })();
       } else {
         setProfile(null);
       }

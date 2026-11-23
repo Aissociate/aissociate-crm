@@ -34,7 +34,7 @@ export default function Routine() {
   const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const charger = useCallback(() => appel<ReponseRoutines>('routines').then(setRep).catch((e) => setErreur(gerer(e))), [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
   const r = rep?.routines.find((x) => x.id === id) ?? null;
   // Un passage tourne : on rafraîchit jusqu'à la fin.
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function Routine() {
     setLocal((x) => ({ ...x, [d.id]: v }));
     if (minuteur.current) clearTimeout(minuteur.current);
     const envoyer = () => agir('routine_regler', { reglages: { [d.id]: v } });
-    if (differe) minuteur.current = setTimeout(envoyer, 600); else envoyer();
+    if (differe) minuteur.current = setTimeout(envoyer, 600); else void envoyer();
   };
   const essayer = () => agir('routine_essayer', {}, "Essai lancé : la routine tourne à blanc, rien n'est envoyé. Le résultat s'affiche dans « Ce qui s'est passé ».");
 
@@ -108,7 +108,7 @@ export default function Routine() {
           </p>
           {proprio && r.essai_jusqu_au && (
             <button type="button" className={CL_BOUTON_CLAIR} disabled={occupe}
-              onClick={() => { if (confirm(`Mettre en route « ${r.titre} » ? Elle agira pour de vrai ; vous validerez toujours avant que quoi que ce soit parte.`)) agir('routine_activer', {}, 'Routine en route.'); }}>
+              onClick={() => { if (confirm(`Mettre en route « ${r.titre} » ? Elle agira pour de vrai ; vous validerez toujours avant que quoi que ce soit parte.`)) void agir('routine_activer', {}, 'Routine en route.'); }}>
               Mettre en route maintenant
             </button>
           )}

@@ -60,7 +60,7 @@ export default function Emargement() {
   };
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try { await charger(); }
       catch (e) { setErreur(e instanceof Error ? e.message : 'Lien invalide.'); }
       finally { setLoading(false); }

@@ -102,7 +102,7 @@ export default function PagePerimetre() {
   };
 
   const charger = useCallback(() => appel<Perimetre>('perimetre').then(setP).catch((e) => setErreur(gerer(e))), [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const appliquerBascule = async () => {
     if (!p) return;

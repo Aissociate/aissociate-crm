@@ -49,7 +49,7 @@ export default function SanteJobs() {
         <p className="text-sm text-muted">
           Chaque fonction planifiée consigne ses exécutions dans <code>job_runs</code> (90 jours conservés).
         </p>
-        <Button variant="secondary" onClick={() => { runs.refresh(); errors.refresh(); }}><RefreshCw className="h-4 w-4" /> Actualiser</Button>
+        <Button variant="secondary" onClick={() => { void runs.refresh(); void errors.refresh(); }}><RefreshCw className="h-4 w-4" /> Actualiser</Button>
       </div>
 
       <Card>

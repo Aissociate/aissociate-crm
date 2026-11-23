@@ -45,14 +45,14 @@ export default function Formations() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const remove = async (f: Formation) => {
     if (!confirm(`Supprimer « ${f.intitule} » ?`)) return;
     const { error } = await supabase.from('formations').delete().eq('id', f.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   return (

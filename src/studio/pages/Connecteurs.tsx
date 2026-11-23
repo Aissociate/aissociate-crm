@@ -136,7 +136,7 @@ export default function Connecteurs() {
     try { setListe((await appel<{ connecteurs: Connecteur[] }>('connecteurs')).connecteurs); }
     catch (e) { setErreur(gerer(e)); setListe([]); }
   }, [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const nomDe = (type: string) => CATALOGUE.find((d) => d.type === type)?.nom ?? (type.startsWith('app:') ? liste?.find((c) => c.type === type)?.infos.libelle : null) ?? type;
   const confirmerSuppression = async () => {
@@ -278,7 +278,7 @@ export default function Connecteurs() {
       <div className="mb-3 flex items-end justify-between gap-3">
         <h2 className="text-lg font-semibold">Connexion en un clic</h2>
         {enLigne && (
-          <button onClick={() => { messageries.charger(); reseaux.charger(); apps.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
+          <button onClick={() => { void messageries.charger(); void reseaux.charger(); void apps.charger(); }} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" aria-label="Actualiser">
             <RefreshCw className="h-3.5 w-3.5" /> Actualiser
           </button>
         )}

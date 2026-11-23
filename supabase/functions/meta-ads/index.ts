@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
             name: c.campaign_name as string,
             spend: Number(c.spend ?? 0), impressions: Number(c.impressions ?? 0),
             clicks: Number(c.clicks ?? 0), leads: sumLeads(c.actions),
-          })).sort((a, b) => b.spend - a.spend)
+          })).sort((a: { spend: number }, b: { spend: number }) => b.spend - a.spend)
         : [];
 
       return json({

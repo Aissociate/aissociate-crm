@@ -16,7 +16,7 @@ export default function BlogArticle() {
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    if (slug) loadArticle(slug);
+    if (slug) void loadArticle(slug);
   }, [slug]);
 
   async function loadArticle(articleSlug: string) {
