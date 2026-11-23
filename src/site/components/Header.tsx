@@ -51,7 +51,7 @@ export default function Header() {
                 }
               >
                 {l.label}
-                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Essai gratuit</span>}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Gratuit</span>}
               </NavLink>
             ))}
           </div>
@@ -97,7 +97,7 @@ export default function Header() {
                 }
               >
                 {l.label}
-                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Essai gratuit</span>}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Gratuit</span>}
               </NavLink>
             ))}
             <a

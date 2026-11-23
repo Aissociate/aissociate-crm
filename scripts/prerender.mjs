@@ -133,9 +133,9 @@ const routes = [
   {
     // Page « Agents IA » (employés virtuels) : aligné sur le <SEO> de src/site/pages/AgentsIA.tsx.
     path: '/agents-ia',
-    title: "Studio IA : votre équipe d'agents IA — essai gratuit, dès 149 €/mois | Aissociate",
-    description: "Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Essai gratuit de 7 jours, sans frais de mise en place, accompagnement à La Réunion. Dès 149 € HT/mois.",
-    keywords: 'agent IA PME, agents IA La Réunion, essai gratuit agent IA, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
+    title: "Studio IA : votre équipe d'agents IA — stage gratuit, contrats dès 59 €/mois | Aissociate",
+    description: "Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Ils commencent en stage gratuit, sans limite de durée ; contrats dès 59 € HT/mois, agents illimités, accompagnement à La Réunion.",
+    keywords: 'agent IA PME, agents IA La Réunion, agent IA gratuit, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
     schemas: [
       {
         '@context': 'https://schema.org', '@type': 'Service',
@@ -145,9 +145,12 @@ const routes = [
         areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
         url: `${SITE}/agents-ia/`, inLanguage: 'fr-FR',
         offers: [
-          { '@type': 'Offer', name: 'Essai gratuit du Studio IA', price: '0', priceCurrency: 'EUR', description: '7 jours, sans carte bancaire, sans frais de mise en place' },
-          { '@type': 'Offer', name: 'Abonnement — premier agent', price: '149', priceCurrency: 'EUR', description: "Par mois, HT, sans engagement ; dégressif jusqu'à -50 % pour le cinquième agent" },
-          { '@type': 'Offer', name: 'Connecteur supplémentaire', price: '9.99', priceCurrency: 'EUR', description: "Par mois et par connecteur actif, HT ; Google Workspace, Outlook, Facebook, Instagram, TikTok et LinkedIn inclus" },
+          // Mêmes montants que supabase/functions/studio/contrats.ts.
+          { '@type': 'Offer', name: 'Stage gratuit', price: '0', priceCurrency: 'EUR', description: '10 h de travail par mois, sans limite de durée ni carte bancaire' },
+          { '@type': 'Offer', name: 'Contrat temps partiel', price: '59', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 75 h de travail, 3 badges d\'accès ; sans engagement en CDD, 2 mois offerts en CDI annuel' },
+          { '@type': 'Offer', name: 'Contrat temps plein', price: '149', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 151,67 h de travail, 6 badges, 2 responsables, mode expert et astreinte' },
+          { '@type': 'Offer', name: 'Contrat équipe complète', price: '287', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 201,67 h de travail, 12 badges, 3 responsables, mode expert, astreinte et SAV prioritaire' },
+          { '@type': 'Offer', name: "Parcours d'intégration", price: '490', priceCurrency: 'EUR', description: 'HT, une fois ; une demi-journée avec un formateur, finançable par l\'OPCO' },
         ],
       },
       breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Agents IA', url: `${SITE}/agents-ia` }]),

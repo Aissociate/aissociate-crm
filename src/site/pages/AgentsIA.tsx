@@ -7,7 +7,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
 import { supabase } from '@/lib/supabase';
-import { APPLICATIONS_UN_CLIC, logoConnecteur, enumerer, libelle, TYPES_CONNECTEURS, useTarifConnecteurs, type TarifConnecteurs } from '@/lib/tarifConnecteurs';
+import { APPLICATIONS_UN_CLIC, logoConnecteur } from '@/lib/tarifConnecteurs';
+import { bulletin, COMPTEURS, CONTRATS, INTEGRATION_HT, INTERRUPTEURS, normaliser, type ContratId } from '../../../supabase/functions/studio/contrats';
 import SamDemo from '../components/SamDemo';
 
 /**
@@ -17,23 +18,18 @@ import SamDemo from '../components/SamDemo';
  * Le formulaire envoie au CRM comme les autres formulaires du site
  * (contact_requests → prospect via le trigger lead_to_contact).
  *
- * ⚠ Tous les montants de l'offre sont dans OFFRE ci-dessous : à modifier là, et
- * dans scripts/prerender.mjs (balises SEO et données structurées).
+ * ⚠ Les montants viennent de la grille des contrats du Studio
+ * (supabase/functions/studio/contrats.ts, la même que la facturation) ; les
+ * reprendre aussi dans scripts/prerender.mjs (balises SEO et données structurées)
+ * et dans le prompt de Sam (supabase/functions/studio-demo).
  */
 
 // ── L'offre ─────────────────────────────────────────────────────────────────
-const OFFRE = {
-  // Abonnement mensuel HT : prix du 1er, 2e, … 5e agent (dégressif jusqu'à -50 %). Aucuns frais de mise en place.
-  // Mêmes montants que PALIERS_AGENTS (supabase/functions/studio/stripe.ts) et OFFRE (studio-demo).
-  mensuelParRang: [149, 131, 112, 93, 74.5],
-  delaiJours: 15,
-  essaiJours: 7,              // essai gratuit ouvert à la fin du questionnaire (studio_config essai_jours)
-  // Connecteurs inclus et prix des autres : réglés dans CRM › Studio IA › Paramètres,
-  // lus en direct (useTarifConnecteurs, repli sur TARIF_DEFAUT de src/lib/tarifConnecteurs.ts).
-};
+const PAYANTS = CONTRATS.filter((c) => c.prix > 0);
+const PRIX_MIN = PAYANTS[0].prix;
 const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
 const LIEN_ESSAI = '/studio/demarrer?depuis=agents-ia';
-const mensuelRang = (i: number) => OFFRE.mensuelParRang[Math.min(i, OFFRE.mensuelParRang.length - 1)];
+const prixAvenant = (id: string) => [...COMPTEURS, ...INTERRUPTEURS].find((a) => a.id === id)!.prix;
 
 // ── L'équipe (miroir du catalogue du Studio : super-pouvoirs réels) ─────────
 type Agent = {
@@ -106,49 +102,42 @@ const AGENTS: Agent[] = [
   },
 ];
 
-const faqAgents = (t: TarifConnecteurs) => [
+const faqAgents = () => [
   { question: 'Est-ce un chatbot de plus ?', answer: "Non. Chaque agent est un spécialiste avec des missions cadrées (ses « super-pouvoirs »). Il connaît votre entreprise : votre fiche, vos tarifs, votre charte, les contenus que vous avez déjà validés. Si une demande sort de son métier, il ne bricole pas : il la confie au bon collègue." },
-  { question: 'Combien ça coûte vraiment ?', answer: `Un abonnement de ${OFFRE.mensuelParRang[0]} € HT par mois pour le premier agent, dégressif pour les suivants, jusqu'à ${eur(OFFRE.mensuelParRang[4])} pour le cinquième (-50 %). Aucuns frais de mise en place, sans engagement : vous résiliez quand vous voulez. Le calculateur de la page vous donne votre montant exact.` },
-  { question: 'Puis-je essayer avant de payer ?', answer: `Oui : ${OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt avec les agents choisis et vos identifiants arrivent par e-mail. À la fin de l'essai, vous choisissez votre abonnement ou vous arrêtez là : rien n'est facturé automatiquement.` },
-  { question: 'Les connecteurs sont-ils compris ?', answer: `${t.inclus.length ? `Oui pour ${enumerer(t.inclus.map((x) => libelle(x)))} (un compte de chaque). Tout autre connecteur actif` : 'Chaque connecteur actif'} (autre messagerie, serveur MCP, autre application${t.inclus.length ? ', compte supplémentaire' : ''}) coûte ${eur(t.prix)} HT par mois, uniquement tant qu'il est connecté.` },
-  { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Pour aller plus loin, notre équipe vous accompagne pendant ${OFFRE.delaiJours} jours : fiche entreprise, ressources, connecteurs et prise en main.` },
+  { question: 'Combien ça coûte vraiment ?', answer: `Vos agents commencent en stage, gratuitement et sans limite de durée (10 h de travail par mois, sans accès à vos outils). Ensuite, vous choisissez un contrat : ${PAYANTS.map((c) => `${c.nom} à ${eur(c.prix)}`).join(', ')} HT par mois, agents illimités. Vous ne payez que les heures de travail et les accès à vos outils dont ils ont besoin. En CDD, sans engagement ; en CDI annuel, deux mois offerts.` },
+  { question: 'Puis-je essayer avant de payer ?', answer: "Oui : tout commence par un stage gratuit, sans carte bancaire et sans limite de durée. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt et vos identifiants arrivent par e-mail. Vous signez un contrat seulement quand vous voulez plus d'heures ou brancher vos outils : rien n'est facturé automatiquement." },
+  { question: 'Les connecteurs sont-ils compris ?', answer: `Chaque outil relié (messagerie, agenda, réseau social, logiciel…) utilise un badge d'accès. Les contrats en comprennent : ${PAYANTS.map((c) => `${c.badges} en ${c.nom.toLowerCase()}`).join(', ')}. Un badge de plus coûte ${eur(prixAvenant('badges'))} HT par mois. Le stage n'en comprend pas.` },
+  { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Si vous voulez aller plus vite, un formateur installe vos agents et forme votre équipe en une demi-journée (parcours d'intégration à ${eur(INTEGRATION_HT)} HT, finançable par votre OPCO).` },
   { question: 'Les agents envoient-ils des messages à ma place ?', answer: "Ils préparent, vous validez. Rien ne part vers vos clients sans votre accord. Les connecteurs (Google Workspace, Outlook, Facebook, Instagram, LinkedIn, TikTok…) permettent de préparer du contenu directement adapté à vos outils." },
   { question: 'Et mes données ?', answer: "Votre espace est cloisonné : vos données ne sont visibles que de vous et de votre équipe. Hébergement en Union européenne, mots de passe et secrets chiffrés, conformité RGPD." },
 ];
 
 const PAS_A_PAS = [
-  { j: 'Jours 1 à 3', t: 'Audit et onboarding', d: 'Un appel pour comprendre votre activité, vos priorités et le ton de votre marque.' },
-  { j: 'Jours 4 à 10', t: 'Configuration', d: 'Fiche entreprise, ressources (tarifs, plaquette, charte), agents choisis, connecteurs.' },
-  { j: 'Jours 11 à 15', t: 'Tests et prise en main', d: 'Vos premières missions avec nous, ajustements, accès de votre équipe.' },
+  { j: 'Aujourd\'hui', t: 'Le stage', d: 'Questionnaire de 10 minutes : votre espace s\'ouvre, vos agents travaillent gratuitement 10 h par mois.' },
+  { j: 'Quand vous voulez', t: 'Le contrat', d: 'Plus d\'heures, des badges d\'accès à vos outils, des responsables : vous choisissez, sans engagement en CDD.' },
+  { j: 'En option', t: 'Le parcours d\'intégration', d: `Une demi-journée avec un formateur : outils branchés, équipe formée. ${eur(INTEGRATION_HT)} HT, finançable OPCO.` },
 ];
 
 const portrait = (id: string) => `/agents-ia/studio/${id}.webp`;
 const allerA = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 
 export default function AgentsIA() {
-  const [choisis, setChoisis] = useState<string[]>(['lea', 'hugo']);
   const [etat, setEtat] = useState<'saisie' | 'envoi' | 'ok' | 'erreur'>('saisie');
   const [erreur, setErreur] = useState('');
   const [faqOuverte, setFaqOuverte] = useState<number | null>(0);
   // Anti-spam : champ piège invisible + temps minimal de saisie (trigger base en renfort).
   const [piege, setPiege] = useState('');
   const [ouvertLe] = useState(() => Date.now());
-  const tarif = useTarifConnecteurs();
-  const inclusCourt = enumerer(tarif.inclus.map((t) => libelle(t, true)));
-  const enOption = [
-    ...TYPES_CONNECTEURS.filter((t) => !tarif.inclus.includes(t.type)).map((t) => t.libelle),
-    ...(tarif.inclus.length ? ["Compte supplémentaire d'un connecteur inclus"] : []),
-  ];
-  const faq = useMemo(() => faqAgents(tarif), [tarif]);
+  const faq = useMemo(() => faqAgents(), []);
+  const [contratChoisi, setContratChoisi] = useState<ContratId>('plein');
+  const [cdi, setCdi] = useState(false);
 
   const calcul = useMemo(() => {
-    const n = choisis.length;
-    const mensuel = Array.from({ length: n }, (_, i) => mensuelRang(i)).reduce((a, b) => a + b, 0);
-    const minutesSemaine = AGENTS.filter((a) => choisis.includes(a.id)).reduce((s, a) => s + a.minutes * 5, 0);
-    return { n, mensuel, heuresMois: Math.round((minutesSemaine * 4.3) / 60) };
-  }, [choisis]);
+    const c = CONTRATS.find((x) => x.id === contratChoisi)!;
+    const b = bulletin(normaliser({ contrat: contratChoisi, cdi }));
+    return { c, mensuel: b.mensuel_ht, annuel: b.annuel_ht };
+  }, [contratChoisi, cdi]);
 
-  const basculer = (id: string) => setChoisis((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
 
   const envoyer = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -159,15 +148,14 @@ export default function AgentsIA() {
     const tel = String(f.get('tel') ?? '').trim();
     const email = String(f.get('email') ?? '').trim().toLowerCase();
     const [premier, ...reste] = nom.split(' ');
-    const equipe = AGENTS.filter((a) => choisis.includes(a.id)).map((a) => `${a.prenom} (${a.metier})`).join(', ') || 'à définir';
     setEtat('envoi'); setErreur('');
     const { error } = await supabase.from('contact_requests').insert([{
       first_name: reste.length ? premier : null,
       last_name: reste.length ? reste.join(' ') : premier,
       email: email || null, phone: tel, company: societe || null,
       request_type: 'Studio IA (agents IA)',
-      message: `Demande d'appel de 20 min — Studio IA. Entreprise : ${societe}. Agents envisagés : ${equipe}. `
-        + `Estimation affichée : ${eur(calcul.mensuel)} HT/mois.`,
+      message: `Demande d'appel de 20 min — Studio IA. Entreprise : ${societe}. `
+        + `Contrat envisagé : ${calcul.c.nom} ${cdi ? '(CDI annuel)' : '(CDD mensuel)'}, ${eur(calcul.mensuel)} HT/mois.`,
       source: window.location.pathname, status: 'new',
     }]);
     if (error) { setErreur(error.message); setEtat('erreur'); return; }
@@ -181,7 +169,7 @@ export default function AgentsIA() {
     </button>
   );
 
-  const Essai = ({ texte = `Essayer gratuitement ${OFFRE.essaiJours} jours`, plein = false }: { texte?: string; plein?: boolean }) => (
+  const Essai = ({ texte = 'Commencer en stage gratuit', plein = false }: { texte?: string; plein?: boolean }) => (
     <a href={LIEN_ESSAI}
       className={`inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 ${plein ? 'w-full' : ''}`}>
       {texte} <ArrowRight className="h-4 w-4" />
@@ -191,9 +179,9 @@ export default function AgentsIA() {
   return (
     <>
       <SEO
-        title={`Studio IA : votre équipe d'agents IA — essai gratuit, dès ${OFFRE.mensuelParRang[0]} €/mois | Aissociate`}
-        description={`Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Essai gratuit de ${OFFRE.essaiJours} jours, sans frais de mise en place, accompagnement à La Réunion. Dès ${OFFRE.mensuelParRang[0]} € HT/mois.`}
-        keywords="agent IA PME, agents IA La Réunion, essai gratuit agent IA, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion"
+        title={`Studio IA : votre équipe d'agents IA — stage gratuit, contrats dès ${PRIX_MIN} €/mois | Aissociate`}
+        description={`Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Ils commencent en stage gratuit, sans limite de durée ; contrats dès ${PRIX_MIN} € HT/mois, agents illimités, accompagnement à La Réunion.`}
+        keywords="agent IA PME, agents IA La Réunion, agent IA gratuit, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion"
         url={`${SITE_URL}/agents-ia`}
         image={`${SITE_URL}/agents-ia/studio/equipe-og.jpg`}
         imageAlt="Studio IA Aissociate : l'équipe d'agents IA"
@@ -217,7 +205,7 @@ export default function AgentsIA() {
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-neutral-300">
               Sept spécialistes qui connaissent vos prix, votre ton et vos clients : posts, prospection, e-mails, articles,
-              courriers, recrutement. Vous décidez, ils préparent. Essayez-les <b className="text-white">gratuitement pendant {OFFRE.essaiJours} jours</b>, sans carte bancaire.
+              courriers, recrutement. Vous décidez, ils préparent. Ils commencent <b className="text-white">en stage, gratuitement et sans limite de durée</b>, sans carte bancaire.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Essai />
@@ -243,8 +231,8 @@ export default function AgentsIA() {
             </figure>
             <ul className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-sm text-neutral-300">
               {[
-                [BadgeCheck, `Essai gratuit de ${OFFRE.essaiJours} jours, sans carte bancaire`],
-                [Clock, 'Sans frais de mise en place, sans engagement'],
+                [BadgeCheck, 'Stage gratuit, sans limite de durée ni carte bancaire'],
+                [Clock, `Contrats dès ${PRIX_MIN} € HT/mois, sans engagement en CDD`],
                 [Lock, 'Données hébergées en Europe, RGPD'],
                 [ShieldCheck, 'Aissociate, organisme certifié Qualiopi'],
               ].map(([Icone, t]) => {
@@ -377,8 +365,8 @@ export default function AgentsIA() {
 
         {/* ── 6. Mise en place ── */}
         <section className="mx-auto max-w-6xl px-4 py-20 sm:px-8">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Vos agents travaillent dès aujourd'hui. Nous vous accompagnons {OFFRE.delaiJours} jours.</h2>
-          <p className="mt-3 max-w-2xl text-neutral-600">Votre espace s'ouvre à la fin du questionnaire. Ensuite, vous n'êtes pas seul : une équipe humaine, à La Réunion, affine tout avec vous. C'est compris dans l'abonnement.</p>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Vos agents travaillent dès aujourd'hui. Vous montez en charge à votre rythme.</h2>
+          <p className="mt-3 max-w-2xl text-neutral-600">Votre espace s'ouvre à la fin du questionnaire. Vous n'êtes pas seul pour autant : une équipe humaine, à La Réunion, répond à vos questions et peut tout installer avec vous.</p>
           <ol className="mt-10 grid gap-5 md:grid-cols-3">
             {PAS_A_PAS.map((p, i) => (
               <li key={p.t} className="rounded-2xl border border-neutral-200 bg-white p-6">
@@ -404,9 +392,9 @@ export default function AgentsIA() {
                   ['Leurs super-pouvoirs', 'Missions cadrées par des formulaires simples : résultat fiable, sans savoir « parler à l\'IA ».'],
                   ['Votre base de connaissances', 'Tarifs, plaquettes, charte, FAQ : lus par les agents avant chaque mission.'],
                   ['Visuels et vidéos IA', 'Générés à la demande, rangés dans votre galerie, prêts à publier.'],
-                  ['Les connecteurs', `${inclusCourt ? `${inclusCourt} inclus ; les autres` : 'Chaque connecteur'} à ${eur(tarif.prix)} HT / mois (détail ci-dessous).`],
-                  ['L\'accompagnement humain', `Mise en place et prise en main avec vous pendant ${OFFRE.delaiJours} jours, sans frais, support à La Réunion.`],
-                  [`${OFFRE.essaiJours} jours d'essai gratuit`, 'Sans carte bancaire. Rien n\'est facturé automatiquement à la fin de l\'essai.'],
+                  ['Des badges d\'accès à vos outils', `Messagerie, agenda, réseaux sociaux, logiciels : ${PAYANTS.map((c) => c.badges).join(', ')} badges selon le contrat, ${eur(prixAvenant('badges'))} HT / mois le badge de plus (détail ci-dessous).`],
+                  ['Formation continue', 'Vos agents reçoivent toutes les mises à jour sans supplément, quel que soit le contrat.'],
+                  ['Un stage gratuit, sans limite de durée', 'Sans carte bancaire. Rien n\'est facturé tant que vous ne signez pas de contrat.'],
                 ].map(([t, d]) => (
                   <li key={t} className="flex gap-3 rounded-xl border border-neutral-200 p-4">
                     <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
@@ -417,70 +405,63 @@ export default function AgentsIA() {
 
               <div className="lg:sticky lg:top-24 lg:self-start">
                 <div className="rounded-2xl border-2 border-neutral-900 p-6">
-                  <p className="font-semibold">Composez votre équipe</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {AGENTS.map((a) => {
-                      const on = choisis.includes(a.id);
+                  <p className="font-semibold">Choisissez votre contrat</p>
+                  <div role="group" aria-label="Type d'engagement" className="mt-3 inline-flex rounded-xl bg-neutral-100 p-1 text-sm">
+                    {[false, true].map((v) => (
+                      <button key={String(v)} type="button" aria-pressed={cdi === v} onClick={() => setCdi(v)}
+                        className={`rounded-lg px-3 py-1.5 font-medium ${cdi === v ? 'bg-white shadow-sm' : 'text-neutral-500'}`}>
+                        {v ? 'CDI · 2 mois offerts' : 'CDD · sans engagement'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {CONTRATS.map((c) => {
+                      const on = c.id === contratChoisi;
                       return (
-                        <button key={a.id} type="button" onClick={() => basculer(a.id)} aria-pressed={on}
-                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${on ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 hover:border-neutral-400'}`}>
-                          <img src={portrait(a.id)} alt="" className="h-5 w-5 rounded-full object-cover object-top" style={{ background: a.couleur }} /> {a.prenom}
+                        <button key={c.id} type="button" onClick={() => setContratChoisi(c.id)} aria-pressed={on}
+                          className={`rounded-xl border p-3 text-left transition-colors ${on ? 'border-orange-500 ring-2 ring-orange-100' : 'border-neutral-200 hover:border-neutral-400'}`}>
+                          <span className="flex items-center justify-between gap-2 font-semibold">{c.nom}{c.reco && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-orange-700">Recommandé</span>}</span>
+                          <span className="block text-sm text-neutral-500">{c.prix ? `${eur(c.prix)} HT / mois` : 'Gratuit, sans limite'}</span>
                         </button>
                       );
                     })}
                   </div>
-                  {calcul.n === 0 ? <p className="mt-6 text-sm text-neutral-500">Choisissez au moins un agent.</p> : (
-                    <dl className="mt-6 space-y-3 text-sm">
-                      <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800">
-                        <dt>Mise en place et accompagnement</dt><dd>Offerts</dd>
-                      </div>
-                      <div>
-                        {Array.from({ length: calcul.n }, (_, i) => (
-                          <div key={i} className="flex justify-between text-neutral-600">
-                            <dt>{i + 1}{i ? 'e' : 'er'} agent{i > 0 && mensuelRang(i) < OFFRE.mensuelParRang[0] ? ` (−${Math.round((1 - mensuelRang(i) / OFFRE.mensuelParRang[0]) * 100)} %)` : ''}</dt>
-                            <dd>{eur(mensuelRang(i))} / mois</dd>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-end justify-between border-t border-neutral-200 pt-3">
-                        <dt className="font-semibold">Abonnement</dt>
-                        <dd className="text-3xl font-semibold">{eur(calcul.mensuel)}<span className="text-sm font-normal text-neutral-500"> HT / mois</span></dd>
-                      </div>
-                      <p className="text-xs text-neutral-500">
-                        {inclusCourt && <>Connecteurs inclus : {inclusCourt}. </>}Autre connecteur actif : + {eur(tarif.prix)} HT / mois chacun.
-                      </p>
-                      <p className="rounded-lg bg-neutral-50 px-3 py-2 text-neutral-600">
-                        Soit environ <b>{calcul.heuresMois} h</b> libérées chaque mois si vous confiez une mission par jour ouvré à chaque agent (estimation).
-                      </p>
-                    </dl>
-                  )}
-                  <div className="mt-6"><Essai texte={`Essayer gratuitement ${OFFRE.essaiJours} jours`} plein /></div>
-                  <p className="mt-2 text-center text-xs text-neutral-500">Sans carte bancaire. Vous choisissez vos agents dans le questionnaire.</p>
+                  <dl className="mt-6 space-y-3 text-sm">
+                    <ul className="space-y-1.5 text-neutral-600">
+                      {calcul.c.points.map((pt) => <li key={pt} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{pt}</li>)}
+                    </ul>
+                    <div className="flex items-end justify-between border-t border-neutral-200 pt-3">
+                      <dt className="font-semibold">{calcul.c.prix ? 'Contrat' : 'Stage'}</dt>
+                      <dd className="text-3xl font-semibold">{eur(calcul.mensuel)}<span className="text-sm font-normal text-neutral-500"> HT / mois</span></dd>
+                    </div>
+                    {calcul.annuel != null && <p className="text-xs text-neutral-500">Soit {eur(calcul.annuel)} HT réglés pour l'année (12 mois pour le prix de 10).</p>}
+                    <p className="text-xs text-neutral-500">Agents illimités. 1 heure de travail = 20 actions d'agent. Avenants à tout moment : heures, badges, responsables, archives.</p>
+                  </dl>
+                  <div className="mt-6"><Essai plein /></div>
+                  <p className="mt-2 text-center text-xs text-neutral-500">Sans carte bancaire. Vous signez le contrat depuis votre espace, quand vous voulez.</p>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-neutral-500">
-                  Montants HT. Abonnement mensuel sans engagement, résiliable à tout moment depuis votre espace.
+                  Montants HT. En CDD, sans engagement, résiliable à tout moment depuis votre espace ; en CDI, engagement d'un an.
                 </p>
               </div>
             </div>
 
             <div id="connecteurs" className="mt-12 grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6">
-                <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">Connecteurs inclus</p>
-                <p className="mt-1 text-sm text-neutral-600">Compris dans l'abonnement, un compte de chaque.</p>
+                <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">Badges d'accès compris</p>
+                <p className="mt-1 text-sm text-neutral-600">Un badge = un outil ouvert à vos agents (une messagerie, un agenda, une page…).</p>
                 <ul className="mt-4 space-y-2">
-                  {tarif.inclus.map((t) => libelle(t)).map((c) => (
-                    <li key={c} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 shrink-0 text-emerald-600" />{c}</li>
+                  {CONTRATS.map((c) => (
+                    <li key={c.id} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 shrink-0 text-emerald-600" />{c.nom} : {c.badges ? `${c.badges} badges` : 'aucun badge'}</li>
                   ))}
                 </ul>
               </div>
               <div className="rounded-2xl border border-neutral-200 p-6">
-                <p className="text-sm font-semibold uppercase tracking-wider text-orange-600">Connecteurs en option</p>
-                <p className="mt-1 text-sm text-neutral-600">
-                  <b className="text-neutral-900">{eur(tarif.prix)} HT / mois</b> par connecteur actif, facturé seulement tant qu'il est connecté.
-                </p>
+                <p className="text-sm font-semibold uppercase tracking-wider text-orange-600">Avenants au contrat</p>
+                <p className="mt-1 text-sm text-neutral-600">Modifiables à tout moment, sans changer de contrat.</p>
                 <ul className="mt-4 space-y-2">
-                  {enOption.map((c) => (
-                    <li key={c} className="flex items-center gap-2 text-sm"><ArrowRight className="h-4 w-4 shrink-0 text-orange-500" />{c}</li>
+                  {[...COMPTEURS, ...INTERRUPTEURS].map((a) => (
+                    <li key={a.id} className="flex items-center gap-2 text-sm"><ArrowRight className="h-4 w-4 shrink-0 text-orange-500" />{a.nom} : <b className="font-medium">{eur(a.prix)} HT</b> {a.unite}</li>
                   ))}
                 </ul>
               </div>
@@ -488,7 +469,7 @@ export default function AgentsIA() {
               <p className="font-semibold">Toutes les autres applications, en un clic</p>
               <p className="mt-1 text-sm text-neutral-600">
                 Vous les reliez vous-même depuis votre espace, sans attendre : un clic, vous autorisez l'accès, c'est connecté.
-                Chacune est facturée {eur(tarif.prix)} HT / mois comme tout connecteur actif. Votre logiciel n'est pas dans la liste ? Demandez-le.
+                Chacune utilise un badge d'accès de votre contrat. Votre logiciel n'est pas dans la liste ? Demandez-le.
               </p>
               <dl className="mt-5 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
                 {APPLICATIONS_UN_CLIC.map((g) => (
@@ -514,7 +495,7 @@ export default function AgentsIA() {
           <ShieldCheck className="mx-auto h-12 w-12 text-orange-500" />
           <h2 className="mt-4 text-3xl font-semibold tracking-tight">Notre engagement : vous essayez avant de payer.</h2>
           <p className="mt-4 text-lg text-neutral-700">
-            {OFFRE.essaiJours} jours d'essai gratuit, sans carte bancaire et sans frais de mise en place. Ensuite, un abonnement mensuel sans engagement,
+            Vos agents commencent en stage, gratuitement, sans carte bancaire et sans limite de durée. Ensuite, un contrat sans engagement en CDD,
             que vous arrêtez quand vous voulez. Et si le Studio n'est pas le bon outil pour vous, nous vous le dirons franchement.
           </p>
           <div className="mt-6"><Essai /></div>
@@ -568,7 +549,7 @@ export default function AgentsIA() {
               </p>
               <ul className="mt-6 space-y-2 text-sm text-neutral-300">
                 <li className="flex items-center gap-2"><CalendarCheck className="h-4 w-4 text-orange-400" /> Appel gratuit de 20 minutes</li>
-                <li className="flex items-center gap-2"><Users className="h-4 w-4 text-orange-400" /> Équipe proposée : {AGENTS.filter((a) => choisis.includes(a.id)).map((a) => a.prenom).join(', ') || 'à définir ensemble'}</li>
+                <li className="flex items-center gap-2"><Users className="h-4 w-4 text-orange-400" /> Contrat envisagé : {calcul.c.nom}{calcul.c.prix ? ` · ${eur(calcul.mensuel)} HT / mois` : ''}</li>
                 <li className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-orange-400" /> Réponse franche, même si ce n'est pas pour vous</li>
               </ul>
             </div>
@@ -604,7 +585,7 @@ export default function AgentsIA() {
                   {etat === 'erreur' && <p className="text-sm text-red-600" role="alert">Une erreur est survenue{erreur ? ` (${erreur})` : ''}. Réessayez, ou appelez-nous au 06 92 24 68 60.</p>}
                   <p className="text-center text-xs text-neutral-500">Sans engagement · données hébergées en Union européenne · RGPD</p>
                   <p className="border-t border-neutral-200 pt-3 text-center text-sm text-neutral-600">
-                    Vous préférez essayer tout de suite ? <a href={LIEN_ESSAI} className="font-semibold text-orange-600 underline">Ouvrez votre essai gratuit de {OFFRE.essaiJours} jours</a> : votre espace est prêt dès la fin du questionnaire.
+                    Vous préférez essayer tout de suite ? <a href={LIEN_ESSAI} className="font-semibold text-orange-600 underline">Ouvrez votre espace en stage gratuit</a> : votre espace est prêt dès la fin du questionnaire.
                   </p>
                 </form>
               )}

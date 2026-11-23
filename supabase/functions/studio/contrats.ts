@@ -9,7 +9,7 @@
 // (src/studio/pages/Contrat.tsx). Changer un montant impose une nouvelle version de clé Stripe
 // (VERSION) : un prix Stripe ne se modifie pas.
 
-export const VERSION = "v3";
+export const VERSION = "v4"; // v4 (23/11) : nouveaux prix des avenants ; v3 encore lue
 /** 1 heure de travail = 20 actions d'agent (= 20 demandes au quota du mois). */
 export const ACTIONS_PAR_HEURE = 20;
 /** CDI : 12 mois pour le prix de 10. */
@@ -51,18 +51,18 @@ export type Avenant = { id: CompteurId | InterrupteurId; nom: string; descriptio
 
 /** Avenants à quantité. */
 export const COMPTEURS: (Avenant & { id: CompteurId })[] = [
-  { id: "heures", nom: "Heures supplémentaires", description: "Par lot de 20 h, quand vos agents dépassent leur temps de travail", prix: 9.9, unite: "/ lot de 20 h / mois", libelle: "lot d'heures supplémentaires" },
-  { id: "badges", nom: "Badges d'accès supplémentaires", description: "Un outil de plus ouvert à vos agents : messagerie, agenda, logiciel de caisse…", prix: 4.9, unite: "/ badge / mois", libelle: "badge d'accès" },
-  { id: "responsables", nom: "Responsables supplémentaires", description: "Un membre de votre équipe qui donne des consignes aux agents", prix: 9.9, unite: "/ responsable / mois", libelle: "responsable" },
-  { id: "archives", nom: "Armoire d'archives", description: "100 Go de plus pour vos documents", prix: 4.9, unite: "/ 100 Go / mois", libelle: "armoire d'archives" },
+  { id: "heures", nom: "Heures supplémentaires", description: "Par lot de 20 h, quand vos agents dépassent leur temps de travail", prix: 19.9, unite: "/ lot de 20 h / mois", libelle: "lot d'heures supplémentaires" },
+  { id: "badges", nom: "Badges d'accès supplémentaires", description: "Un outil de plus ouvert à vos agents : messagerie, agenda, logiciel de caisse…", prix: 9.9, unite: "/ badge / mois", libelle: "badge d'accès" },
+  { id: "responsables", nom: "Responsables supplémentaires", description: "Un membre de votre équipe qui donne des consignes aux agents", prix: 14.9, unite: "/ responsable / mois", libelle: "responsable" },
+  { id: "archives", nom: "Armoire d'archives", description: "100 Go de plus pour vos documents", prix: 9.9, unite: "/ 100 Go / mois", libelle: "armoire d'archives" },
 ];
 export const HEURES_PAR_LOT = 20;
 export const GO_PAR_ARMOIRE = 100;
 
 /** Avenants oui / non (inclus d'office dans certains contrats). */
 export const INTERRUPTEURS: (Avenant & { id: InterrupteurId })[] = [
-  { id: "expert", nom: "Promotion : qualification Expert", description: "Vos agents passent sur le modèle d'IA supérieur pour les tâches délicates", prix: 19.9, unite: "/ mois", libelle: "qualification Expert" },
-  { id: "astreinte", nom: "Astreinte", description: "Une personne d'Aissociate répond en priorité, sous 2 h ouvrées", prix: 9.9, unite: "/ mois", libelle: "astreinte" },
+  { id: "expert", nom: "Promotion : qualification Expert", description: "Vos agents passent sur le modèle d'IA supérieur pour les tâches délicates", prix: 29.9, unite: "/ mois", libelle: "qualification Expert" },
+  { id: "astreinte", nom: "Astreinte", description: "Une personne d'Aissociate répond en priorité, sous 4 h ouvrées", prix: 29.9, unite: "/ mois", libelle: "astreinte" },
 ];
 
 export type Choix = {
@@ -143,7 +143,7 @@ export function articles(ch: Choix): { element: string; nom: string; quantite: n
 
 /** Choix reconstitué depuis les articles d'un abonnement Stripe ; null si ce n'est pas un contrat de cette grille. */
 export function choixDepuisArticles(items: { lookup_key?: string | null; quantite: number }[]): Choix | null {
-  const re = new RegExp(`^studio_${VERSION}_(contrat_[a-z]+|avenant_[a-z]+)_(mois|an)$`);
+  const re = new RegExp(`^studio_(?:v3|${VERSION})_(contrat_[a-z]+|avenant_[a-z]+)_(mois|an)$`);
   const ch: Choix = { ...CHOIX_STAGE };
   let trouve = false;
   for (const it of items) {
