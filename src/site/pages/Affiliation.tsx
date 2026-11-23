@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ArrowRight, BadgeCheck, Briefcase, Calculator, Check, GraduationCap, Handshake, Megaphone,
   MonitorSmartphone, Repeat, Users, Building2,
@@ -13,6 +14,7 @@ import { CONTRATS } from '../../../supabase/functions/studio/contrats';
  * Programme partenaires (/affiliation) : recrutement d'apporteurs d'affaires pour le Studio IA.
  * Commission : 30 % du montant HT encaissé les 12 premiers mois d'un client, puis 10 % tant qu'il reste abonné.
  * Les candidatures arrivent dans contact_requests (type « Partenariat (affiliation) »), comme les autres demandes du site.
+ * Les commerciaux indépendants ont un bouton à part vers le test commercial noté (/affiliation/test).
  */
 const TAUX_AN_1 = 0.3;
 const TAUX_ENSUITE = 0.1;
@@ -46,6 +48,7 @@ const FAQ = [
 
 export default function Affiliation() {
   const [clients, setClients] = useState(10);
+  const [annees, setAnnees] = useState(5);
   const [contratId, setContratId] = useState(PAYANTS.find((c) => c.id === 'plein')?.id ?? PAYANTS[0].id);
   const [etat, setEtat] = useState<'idle' | 'envoi' | 'ok' | 'erreur'>('idle');
   const [erreur, setErreur] = useState('');
@@ -55,8 +58,13 @@ export default function Affiliation() {
   const calcul = useMemo(() => {
     const c = PAYANTS.find((x) => x.id === contratId) ?? PAYANTS[0];
     const annuel = clients * c.prix * 12;
-    return { c, an1: annuel * TAUX_AN_1, ensuite: annuel * TAUX_ENSUITE, mois1: (annuel * TAUX_AN_1) / 12 };
-  }, [clients, contratId]);
+    const an1 = annuel * TAUX_AN_1;
+    const ensuite = annuel * TAUX_ENSUITE;
+    // Année par année sur la durée de vie choisie : 30 % la 1re, 10 % les suivantes.
+    const parAn = Array.from({ length: annees }, (_, i) => (i === 0 ? an1 : ensuite));
+    const total = parAn.reduce((s, x) => s + x, 0);
+    return { c, an1, ensuite, mois1: an1 / 12, moisEnsuite: ensuite / 12, parAn, total };
+  }, [clients, contratId, annees]);
 
   const allerA = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -166,19 +174,45 @@ export default function Affiliation() {
                   ))}
                 </div>
               </fieldset>
+              <div>
+                <label htmlFor="sim-annees" className="flex items-baseline justify-between text-sm font-medium">
+                  Durée de vie moyenne d’un client
+                  <span className="font-display text-2xl font-extrabold">{annees} an{annees > 1 ? 's' : ''}</span>
+                </label>
+                <input id="sim-annees" type="range" min={1} max={10} value={annees}
+                  onChange={(e) => setAnnees(Number(e.target.value))} className="mt-3 w-full accent-orange-500" />
+                <p className="mt-2 text-xs text-neutral-500">30 % la première année, puis 10 % chaque année tant que le client reste abonné, sans limite de durée.</p>
+              </div>
             </div>
             <div className="flex flex-col justify-between gap-6 bg-neutral-950 p-8 text-white" aria-live="polite">
-              <div>
-                <p className="text-sm text-neutral-400">La première année</p>
-                <p className="font-display text-5xl font-extrabold tracking-tight text-orange-400">{eur(calcul.an1)}</p>
-                <p className="mt-1 text-sm text-neutral-300">soit {eur(calcul.mois1)} par mois</p>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-neutral-400">1re année · 30 %</p>
+                  <p className="font-display text-4xl font-extrabold tracking-tight text-orange-400">{eur(calcul.an1)}</p>
+                  <p className="mt-1 text-sm text-neutral-300">{eur(calcul.mois1)} par mois</p>
+                </div>
+                <div>
+                  <p className="text-sm text-neutral-400">Années suivantes · 10 %</p>
+                  <p className="font-display text-4xl font-extrabold tracking-tight">{eur(calcul.ensuite)}</p>
+                  <p className="mt-1 text-sm text-neutral-300">{eur(calcul.moisEnsuite)} par mois</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-neutral-400">Puis chaque année</p>
-                <p className="font-display text-3xl font-extrabold tracking-tight">{eur(calcul.ensuite)}</p>
+              {/* Année par année : la hauteur des barres suit le montant. */}
+              <div aria-hidden="true" className="flex h-24 items-end gap-1.5">
+                {calcul.parAn.map((m, i) => (
+                  <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                    <div className={`w-full ${i === 0 ? 'bg-orange-400' : 'bg-white/30'}`}
+                      style={{ height: `${Math.max(4, (m / (calcul.an1 || 1)) * 80)}px` }} />
+                    <span className="text-[10px] text-neutral-500">A{i + 1}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-white/15 pt-5">
+                <p className="text-sm text-neutral-400">Total sur la durée de vie ({annees} an{annees > 1 ? 's' : ''})</p>
+                <p className="font-display text-5xl font-extrabold tracking-tight text-orange-400">{eur(calcul.total)}</p>
               </div>
               <p className="text-xs text-neutral-500">
-                Estimation pour {clients} client{clients > 1 ? 's' : ''} en contrat {calcul.c.nom.toLowerCase()} mensuel, tous abonnés toute l’année.
+                Estimation pour {clients} client{clients > 1 ? 's' : ''} en contrat {calcul.c.nom.toLowerCase()} mensuel, tous abonnés pendant {annees} an{annees > 1 ? 's' : ''}.
                 Commission calculée sur le montant HT encaissé, hors avenants.
               </p>
             </div>
@@ -218,6 +252,20 @@ export default function Affiliation() {
                 <p className="mt-2 text-sm text-neutral-600">{texte}</p>
               </div>
             ))}
+          </div>
+          {/* Seul accès au test commercial : les autres profils passent par le formulaire de candidature. */}
+          <div className="mt-px flex flex-col gap-6 bg-neutral-950 p-6 text-white sm:p-8 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="font-mono text-xs font-medium uppercase tracking-[0.16em] text-orange-400">Commerciaux indépendants</p>
+              <h3 className="mt-2 text-2xl font-semibold">Vous prospectez et signez pour vivre ?</h3>
+              <p className="mt-2 max-w-2xl text-neutral-300">
+                Votre candidature passe par un test commercial en ligne de 20 à 25 minutes : profil, mises en situation, calculs et réponses écrites.
+              </p>
+            </div>
+            <Link to="/affiliation/test"
+              className="inline-flex shrink-0 items-center gap-2 bg-orange-500 px-6 py-3 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400">
+              Passer le test commercial <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </section>
 

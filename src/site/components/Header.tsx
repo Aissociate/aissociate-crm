@@ -12,6 +12,8 @@ const LIENS = [
   { to: '/assistance', label: 'Assistance' },
   { to: '/developpement', label: 'Développement' },
   { to: '/blog', label: 'Blog' },
+  // Lien affiché sur grand écran seulement dans la barre (sinon elle déborde vers 1024 px) ; toujours dans le menu mobile.
+  { to: '/affiliation', label: 'Affiliation', grandEcran: true },
 ];
 
 export default function Header() {
@@ -43,7 +45,7 @@ export default function Header() {
                 to={l.to}
                 end={l.to === '/'}
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`
+                  `${l.grandEcran ? 'hidden xl:flex' : 'flex'} items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`
                 }
               >
                 {l.label}
