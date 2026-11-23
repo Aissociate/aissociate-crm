@@ -53,27 +53,27 @@ export function buildSignatureHtml(
   // Préfixe « expéditeur » — activé par défaut. Priorité à la signature personnelle
   // (texte libre propre à l'utilisateur) ; à défaut, nom + coordonnées.
   if (c.include_sender !== false && sender?.signature && sender.signature.trim()) {
-    lines.push(`<div style="color:#0f172a">${esc(sender.signature.trim()).replace(/\n/g, '<br>')}</div>`);
+    lines.push(`<div style="color:#17120e">${esc(sender.signature.trim()).replace(/\n/g, '<br>')}</div>`);
   } else if (c.include_sender !== false && sender && (sender.prenom || sender.nom)) {
-    lines.push(`<div style="font-weight:600;color:#0f172a">${esc([sender.prenom, sender.nom].filter(Boolean).join(' '))}</div>`);
+    lines.push(`<div style="font-weight:600;color:#17120e">${esc([sender.prenom, sender.nom].filter(Boolean).join(' '))}</div>`);
     const sub = [
       sender.telephone ? telLink(String(sender.telephone)) : '',
       sender.email ? mailLink(String(sender.email)) : '',
     ].filter(Boolean).join(' · ');
-    if (sub) lines.push(`<div style="color:#475569">${sub}</div>`);
+    if (sub) lines.push(`<div style="color:#615850">${sub}</div>`);
   }
 
   // Bloc organisme (coordonnées).
-  if (o.nom) lines.push(`<div style="font-weight:600;color:#0f172a">${esc(o.nom)}</div>`);
+  if (o.nom) lines.push(`<div style="font-weight:600;color:#17120e">${esc(o.nom)}</div>`);
   const addr = [o.adresse, [o.code_postal, o.ville].filter(Boolean).join(' ')]
     .filter(Boolean).map((s) => esc(String(s))).join(', ');
-  if (addr) lines.push(`<div style="color:#475569">${addr}</div>`);
+  if (addr) lines.push(`<div style="color:#615850">${addr}</div>`);
   const contact = [
     o.telephone ? `Tél. ${telLink(String(o.telephone))}` : '',
     o.email ? mailLink(String(o.email)) : '',
     o.site_web ? webLink(String(o.site_web)) : '',
   ].filter(Boolean).join(' · ');
-  if (contact) lines.push(`<div style="color:#475569">${contact}</div>`);
+  if (contact) lines.push(`<div style="color:#615850">${contact}</div>`);
 
   const logo = o.logo_url
     ? `<img src="${o.logo_url}" alt="${esc(o.nom ?? '')}" style="max-height:56px;margin-bottom:8px;display:block" />`
@@ -81,7 +81,7 @@ export function buildSignatureHtml(
 
   if (!logo && lines.length === 0) return '';
 
-  return `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5">
+  return `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e6dcd2;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5">
 ${logo}${lines.join('\n')}
 </div>`;
 }

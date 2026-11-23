@@ -47,8 +47,8 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{
           minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 24, background: '#0b1120', color: '#94a3b8', fontSize: 14,
-          fontFamily: 'Inter, system-ui, sans-serif',
+          padding: 24, background: '#0e0c0a', color: '#b3a79a', fontSize: 14,
+          fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
         }}>
           Mise à jour de l'application…
         </div>
@@ -58,20 +58,20 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{
           minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 24, background: '#0b1120', color: '#e2e8f0',
-          fontFamily: 'Inter, system-ui, sans-serif',
+          padding: 24, background: '#0e0c0a', color: '#e6dcd2',
+          fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
         }}>
           <div style={{
-            maxWidth: 640, width: '100%', background: '#111827', border: '1px solid #1f2937',
+            maxWidth: 640, width: '100%', background: '#1b1713', border: '1px solid #3a3129',
             borderRadius: 12, padding: 24,
           }}>
-            <h1 style={{ margin: 0, fontSize: 18, color: '#fb9a3c' }}>Une erreur est survenue</h1>
-            <p style={{ color: '#94a3b8', fontSize: 14 }}>
+            <h1 style={{ margin: 0, fontSize: 18, color: '#f0823f' }}>Une erreur est survenue</h1>
+            <p style={{ color: '#b3a79a', fontSize: 14 }}>
               L'application a rencontré une erreur au chargement. Détail ci-dessous :
             </p>
             <pre style={{
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#0b1120',
-              border: '1px solid #1f2937', borderRadius: 8, padding: 12, fontSize: 12,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#0e0c0a',
+              border: '1px solid #3a3129', borderRadius: 8, padding: 12, fontSize: 12,
               color: '#fca5a5', maxHeight: 280, overflow: 'auto',
             }}>
               {this.state.error.message}

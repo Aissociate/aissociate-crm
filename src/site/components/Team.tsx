@@ -12,9 +12,9 @@ export default function Team() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          <div className="bg-[#f6f6f4] rounded-2xl p-8 shadow-lg border border-blue-100 hover:shadow-sm transition-all">
+          <div className="bg-[#F2ECE4] rounded-2xl p-8 shadow-lg border border-blue-100 hover:shadow-sm transition-all">
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 bg-neutral-700 rounded-full flex items-center justify-center">
                 <User className="w-8 h-8 text-white" />
               </div>
               <div>
@@ -30,9 +30,9 @@ export default function Team() {
             </p>
           </div>
 
-          <div className="bg-[#f6f6f4] rounded-2xl p-8 shadow-lg border border-emerald-100 hover:shadow-sm transition-all">
+          <div className="bg-[#F2ECE4] rounded-2xl p-8 shadow-lg border border-emerald-100 hover:shadow-sm transition-all">
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 bg-neutral-700 rounded-full flex items-center justify-center">
                 <Users className="w-8 h-8 text-white" />
               </div>
               <div>

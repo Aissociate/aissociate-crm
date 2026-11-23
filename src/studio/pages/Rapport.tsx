@@ -85,7 +85,7 @@ export default function Rapport() {
                         <span className="text-neutral-500">{a.missions} mission{a.missions > 1 ? 's' : ''} · {minutesEnTexte(a.minutes)}</span>
                       </div>
                       <div className="mt-1 h-2 overflow-hidden rounded-full bg-neutral-100">
-                        <div className="h-full rounded-full" style={{ width: `${Math.max(4, (a.minutes / maxMinutes) * 100)}%`, background: ag?.couleur ?? '#f97316' }} />
+                        <div className="h-full rounded-full" style={{ width: `${Math.max(4, (a.minutes / maxMinutes) * 100)}%`, background: ag?.couleur ?? '#ea6a1e' }} />
                       </div>
                     </div>
                   </div>

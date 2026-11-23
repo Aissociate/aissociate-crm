@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { FileText, LogOut } from 'lucide-react';
 import { appel } from '../api';
 import { Bouton, Carte, Chargement, Markdown, cx } from '../composants';
+import { Logo } from '@/components/Logo';
 
 type Textes = { version: string | null; documents: { titre: string; contenu: string }[] };
 
@@ -26,11 +27,11 @@ export default function AccepterCgv({ onAccepte, onDeconnexion, gerer }: {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f6f4] px-4 py-8 font-sans text-neutral-900 sm:px-8">
+    <div className="min-h-screen bg-[#F2ECE4] px-4 py-8 font-sans text-neutral-900 sm:px-8">
       <div className="mx-auto max-w-3xl space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-lg font-bold tracking-tight">A(I)ssociate <span className="text-orange-500">Studio</span></p>
+            <Logo size="sm" branche="Studio IA" fond="clair" />
             <h1 className="mt-3 text-2xl font-semibold">Avant de commencer</h1>
             <p className="mt-1 text-sm text-neutral-600">Merci de lire et d'accepter nos conditions générales de vente et notre accord de traitement des données personnelles.</p>
           </div>

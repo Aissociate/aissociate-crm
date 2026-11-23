@@ -74,7 +74,7 @@ function CrmFormationDetail({ f }) {
           <div className="bg-orange-50 rounded-2xl p-8 border border-orange-200 text-center">
             <h2 className="tracking-tight text-2xl font-semibold text-neutral-950 mb-3">Intéressé par cette formation ?</h2>
             <p className="text-neutral-600 mb-6">Demandez un devis personnalisé, finançable (CPF / OPCO / AGEFICE).</p>
-            <Link to={`/formulaire?formation=${encodeURIComponent(f.intitule)}`} className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all shadow-lg">Demander un devis</Link>
+            <Link to={`/formulaire?formation=${encodeURIComponent(f.intitule)}`} className="inline-block bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-3 rounded-xl font-semibold transition-all shadow-lg">Demander un devis</Link>
             <p className="text-sm text-neutral-500 mt-3">Réponse sous 24 h ouvrées</p>
           </div>
         </div>
@@ -793,7 +793,7 @@ export default function FormationDetailPage() {
               <div className="flex flex-wrap gap-2 mb-4">
                 {formation.isCertifying && (
                   <>
-                    <span className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-semibold">
+                    <span className="bg-orange-500 text-neutral-950 px-4 py-2 rounded-full text-sm font-semibold">
                       Formation certifiante
                     </span>
                     <span className="bg-emerald-500 text-white px-4 py-2 rounded-full text-sm font-semibold">
@@ -834,7 +834,7 @@ export default function FormationDetailPage() {
                   <Target className="w-8 h-8 text-orange-600" />
                   Objectifs de la formation
                 </h2>
-                <div className="bg-[#f6f6f4] rounded-2xl p-8 border border-neutral-200">
+                <div className="bg-[#F2ECE4] rounded-2xl p-8 border border-neutral-200">
                   <p className="text-neutral-600 mb-6">À l’issue de la formation, le participant sera capable de :</p>
                   <ul className="space-y-3">
                     {formation.objectives.map((obj: string, index: number) => (
@@ -894,7 +894,7 @@ export default function FormationDetailPage() {
                             href={fmt.cpfUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-sm"
+                            className="block w-full text-center bg-orange-500 hover:bg-orange-400 text-neutral-950 px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-sm"
                           >
                             S'inscrire via Mon Compte Formation
                           </a>
@@ -915,7 +915,7 @@ export default function FormationDetailPage() {
                 </h2>
                 <div className="grid sm:grid-cols-2 gap-4">
                   {formation.strengths.map((strength: string, index: number) => (
-                    <div key={index} className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-200">
+                    <div key={index} className="bg-neutral-100 rounded-xl p-6 border border-neutral-200">
                       <CheckCircle className="w-6 h-6 text-emerald-600 mb-3" />
                       <p className="text-neutral-700">{strength}</p>
                     </div>
@@ -976,7 +976,7 @@ export default function FormationDetailPage() {
 
                   <Link
                     to={`/formulaire?formation=${encodeURIComponent(formation.title)}`}
-                    className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold transition-all shadow-lg hover:shadow-sm"
+                    className="block w-full text-center bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold transition-all shadow-lg hover:shadow-sm"
                   >
                     Demander un devis
                   </Link>

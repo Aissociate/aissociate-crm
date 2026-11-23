@@ -56,8 +56,8 @@ export default function ConnexionsEspace({ workspaceId, nomEspace, emailDefaut }
           subject: appli ? `Connectez ${appli} à votre Studio IA` : 'Connectez votre messagerie à votre Studio IA',
           text: `Bonjour,\n\nPour que vos agents IA puissent travailler avec ${quoi}, autorisez la connexion en un clic :\n${url}\n\nLe lien est valable 7 jours et réservé à l'espace « ${espace} ». Vos identifiants ne sont jamais transmis à Aissociate, et rien n'est envoyé ni publié sans votre validation.\n\nL'équipe Aissociate`,
           html: `<p>Bonjour,</p><p>Pour que vos agents IA puissent travailler avec ${echapper(quoi)}, autorisez la connexion en un clic :</p>`
-            + `<p><a href="${echapper(url)}" style="display:inline-block;background:#111827;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Connecter ${echapper(appli ?? 'ma messagerie')}</a></p>`
-            + `<p style="color:#6b7280;font-size:13px">Lien valable 7 jours, réservé à l'espace « ${echapper(espace)} ». Vos identifiants ne sont jamais transmis à Aissociate, et rien n'est envoyé ni publié sans votre validation.</p>`
+            + `<p><a href="${echapper(url)}" style="display:inline-block;background:#1b1713;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Connecter ${echapper(appli ?? 'ma messagerie')}</a></p>`
+            + `<p style="color:#7a6f64;font-size:13px">Lien valable 7 jours, réservé à l'espace « ${echapper(espace)} ». Vos identifiants ne sont jamais transmis à Aissociate, et rien n'est envoyé ni publié sans votre validation.</p>`
             + '<p>L\'équipe Aissociate</p>',
         },
       });

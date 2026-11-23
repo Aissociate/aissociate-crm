@@ -29,7 +29,7 @@ export default function NotFound() {
           <div className="flex flex-wrap justify-center gap-3">
             <Link
               to="/"
-              className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-700"
+              className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-neutral-950 px-6 py-3 rounded-xl font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-700"
             >
               <Home className="w-4 h-4" aria-hidden="true" /> Accueil
             </Link>

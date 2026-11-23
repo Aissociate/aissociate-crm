@@ -61,7 +61,7 @@ export default function OrganismHome() {
       <Header />
 
       <main id="contenu">
-      <section className="relative bg-gradient-to-br from-neutral-50 via-white to-orange-50 py-20 overflow-hidden">
+      <section className="relative bg-neutral-50 py-20 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMDAwMCIgc3Ryb2tlLW9wYWNpdHk9IjAuMDMiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-40"></div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -85,7 +85,7 @@ export default function OrganismHome() {
               <div className="flex flex-wrap gap-4">
                 <Link
                   to="/formations"
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
+                  className="bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
                 >
                   Découvrir nos formations
                   <ArrowRight className="w-5 h-5" />
@@ -138,7 +138,7 @@ export default function OrganismHome() {
                   </div>
 
                   <div className="flex items-center gap-4 p-4 bg-neutral-50 rounded-xl">
-                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-neutral-700 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Target className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -148,7 +148,7 @@ export default function OrganismHome() {
                   </div>
 
                   <div className="flex items-center gap-4 p-4 bg-neutral-50 rounded-xl">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-neutral-700 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Users className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -158,7 +158,7 @@ export default function OrganismHome() {
                   </div>
 
                   <div className="flex items-center gap-4 p-4 bg-neutral-50 rounded-xl">
-                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 bg-neutral-700 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Clock className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -196,7 +196,7 @@ export default function OrganismHome() {
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-6">
+            <div className="bg-neutral-100 border border-neutral-200 rounded-xl p-6">
               <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center mb-4">
                 <TrendingUp className="w-6 h-6 text-white" />
               </div>
@@ -206,7 +206,7 @@ export default function OrganismHome() {
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-6">
+            <div className="bg-neutral-100 border border-neutral-200 rounded-xl p-6">
               <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4">
                 <Users className="w-6 h-6 text-white" />
               </div>
@@ -216,7 +216,7 @@ export default function OrganismHome() {
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6">
+            <div className="bg-neutral-100 border border-neutral-200 rounded-xl p-6">
               <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-4">
                 <Mail className="w-6 h-6 text-white" />
               </div>
@@ -236,7 +236,7 @@ export default function OrganismHome() {
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-200 rounded-xl p-6">
+            <div className="bg-neutral-100 border border-neutral-200 rounded-xl p-6">
               <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center mb-4">
                 <Building2 className="w-6 h-6 text-white" />
               </div>
@@ -249,7 +249,7 @@ export default function OrganismHome() {
         </div>
       </section>
 
-      <section className="py-20 bg-[#f6f6f4]">
+      <section className="py-20 bg-[#F2ECE4]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
@@ -307,7 +307,7 @@ export default function OrganismHome() {
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/60 to-transparent"></div>
               </div>
               <div className="p-8">
-              <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform -mt-16 relative">
+              <div className="w-16 h-16 bg-neutral-700 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform -mt-16 relative">
                 <TrendingUp className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-semibold text-neutral-950 mb-3">Formations intermédiaires</h3>
@@ -338,7 +338,7 @@ export default function OrganismHome() {
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/60 to-transparent"></div>
               </div>
               <div className="p-8">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform -mt-16 relative">
+              <div className="w-16 h-16 bg-neutral-700 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform -mt-16 relative">
                 <Users className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-semibold text-neutral-950 mb-3">Formations métiers avancées</h3>
@@ -360,7 +360,7 @@ export default function OrganismHome() {
         </div>
       </section>
 
-      <section className="py-20 bg-[#f6f6f4]">
+      <section className="py-20 bg-[#F2ECE4]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
@@ -427,7 +427,7 @@ export default function OrganismHome() {
           <div className="flex flex-wrap gap-4 justify-center">
             <Link
               to="/formations"
-              className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
+              className="bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
             >
               Voir nos formations
               <ArrowRight className="w-5 h-5" />
@@ -444,7 +444,7 @@ export default function OrganismHome() {
       </section>
 
       {/* FAQ — données structurées FAQPage (rich snippet) */}
-      <section id="faq" className="py-20 bg-gradient-to-b from-white to-neutral-50 scroll-mt-20">
+      <section id="faq" className="py-20 bg-neutral-50 scroll-mt-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">

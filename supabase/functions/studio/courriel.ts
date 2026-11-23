@@ -114,5 +114,5 @@ export function mailIdentifiants(p: { prenom: string | null; entreprise: string;
 <p><a href="${echapper(url)}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px">Ouvrir mon Studio IA</a></p>
 <p style="color:#6b7280;font-size:13px">À la première connexion, vous choisirez votre propre mot de passe puis accepterez nos conditions générales de vente et notre accord de traitement des données.</p>
 <p>Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.</p><p>L'équipe Aissociate</p></div>`;
-  return { objet: "Votre Studio IA est prêt : vos identifiants pour l'essai gratuit", html, texte };
+  return { objet: p.finEssai ? "Votre Studio IA est prêt : vos identifiants pour l'essai gratuit" : "Votre Studio IA est prêt : vos identifiants", html, texte };
 }

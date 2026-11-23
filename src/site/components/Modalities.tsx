@@ -68,7 +68,7 @@ export default function Modalities() {
   ];
 
   return (
-    <section className="py-20 bg-[#f6f6f4]">
+    <section className="py-20 bg-[#F2ECE4]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
@@ -84,7 +84,7 @@ export default function Modalities() {
                 key={index}
                 className="bg-white rounded-xl p-6 shadow-lg hover:shadow-sm transition-all border border-neutral-100"
               >
-                <div className={`w-14 h-14 bg-gradient-to-br ${modality.color} rounded-xl flex items-center justify-center mb-4`}>
+                <div className={`w-14 h-14 bg-neutral-700 rounded-xl flex items-center justify-center mb-4`}>
                   <Icon className="w-7 h-7 text-white" />
                 </div>
                 <h3 className="text-xl font-semibold text-neutral-950 mb-3">{modality.title}</h3>

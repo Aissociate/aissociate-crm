@@ -148,7 +148,7 @@ export default function SignalerBug() {
                   </button>
                   <button onClick={retirer} title="Retirer la capture" className="absolute right-1.5 top-1.5 rounded-full bg-neutral-900/70 p-1 text-white hover:bg-neutral-900"><X className="h-3 w-3" /></button>
                   <div className="absolute bottom-1.5 right-1.5 flex gap-1">
-                    <button onClick={() => setAnnoter(true)} className="flex items-center gap-1 rounded-full bg-orange-500 px-2 py-1 text-xs text-white hover:bg-orange-600"><Pencil className="h-3 w-3" /> Annoter</button>
+                    <button onClick={() => setAnnoter(true)} className="flex items-center gap-1 rounded-full bg-orange-500 px-2 py-1 text-xs text-neutral-950 hover:bg-orange-400"><Pencil className="h-3 w-3" /> Annoter</button>
                     <button onClick={() => void signaler()} className="flex items-center gap-1 rounded-full bg-neutral-900/70 px-2 py-1 text-xs text-white hover:bg-neutral-900"><RefreshCw className="h-3 w-3" /> Reprendre</button>
                   </div>
                 </div>

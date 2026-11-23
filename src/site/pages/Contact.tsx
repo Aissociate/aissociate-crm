@@ -90,7 +90,7 @@ export default function Contact() {
         </div>
       </section>
 
-      <section className="py-20 bg-gradient-to-b from-white via-neutral-50/50 to-white">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-3 gap-8 mb-12">
             <div className="bg-white border-2 border-neutral-200 rounded-xl p-6 text-center hover:border-orange-300 hover:shadow-lg transition-all">
@@ -256,7 +256,7 @@ export default function Contact() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
+                  className="w-full bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
                 >
                   <Send className="w-5 h-5" />
                   {loading ? 'Envoi en cours…' : 'Envoyer le message'}
@@ -290,7 +290,7 @@ export default function Contact() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-8">
+              <div className="bg-neutral-100 border border-neutral-200 rounded-2xl p-8">
                 <MessageSquare className="w-12 h-12 text-emerald-600 mb-4" />
                 <h3 className="text-xl font-semibold text-neutral-950 mb-3">
                   Questions fréquentes
@@ -306,7 +306,7 @@ export default function Contact() {
                 </Link>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-2xl p-8">
+              <div className="bg-neutral-100 border border-neutral-200 rounded-2xl p-8">
                 <CheckCircle className="w-12 h-12 text-blue-600 mb-4" />
                 <h3 className="text-xl font-semibold text-neutral-950 mb-3">
                   Engagement qualité

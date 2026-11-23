@@ -76,7 +76,7 @@ export default function FAQ() {
           {faqs.map((faq, index) => (
             <div
               key={index}
-              className="bg-[#f6f6f4] rounded-xl border border-blue-100 overflow-hidden hover:shadow-lg transition-all"
+              className="bg-[#F2ECE4] rounded-xl border border-blue-100 overflow-hidden hover:shadow-lg transition-all"
               itemScope
               itemProp="mainEntity"
               itemType="https://schema.org/Question"

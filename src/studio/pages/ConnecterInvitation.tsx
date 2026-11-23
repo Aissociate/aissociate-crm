@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, Lock, Plug } from 'lucide-react';
 import { appel } from '../api';
 import { Bouton, Chargement } from '../composants';
+import { Logo } from '@/components/Logo';
 
 type Invitation = { lien: string; espace: string; application: string | null };
 
@@ -24,9 +25,9 @@ export default function ConnecterInvitation() {
   }, [jeton, retour, echec]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-4 font-sans">
+    <div className="flex min-h-screen items-center justify-center bg-[#F2ECE4] px-4 font-sans">
       <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
-        <p className="text-lg font-bold">A(I)ssociate <span className="text-orange-500">Studio</span></p>
+        <Logo size="sm" branche="Studio IA" fond="clair" />
         {retour && !echec ? (
           <>
             <span className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></span>

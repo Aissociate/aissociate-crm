@@ -693,7 +693,7 @@ export default function Messagerie() {
                   <div className="border-t border-line bg-surface-2/40">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                       {c.kind ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-neutral-950">
                           <UserCog className="h-3.5 w-3.5" /> {c.label} <span className="opacity-80">· {aff ?? 'Direction'}</span>
                         </span>
                       ) : (

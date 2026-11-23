@@ -258,7 +258,7 @@ export default function MiniCalendrierContact({
               className={cn(
                 'flex h-9 flex-col items-center justify-center rounded-md text-xs transition-colors',
                 !isSameMonth(d, mois) && 'text-muted/50',
-                actif ? 'bg-brand-600 font-semibold text-white'
+                actif ? 'bg-brand-600 font-semibold text-neutral-950'
                   : inscrit ? 'bg-brand-500/15 font-semibold text-brand-600 hover:bg-brand-500/25 dark:text-brand-400'
                     : 'text-fg hover:bg-surface-2',
                 isSameDay(d, new Date()) && !actif && 'ring-1 ring-inset ring-brand-400',

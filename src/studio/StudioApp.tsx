@@ -9,6 +9,7 @@ import { BASE, nouvelleAdresse, ongletActif, REDIRECTIONS, sectionDe, SECTIONS, 
 import { appel, jeton, majuscule, SessionExpiree, type Me } from './api';
 import { Chargement, cx } from './composants';
 import SignalerBug, { ouvrirSignalement } from './composants/SignalerBug';
+import { Logo, LogoEmpile } from '@/components/Logo';
 
 const Connexion = lazy(() => import('./pages/Connexion'));
 const Aujourdhui = lazy(() => import('./pages/Aujourdhui'));
@@ -68,7 +69,7 @@ function AgentChatParAgent() {
 
 function Garde() {
   const c = useContext(StudioContext)!;
-  if (c.chargement) return <div className="min-h-screen bg-[#F6F5F3]"><Chargement /></div>;
+  if (c.chargement) return <div className="min-h-screen bg-[#F2ECE4]"><Chargement /></div>;
   if (!c.me) return <Navigate to="/studio/connexion" replace />;
   if (c.me.user.doit_changer) return <Compte premiereConnexion />;
   if (c.me.user.cgv_a_accepter) {
@@ -90,12 +91,12 @@ function Lien({ to, label, icon: Icon, actif, pastille, discret }: {
       to={to} data-tuto={to} aria-current={actif ? 'page' : undefined}
       className={cx(
         'flex min-h-[46px] items-center gap-3 rounded-xl px-3.5 text-base transition-colors',
-        actif ? 'bg-[#EDECEA] font-semibold text-[#141414]' : cx(discret ? 'text-[#5F5B57]' : 'text-[#141414]', 'hover:bg-[#F6F5F3]'),
+        actif ? 'bg-[#F2ECE4] font-semibold text-[#17120E]' : cx(discret ? 'text-[#615850]' : 'text-[#17120E]', 'hover:bg-[#F2ECE4]'),
       )}
     >
       <Icon className="h-5 w-5 shrink-0" aria-hidden /> <span className="flex-1">{label}</span>
       {pastille ? (
-        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EA6A1E] px-1.5 text-[13px] font-bold text-[#141414]"
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EA6A1E] px-1.5 text-[13px] font-bold text-[#17120E]"
           aria-label={`${pastille} décision${pastille > 1 ? 's' : ''} en attente`}>{pastille}</span>
       ) : null}
     </Link>
@@ -116,11 +117,11 @@ function SectionOnglets() {
   return (
     <>
       {section && section.onglets.length > 1 && (
-        <nav aria-label={`Rubriques de « ${section.label} »`} className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-[#E7E5E2] px-1">
+        <nav aria-label={`Rubriques de « ${section.label} »`} className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-[#E6DCD2] px-1">
           {section.onglets.map((o) => (
             <Link key={o.chemin} to={o.chemin} aria-current={o === actif ? 'page' : undefined}
               className={cx('-mb-px flex min-h-[44px] shrink-0 items-center whitespace-nowrap border-b-2 px-3 text-[15px]',
-                o === actif ? 'border-[#141414] font-semibold text-[#141414]' : 'border-transparent text-[#5F5B57] hover:text-[#141414]')}>
+                o === actif ? 'border-[#17120E] font-semibold text-[#17120E]' : 'border-transparent text-[#615850] hover:text-[#17120E]')}>
               {o.label}
             </Link>
           ))}
@@ -152,8 +153,8 @@ function Coquille() {
   const nav = (
     <nav aria-label="Navigation principale" className="flex min-h-full flex-col gap-0.5 px-4 py-6" onClick={() => setOuvert(false)}>
       <div className="mb-7 px-3">
-        <p className="text-[19px] font-bold leading-tight tracking-tight text-[#141414]">A(I)ssociate <span className="text-[#EA6A1E]">Studio</span></p>
-        <p className="mt-1 line-clamp-2 break-words text-[13px] text-[#5F5B57]" title={me.workspace.nom}>{me.workspace.nom}</p>
+        <LogoEmpile branche="Studio IA" fond="clair" />
+        <p className="mt-1 line-clamp-2 break-words text-[13px] text-[#615850]" title={me.workspace.nom}>{me.workspace.nom}</p>
       </div>
       {essaiFini ? (
         <>
@@ -168,7 +169,7 @@ function Coquille() {
       <div className="mt-auto pt-6">
         {!essaiFini && <Lien to={reglages.to} label={reglages.label} icon={ICONES[reglages.id]} actif={courante === reglages.id} discret />}
       </div>
-      <div className="mt-2 border-t border-[#E7E5E2] pt-4">
+      <div className="mt-2 border-t border-[#E6DCD2] pt-4">
         <p className="truncate px-3 text-sm font-medium text-neutral-800">{[majuscule(me.user.prenom), me.user.nom].filter(Boolean).join(' ') || me.user.email}</p>
         <p className="truncate px-3 text-xs text-neutral-500">{me.user.email}</p>
         <button onClick={deconnexion} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-100">
@@ -188,10 +189,10 @@ function Coquille() {
     </nav>
   );
   return (
-    <div className="min-h-screen bg-[#F6F5F3] font-sans text-neutral-900">
+    <div className="min-h-screen bg-[#F2ECE4] font-sans text-neutral-900">
       <aside className="fixed inset-y-0 left-0 hidden w-60 overflow-y-auto border-r border-neutral-200 bg-white lg:block">{nav}</aside>
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200 bg-[#F6F5F3]/90 px-4 py-3 backdrop-blur lg:hidden">
-        <p className="font-bold">A(I)ssociate <span className="text-orange-500">Studio</span></p>
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200 bg-[#F2ECE4]/90 px-4 py-3 backdrop-blur lg:hidden">
+        <Logo size="xs" branche="Studio IA" fond="clair" />
         <button onClick={() => setOuvert(true)} aria-label="Ouvrir le menu"><Menu className="h-5 w-5" /></button>
       </header>
       {ouvert && (
@@ -257,7 +258,7 @@ export default function StudioApp() {
 
   return (
     <StudioContext.Provider value={{ me, chargement, rafraichir, connecte, deconnexion, gerer }}>
-      <Suspense fallback={<div className="min-h-screen bg-[#F6F5F3]"><Chargement /></div>}>
+      <Suspense fallback={<div className="min-h-screen bg-[#F2ECE4]"><Chargement /></div>}>
         <Routes>
           <Route path="connexion" element={<Connexion />} />
           <Route path="mot-de-passe/:jeton" element={<Reinitialiser />} />

@@ -1,0 +1,132 @@
+/* Aissociate — brand guide — generated from tokens.json */
+:root, [data-theme="clair"] {
+  --fond: #ffffff; /* Fond de page. Blanc par défaut, taupe pour les supports de marque, noir pour le Studio IA. */
+  --fond-alt: #f2ece4; /* Surfaces secondaires : encadrés, bandeaux, cartes posées sur le fond. */
+  --encre: #17120e; /* Texte principal, « ssociate » du logo, noms des branches. Sur fond ou fond-alt. */
+  --encre-douce: #615850; /* Texte secondaire, légendes, mentions. Au moins 4,5:1 sur fond et fond-alt dans les trois thèmes. */
+  --filet: #e6dcd2; /* Séparateurs et bordures fines. Jamais pour du texte. */
+  --orange: #ea6a1e; /* Couleur de marque : « AI » du logo, filet vertical de la famille, « IA » de Studio IA et de la baseline. 3,2:1 sur blanc, 2,7:1 sur sable (fond-alt clair) : réservé aux éléments de 24 px et plus en gras sur blanc, et au logo de grande taille sur sable. Ailleurs, utiliser orange-texte. */
+  --orange-texte: #b24a0c; /* Orange lisible pour les textes de moins de 24 px : liens, étiquettes, chiffres mis en avant. Au moins 4,5:1 sur fond. */
+  --sur-orange: #17120e; /* Texte posé sur un aplat orange (boutons, pastilles). Jamais de blanc sur orange en petit corps. */
+  --taupe: #483c32; /* Taupe de marque, valeur fixe. Aplats, couvertures, fond du monogramme. */
+  --accent-taupe: #483c32; /* Aplat taupe qui reste visible quel que soit le fond : plus profond quand le fond est déjà taupe. */
+  --sable: #f2ece4; /* Sable de marque, valeur fixe. Aplats clairs, fonds de documents. */
+  --noir: #0e0c0a; /* Noir de marque, valeur fixe. Fond du Studio IA et des supports sombres. */
+}
+[data-theme="taupe"] {
+  --fond: #483c32;
+  --fond-alt: #3b3129;
+  --encre: #ffffff;
+  --encre-douce: #d9cec3;
+  --filet: #5c4e42;
+  --orange: #f0823f;
+  --orange-texte: #f4a26c;
+  --sur-orange: #17120e;
+  --accent-taupe: #2e261f;
+}
+[data-theme="sombre"] {
+  --fond: #0e0c0a;
+  --fond-alt: #1b1713;
+  --encre: #ffffff;
+  --encre-douce: #b3a79a;
+  --filet: #3a3129;
+  --orange: #f0823f;
+  --orange-texte: #f4a26c;
+  --sur-orange: #17120e;
+  --accent-taupe: #483c32;
+}
+:root {
+  --espace-1: 4px; /* Écart minimal entre éléments liés. */
+  --espace-2: 8px; /* Écart entre les lignes d'un bloc de branches. */
+  --espace-4: 16px; /* Marge intérieure des petits éléments. */
+  --espace-6: 24px; /* Écart entre blocs, pas de la grille de couverture. */
+  --espace-10: 40px; /* Marge intérieure des encadrés et des cartes. */
+  --espace-16: 64px; /* Marges de page et grands espacements. */
+  --rayon-0: 0; /* Par défaut : la marque est à angles droits (aplats, cartes, monogramme imprimé). */
+  --rayon-icone: 22%; /* Icône d'application du monogramme uniquement, comme l'exigent les systèmes mobiles. */
+  --rayon-pilule: 999px; /* Pastilles et boutons uniquement. */
+  --font-display: Archivo, "Helvetica Neue", Arial, sans-serif;
+  --font-texte: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --font-icones: "Material Symbols Sharp";
+  --text-logo-ai: 900 92px/1 var(--font-display); /* « AI » du logo, Archivo Black 900, couleur orange. */
+  --text-logo-ssociate: 400 92px/1 var(--font-display); /* Fin du logo, Archivo Regular 400, couleur encre. */
+  --text-logo-branche: 800 44px/1.05 var(--font-display); /* Nom de branche à côté du logo : environ la moitié de la taille du logo, Archivo ExtraBold 800. */
+  --text-baseline: 400 30px/1 var(--font-display); /* Baseline sous le logo : un tiers de la taille du logo. « IA » et « Hommes » en 800, le reste en 400. */
+  --text-titre-1: 800 48px/1.05 var(--font-display); /* Titre de couverture ou de page. */
+  --text-titre-2: 700 32px/1.15 var(--font-display); /* Titre de section. */
+  --text-titre-3: 700 22px/1.3 var(--font-display); /* Sous-titre, titre de carte. */
+  --text-texte: 400 16px/1.6 var(--font-texte); /* Texte courant. */
+  --text-texte-petit: 400 14px/1.5 var(--font-texte); /* Légendes, notes, mentions légales. */
+  --text-etiquette: 500 12px/1.4 var(--font-mono); /* Surtitres et étiquettes, en capitales, couleur orange-texte ou encre-douce. */
+}
+.logo-ai {
+  font-family: var(--font-display);
+  font-size: 92px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+.logo-ssociate {
+  font-family: var(--font-display);
+  font-size: 92px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+.logo-branche {
+  font-family: var(--font-display);
+  font-size: 44px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+.baseline {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.titre-1 {
+  font-family: var(--font-display);
+  font-size: 48px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.titre-2 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.titre-3 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.texte {
+  font-family: var(--font-texte);
+  font-size: 16px;
+  line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.texte-petit {
+  font-family: var(--font-texte);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.etiquette {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+}

@@ -1,23 +1,16 @@
 // @ts-nocheck
 import { Clock, Monitor, Brain, Users, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Logo } from '@/components/Logo';
 
 export default function Hero() {
   return (
     <section className="relative bg-neutral-950 text-white overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(251,146,60,0.08),transparent_50%),radial-gradient(circle_at_70%_80%,rgba(245,158,11,0.08),transparent_50%)]"></div>
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMiI+PHBhdGggZD0iTTM2IDEzNGg3djJ2LTJoLTd6bS0xNCAwaDd2MmgtN3YtMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-50"></div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
         <div className="flex justify-center mb-10">
-          <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
-            <img
-              src="https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg"
-              alt="Formation IA Générative - Organisme de formation certifié Qualiopi spécialisé en intelligence artificielle"
-              className="h-20 sm:h-24 w-auto object-contain"
-              loading="eager"
-            />
-          </div>
+          <Logo size="lg" tagline fond="sombre" />
         </div>
 
         <div className="text-center max-w-5xl mx-auto">
@@ -44,7 +37,7 @@ export default function Hero() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-20">
             <Link
               to="/formulaire"
-              className="group bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-sm hover:shadow-sm w-full sm:w-auto flex items-center justify-center gap-2"
+              className="group bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-sm hover:shadow-sm w-full sm:w-auto flex items-center justify-center gap-2"
             >
               Découvrir la formation
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
