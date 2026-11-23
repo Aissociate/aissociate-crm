@@ -127,8 +127,8 @@ export default function Questionnaire() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="h-6 w-6" /></div>
           <h1 className="text-2xl font-semibold">{fini === 'essai' ? 'Votre Studio est prêt !' : 'Merci, c\'est bien reçu !'}</h1>
           <p className="mt-3 text-sm text-neutral-600">
-            {fini === 'essai' && <>Vos identifiants viennent de vous être envoyés par e-mail (pensez à vérifier les indésirables). Votre essai gratuit de 7 jours démarre aujourd'hui : vos agents vous attendent déjà.</>}
-            {fini === 'essai_sans_mail' && <>Votre espace d'essai est créé, mais l'e-mail avec vos identifiants n'a pas pu partir. Nous vous les envoyons au plus vite : écrivez-nous à contact@aissociate.re si vous ne les recevez pas.</>}
+            {fini === 'essai' && <>Vos identifiants viennent de vous être envoyés par e-mail (pensez à vérifier les indésirables). Vos agents démarrent aujourd'hui en stage, gratuitement et sans limite de durée : ils vous attendent déjà.</>}
+            {fini === 'essai_sans_mail' && <>Votre espace est créé, mais l'e-mail avec vos identifiants n'a pas pu partir. Nous vous les envoyons au plus vite : écrivez-nous à contact@aissociate.re si vous ne les recevez pas.</>}
             {fini === 'deja_client' && <>Cette adresse e-mail a déjà un accès au Studio : connectez-vous avec vos identifiants habituels (ou « Mot de passe oublié ? » sur la page de connexion).</>}
             {fini === 'demande' && <>Nous étudions vos réponses et revenons vers vous sous 48 h ouvrées avec votre plan de démarrage. Vos identifiants d'accès au Studio vous seront transmis dès que votre espace sera prêt.</>}
           </p>
@@ -153,7 +153,7 @@ export default function Questionnaire() {
       <main className="mx-auto max-w-3xl px-4 py-8">
         {etape === 0 && (
           <p className="mb-6 text-sm text-neutral-600">
-            <b className="text-neutral-900">Essai gratuit de 7 jours, sans carte bancaire.</b> Décrivez votre entreprise en 10 minutes : à la fin,
+            <b className="text-neutral-900">Gratuit, sans limite de durée ni carte bancaire.</b> Décrivez votre entreprise en 10 minutes : à la fin,
             votre espace s'ouvre aussitôt avec les agents choisis, et vos identifiants arrivent par e-mail. Vos agents démarrent
             avec ces informations. Vos réponses sont gardées sur cet appareil si vous faites une pause.
           </p>
@@ -196,7 +196,7 @@ export default function Questionnaire() {
             <ArrowLeft className="h-4 w-4" /> Précédent
           </Bouton>
           <Bouton onClick={suivant} disabled={envoi}>
-            {derniere ? (envoi ? 'Ouverture de votre espace…' : 'Ouvrir mon essai gratuit') : <>Suivant <ArrowRight className="h-4 w-4" /></>}
+            {derniere ? (envoi ? 'Ouverture de votre espace…' : 'Ouvrir mon espace gratuit') : <>Suivant <ArrowRight className="h-4 w-4" /></>}
           </Bouton>
         </div>
       </main>

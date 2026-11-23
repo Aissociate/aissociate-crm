@@ -115,7 +115,7 @@ export default function Connexion() {
             <button type="button" className="underline" onClick={() => { setOubli('saisie'); setErreur(''); }}>Mot de passe oublié ?</button>
           </p>
           <p className="border-t border-neutral-100 pt-4 text-center text-sm text-neutral-600">
-            Pas encore de compte ? <a className="font-medium text-orange-600 underline" href="/studio/demarrer">Essayer gratuitement 7 jours</a>
+            Pas encore de compte ? <a className="font-medium text-orange-600 underline" href="/studio/demarrer">Essayer gratuitement</a>
           </p>
         </form>
         )}
