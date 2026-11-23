@@ -26,7 +26,7 @@ export default function Footer() {
         <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
             <p className="text-xl font-semibold tracking-tight">Un projet, une question ?</p>
-            <p className="mt-1 text-sm text-neutral-400">Un conseiller vous répond sous 24 h ouvrées. Essai gratuit de 7 jours pour le Studio IA.</p>
+            <p className="mt-1 text-sm text-neutral-400">Un conseiller vous répond sous 24 h ouvrées. Stage gratuit, sans limite de durée, pour le Studio IA.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <a href="/studio/demarrer?depuis=pied" className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600">

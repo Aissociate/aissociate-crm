@@ -81,7 +81,7 @@ export default function SamChat({ className = '', onFermer, focus = false }: { c
                 </p>
                 {essai && (
                   <a href={essai} className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600">
-                    Ouvrir mon essai gratuit <ArrowRight className="h-4 w-4" />
+                    Ouvrir mon espace gratuit <ArrowRight className="h-4 w-4" />
                   </a>
                 )}
               </div>

@@ -120,7 +120,7 @@ export function decouper(texte: string): Bout[] {
   return bouts;
 }
 
-/** Lien vers l'essai gratuit cité dans un message (affiché en bouton sous la bulle). */
+/** Lien vers l'ouverture d'espace (stage gratuit) cité dans un message (affiché en bouton sous la bulle). */
 export function lienEssai(texte: string): string | null {
   return /aissociate\.re\/studio\/demarrer/.test(texte) ? '/studio/demarrer?depuis=sam' : null;
 }

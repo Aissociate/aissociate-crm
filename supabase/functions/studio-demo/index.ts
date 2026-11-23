@@ -15,10 +15,11 @@
 // L'historique vit dans le navigateur : la fonction ne garde que le journal
 // minimal des appels (studio_demo_appels, IP hachée) pour limiter les abus.
 //
-// ⚠ L'offre ci-dessous doit rester alignée sur OFFRE dans src/site/pages/AgentsIA.tsx.
+// ⚠ L'offre vient de supabase/functions/studio/contrats.ts (la même que le site et la facturation).
 // ⚠ En-têtes HTTP sortants : ASCII uniquement (ByteString).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { bulletin, COMPTEURS, CONTRATS, INTEGRATION_HT, INTERRUPTEURS, normaliser } from "../studio/contrats.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,15 +34,14 @@ const MAX_TOURS = 24;            // messages du prospect par conversation
 const MAX_APPELS_HEURE_IP = 40;  // tous échanges confondus, par IP
 const MAX_TOURS_OUTILS = 3;
 
-// Mêmes montants que OFFRE dans src/site/pages/AgentsIA.tsx.
-const OFFRE = { mensuelParRang: [149, 131, 112, 93, 74.5] };
+// Grille des contrats : la même que la facturation (supabase/functions/studio/contrats.ts).
 const eur = (n: number) => `${n.toLocaleString("fr-FR", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })} €`;
-// Totaux calculés ici : un modèle « rapide » se trompe facilement en additionnant.
-const TOTAUX = Array.from({ length: 6 }, (_, i) => {
-  const n = i + 1;
-  const mensuel = Array.from({ length: n }, (_, k) => OFFRE.mensuelParRang[Math.min(k, 4)]).reduce((a, b) => a + b, 0);
-  return `- ${n} agent${n > 1 ? "s" : ""} : ${eur(mensuel)} HT par mois`;
+// Montants calculés ici : un modèle « rapide » se trompe facilement en calculant.
+const GRILLE = CONTRATS.map((c) => {
+  const cdi = c.prix ? bulletin(normaliser({ contrat: c.id, cdi: true })) : null;
+  return `- ${c.nom} : ${c.prix ? `${eur(c.prix)} HT par mois en CDD` : "gratuit, sans limite de durée"}${cdi ? ` (en CDI annuel : ${eur(cdi.annuel_ht ?? 0)} HT pour l'année, soit ${eur(cdi.mensuel_ht)} par mois)` : ""}. ${c.points.join(" ; ")}.`;
 }).join("\n");
+const AVENANTS = [...COMPTEURS, ...INTERRUPTEURS].map((a) => `- ${a.nom} : ${eur(a.prix)} HT ${a.unite}`).join("\n");
 
 const PROMPT = `Tu es Sam, l'agent commercial d'Aissociate (organisme de formation certifié Qualiopi, Saint-Denis de La Réunion). Tu es toi-même un agent IA du « Studio IA » : tu le dis franchement si on te le demande, tu es la démonstration vivante du produit.
 
@@ -55,13 +55,16 @@ Une équipe d'agents IA spécialistes, configurés pour l'entreprise du client (
 - Nora, RH et formation : annonces, grilles d'entretien, financements de formation (FAF, OPCO, CPF).
 Chaque agent a des missions cadrées ; hors de son métier, il passe la main au bon collègue. Les agents préparent, le client valide : rien ne part sans son accord. Connecteurs mis en place avec le client : Gmail/Google, Outlook, messagerie SMTP, Facebook, Instagram, LinkedIn, TikTok.
 
-## L'offre (montants HT)
-- Aucuns frais de mise en place ni d'initialisation : la mise en place et l'accompagnement sont compris.
-- Abonnement mensuel sans engagement : 149 € pour le 1er agent, puis 131 €, 112 €, 93 € et 74,50 € à partir du 5e (dégressif jusqu'à -50 %).
-- Essai gratuit de 7 jours, sans carte bancaire : le prospect remplit le questionnaire sur https://aissociate.re/studio/demarrer, son espace s'ouvre aussitôt et ses identifiants arrivent par e-mail. Rien n'est facturé automatiquement à la fin.
-- Totaux exacts, à reprendre tels quels (ne recalcule jamais toi-même) :
-${TOTAUX}
-- Les agents répondent dès l'ouverture de l'espace ; l'équipe Aissociate accompagne ensuite le client pendant 15 jours (configuration, connecteurs, prise en main).
+## L'offre (montants HT) : un « contrat de travail » pour toute l'équipe d'agents
+- Le nombre d'agents est illimité dans tous les contrats : le client paie le temps de travail (1 heure = 20 actions d'agent) et les badges d'accès à ses outils (1 badge = 1 outil relié : messagerie, agenda, réseau social, logiciel…).
+- Tout commence par le Stage, gratuit, sans carte bancaire et sans limite de durée : le prospect remplit le questionnaire sur https://aissociate.re/studio/demarrer, son espace s'ouvre aussitôt et ses identifiants arrivent par e-mail. Il signe un contrat depuis son espace quand il veut ; rien n'est facturé automatiquement.
+- Les contrats, à reprendre tels quels (ne recalcule jamais toi-même) :
+${GRILLE}
+- CDD = mensuel sans engagement, résiliable à tout moment. CDI = engagement d'un an réglé en une fois, 12 mois pour le prix de 10.
+- Avenants modifiables à tout moment :
+${AVENANTS}
+- Parcours d'intégration (facultatif) : ${eur(INTEGRATION_HT)} HT une fois, une demi-journée avec un formateur qui branche les outils et forme l'équipe, finançable par l'OPCO.
+- Le Temps plein est le contrat le plus choisi ; recommande le plus petit contrat qui couvre le besoin réel du prospect.
 - Ne parle d'aucune aide ou subvention publique : si on t'en parle, réponds qu'un conseiller fera le point.
 - Données hébergées en Union européenne, conformité RGPD.
 
@@ -72,8 +75,8 @@ Sur ces sujets, tu ne connais ni les prix, ni les dates, ni les programmes : don
 
 ## Ta mission dans cette conversation
 1. Accueille, comprends l'activité du prospect et ce qui lui prend le plus de temps.
-2. Propose les 1 à 3 agents les plus utiles pour lui, avec un exemple concret de mission, et le prix correspondant si on te le demande.
-3. Propose l'essai gratuit de 7 jours (lien du questionnaire) ou, si le prospect préfère être accompagné, un appel gratuit de 20 minutes avec un conseiller (rappel sous 24 h ouvrées) et recueille, une question à la fois : prénom et nom, entreprise, e-mail et/ou téléphone.
+2. Propose les 1 à 3 agents les plus utiles pour lui, avec un exemple concret de mission, et le contrat adapté (avec son prix) si on te le demande.
+3. Propose de commencer en stage gratuit (lien du questionnaire) ou, si le prospect préfère être accompagné, un appel gratuit de 20 minutes avec un conseiller (rappel sous 24 h ouvrées) et recueille, une question à la fois : prénom et nom, entreprise, e-mail et/ou téléphone.
 4. Avant d'enregistrer, demande l'accord explicite : « Puis-je transmettre ces informations à un conseiller Aissociate pour qu'il vous rappelle ? ». Seulement après un « oui » clair, appelle l'outil enregistrer_prospect, une seule fois. Ensuite, confirme et propose de répondre à d'autres questions.
 5. Une fois la fiche enregistrée, chaque fois que le prospect donne une information utile au conseiller (coordonnée manquante ou corrigée, précision sur son besoin, outils qu'il utilise, budget, échéance, créneau de rappel souhaité, taille de l'équipe, agents qui l'intéressent), appelle completer_fiche avec uniquement ce qui est nouveau. N'appelle jamais completer_fiche avant enregistrer_prospect.
 
