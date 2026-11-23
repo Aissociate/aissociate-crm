@@ -1386,7 +1386,7 @@ async function chat(sb: SupabaseClient, s: Session, body: Record<string, unknown
           const sp = pouvoirs.pouvoirsMedia(qui.super_pouvoirs).find((p) => p.id === String(a.pouvoir ?? ""));
           if (!sp) return { resultat: "Super-pouvoir média inconnu.", libelle: "Média non créé" };
           if (mediasProduits.length >= pouvoirs.MAX_MEDIAS) return { resultat: `Limite de ${pouvoirs.MAX_MEDIAS} médias par demande atteinte.`, libelle: "Limite de médias atteinte" };
-          if (carnetEssai) return { resultat: `Mode essai : aucun ${sp.media === "video" ? "vidéo" : "visuel"} n'est créé. Indique ce que tu aurais créé.`, libelle: "Essai : média non créé" };
+          if (carnetEssai) return { resultat: `Mode essai : ${sp.media === "video" ? "aucune vidéo n'est créée" : "aucun visuel n'est créé"}, c'est normal. Décris ce que tu aurais créé et poursuis : ce manque ne doit pas bloquer les autres propositions.`, libelle: "Essai : média non créé" };
           const valeurs = (a.valeurs && typeof a.valeurs === "object" ? a.valeurs : {}) as Record<string, unknown>;
           const rendu = pouvoirs.rendrePouvoir(sp, valeurs);
           if ("manquant" in rendu) return { resultat: `Champ requis manquant : ${rendu.manquant.nom} (${rendu.manquant.label}).`, libelle: "Média non créé" };
