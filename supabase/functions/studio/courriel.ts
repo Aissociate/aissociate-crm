@@ -116,3 +116,30 @@ export function mailIdentifiants(p: { prenom: string | null; entreprise: string;
 <p>Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.</p><p>L'équipe Aissociate</p></div>`;
   return { objet: p.finEssai ? "Votre Studio IA est prêt : vos identifiants pour l'essai gratuit" : "Votre Studio IA est prêt : vos identifiants", html, texte };
 }
+
+/** Invitation d'un responsable par le propriétaire de l'espace (responsables.ts). */
+export function mailInvitationResponsable(p: { prenom: string | null; invitePar: string; espace: string; email: string; motDePasse: string; site: string }) {
+  const url = `${p.site.replace(/\/$/, "")}/studio/connexion`;
+  const bonjour = `Bonjour${p.prenom ? ` ${p.prenom}` : ""},`;
+  const lignes = [
+    `${p.invitePar} vous a ajouté comme responsable du Studio IA${p.espace ? ` « ${p.espace} »` : ""}.`,
+    "Vous pouvez désormais donner des consignes à l'équipe d'agents IA, valider leurs propositions et suivre leur travail.",
+  ];
+  const texte = [
+    bonjour, "", ...lignes, "",
+    `Adresse : ${url}`, `Identifiant : ${p.email}`, `Mot de passe provisoire : ${p.motDePasse}`, "",
+    "À la première connexion, vous choisirez votre propre mot de passe puis accepterez nos conditions générales.",
+    "", "Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.", "", "L'équipe Aissociate",
+  ].join("\n");
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#17120e;max-width:560px">
+<p>${echapper(bonjour)}</p>${lignes.map((l) => `<p>${echapper(l)}</p>`).join("")}
+<table style="border-collapse:collapse;margin:18px 0;background:#f2ece4"><tbody>
+<tr><td style="padding:10px 16px;color:#615850">Adresse</td><td style="padding:10px 16px"><a href="${echapper(url)}">${echapper(url)}</a></td></tr>
+<tr><td style="padding:10px 16px;color:#615850">Identifiant</td><td style="padding:10px 16px">${echapper(p.email)}</td></tr>
+<tr><td style="padding:10px 16px;color:#615850">Mot de passe provisoire</td><td style="padding:10px 16px;font-family:monospace;font-size:16px"><b>${echapper(p.motDePasse)}</b></td></tr>
+</tbody></table>
+<p><a href="${echapper(url)}" style="display:inline-block;background:#ea6a1e;color:#17120e;font-weight:bold;text-decoration:none;padding:10px 18px">Ouvrir le Studio IA</a></p>
+<p style="color:#615850;font-size:13px">À la première connexion, vous choisirez votre propre mot de passe puis accepterez nos conditions générales.</p>
+<p>Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.</p><p>L'équipe Aissociate</p></div>`;
+  return { objet: `${p.invitePar} vous invite sur le Studio IA`, html, texte };
+}

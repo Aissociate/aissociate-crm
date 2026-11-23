@@ -158,3 +158,21 @@ export function choixDepuisArticles(items: { lookup_key?: string | null; quantit
   }
   return trouve ? normaliser(ch) : null;
 }
+
+// ── Responsables (responsables.ts) : règle pure, testée ici ──
+export type Responsable = {
+  id: string; email: string; prenom: string | null; nom: string | null; role: string; actif: boolean; created_at: string;
+};
+
+/**
+ * Comptes à désactiver pour revenir à `max` comptes actifs : le propriétaire est toujours gardé,
+ * puis les membres les plus anciens. Renvoie les identifiants des membres en trop, du plus récent au plus ancien.
+ */
+export function enTrop(comptes: Responsable[], max: number): string[] {
+  const actifs = comptes.filter((c) => c.actif);
+  const limite = Math.max(1, Math.floor(max));
+  if (actifs.length <= limite) return [];
+  const ordre = [...actifs].sort((a, b) =>
+    (a.role === "proprietaire" ? 0 : 1) - (b.role === "proprietaire" ? 0 : 1) || a.created_at.localeCompare(b.created_at));
+  return ordre.slice(limite).filter((c) => c.role !== "proprietaire").reverse().map((c) => c.id);
+}

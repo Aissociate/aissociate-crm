@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { articles, bulletin, CHOIX_STAGE, choixDepuisArticles, clePrix, droits, normaliser } from './contrats';
+import { articles, bulletin, CHOIX_STAGE, choixDepuisArticles, clePrix, droits, enTrop, normaliser, type Responsable } from './contrats';
 
 describe('grille des contrats', () => {
   it('Temps plein CDD sans avenant : 149 € HT, expert et astreinte inclus', () => {
@@ -39,5 +39,23 @@ describe('grille des contrats', () => {
     expect(relu).toEqual(ch);
     expect(choixDepuisArticles([{ lookup_key: 'studio_agents_v2', quantite: 2 }])).toBeNull();
     expect(choixDepuisArticles([{ lookup_key: 'studio_v3_contrat_plein_mois', quantite: 1 }])?.contrat).toBe('plein');
+  });
+});
+
+describe('responsables en trop après un contrat inférieur', () => {
+  const c = (id: string, role: string, jour: number, actif = true): Responsable =>
+    ({ id, email: `${id}@x.re`, prenom: null, nom: null, role, actif, created_at: `2026-11-${String(jour).padStart(2, '0')}T00:00:00Z` });
+  const equipe = [c('m2', 'membre', 5), c('p', 'proprietaire', 9), c('m1', 'membre', 3), c('m3', 'membre', 7)];
+
+  it('garde le propriétaire puis les plus anciens, retire les plus récents', () => {
+    expect(enTrop(equipe, 2)).toEqual(['m3', 'm2']);
+    expect(enTrop(equipe, 1)).toEqual(['m3', 'm2', 'm1']);
+  });
+  it('rien à retirer sous la limite, comptes inactifs ignorés', () => {
+    expect(enTrop(equipe, 4)).toEqual([]);
+    expect(enTrop([...equipe, c('m4', 'membre', 10, false)], 4)).toEqual([]);
+  });
+  it('ne retire jamais le propriétaire, même avec une limite à 0', () => {
+    expect(enTrop(equipe, 0)).not.toContain('p');
   });
 });

@@ -20,6 +20,7 @@ const Ressources = lazy(() => import('./pages/Ressources'));
 const Creations = lazy(() => import('./pages/Creations'));
 const Entreprise = lazy(() => import('./pages/Entreprise'));
 const Compte = lazy(() => import('./pages/Compte'));
+const Responsables = lazy(() => import('./pages/Responsables'));
 const Connecteurs = lazy(() => import('./pages/Connecteurs'));
 const Rapport = lazy(() => import('./pages/Rapport'));
 const ConnecterInvitation = lazy(() => import('./pages/ConnecterInvitation'));
@@ -288,6 +289,7 @@ export default function StudioApp() {
             <Route path="reglages/entreprise" element={<Entreprise />} />
             <Route path="reglages/perimetre" element={<Perimetre />} />
             <Route path="reglages/perimetre/contrat" element={<Contrat />} />
+            <Route path="reglages/responsables" element={<Responsables />} />
             <Route path="reglages/compte" element={<Compte />} />
             <Route path="reglages/rapport" element={<Rapport />} />
             {/* Anciennes adresses : toujours servies, par redirection. */}
