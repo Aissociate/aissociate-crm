@@ -158,6 +158,13 @@ const routes = [
     ],
   },
   {
+    path: '/affiliation',
+    title: 'Programme partenaires Studio IA : 30 % la première année, 10 % ensuite | Aissociate',
+    description: "Recommandez le Studio IA d'Aissociate à vos clients et à votre réseau : 30 % du montant encaissé la première année, puis 10 % tant que le client reste abonné. Experts-comptables, consultants, agences, formateurs à La Réunion et ailleurs.",
+    keywords: "programme affiliation IA, apporteur d'affaires IA, partenariat agents IA, commission récurrente, affiliation SaaS La Réunion",
+    schemas: [breadcrumb([{ name: 'Accueil', url: canon('/') }, { name: 'Programme partenaires', url: canon('/affiliation') }])],
+  },
+  {
     path: '/aides-formation',
     title: 'Financer sa formation IA : CPF, OPCO, France Travail | Aissociate',
     description: "Toutes les aides pour financer votre formation en intelligence artificielle : CPF, OPCO, France Travail, plan de développement des compétences. Accompagnement par un organisme Qualiopi à La Réunion.",
@@ -432,6 +439,7 @@ async function generateSitemap(formations, blogArticles) {
     { loc: '/aides-formation', priority: '0.8', changefreq: 'monthly' },
     { loc: '/blog', priority: '0.85', changefreq: 'daily' },
     { loc: '/contact', priority: '0.75', changefreq: 'monthly' },
+    { loc: '/affiliation', priority: '0.6', changefreq: 'monthly' },
     { loc: '/formulaire', priority: '0.7', changefreq: 'monthly' },
     { loc: '/mentions-legales', priority: '0.3', changefreq: 'yearly' },
     { loc: '/confidentialite', priority: '0.3', changefreq: 'yearly' },

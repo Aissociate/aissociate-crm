@@ -8,6 +8,7 @@ const SERVICES = [
   { to: '/aides-formation', label: 'Financer ma formation (CPF, OPCO)' },
   { to: '/', label: 'Studio IA : votre équipe d\'agents IA' },
   { to: '/formation-ia', label: 'Organisme de formation IA (Qualiopi)' },
+  { to: '/affiliation', label: 'Devenir partenaire (30 % de commission)' },
   { to: '/assistance', label: 'Assistance & chatbots IA' },
   { to: '/developpement', label: 'Développement d\'agents IA' },
   { to: '/blog', label: 'Blog IA' },
