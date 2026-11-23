@@ -1,70 +1,33 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, UserCog, TriangleAlert, ChevronDown, ChevronRight, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Search, UserRound, UserPlus, CheckCheck, CircleSlash2, Forward, SlidersHorizontal, Send, Bot, Clock } from 'lucide-react';
+import { Plus, Trash2, Info, RefreshCw, TriangleAlert, Search, SlidersHorizontal } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Spinner, EmptyState, Badge, SearchSelect, TONE_TILE, type Tone } from '@/components/ui';
+import { PageHeader, Button, Spinner, EmptyState } from '@/components/ui';
 import { formatDate, fullName, cn } from '@/lib/utils';
-import { LinkedText } from '@/lib/linkify';
 import ComposeMessageModal, { type ComposeInitial } from '@/components/ComposeMessageModal';
-import PieceJointeLien from '@/components/PieceJointeLien';
 import ContactFiche from '@/components/ContactFiche';
-import { OPP_STAGE_LABELS } from '@/lib/constants';
 import { usePipelineColonnes } from '@/lib/pipeline';
 import type {
-  Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat,
-  Opportunite, OpportuniteStage, ConversationClose, Entreprise, Financeur, EmailOrigine,
+  Email, Contact, Profile, Formateur, Candidat,
+  Opportunite, OpportuniteStage, ConversationClose, Entreprise, Financeur,
 } from '@/lib/database.types';
+import {
+  ALL_SCOPES, atOf, emailAddr, estIA, expediteurDuMessage, fwdSubject, interlocuteurDe, parseDisplayName,
+  reSubject, regrouperConversations, type Convo, type Scope, type SmtpCfg, type SyncInfo, type View,
+} from './messagerie/conversations';
+import { FiltresAvances } from './messagerie/FiltresAvances';
+import { ListeEnvoyes } from './messagerie/ListeEnvoyes';
+import { ListeConversations } from './messagerie/ListeConversations';
+import { ModaleAffectation } from './messagerie/ModaleAffectation';
 
-type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
-type SyncInfo = { last_at?: string; ok?: boolean; imported?: number; skipped?: number; error?: string };
-type View = 'conversations' | 'envoyes' | 'orphelins';
-
-// Adresse e-mail nue de « Nom <a@b.com> », normalisée.
-const emailAddr = (s: string | null): string => {
-  if (!s) return '';
-  const m = s.match(/<([^>]+)>/);
-  return (m ? m[1] : s).trim().toLowerCase();
-};
-const digits = (s: string | null): string => (s ?? '').replace(/[^\d]/g, '');
-const reSubject = (s: string | null): string => /^\s*re\s*:/i.test(s ?? '') ? (s ?? '') : `Re: ${s ?? ''}`;
-// « Fwd: » n'est pas empilé sur un objet déjà transféré, et un « Re: » existant
-// est conservé : « Fwd: Re: Devis » dit bien d'où vient le message.
-const fwdSubject = (s: string | null): string =>
-  /^\s*(fwd?|tr)\s*:/i.test(s ?? '') ? (s ?? '') : `Fwd: ${s ?? ''}`;
-
-type MatchKind = 'contact' | 'formateur' | 'candidat';
-const KIND_LABEL: Record<MatchKind, string> = { contact: 'Contact', formateur: 'Formateur', candidat: 'Recrutement' };
-const KIND_TONE: Record<MatchKind, Tone> = {
-  contact: 'brand',
-  formateur: 'info',
-  candidat: 'warning',
-};
-
-type Peer = { key: string; label: string; kind: MatchKind | null; contactId: string | null; ownerId: string | null };
-type Convo = {
-  key: string; label: string; kind: MatchKind | null; contactId: string | null;
-  emails: Email[]; owners: Set<string>; channels: Set<EmailCanal>;
-  lastAt: string; lastDir: EmailDirection; lastCanal: EmailCanal;
-  hasInbound: boolean; hasOutbound: boolean; unread: boolean; matched: boolean;
-  /** Un message sortant existe après le dernier message entrant. */
-  answered: boolean;
-  /** Discussion marquée « close » : aucune réponse n'est attendue. */
-  closed: boolean;
-  /** Étape de l'opportunité du contact lié, `null` s'il n'en a pas. */
-  oppStage: OpportuniteStage | null;
-};
-
-// Périmètres de recherche activables (ticket « Messagerie fonction de recherche »).
-type Scope = 'expediteur' | 'destinataire' | 'objet' | 'corps' | 'piece_jointe';
-const SCOPE_LABELS: Record<Scope, string> = {
-  expediteur: 'Expéditeurs', destinataire: 'Destinataires', objet: 'Objet',
-  corps: 'Corps du texte', piece_jointe: 'Pièces jointes',
-};
-const ALL_SCOPES = Object.keys(SCOPE_LABELS) as Scope[];
-
+/**
+ * Messagerie : une conversation par interlocuteur, e-mail et WhatsApp réunis, plus la vue « Envoyés ».
+ * Les règles de regroupement sont dans `messagerie/conversations.ts`, les listes et les filtres
+ * avancés dans `messagerie/` ; cette page charge les données et tient filtres, sélection et actions.
+ */
 export default function Messagerie() {
   const { isManager, isAdmin, session } = useAuth();
   const { colonnes: colonnesPipeline } = usePipelineColonnes();
@@ -105,106 +68,17 @@ export default function Messagerie() {
 
   const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
 
-  // ── Expéditeur d'un message sortant : IA, automate ou utilisateur ──
-  // Les lignes antérieures à la colonne `origine` sont déduites : un envoi
-  // rattaché à un utilisateur (owner_id) est le sien, sinon il est automatique.
-  const expediteurDe = (e: Email): { origine: EmailOrigine; label: string } => {
-    const o: EmailOrigine = e.origine ?? (e.owner_id ? 'utilisateur' : 'automatique');
-    if (o === 'ia_assistant') return { origine: o, label: e.origine_libelle || 'Assistant IA' };
-    if (o === 'ia_studio') return { origine: o, label: e.origine_libelle || 'Agent IA (Studio)' };
-    if (o === 'automatique') return { origine: o, label: e.origine_libelle || 'Envoi automatique' };
-    return { origine: o, label: ownerName(e.owner_id) ?? e.origine_libelle ?? 'Utilisateur' };
-  };
-  const estIA = (o: EmailOrigine) => o === 'ia_assistant' || o === 'ia_studio';
-  const badgeExpediteur = (e: Email) => {
-    const x = expediteurDe(e);
-    return (
-      <Badge tone={estIA(x.origine) ? 'info' : x.origine === 'automatique' ? 'neutral' : 'brand'}>
-        <span className="inline-flex items-center gap-1">
-          {estIA(x.origine) ? <Bot className="h-3 w-3" /> : x.origine === 'automatique' ? <Clock className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
-          {estIA(x.origine) ? `IA · ${x.label}` : x.label}
-        </span>
-      </Badge>
-    );
-  };
+  // Expéditeur d'un message sortant (IA, automate ou utilisateur) et interlocuteur d'un message.
+  const expediteurDe = (e: Email) => expediteurDuMessage(e, ownerName);
+  const resolvePeer = (e: Email) => interlocuteurDe(e, contacts.data, formateurs.data, candidats.data);
 
-  // ── Résolution de l'INTERLOCUTEUR d'un message (clé de regroupement) ──
-  // Un e-mail connu et un WhatsApp du même contact partagent la même clé
-  // `contact:<id>` -> ils tombent dans la même conversation.
-  const resolvePeer = (e: Email): Peer => {
-    const raw = e.direction === 'entrant' ? (e.expediteur ?? '') : (e.destinataires[0] ?? '');
-    if (e.canal === 'whatsapp') {
-      const ph = digits(raw);
-      const c = ph ? contacts.data.find((x) => x.telephone && digits(x.telephone) === ph) : null;
-      const cc = c ?? (e.contact_id ? contacts.data.find((x) => x.id === e.contact_id) : null);
-      if (cc) return { key: `contact:${cc.id}`, label: fullName(cc.prenom, cc.nom), kind: 'contact', contactId: cc.id, ownerId: cc.responsable_id ?? cc.owner_id ?? null };
-      return { key: `wa:${ph || raw || '?'}`, label: raw || 'WhatsApp', kind: null, contactId: null, ownerId: null };
-    }
-    const addr = emailAddr(raw);
-    const c = addr ? contacts.data.find((x) => emailAddr(x.email) === addr) : null;
-    if (c) return { key: `contact:${c.id}`, label: fullName(c.prenom, c.nom), kind: 'contact', contactId: c.id, ownerId: c.responsable_id ?? c.owner_id ?? null };
-    const f = addr ? formateurs.data.find((x) => emailAddr(x.email) === addr) : null;
-    if (f) return { key: `formateur:${f.id}`, label: fullName(f.prenom, f.nom), kind: 'formateur', contactId: null, ownerId: null };
-    const k = addr ? candidats.data.find((x) => emailAddr(x.email) === addr) : null;
-    if (k) return { key: `candidat:${k.id}`, label: fullName(k.prenom, k.nom), kind: 'candidat', contactId: null, ownerId: null };
-    if (e.contact_id) { const cc = contacts.data.find((x) => x.id === e.contact_id); if (cc) return { key: `contact:${cc.id}`, label: fullName(cc.prenom, cc.nom), kind: 'contact', contactId: cc.id, ownerId: cc.responsable_id ?? cc.owner_id ?? null }; }
-    return { key: `addr:${addr || raw || '?'}`, label: raw || addr || '—', kind: null, contactId: null, ownerId: null };
-  };
-
-  // Conversations regroupées par interlocuteur (tous canaux, tous sens).
-  const buildConvos = (): Convo[] => {
-    const map = new Map<string, Convo>();
-    data.forEach((e) => {
-      const p = resolvePeer(e);
-      let cv = map.get(p.key);
-      if (!cv) { cv = { key: p.key, label: p.label, kind: p.kind, contactId: p.contactId, emails: [], owners: new Set(), channels: new Set(), lastAt: '', lastDir: 'sortant', lastCanal: 'email', hasInbound: false, hasOutbound: false, unread: false, matched: p.kind !== null, answered: false, closed: false, oppStage: null }; map.set(p.key, cv); }
-      cv.emails.push(e);
-      cv.channels.add(e.canal === 'whatsapp' ? 'whatsapp' : 'email');
-      const t = e.sent_at ?? e.created_at;
-      if (t > cv.lastAt) { cv.lastAt = t; cv.lastDir = e.direction; cv.lastCanal = e.canal === 'whatsapp' ? 'whatsapp' : 'email'; }
-      if (e.direction === 'entrant') { cv.hasInbound = true; if (!e.lu) cv.unread = true; } else cv.hasOutbound = true;
-      if (e.owner_id) cv.owners.add(e.owner_id);
-      if (p.ownerId) cv.owners.add(p.ownerId);
-    });
-    const dir = chrono ? -1 : 1; // chrono = plus ancien d'abord
-    const at = (e: Email) => e.sent_at ?? e.created_at;
-    return [...map.values()]
-      .map((cv) => {
-        cv.emails.sort((a, b) => ((at(a) < at(b) ? 1 : -1) * dir));
-        // « Répondu » = un sortant postérieur au dernier entrant. Une conversation
-        // sans aucun message entrant n'attend rien : elle est considérée traitée.
-        const lastIn = cv.emails.filter((e) => e.direction === 'entrant').map(at).sort().at(-1);
-        cv.answered = !lastIn || cv.emails.some((e) => e.direction === 'sortant' && at(e) > lastIn);
-        cv.closed = closedKeys.has(cv.key);
-        cv.oppStage = cv.contactId ? (oppByContact.get(cv.contactId) ?? null) : null;
-        return cv;
-      })
-      .sort((a, b) => ((a.lastAt < b.lastAt ? 1 : -1) * dir));
-  };
-
-  const allConvos = buildConvos();
+  const allConvos = regrouperConversations({ data, chrono, closedKeys, oppByContact, resolvePeer });
   const isOrphan = (c: Convo) => !c.matched && c.hasInbound;
   const orphanConvos = allConvos.filter(isOrphan);
   const mainConvos = allConvos.filter((c) => !isOrphan(c));
 
   // ── Affectation manuelle d'un e-mail (ou de tout le fil) à un contact ──
   const [assignTarget, setAssignTarget] = useState<Email | null>(null);
-  const [assignContact, setAssignContact] = useState('');
-  const [assignWhole, setAssignWhole] = useState(true);
-  const openAssign = (e: Email) => { setAssignTarget(e); setAssignContact(e.contact_id ?? ''); setAssignWhole(true); };
-  const doAssign = async () => {
-    if (!assignTarget) return;
-    const c = contacts.data.find((x) => x.id === assignContact);
-    const owner = c ? (c.responsable_id ?? c.owner_id ?? null) : null;
-    const fields = { contact_id: assignContact || null, owner_id: owner };
-    const q = supabase.from('emails').update(fields);
-    const { error } = assignWhole && assignTarget.expediteur
-      ? await q.eq('expediteur', assignTarget.expediteur)
-      : await q.eq('id', assignTarget.id);
-    if (error) { alert(error.message); return; }
-    setAssignTarget(null);
-    void refresh();
-  };
 
   // Statut SMTP (bandeau) + horodatage de la dernière synchronisation IMAP,
   // écrit par la fonction « fetch-emails » à chaque passage (manuel ou cron).
@@ -225,8 +99,6 @@ export default function Messagerie() {
   }, []);
 
   const [view, setView] = useState<View>('conversations');
-  const [openThreads, setOpenThreads] = useState<Set<string>>(new Set());
-  const toggleThread = (k: string) => setOpenThreads((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   // ── Sélection / suppression de masse ──
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -413,8 +285,6 @@ export default function Messagerie() {
 
   // ── Vue « Envoyés » : tous les e-mails partis du CRM, un par ligne ──
   const [expFilter, setExpFilter] = useState<'' | 'ia' | 'humain' | 'automatique'>('');
-  const [openSent, setOpenSent] = useState<string | null>(null);
-  const atOf = (e: Email) => e.sent_at ?? e.created_at;
   const sentAll = data.filter((e) => e.direction === 'sortant' && e.canal !== 'whatsapp' && e.statut !== 'brouillon');
   const sentMatches = (e: Email): boolean => {
     const x = expediteurDe(e);
@@ -459,14 +329,6 @@ export default function Messagerie() {
   const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
 
-  /** « Jean Dupont <j@d.fr> » → { prenom: 'Jean', nom: 'Dupont' } ; vide si absent. */
-  const parseDisplayName = (raw: string | null): { prenom: string; nom: string } => {
-    const m = (raw ?? '').match(/^\s*"?([^"<]+?)"?\s*</);
-    const parts = (m?.[1] ?? '').trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return { prenom: '', nom: '' };
-    if (parts.length === 1) return { prenom: '', nom: parts[0] };
-    return { prenom: parts[0], nom: parts.slice(1).join(' ') };
-  };
 
   const openPeer = (c: Convo) => {
     if (c.contactId) {
@@ -521,8 +383,6 @@ export default function Messagerie() {
     void refresh();
   };
 
-  // Pastille canal (e-mail / WhatsApp)
-  const channelIcon = (c: EmailCanal, cls = 'h-4 w-4') => (c === 'whatsapp' ? <MessageCircle className={cls} /> : <Mail className={cls} />);
 
   return (
     <div>
@@ -601,53 +461,16 @@ export default function Messagerie() {
       </div>
 
       {avance && (
-        <div className="mb-4 space-y-3 rounded-xl border border-line bg-surface p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Fourchette de dates — ticket « fonction de recherche de messages ». */}
-            <label className="flex items-center gap-1.5 text-sm text-muted">
-              Du <input type="date" className="input w-[9.5rem] py-2 text-sm" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} title="Date de début" />
-            </label>
-            <label className="flex items-center gap-1.5 text-sm text-muted">
-              au <input type="date" className="input w-[9.5rem] py-2 text-sm" value={dateFin} onChange={(e) => setDateFin(e.target.value)} title="Date de fin" />
-            </label>
-            <select className="input max-w-[210px] py-2 text-sm" value={oppFilter} onChange={(e) => setOppFilter(e.target.value)}>
-              <option value="">Opportunité : toutes</option>
-              <option value="aucune">Sans opportunité</option>
-              {colonnesPipeline.map((c) => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
-            </select>
-            <select className="input max-w-[190px] py-2 text-sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
-              <option value="date">Trier par date</option>
-              <option value="conseiller">Trier par conseiller</option>
-            </select>
-            <button
-              onClick={() => setChrono((v) => !v)}
-              title={chrono ? 'Actuellement : ordre chronologique (plus ancien en premier)' : 'Actuellement : plus récent en premier'}
-              className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-2 text-sm text-muted transition hover:border-brand-400 hover:text-brand-600"
-            >
-              <ArrowDownUp className="h-4 w-4" />
-              {chrono ? 'Chronologique' : 'Plus récent d’abord'}
-            </button>
-            {nbAvances > 0 && (
-              <button onClick={effacerAvances} className="text-sm font-medium text-muted underline-offset-2 hover:text-fg hover:underline">Effacer ces filtres</button>
-            )}
-          </div>
-
-          {/* Périmètre de la recherche : à restreindre ou étendre au besoin. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
-            <span className="font-medium">Rechercher dans :</span>
-            {ALL_SCOPES.map((s) => (
-              <label key={s} className="flex cursor-pointer items-center gap-1.5">
-                <input
-                  type="checkbox" checked={scopes.has(s)}
-                  onChange={() => setScopes((prev) => { const n = new Set(prev); if (n.has(s)) n.delete(s); else n.add(s); return n; })}
-                />
-                {SCOPE_LABELS[s]}
-              </label>
-            ))}
-            <button onClick={() => setScopes(new Set(ALL_SCOPES))} className="underline hover:text-fg">tout</button>
-            <button onClick={() => setScopes(new Set())} className="underline hover:text-fg">aucun</button>
-          </div>
-        </div>
+        <FiltresAvances
+          dateDebut={dateDebut} setDateDebut={setDateDebut}
+          dateFin={dateFin} setDateFin={setDateFin}
+          oppFilter={oppFilter} setOppFilter={setOppFilter}
+          colonnesPipeline={colonnesPipeline}
+          sortBy={sortBy} setSortBy={setSortBy}
+          chrono={chrono} setChrono={setChrono}
+          scopes={scopes} setScopes={setScopes}
+          nbAvances={nbAvances} effacerAvances={effacerAvances}
+        />
       )}
 
       {!loading && visibleIds.length > 0 && (
@@ -671,65 +494,17 @@ export default function Messagerie() {
         sentList.length === 0 ? (
           <EmptyState title="Aucun e-mail envoyé" message={sentAll.length ? 'Aucun envoi ne correspond aux filtres.' : undefined} />
         ) : (
-          <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-            {sentList.map((e) => {
-              const peer = resolvePeer(e);
-              const ouvert = openSent === e.id;
-              const ia = estIA(expediteurDe(e).origine);
-              return (
-                <div key={e.id} className={selection.has(e.id) ? 'bg-brand-500/5' : ''}>
-                  <div className="flex items-start gap-2.5 p-3">
-                    <input
-                      type="checkbox" className="mt-2 shrink-0" checked={selection.has(e.id)} title="Sélectionner ce message"
-                      onChange={() => setSelection((sel) => { const n = new Set(sel); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; })}
-                    />
-                    <button onClick={() => setOpenSent(ouvert ? null : e.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                      <div className={cn('mt-0.5 shrink-0 rounded-full p-2', TONE_TILE[ia ? 'info' : 'brand'])}>
-                        {ia ? <Bot className="h-5 w-5" /> : <Send className="h-5 w-5" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate font-medium text-fg">{e.sujet || '(sans objet)'}</p>
-                          {e.attachments && e.attachments.length > 0 && <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />}
-                          <span className="ml-auto shrink-0 text-xs text-muted">{formatDate(atOf(e), 'dd/MM/yyyy HH:mm')}</span>
-                          {ouvert ? <ChevronDown className="h-4 w-4 shrink-0 text-muted" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted" />}
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-muted">
-                          À {e.destinataires.join(', ') || '—'}{e.copie?.length ? ` · copie : ${e.copie.join(', ')}` : ''}
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-                          {badgeExpediteur(e)}
-                          {peer.kind ? <Badge tone={KIND_TONE[peer.kind]}>{KIND_LABEL[peer.kind]} · {peer.label}</Badge> : <Badge tone="warning">Non rattaché</Badge>}
-                          {e.statut === 'echec' ? <Badge tone="danger">non délivré</Badge> : <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
-                        </div>
-                      </div>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-0.5">
-                      {peer.contactId && (
-                        <button onClick={() => { const ct = contacts.data.find((x) => x.id === peer.contactId); if (ct) setFiche(ct); }} title="Ouvrir la fiche du contact" className="rounded p-1.5 text-muted hover:text-brand-600">
-                          <UserRound className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button onClick={() => forward(e)} title="Transférer ce message" className="rounded p-1.5 text-muted hover:text-brand-600"><Forward className="h-4 w-4" /></button>
-                      <button onClick={() => remove(e)} title="Supprimer ce message" className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                  {ouvert && (
-                    <div className="border-t border-line bg-surface-2/40 p-3">
-                      {e.corps
-                        ? <p className="whitespace-pre-wrap break-words text-sm text-fg"><LinkedText text={e.corps} /></p>
-                        : <p className="text-sm text-muted">(message vide)</p>}
-                      {e.attachments && e.attachments.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {e.attachments.map((a, i) => <PieceJointeLien key={i} piece={a} />)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <ListeEnvoyes
+            sentList={sentList}
+            selection={selection}
+            setSelection={setSelection}
+            resolvePeer={resolvePeer}
+            expediteurDe={expediteurDe}
+            contacts={contacts.data}
+            setFiche={setFiche}
+            forward={forward}
+            remove={remove}
+          />
         )
       ) : convos.length === 0 ? (
         <EmptyState
@@ -737,180 +512,37 @@ export default function Messagerie() {
           message={view === 'orphelins' || reponseFilter === 'non_repondu' ? undefined : 'Changez de vue ou videz la recherche.'}
         />
       ) : (
-        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
-          {convos.map((c) => {
-            const expanded = openThreads.has(c.key);
-            const last = newestFirst(c)[0];
-            const aff = affectationLabel(c);
-            return (
-              <div key={c.key} className={convoSelected(c) ? 'bg-brand-500/5' : ''}>
-                {/* En-tête : interlocuteur, dernière interaction, canaux, affectation */}
-                <div className="flex items-start gap-2.5 p-3">
-                  <input type="checkbox" className="mt-2 shrink-0" checked={convoSelected(c)} onChange={() => toggleConvo(c)} title="Sélectionner la conversation" />
-                  <button onClick={() => toggleThread(c.key)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                    <div className={cn('mt-0.5 shrink-0 rounded-full p-2', TONE_TILE[c.lastCanal === 'whatsapp' ? 'success' : c.lastDir === 'entrant' ? 'info' : 'brand'])}>
-                      {channelIcon(c.lastCanal, 'h-5 w-5')}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        {c.unread && <span className="h-2 w-2 shrink-0 rounded-full bg-brand-600" title="Non lu" />}
-                        <p className={`truncate ${c.unread ? 'font-semibold' : 'font-medium'} text-fg`}>{c.label}</p>
-                        {c.channels.has('email') && <Mail className="h-3 w-3 shrink-0 text-muted" />}
-                        {c.channels.has('whatsapp') && <MessageCircle className="h-3 w-3 shrink-0 text-emerald-500" />}
-                        <span className="shrink-0 text-xs text-muted">· {c.emails.length}</span>
-                        {c.emails.some((e) => e.attachments && e.attachments.length > 0) && <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />}
-                        <span className="ml-auto shrink-0 text-xs text-muted">{formatDate(c.lastAt, 'dd/MM/yyyy HH:mm')}</span>
-                        {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-muted" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted" />}
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        <span className="text-fg/70">{last.direction === 'entrant' ? '↩ ' : '↪ '}{last.sujet || (last.canal === 'whatsapp' ? 'WhatsApp' : '(sans objet)')}</span>
-                        {last.corps ? ` — ${last.corps}` : ''}
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-                        {c.kind ? (
-                          <>
-                            <Badge tone={KIND_TONE[c.kind]}>{KIND_LABEL[c.kind]}</Badge>
-                            <Badge tone={c.owners.size > 0 ? 'neutral' : 'info'}>{aff ?? 'Direction'}</Badge>
-                          </>
-                        ) : c.hasInbound ? <Badge tone="warning">Non rattaché</Badge> : null}
-                        {/* Statut de traitement : réponse apportée / attendue / discussion close. */}
-                        {c.closed
-                          ? <Badge tone="neutral">Discussion close</Badge>
-                          : c.answered ? <Badge tone="success">Répondu</Badge> : <Badge tone="warning">À répondre</Badge>}
-                        {c.oppStage && <Badge tone="info">Opportunité · {OPP_STAGE_LABELS[c.oppStage] ?? c.oppStage}</Badge>}
-                        {/* Repère visuel : un brouillon attend d'être finalisé dans ce fil. */}
-                        {c.emails.some((e) => e.statut === 'brouillon') && <Badge tone="warning">Brouillon à finaliser</Badge>}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Accès direct à la fiche du contact, ou création si l'interlocuteur est inconnu. */}
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button onClick={() => reply(c)} title="Répondre" className="rounded p-1.5 text-muted hover:text-brand-600">
-                      <Reply className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => openPeer(c)}
-                      title={c.contactId ? 'Ouvrir la fiche du contact' : 'Créer ce contact dans Contacts'}
-                      className="rounded p-1.5 text-muted hover:text-brand-600"
-                    >
-                      {c.contactId ? <UserRound className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                    </button>
-                    <button
-                      onClick={() => toggleClose(c)}
-                      title={c.closed ? 'Rouvrir la discussion' : 'Clore la discussion (aucune réponse attendue)'}
-                      className={cn('rounded p-1.5 hover:text-brand-600', c.closed ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted')}
-                    >
-                      {c.closed ? <CircleSlash2 className="h-4 w-4" /> : <CheckCheck className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Détail déplié : tag interlocuteur + Répondre, puis fil façon chat */}
-                {expanded && (
-                  <div className="border-t border-line bg-surface-2/40">
-                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                      {c.kind ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-600 px-3 py-1 text-xs font-medium text-white">
-                          <UserCog className="h-3.5 w-3.5" /> {c.label} <span className="opacity-80">· {aff ?? 'Direction'}</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                          <TriangleAlert className="h-3.5 w-3.5" /> {c.label} · non rattaché
-                        </span>
-                      )}
-                      <Button variant="secondary" onClick={() => reply(c)}><Reply className="h-4 w-4" /> Répondre</Button>
-                    </div>
-                    <div className="max-h-[28rem] space-y-3 overflow-y-auto p-3 pt-0">
-                      {c.emails.map((e) => {
-                        const wa = e.canal === 'whatsapp';
-                        return (
-                          <div key={e.id} className={`flex ${e.direction === 'sortant' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[88%] rounded-xl border p-3 ${wa ? 'border-emerald-500/20 bg-emerald-500/5' : e.direction === 'sortant' ? 'border-brand-500/20 bg-brand-500/5' : 'border-line bg-surface'}`}>
-                              <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted">
-                                <span className="flex min-w-0 items-center gap-1 truncate">
-                                  {channelIcon(e.canal, 'h-3 w-3 shrink-0')}
-                                  {e.direction === 'entrant' ? `De ${e.expediteur ?? '—'}` : `À ${e.destinataires.join(', ') || '—'}`}
-                                  {e.copie?.length > 0 && <span className="truncate">· copie : {e.copie.join(', ')}</span>}
-                                </span>
-                                <span className="flex shrink-0 items-center gap-2">
-                                  {/* Un avis de non-remise arrive en « entrant » : il doit rester visible. */}
-                                  {e.statut === 'echec'
-                                    ? <Badge tone="danger">non délivré</Badge>
-                                    : e.direction === 'sortant' && !wa && <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
-                                  {e.direction === 'sortant' && !wa && e.statut !== 'brouillon' && badgeExpediteur(e)}
-                                  {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
-                                </span>
-                              </div>
-                              {!wa && e.sujet && <p className="mb-1 text-sm font-medium text-fg">{e.sujet}</p>}
-                              {e.corps && <p className="whitespace-pre-wrap break-words text-sm text-fg"><LinkedText text={e.corps} /></p>}
-                              {e.attachments && e.attachments.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {e.attachments.map((a, i) => <PieceJointeLien key={i} piece={a} />)}
-                                </div>
-                              )}
-                              <div className="mt-2 flex items-center justify-end gap-1">
-                                {e.direction === 'sortant' && e.statut === 'brouillon' && (
-                                  <button onClick={() => editDraft(e)} title="Reprendre le brouillon" className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-500/10 dark:text-brand-400">
-                                    <Pencil className="h-3.5 w-3.5" /> Reprendre
-                                  </button>
-                                )}
-                                {/* Transfert : e-mail uniquement — un message WhatsApp
-                                    part par wa.me, sans pièces jointes ni objet. */}
-                                {!wa && e.statut !== 'brouillon' && (
-                                  <button onClick={() => forward(e)} title="Transférer ce message" className="flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-muted hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400">
-                                    <Forward className="h-3.5 w-3.5" /> Transférer
-                                  </button>
-                                )}
-                                {/* Lu / non lu : le message peut être remis en « à traiter ». */}
-                                {e.direction === 'entrant' && (
-                                  <button
-                                    onClick={() => toggleLu(e)}
-                                    title={e.lu ? 'Marquer comme non lu' : 'Marquer comme lu'}
-                                    className={cn('rounded p-1 hover:text-brand-600', e.lu ? 'text-muted' : 'text-brand-600 dark:text-brand-400')}
-                                  >
-                                    {e.lu ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
-                                  </button>
-                                )}
-                                {e.direction === 'entrant' && !wa && <button onClick={() => openAssign(e)} title="Affecter à un contact/conseiller" className="rounded p-1 text-muted hover:text-brand-600"><UserCog className="h-4 w-4" /></button>}
-                                <button onClick={() => remove(e)} title="Supprimer ce message" className="rounded p-1 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <ListeConversations
+          convos={convos}
+          newestFirst={newestFirst}
+          affectationLabel={affectationLabel}
+          convoSelected={convoSelected}
+          toggleConvo={toggleConvo}
+          expediteurDe={expediteurDe}
+          reply={reply}
+          openPeer={openPeer}
+          toggleClose={toggleClose}
+          editDraft={editDraft}
+          forward={forward}
+          toggleLu={toggleLu}
+          openAssign={setAssignTarget}
+          remove={remove}
+        />
       )}
 
       {/* Composition multi-canal (modale partagée avec la fiche contact) */}
       <ComposeMessageModal open={open} onClose={() => setOpen(false)} onSent={refresh} initial={composeInitial} />
 
       {/* Affectation d'un e-mail / d'une conversation à un contact */}
-      <Modal
-        open={!!assignTarget} onClose={() => setAssignTarget(null)} title="Affecter l'e-mail"
-        footer={<><Button variant="secondary" onClick={() => setAssignTarget(null)}>Annuler</Button><Button onClick={doAssign}>Affecter</Button></>}
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted">De : <strong className="text-fg">{assignTarget?.expediteur ?? '—'}</strong></p>
-          <Field label="Apprenant / prospect" hint="L'e-mail sera visible par le conseiller affecté à ce contact ; sinon par la direction">
-            <SearchSelect
-              value={assignContact} onChange={setAssignContact}
-              options={contacts.data.map((c) => ({ value: c.id, label: fullName(c.prenom, c.nom), sub: c.email ?? undefined }))}
-              placeholder="Rechercher un contact (nom, e-mail)…" emptyLabel="— Direction (non affecté) —"
-            />
-          </Field>
-          <label className="flex items-center gap-2 text-sm text-fg">
-            <input type="checkbox" checked={assignWhole} onChange={(e) => setAssignWhole(e.target.checked)} />
-            Appliquer à toute la conversation (tous les e-mails de cet expéditeur)
-          </label>
-        </div>
-      </Modal>
+      {assignTarget && (
+        <ModaleAffectation
+          key={assignTarget.id}
+          assignTarget={assignTarget}
+          contacts={contacts.data}
+          onClose={() => setAssignTarget(null)}
+          refresh={refresh}
+        />
+      )}
 
       {/* Fiche du contact ouverte depuis une conversation */}
       {fiche && (
