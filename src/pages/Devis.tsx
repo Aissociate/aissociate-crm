@@ -10,7 +10,7 @@ import { FileLink } from '@/components/FileUpload';
 import AddToDossierButton from '@/components/AddToDossierButton';
 import { cn, formatDate, fullName, formatMoney } from '@/lib/utils';
 import { ensureDossierClient } from '@/lib/dossierClient';
-import type { Devis, DevisLigne, DevisStatut, Contact, Entreprise, Financeur, Formation, Dossier, Profile } from '@/lib/database.types';
+import type { Devis, DevisLigne, DevisStatut, Contact, Financeur, Formation, Dossier, Profile } from '@/lib/database.types';
 
 const STATUT_LABELS: Record<DevisStatut, string> = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté', refuse: 'Refusé', expire: 'Expiré' };
 const STATUT_TONES: Record<DevisStatut, Tone> = {
@@ -30,7 +30,6 @@ export default function Devis() {
   const { session } = useAuth();
   const { data, loading, refresh } = useCollection<Devis>('devis', { orderBy: { column: 'created_at', ascending: false } });
   const contacts = useCollection<Contact>('contacts');
-  const entreprises = useCollection<Entreprise>('entreprises');
   const financeurs = useCollection<Financeur>('financeurs');
   const formations = useCollection<Formation>('formations');
   const dossiers = useCollection<Dossier>('dossiers');

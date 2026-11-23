@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, FileText, Wand as Wand2, Sparkles, Copy } from 'lucide-react';
+import { Pencil, Trash2, FileText, Wand as Wand2, Sparkles, Copy } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';

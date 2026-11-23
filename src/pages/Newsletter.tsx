@@ -3,7 +3,7 @@ import { Mail, Sparkles, Eye, Send, Trash2, Loader as Loader2, Users } from 'luc
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
-import { PageHeader, Card, Button, Modal, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { PageHeader, Button, Modal, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
 import type { Newsletter as NL } from '@/lib/database.types';
 

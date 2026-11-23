@@ -348,7 +348,7 @@ function TicketCard({
 // ─── Page principale ───────────────────────────────────────────────────────────
 
 export default function Tickets() {
-  const { session, isAdmin } = useAuth();
+  const { session } = useAuth();
   const [activeTab, setActiveTab] = useState<TicketType>('bug');
   const [statutFilter, setStatutFilter] = useState<TicketStatut | 'tous'>('tous');
   const [createType, setCreateType] = useState<TicketType | null>(null);

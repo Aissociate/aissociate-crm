@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
+import { journaliserEnvoi } from '@/lib/journalEmail';
 import { supabase } from '@/lib/supabase';
 import { uploadFile } from '@/lib/storage';
 import {
@@ -194,14 +195,12 @@ export default function Evaluations() {
     if (error) throw new Error(`Envoi impossible (SMTP non configuré ?). ${error.message}`);
     const envoyeLe = new Date().toISOString();
     await supabase.from('evaluation_liens').update({ statut: relance ? 'relance' : 'envoye', sent_at: envoyeLe }).eq('id', l.id);
-    const { error: logErr } = await supabase.from('emails').insert({
-      destinataires: [l.destinataire_email], copie: [], sujet: l.libelle, corps: texte,
-      statut: 'envoye', canal: 'email', direction: 'sortant',
-      expediteur: smtpFrom ?? profile?.email ?? null,
-      contact_id: l.contact_id, dossier_id: l.dossier_id,
-      sent_at: envoyeLe, owner_id: session?.user.id ?? null, attachments: [],
+    const logErr = await journaliserEnvoi({
+      destinataire: l.destinataire_email, sujet: l.libelle, corps: texte,
+      expediteur: smtpFrom ?? profile?.email ?? null, ownerId: session?.user.id ?? null,
+      contactId: l.contact_id, dossierId: l.dossier_id, envoyeLe,
     });
-    if (logErr) setErreur(`Mail envoyé, mais non enregistré dans la Messagerie : ${logErr.message}`);
+    if (logErr) setErreur(`Mail envoyé, mais non enregistré dans la Messagerie : ${logErr}`);
   };
 
   const envoyerLien = async (l: EvaluationLien) => {

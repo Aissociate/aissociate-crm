@@ -150,7 +150,7 @@ export default function Qualiopi() {
           onRefresh={() => { indicateurs.refresh(); preuves.refresh(); documents.refresh(); dossierDocs.refresh(); }}
         />
       )}
-      {tab === 'dossiers' && <Dossiers userId={session?.user.id ?? null} />}
+      {tab === 'dossiers' && <Dossiers />}
       {tab === 'questionnaires' && <Questionnaires />}
       {tab === 'documents' && (
         <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>
@@ -365,7 +365,7 @@ function CommentBox({ value, onSave }: { value: string; onSave: (v: string) => v
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB 2 — DOSSIERS DE FORMATION
 // ─────────────────────────────────────────────────────────────────────────────
-function Dossiers({ userId }: { userId: string | null }) {
+function Dossiers() {
   const sessions = useCollection<SessionFormation>('sessions_formation', { orderBy: { column: 'date_debut', ascending: false } });
   const docs = useCollection<QualiopiDossierDoc>('qualiopi_dossier_docs');
   const participants = useCollection<SessionParticipant>('session_participants');
@@ -378,8 +378,6 @@ function Dossiers({ userId }: { userId: string | null }) {
 
   // Types de pièces disposant d'un modèle .docx actif → publipostage possible.
   const modelTypes = new Set(modeles.data.filter((m) => m.actif && m.fichier_url).map((m) => m.type_doc));
-
-  const refresh = () => { docs.refresh(); };
 
   const prepare = async (sessionId: string) => {
     setBusy(sessionId);
