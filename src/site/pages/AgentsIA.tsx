@@ -29,6 +29,19 @@ const PAYANTS = CONTRATS.filter((c) => c.prix > 0);
 const PRIX_MIN = PAYANTS[0].prix;
 const eur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' €';
 const LIEN_ESSAI = '/studio/demarrer?depuis=agents-ia';
+
+// Comparaison avec un salarié (section « Un salarié, un agent ») : repères généraux du Code du
+// travail, sans chiffre de convention collective. Les montants du Studio suivent contrats.ts.
+const PRIX_PLEIN = CONTRATS.find((c) => c.id === 'plein')?.prix ?? 149;
+const COMPARAISON = [
+  { critere: 'Recrutement', salarie: "Annonce, entretiens, contrat de travail, déclaration préalable à l'embauche : souvent plusieurs semaines.", agent: 'Dix minutes de questionnaire. Il connaît vos prix, votre ton et vos clients dès le premier jour.' },
+  { critere: "Période d'essai", salarie: "Jusqu'à deux mois pour un employé en CDI, avant que l'engagement devienne durable.", agent: "Un stage gratuit, sans limite de durée ni carte bancaire. Vous payez seulement s'il vous est utile." },
+  { critere: 'Coût', salarie: "Au SMIC, plus de 1 800 € brut par mois, auxquels s'ajoutent les cotisations patronales.", agent: `${PRIX_PLEIN} € HT par mois pour 151,67 h de travail (contrat temps plein), agents illimités.` },
+  { critere: 'Temps de travail', salarie: '35 h par semaine ; au plus 10 h par jour et 48 h par semaine, heures supplémentaires majorées.', agent: 'Ses heures se répartissent quand vous en avez besoin, soir et week-end compris. 20 h de plus pour 19,90 €.' },
+  { critere: 'Absences', salarie: 'Deux jours et demi de congés payés par mois travaillé, arrêts maladie, remplacements à organiser.', agent: "Pas de planning de congés ni de remplaçant à trouver : vos agents répondent toute l'année." },
+  { critere: 'Montée en compétences', salarie: "L'employeur doit adapter son salarié à son poste et le former : du temps et un budget.", agent: "Il apprend de vos documents et de vos corrections. Pour votre équipe, un parcours d'intégration finançable par l'OPCO." },
+  { critere: 'Fin du contrat', salarie: 'Démission, licenciement ou rupture conventionnelle : préavis, procédure et indemnités.', agent: "En CDD, sans engagement : vous l'arrêtez quand vous voulez." },
+];
 const prixAvenant = (id: string) => [...COMPTEURS, ...INTERRUPTEURS].find((a) => a.id === id)!.prix;
 
 // ── L'équipe (miroir du catalogue du Studio : super-pouvoirs réels) ─────────
@@ -250,6 +263,10 @@ export default function AgentsIA() {
             <p>Vous avez essayé ChatGPT. Une page blanche, des réponses génériques, et il faut tout lui réexpliquer à chaque fois : vos prix, vos clients, votre façon de parler.</p>
             <p className="font-medium text-neutral-900">Le problème n'est pas l'IA. C'est qu'on vous a donné un outil, alors qu'il vous fallait une équipe.</p>
           </div>
+          <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Essai texte="Je veux une équipe, pas un outil" />
+            <span className="text-sm text-neutral-600">Gratuit, sans carte bancaire, sans limite de durée.</span>
+          </div>
         </section>
 
         {/* ── 2 bis. Démo en direct : Sam, notre propre agent commercial ── */}
@@ -290,6 +307,7 @@ export default function AgentsIA() {
               ))}
             </div>
           </div>
+          <div className="mx-auto mt-10 max-w-6xl px-4 sm:px-8"><Essai texte="Voir ce que mon équipe ferait pour moi" /></div>
         </section>
 
         {/* ── 4. L'équipe ── */}
@@ -327,6 +345,10 @@ export default function AgentsIA() {
               </article>
             ))}
           </div>
+          <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Essai texte="Recruter mon équipe en stage gratuit" />
+            <span className="text-sm text-neutral-600">Choisissez vos agents en 10 minutes, ajoutez-en quand vous voulez.</span>
+          </div>
         </section>
 
         {/* ── 5. Preuve : un exemple réel ── */}
@@ -359,6 +381,7 @@ export default function AgentsIA() {
               </p>
             </div>
           </div>
+          <div className="mx-auto mt-10 max-w-6xl px-4 sm:px-8"><Essai texte="Essayer avec mon entreprise" /></div>
         </section>
 
         {/* ── 6. Mise en place ── */}
@@ -375,6 +398,46 @@ export default function AgentsIA() {
               </li>
             ))}
           </ol>
+          <div className="mt-10"><Essai /></div>
+        </section>
+
+        {/* ── Comparaison avec un salarié : repères généraux du Code du travail ── */}
+        <section id="salarie" className="bg-neutral-950 py-20 text-white">
+          <div className="mx-auto max-w-6xl px-4 sm:px-8">
+            <p className="font-mono text-xs font-medium uppercase tracking-[0.16em] text-orange-400">Un salarié, un agent</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">Le Code du travail protège vos salariés. Vos agents, eux, n'en ont pas besoin.</h2>
+            <p className="mt-4 max-w-2xl text-lg text-neutral-300">
+              Recruter quelqu'un pour vos posts, vos relances ou vos courriers, c'est un engagement sérieux, encadré par la loi.
+              Confier ces tâches à un agent, c'est un contrat que vous ajustez chaque mois.
+            </p>
+            <div className="mt-10 border-t border-white/15" role="table" aria-label="Comparaison entre un salarié et un agent du Studio IA">
+              <div role="row" className="hidden grid-cols-[1fr_1.4fr_1.4fr] gap-6 border-b border-white/15 py-3 text-xs font-medium uppercase tracking-[0.12em] text-neutral-400 sm:grid">
+                <span role="columnheader"><span className="sr-only">Critère</span></span>
+                <span role="columnheader">Un salarié</span>
+                <span role="columnheader" className="text-orange-400">Un agent du Studio IA</span>
+              </div>
+              {COMPARAISON.map((r) => (
+                <div key={r.critere} role="row" className="grid gap-2 border-b border-white/15 py-5 sm:grid-cols-[1fr_1.4fr_1.4fr] sm:gap-6">
+                  <span role="rowheader" className="font-display font-bold">{r.critere}</span>
+                  <span role="cell" className="text-neutral-400"><span className="mr-1 text-xs uppercase tracking-wider text-neutral-500 sm:hidden">Salarié :</span>{r.salarie}</span>
+                  <span role="cell" className="text-white"><span className="mr-1 text-xs uppercase tracking-wider text-orange-400 sm:hidden">Agent :</span>{r.agent}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-neutral-500">Repères généraux du Code du travail ; les règles exactes dépendent de la convention collective et du contrat.</p>
+            <div className="mt-10 max-w-3xl border-l-4 border-orange-500 pl-5">
+              <p className="text-lg text-neutral-200">
+                Un agent ne décide pas, ne signe pas, ne rencontre pas vos clients. Il ne remplace personne : il prend la part répétitive
+                du travail pour que vous et vos salariés gardiez celle qui compte. <b className="text-white">Des IA et des Hommes.</b>
+              </p>
+            </div>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Essai texte="Embaucher mon premier agent en stage" />
+              <button type="button" onClick={() => allerA('offre')} className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold hover:bg-white/10">
+                Comparer les contrats
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* ── 7. L'offre empilée + calculateur ── */}
@@ -515,6 +578,7 @@ export default function AgentsIA() {
               </ul>
             </div>
           </div>
+          <div className="mx-auto mt-10 max-w-6xl px-4 sm:px-8"><Essai texte="C'est pour moi : j'essaie" /></div>
         </section>
 
         {/* ── 10. FAQ ── */}
@@ -530,6 +594,12 @@ export default function AgentsIA() {
                 {faqOuverte === i && <p className="px-5 pb-5 text-neutral-600">{q.answer}</p>}
               </div>
             ))}
+          </div>
+          <div className="mt-10 flex flex-wrap items-center gap-3">
+            <Essai />
+            <button type="button" onClick={() => allerA('capture')} className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 px-6 py-3 text-sm font-semibold text-neutral-900 hover:bg-white">
+              Une autre question ? Réservons 20 minutes
+            </button>
           </div>
         </section>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ArrowRight, Menu, MessageCircle, PhoneCall, X } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { trackClick } from '@/lib/track';
@@ -16,6 +16,9 @@ const LIENS = [
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Sur l'accueil (Studio IA), le bouton principal mène au stage gratuit ; ailleurs, au formulaire de contact.
+  const { pathname } = useLocation();
+  const cta = pathname === '/' ? { to: '/studio/demarrer?depuis=entete', texte: 'Essayer gratuitement' } : { to: '/formulaire', texte: 'Nous contacter' };
   const fermer = () => setIsMenuOpen(false);
 
   return (
@@ -60,10 +63,10 @@ export default function Header() {
               0692 24 68 60
             </a>
             <Link
-              to="/formulaire"
+              to={cta.to}
               className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400"
             >
-              Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              {cta.texte} <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
 
@@ -113,11 +116,11 @@ export default function Header() {
               WhatsApp
             </a>
             <Link
-              to="/formulaire"
+              to={cta.to}
               className="mx-4 !mt-4 flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-semibold text-neutral-950"
               onClick={fermer}
             >
-              Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              {cta.texte} <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         )}
