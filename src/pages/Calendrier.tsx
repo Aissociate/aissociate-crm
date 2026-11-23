@@ -20,7 +20,7 @@ import type {
   SessionFormation, SessionParticipant, ParticipantStatut, Formation, Contact, Formateur, ContactAction,
 } from '@/lib/database.types';
 
-const COULEURS = ['#ea6a1e', '#10b981', '#6366f1', '#ef4444', '#0ea5e9', '#a855f7', '#64748b'];
+const COULEURS = ['#ea6a1e', '#10b981', '#6366f1', '#ef4444', '#0ea5e9', '#a855f7', '#7a6f64'];
 const PART_STATUTS: { v: ParticipantStatut; label: string }[] = [
   { v: 'inscrit', label: 'Inscrit' }, { v: 'present', label: 'Présent' },
   { v: 'absent', label: 'Absent' }, { v: 'annule', label: 'Annulé' },
@@ -343,7 +343,7 @@ export default function Calendrier() {
                     >
                       <div className="mb-1 flex items-center justify-between">
                         <button onClick={() => ouvrirJour(day)} title="Voir la journée"
-                          className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs hover:ring-2 hover:ring-brand-500/40 ${today ? 'bg-brand-600 font-semibold text-white' : 'text-muted'}`}>
+                          className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs hover:ring-2 hover:ring-brand-500/40 ${today ? 'bg-brand-600 font-semibold text-neutral-950' : 'text-muted'}`}>
                           {vue === 'semaine' ? format(day, 'd MMM', { locale: fr }) : format(day, 'd')}
                         </button>
                         <button onClick={() => openNew(day)} className="rounded p-0.5 text-muted opacity-0 hover:bg-surface-2 hover:text-brand-600 group-hover:opacity-100" title="Ajouter">

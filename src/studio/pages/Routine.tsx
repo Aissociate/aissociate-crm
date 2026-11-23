@@ -15,8 +15,8 @@ import { Bascule, ChaineEtapes, CL_BOUTON_CLAIR, CL_BOUTON_NOIR, CL_LIEN, CL_SUR
 
 const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const HEURES = Array.from({ length: 17 }, (_, i) => i + 6); // 6 h → 22 h
-const puce = (on: boolean) => cx('min-h-[44px] min-w-[48px] rounded-[10px] border px-2.5 text-sm',
-  on ? 'border-[#141414] bg-[#141414] font-semibold text-white' : 'border-[#D6D3CF] bg-white text-[#141414] hover:border-[#141414]');
+const puce = (on: boolean) => cx('min-h-[44px] min-w-[48px] rounded-none border px-2.5 text-sm',
+  on ? 'border-[#17120E] bg-[#17120E] font-semibold text-white' : 'border-[#D9CEC3] bg-white text-[#17120E] hover:border-[#17120E]');
 const bascule = (liste: number[], v: number) => (liste.includes(v) ? liste.filter((x) => x !== v) : [...liste, v]).sort((a, b) => a - b);
 
 export default function Routine() {
@@ -75,17 +75,17 @@ export default function Routine() {
   const essayer = () => agir('routine_essayer', {}, "Essai lancé : la routine tourne à blanc, rien n'est envoyé. Le résultat s'affiche dans « Ce qui s'est passé ».");
 
   return (
-    <div className="flex flex-col gap-6 text-[17px] leading-normal text-[#141414]">
+    <div className="flex flex-col gap-6 text-[17px] leading-normal text-[#17120E]">
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div className="flex min-w-0 flex-col gap-2">
           <Link to="/studio/routines" className={cx(CL_SURTITRE, 'self-start no-underline hover:underline')}>{compteActives(rep.routines)}</Link>
           <h1 className="text-[clamp(26px,3vw,36px)] font-extrabold leading-[1.1] tracking-[-0.025em]">{r.titre}</h1>
-          <p className="text-[15px] text-[#5F5B57]">{sousTitre(r)}</p>
+          <p className="text-[15px] text-[#615850]">{sousTitre(r)}</p>
         </div>
         {proprio && (
           <div className="flex flex-wrap items-center gap-2.5">
             <Bascule actif={r.actif} disabled={occupe} onChange={(v) => agir('routine_regler', { actif: v })}
-              className="border-[#D6D3CF] bg-white font-semibold">
+              className="border-[#D9CEC3] bg-white font-semibold">
               {r.actif ? 'Routine active' : 'Routine en pause'}
             </Bascule>
             <button type="button" className={CL_BOUTON_NOIR} disabled={occupe || r.en_cours} onClick={essayer}>
@@ -122,40 +122,40 @@ export default function Routine() {
           <ChaineEtapes etapes={etapes} enClair={r.en_clair} choisie={sel.id} onChoisir={setChoisie} agents={me.agents} heures={r.heures}
             pied={proprio && <Link to="/studio/routines/nouvelle" className={cx(CL_LIEN, 'mt-3.5 font-medium')}>Une autre façon de faire ? Décrivez-la à Léa</Link>} />
 
-          <section aria-label="Ce qui s'est passé" className="flex flex-col rounded-[20px] border border-[#E7E5E2] bg-white px-6 py-[22px]">
+          <section aria-label="Ce qui s'est passé" className="flex flex-col rounded-none border border-[#E6DCD2] bg-white px-6 py-[22px]">
             <h2 className="mb-2 text-[19px] font-bold">Ce qui s'est passé</h2>
             {r.historique.length ? r.historique.map((l, i) => (
-              <div key={`${l.date}-${i}`} className="flex flex-wrap items-start gap-x-3.5 gap-y-1 border-t border-[#EEEDEA] py-3">
-                <span className="w-28 flex-none pt-0.5 text-[13px] text-[#5F5B57]">{dateCourte(l.date)}</span>
+              <div key={`${l.date}-${i}`} className="flex flex-wrap items-start gap-x-3.5 gap-y-1 border-t border-[#E6DCD2] py-3">
+                <span className="w-28 flex-none pt-0.5 text-[13px] text-[#615850]">{dateCourte(l.date)}</span>
                 <span className="flex min-w-0 flex-1 items-start gap-3">
                   <span aria-hidden className="mt-2 h-2.5 w-2.5 flex-none rounded-full" style={{ background: COULEURS_HISTORIQUE[l.ton] }} />
                   <span className="min-w-0 flex-1 text-[15px]">{l.texte}</span>
                 </span>
               </div>
             )) : (
-              <p className="border-t border-[#EEEDEA] pt-3 text-[15px] text-[#5F5B57]">
+              <p className="border-t border-[#E6DCD2] pt-3 text-[15px] text-[#615850]">
                 Pas encore de passage. {proprio && '« Essayer sur un vrai cas » en lance un tout de suite, à blanc.'}
               </p>
             )}
           </section>
 
           {r.consigne_origine && (
-            <details className="rounded-2xl border border-[#E7E5E2] bg-white px-5 py-3 text-[15px]">
+            <details className="rounded-2xl border border-[#E6DCD2] bg-white px-5 py-3 text-[15px]">
               <summary className="min-h-[44px] cursor-pointer py-2.5 font-semibold">Consigne d'origine de cette tâche</summary>
-              <p className="whitespace-pre-line pb-2 text-[#5F5B57]">{r.consigne_origine}</p>
+              <p className="whitespace-pre-line pb-2 text-[#615850]">{r.consigne_origine}</p>
             </details>
           )}
           {proprio && (
             <button type="button" disabled={occupe}
               onClick={async () => { if (confirm(`Supprimer la routine « ${r.titre} » ? Son historique sera effacé.`) && await agir('routine_supprimer', {})) navigate('/studio/routines'); }}
-              className="inline-flex min-h-[44px] items-center gap-2 self-start text-[15px] text-[#5F5B57] hover:text-red-700">
+              className="inline-flex min-h-[44px] items-center gap-2 self-start text-[15px] text-[#615850] hover:text-red-700">
               <Trash2 className="h-4 w-4" /> Supprimer la routine
             </button>
           )}
         </div>
 
         <aside aria-label="Réglages de l'étape sélectionnée"
-          className="flex min-w-0 max-w-full flex-[1_1_340px] flex-col gap-[22px] rounded-[20px] border border-[#E7E5E2] bg-white p-6 lg:sticky lg:top-6">
+          className="flex min-w-0 max-w-full flex-[1_1_340px] flex-col gap-[22px] rounded-none border border-[#E6DCD2] bg-white p-6 lg:sticky lg:top-6">
           <div className="flex flex-col gap-1">
             <p className={cx('text-[11.5px] uppercase tracking-[0.06em]', sel.type === 'validation' || sel.type === 'depart' ? 'font-semibold text-[#B24A0C]' : 'text-[#1F5B85]')}>
               {surtitre(sel, index, prenom)}
@@ -171,23 +171,23 @@ export default function Routine() {
             <>
               {sel.reglages.length ? sel.reglages.map((d) => (
                 <Reglage key={d.id} d={d} v={valeurs[d.id]} desactive={!proprio || occupe} onChange={regler} />
-              )) : <p className="text-[15px] text-[#5F5B57]">Rien à régler à cette étape{sel.type === 'envoi' ? " : l'envoi suit toujours votre feu vert" : ''}.</p>}
-              <div className="flex flex-col gap-2.5 border-t border-[#E7E5E2] pt-[18px]">
-                <p className="text-[11.5px] uppercase tracking-[0.06em] text-[#5F5B57]">{derniere ? `La dernière fois · ${dateCourte(derniere.date)}` : 'La dernière fois'}</p>
+              )) : <p className="text-[15px] text-[#615850]">Rien à régler à cette étape{sel.type === 'envoi' ? " : l'envoi suit toujours votre feu vert" : ''}.</p>}
+              <div className="flex flex-col gap-2.5 border-t border-[#E6DCD2] pt-[18px]">
+                <p className="text-[11.5px] uppercase tracking-[0.06em] text-[#615850]">{derniere ? `La dernière fois · ${dateCourte(derniere.date)}` : 'La dernière fois'}</p>
                 <p className="text-[15px]">{derniere ? derniere.texte : "La routine n'a pas encore tourné."}</p>
                 {proprio && (
                   <button type="button" className={cx(CL_BOUTON_CLAIR, 'self-start')} disabled={occupe || r.en_cours} onClick={essayer}>
                     <Play className="h-4 w-4" /> Essayer avec ce réglage
                   </button>
                 )}
-                <p className="text-[13.5px] text-[#5F5B57]">Un essai tourne sur vos vraies données, sans rien envoyer.</p>
+                <p className="text-[13.5px] text-[#615850]">Un essai tourne sur vos vraies données, sans rien envoyer.</p>
               </div>
             </>
           )}
 
           {proprio && (
-            <div className="mt-auto flex flex-col gap-1.5 border-t border-[#E7E5E2] pt-4">
-              <p className="text-sm text-[#5F5B57]">Une modification plus complexe ?</p>
+            <div className="mt-auto flex flex-col gap-1.5 border-t border-[#E6DCD2] pt-4">
+              <p className="text-sm text-[#615850]">Une modification plus complexe ?</p>
               <Link to="/studio/routines/nouvelle" className={CL_LIEN}>Dites-le à Léa en une phrase</Link>
             </div>
           )}
@@ -219,7 +219,7 @@ function Depart({ r, desactive, onChange }: { r: RoutineT; desactive: boolean; o
           ))}
         </div>
       </div>
-      <p className="text-sm text-[#5F5B57]">
+      <p className="text-sm text-[#615850]">
         La routine part à heures fixes. Pour réagir vite à un message, choisissez plusieurs heures dans la journée : à chacune, l'agent regarde s'il y a du nouveau.
       </p>
     </div>
@@ -247,7 +247,7 @@ function Reglage({ d, v, desactive, onChange }: { d: DefReglage; v: Valeur | und
   const idLibelle = `reglage-${d.id}`;
   if (d.type === 'compteur') {
     const n = Number(v ?? d.defaut);
-    const bouton = 'flex h-12 w-12 items-center justify-center rounded-xl border border-[#D6D3CF] bg-white text-[22px] hover:border-[#141414] disabled:opacity-40';
+    const bouton = 'flex h-12 w-12 items-center justify-center rounded-xl border border-[#D9CEC3] bg-white text-[22px] hover:border-[#17120E] disabled:opacity-40';
     return (
       <div className="flex flex-col gap-2">
         <p id={idLibelle} className="text-[15px] font-medium">{d.libelle}</p>
@@ -267,7 +267,7 @@ function Reglage({ d, v, desactive, onChange }: { d: DefReglage; v: Valeur | und
         <div role="group" aria-labelledby={idLibelle} className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(110px,1fr))]">
           {d.options.map((o) => (
             <button key={o.valeur} type="button" aria-pressed={actuel === o.valeur} disabled={desactive} onClick={() => onChange(d, o.valeur)}
-              className={cx('min-h-[48px] rounded-xl px-3 text-[15px]', actuel === o.valeur ? 'border-2 border-[#141414] bg-[#F6F5F3] font-semibold' : 'border border-[#D6D3CF] bg-white hover:border-[#141414]')}>
+              className={cx('min-h-[48px] rounded-xl px-3 text-[15px]', actuel === o.valeur ? 'border-2 border-[#17120E] bg-[#F2ECE4] font-semibold' : 'border border-[#D9CEC3] bg-white hover:border-[#17120E]')}>
               {o.libelle}
             </button>
           ))}
@@ -279,7 +279,7 @@ function Reglage({ d, v, desactive, onChange }: { d: DefReglage; v: Valeur | und
     return (
       <div className="flex flex-col gap-1.5">
         <Bascule actif={Boolean(v ?? d.defaut)} disabled={desactive} onChange={(x) => onChange(d, x)}>{d.libelle}</Bascule>
-        {d.aide && <p className="text-sm text-[#5F5B57]">{d.aide}</p>}
+        {d.aide && <p className="text-sm text-[#615850]">{d.aide}</p>}
       </div>
     );
   }
@@ -294,7 +294,7 @@ function ChampTexte({ d, v, desactive, onChange }: { d: Extract<DefReglage, { ty
       {d.libelle}
       <span className="flex gap-2">
         <input type={d.format === 'email' ? 'email' : 'text'} value={t} disabled={desactive} onChange={(e) => setT(e.target.value)}
-          className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-[#D6D3CF] bg-white px-3 font-normal text-[#141414] outline-none focus:border-[#141414]" />
+          className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-[#D9CEC3] bg-white px-3 font-normal text-[#17120E] outline-none focus:border-[#17120E]" />
         <button type="button" className={CL_BOUTON_CLAIR} disabled={desactive || t.trim() === v} onClick={() => onChange(t.trim())}>Enregistrer</button>
       </span>
     </label>

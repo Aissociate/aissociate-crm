@@ -68,7 +68,7 @@ export default function SamChat({ className = '', onFermer, focus = false }: { c
         )}
       </div>
 
-      <div ref={fil} className="flex-1 space-y-3 overflow-y-auto bg-[#f6f6f4] px-4 py-4" aria-live="polite">
+      <div ref={fil} className="flex-1 space-y-3 overflow-y-auto bg-[#F2ECE4] px-4 py-4" aria-live="polite">
         {etat.messages.map((m, i) => {
           const moi = m.role === 'user';
           const essai = !moi ? lienEssai(m.content) : null;
@@ -80,7 +80,7 @@ export default function SamChat({ className = '', onFermer, focus = false }: { c
                   <Texte contenu={m.content} clair={moi} />
                 </p>
                 {essai && (
-                  <a href={essai} className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600">
+                  <a href={essai} className="mt-2 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400">
                     Ouvrir mon espace gratuit <ArrowRight className="h-4 w-4" />
                   </a>
                 )}
@@ -121,7 +121,7 @@ export default function SamChat({ className = '', onFermer, focus = false }: { c
           placeholder="Écrivez à Sam…" aria-label="Votre message à Sam"
           className="max-h-32 flex-1 resize-none rounded-xl border [scrollbar-width:none] border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none transition-colors focus:border-neutral-900 focus:bg-white" />
         <button type="submit" disabled={!saisie.trim() || etat.attente} aria-label="Envoyer"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white transition-colors hover:bg-orange-600 disabled:bg-neutral-200 disabled:text-neutral-400">
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-neutral-950 transition-colors hover:bg-orange-400 disabled:bg-neutral-200 disabled:text-neutral-400">
           <ArrowUp className="h-4 w-4" />
         </button>
       </form>

@@ -12,7 +12,7 @@ export default function Target() {
   ];
 
   return (
-    <section className="py-24 bg-gradient-to-b from-white via-neutral-50/50 to-white">
+    <section className="py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-500 rounded-2xl mb-6">
@@ -26,8 +26,6 @@ export default function Target() {
 
         <div className="max-w-5xl mx-auto">
           <div className="relative bg-white rounded-3xl p-8 sm:p-12 shadow-sm border border-neutral-200 mb-16 overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-orange-500/10 to-amber-500/10 rounded-full blur-3xl -z-0"></div>
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-amber-500/10 to-orange-500/10 rounded-full blur-3xl -z-0"></div>
 
             <div className="relative z-10">
               <p className="text-lg sm:text-xl text-neutral-700 mb-6 leading-relaxed">

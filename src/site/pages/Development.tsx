@@ -125,7 +125,7 @@ export default function Development() {
             <div className="flex flex-wrap gap-4 justify-center">
               <Link
                 to="/formulaire"
-                className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
+                className="bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
               >
                 Discuter de votre projet
                 <ArrowRight className="w-5 h-5" />
@@ -166,7 +166,7 @@ export default function Development() {
               const Icon = solution.icon;
               return (
                 <div key={index} className="bg-white border-2 border-neutral-200 hover:border-orange-300 rounded-2xl p-8 transition-all hover:shadow-sm group">
-                  <div className={`w-16 h-16 bg-gradient-to-br ${solution.color} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+                  <div className={`w-16 h-16 bg-neutral-700 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
                     <Icon className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-semibold text-neutral-950 mb-3">{solution.title}</h3>
@@ -187,7 +187,7 @@ export default function Development() {
         </div>
       </section>
 
-      <section className="py-20 bg-[#f6f6f4]">
+      <section className="py-20 bg-[#F2ECE4]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
@@ -202,7 +202,7 @@ export default function Development() {
             {processSteps.map((step, index) => (
               <div key={index} className="relative">
                 <div className="bg-white rounded-xl p-6 text-center shadow-lg h-full">
-                  <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 text-white font-semibold text-xl">
+                  <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 text-neutral-950 font-semibold text-xl">
                     {step.step}
                   </div>
                   <h3 className="font-semibold text-neutral-950 mb-2">{step.title}</h3>
@@ -298,7 +298,7 @@ export default function Development() {
               <div className="space-y-4">
                 <Link
                   to="/formulaire"
-                  className="block w-full text-center bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-xl font-semibold text-lg transition-all"
+                  className="block w-full text-center bg-orange-500 hover:bg-orange-400 text-neutral-950 py-4 rounded-xl font-semibold text-lg transition-all"
                 >
                   Demander un devis
                 </Link>

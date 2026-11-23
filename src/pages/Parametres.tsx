@@ -493,7 +493,7 @@ export default function Parametres() {
             <div>
               <p className="mb-1 text-xs font-medium text-muted">Aperçu</p>
               <div className="rounded-lg border border-line bg-white p-3 text-slate-800"
-                dangerouslySetInnerHTML={{ __html: buildSignatureHtml(signature, organisme, profile) || '<span style="color:#94a3b8">Aucune signature (renseignez l\'organisme).</span>' }} />
+                dangerouslySetInnerHTML={{ __html: buildSignatureHtml(signature, organisme, profile) || '<span style="color:#b3a79a">Aucune signature (renseignez l\'organisme).</span>' }} />
             </div>
             <div className="flex items-center gap-3">
               <Button onClick={() => persist('email_signature', signature)} disabled={saving === 'email_signature'}>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { ArrowRight, Menu, MessageCircle, PhoneCall, X } from 'lucide-react';
-import AdminLogo from './AdminLogo';
+import { Logo } from '@/components/Logo';
 import { trackClick } from '@/lib/track';
 
 // Même langage visuel que la page /agents-ia : neutres, orange plein, angles doux.
@@ -29,16 +29,8 @@ export default function Header() {
       </a>
       <nav aria-label="Navigation principale" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5" onClick={fermer}>
-            <AdminLogo
-              src="https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg"
-              alt="AIssociate Logo"
-              className="h-10 w-10 rounded-xl object-contain"
-            />
-            <div className="leading-tight">
-              <div className="text-lg font-semibold tracking-tight text-neutral-950">AIssociate</div>
-              <div className="text-[11px] text-neutral-500">Formation &amp; agents IA · La Réunion</div>
-            </div>
+          <Link to="/" className="flex shrink-0 items-center" onClick={fermer} aria-label="Aissociate, accueil">
+            <Logo size="sm" tagline fond="clair" />
           </Link>
 
           <div className="hidden items-center gap-1 lg:flex">
@@ -51,7 +43,7 @@ export default function Header() {
                 }
               >
                 {l.label}
-                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Gratuit</span>}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-neutral-950">Gratuit</span>}
               </NavLink>
             ))}
           </div>
@@ -68,7 +60,7 @@ export default function Header() {
             </a>
             <Link
               to="/formulaire"
-              className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400"
             >
               Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -97,7 +89,7 @@ export default function Header() {
                 }
               >
                 {l.label}
-                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Gratuit</span>}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-neutral-950">Gratuit</span>}
               </NavLink>
             ))}
             <a
@@ -120,7 +112,7 @@ export default function Header() {
             </a>
             <Link
               to="/formulaire"
-              className="mx-4 !mt-4 flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-semibold text-white"
+              className="mx-4 !mt-4 flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-semibold text-neutral-950"
               onClick={fermer}
             >
               Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />

@@ -129,7 +129,7 @@ export default function Emargement() {
 
           {!etat?.code_actif ? (
             <button onClick={demanderCode} disabled={busy}
-              className="w-full rounded-xl bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
+              className="w-full rounded-xl bg-orange-500 px-4 py-3 font-medium text-neutral-950 transition hover:bg-orange-400 disabled:opacity-50">
               {busy ? 'Envoi…' : 'Recevoir mon code par e-mail'}
             </button>
           ) : (
@@ -141,7 +141,7 @@ export default function Emargement() {
                   className="w-full rounded-xl border border-neutral-300 px-3 py-2 text-center text-2xl tracking-[0.4em] outline-none focus:border-orange-500" />
               </label>
               <button onClick={valider} disabled={busy || code.length < 6 || coches.size === 0}
-                className="w-full rounded-xl bg-orange-600 px-4 py-3 font-medium text-white transition hover:bg-orange-700 disabled:opacity-50">
+                className="w-full rounded-xl bg-orange-500 px-4 py-3 font-medium text-neutral-950 transition hover:bg-orange-400 disabled:opacity-50">
                 {busy ? 'Enregistrement…' : `Émarger ${coches.size} demi-journée(s)`}
               </button>
               <button onClick={demanderCode} disabled={busy}

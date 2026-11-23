@@ -465,7 +465,7 @@ export default function AgentChat() {
               <>
                 {saisie.trim() && (
                   <button type="submit" disabled={envoiConsigne} title="Envoyer la consigne : elle sera prise en compte à l'étape suivante"
-                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-orange-500 px-3 text-xs font-semibold text-white disabled:bg-neutral-300">
+                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-orange-500 px-3 text-xs font-semibold text-neutral-950 disabled:bg-neutral-300">
                     {envoiConsigne ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CornerDownRight className="h-3.5 w-3.5" aria-hidden />} Consigne
                   </button>
                 )}
@@ -476,7 +476,7 @@ export default function AgentChat() {
               </>
             ) : (
               <button type="submit" disabled={(!saisie.trim() && !pieces.length) || lecture || attente} aria-label="Envoyer"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-neutral-950 disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>
             )}
           </div>
         </form>

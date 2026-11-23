@@ -266,7 +266,7 @@ export default function FormationsList() {
         </div>
       </section>
 
-      <section className="py-20 bg-gradient-to-b from-white via-neutral-50/50 to-white">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
             <div className="bg-white border-2 border-orange-300 rounded-xl p-6 text-center">
@@ -317,7 +317,7 @@ export default function FormationsList() {
 
               return (
               <div key={formation.id} className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden hover:shadow-sm transition-shadow">
-                <div className={`h-2 bg-gradient-to-r ${formation.color}`}></div>
+                <div className={`h-1 bg-orange-500`}></div>
 
                 <div className="relative h-64 overflow-hidden">
                   <img
@@ -368,14 +368,14 @@ export default function FormationsList() {
 
                       <Link
                         to={`/formations/${formation.id}`}
-                        className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
+                        className="inline-block bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
                       >
                         Découvrir la formation
                       </Link>
                     </div>
 
                     <div className="space-y-4">
-                      <div className="bg-[#f6f6f4] rounded-xl p-6 border border-neutral-200">
+                      <div className="bg-[#F2ECE4] rounded-xl p-6 border border-neutral-200">
                         <div className="text-center mb-6">
                           <div className="text-4xl font-semibold text-neutral-950 mb-1">{formation.price}</div>
                           <div className="text-sm text-neutral-600">{formation.priceNote || 'Par participant'}</div>
@@ -456,7 +456,7 @@ export default function FormationsList() {
               </p>
               <Link
                 to="/formulaire"
-                className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
+                className="inline-block bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
               >
                 Contactez-nous
               </Link>

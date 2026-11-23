@@ -38,7 +38,7 @@ type Agent = {
 };
 const AGENTS: Agent[] = [
   {
-    id: 'lea', prenom: 'Léa', metier: 'Assistante générale', couleur: '#f97316', minutes: 20,
+    id: 'lea', prenom: 'Léa', metier: 'Assistante générale', couleur: '#ea6a1e', minutes: 20,
     accroche: 'Votre bras droit pour tout ce qui encombre la journée.',
     pouvoirs: ['Rédiger un e-mail au bon ton', 'Synthétiser un document en 5 points et des actions', 'Organiser votre semaine (urgent / important)'],
     cas: [
@@ -164,14 +164,14 @@ export default function AgentsIA() {
 
   const Cta = ({ texte = 'Réserver mon appel de 20 min', clair = false }: { texte?: string; clair?: boolean }) => (
     <button type="button" onClick={() => allerA('capture')}
-      className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors ${clair ? 'bg-white text-neutral-900 hover:bg-neutral-100' : 'bg-orange-500 text-white hover:bg-orange-600'}`}>
+      className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors ${clair ? 'bg-white text-neutral-900 hover:bg-neutral-100' : 'bg-orange-500 text-neutral-950 hover:bg-orange-400'}`}>
       {texte} <ArrowRight className="h-4 w-4" />
     </button>
   );
 
   const Essai = ({ texte = 'Commencer en stage gratuit', plein = false }: { texte?: string; plein?: boolean }) => (
     <a href={LIEN_ESSAI}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 ${plein ? 'w-full' : ''}`}>
+      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400 ${plein ? 'w-full' : ''}`}>
       {texte} <ArrowRight className="h-4 w-4" />
     </a>
   );
@@ -189,12 +189,10 @@ export default function AgentsIA() {
         faqData={faq}
       />
       <Header />
-      <main id="contenu" className="bg-[#f6f6f4] font-sans text-neutral-900">
+      <main id="contenu" className="bg-[#F2ECE4] font-sans text-neutral-900">
 
         {/* ── 1. Accroche ── */}
         <section className="relative overflow-hidden bg-neutral-950 text-white">
-          <div className="pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-orange-500/25 blur-3xl" />
-          <div className="pointer-events-none absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-pink-500/10 blur-3xl" />
           <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-8 sm:py-24">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-neutral-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Studio IA · Aissociate · Saint-Denis, La Réunion
@@ -579,7 +577,7 @@ export default function AgentsIA() {
                     <label htmlFor="ag-site">Site web</label>
                     <input id="ag-site" name="site" tabIndex={-1} autoComplete="off" value={piege} onChange={(e) => setPiege(e.target.value)} />
                   </div>
-                  <button type="submit" disabled={etat === 'envoi'} className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60">
+                  <button type="submit" disabled={etat === 'envoi'} className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-neutral-950 hover:bg-orange-400 disabled:opacity-60">
                     {etat === 'envoi' ? 'Envoi en cours…' : 'Réserver mon appel de 20 min'} <ArrowRight className="h-4 w-4" />
                   </button>
                   {etat === 'erreur' && <p className="text-sm text-red-600" role="alert">Une erreur est survenue{erreur ? ` (${erreur})` : ''}. Réessayez, ou appelez-nous au 06 92 24 68 60.</p>}

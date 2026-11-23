@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import { appel } from '../api';
 import { Bouton } from '../composants';
+import { Logo } from '@/components/Logo';
 
 const champ = 'w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none focus:border-neutral-900 focus:bg-white';
 
@@ -27,9 +28,9 @@ export default function Reinitialiser() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-4 font-sans text-neutral-900">
+    <div className="flex min-h-screen items-center justify-center bg-[#F2ECE4] px-4 font-sans text-neutral-900">
       <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-8">
-        <p className="mb-6 text-lg font-bold">A(I)ssociate <span className="text-orange-500">Studio</span></p>
+        <Logo size="sm" branche="Studio IA" fond="clair" className="mb-6" />
         {fait ? (
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="h-6 w-6" /></div>

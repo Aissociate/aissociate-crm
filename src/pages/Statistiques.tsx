@@ -11,7 +11,7 @@ import ConseillerActivite from '@/components/ConseillerActivite';
 import type { Dossier, Opportunite, Financeur, DossierStatut } from '@/lib/database.types';
 
 // Palette de graphiques : marque en tête, puis tons sémantiques (cf. Badge), nuances de marque, neutre.
-const COLORS = ['#ea6a1e', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#fb9a3c', '#fdba74', '#64748b'];
+const COLORS = ['#ea6a1e', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#f0823f', '#fdba74', '#7a6f64'];
 const GRID = 'rgb(148 163 184 / 0.2)';
 
 export default function Statistiques() {

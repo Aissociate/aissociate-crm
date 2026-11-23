@@ -437,7 +437,7 @@ export default function DossierDetail() {
                         }`}
                       >
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                          done ? 'bg-emerald-500 text-white' : current ? 'bg-brand-600 text-white' : 'bg-surface-2 text-muted'
+                          done ? 'bg-emerald-500 text-neutral-950' : current ? 'bg-brand-600 text-neutral-950' : 'bg-surface-2 text-muted'
                         }`}>
                           {done ? <Check className="h-3.5 w-3.5" /> : e.ordre}
                         </span>

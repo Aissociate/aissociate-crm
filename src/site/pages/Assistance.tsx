@@ -106,7 +106,7 @@ export default function Assistance() {
               <div className="flex flex-wrap gap-4">
                 <Link
                   to="/formulaire"
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
+                  className="bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-4 rounded-xl font-semibold text-lg transition-all  shadow-lg flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
                   Prendre rendez-vous
@@ -177,7 +177,7 @@ export default function Assistance() {
               const Icon = service.icon;
               return (
                 <div key={index} className="bg-white border-2 border-neutral-200 hover:border-orange-300 rounded-2xl p-8 transition-all hover:shadow-sm group">
-                  <div className={`w-16 h-16 bg-gradient-to-br ${service.color} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+                  <div className={`w-16 h-16 bg-neutral-700 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
                     <Icon className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-semibold text-neutral-950 mb-3">{service.title}</h3>
@@ -189,7 +189,7 @@ export default function Assistance() {
         </div>
       </section>
 
-      <section className="py-20 bg-[#f6f6f4]">
+      <section className="py-20 bg-[#F2ECE4]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-neutral-950 mb-4">
@@ -269,7 +269,7 @@ export default function Assistance() {
               </div>
             </div>
 
-            <div className="bg-orange-500 rounded-2xl p-8 sm:p-10 text-white">
+            <div className="bg-orange-500 rounded-2xl p-8 sm:p-10 text-neutral-950">
               <div className="text-center mb-8">
                 <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-80" />
                 <h3 className="text-2xl font-semibold mb-2">Parlons de votre projet</h3>

@@ -137,7 +137,7 @@ export default function EspaceClient() {
                   <p className="truncate text-sm font-medium text-neutral-800">{q.titre}</p>
                   {q.sent_at && <p className="text-xs text-neutral-500">Envoyé le {frDate(q.sent_at)}</p>}
                 </div>
-                <a href={q.url} className="rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Répondre</a>
+                <a href={q.url} className="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-orange-400">Répondre</a>
               </li>
             ))}
           </ul>
@@ -151,7 +151,7 @@ export default function EspaceClient() {
                   <p className="truncate text-sm font-medium text-neutral-800">{s.libelle}</p>
                   <p className="text-xs text-neutral-500">Demandé le {frDate(s.created_at)}</p>
                 </div>
-                <a href={`/signature/${s.token}`} className="rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">Signer</a>
+                <a href={`/signature/${s.token}`} className="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-semibold text-neutral-950 hover:bg-orange-400">Signer</a>
               </li>
             ))}
           </ul>

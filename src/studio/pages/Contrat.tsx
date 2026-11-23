@@ -42,7 +42,7 @@ function Coche() {
 function BoutonBascule({ actif, onClick, children }: { actif: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" aria-pressed={actif} onClick={onClick}
-      className="min-h-[44px] min-w-[132px] rounded-[10px] px-3.5 py-2.5 font-semibold"
+      className="min-h-[44px] min-w-[132px] rounded-none px-3.5 py-2.5 font-semibold"
       style={actif ? { background: C.nuit, color: '#fff', border: `1px solid ${C.nuit}` } : { background: '#fff', color: C.brun, border: `1px solid ${C.trait2}` }}>
       {children}
     </button>
@@ -198,7 +198,7 @@ export default function PageContrat() {
                       <span className="text-sm" style={{ color: C.gris }}>{o.description}</span>
                     </div>
                     <span className="whitespace-nowrap text-[13px]" style={{ ...MONO, color: C.gris }}>{euros(o.prix)} {o.unite}</span>
-                    <div className="flex items-center gap-1 rounded-[10px] p-1" style={{ background: C.sable }}>
+                    <div className="flex items-center gap-1 rounded-none p-1" style={{ background: C.sable }}>
                       <button type="button" aria-label={`Retirer un ${o.libelle}`} onClick={() => maj({ [o.id]: choix[o.id] - 1 })} className="h-11 w-11 rounded-lg bg-white text-xl leading-none" style={{ color: C.encre }}>−</button>
                       <span aria-live="polite" className="min-w-10 text-center font-semibold tabular-nums">{choix[o.id]}</span>
                       <button type="button" aria-label={`Ajouter un ${o.libelle}`} onClick={() => maj({ [o.id]: choix[o.id] + 1 })} className="h-11 w-11 rounded-lg bg-white text-xl leading-none" style={{ color: C.encre }}>+</button>
@@ -215,7 +215,7 @@ export default function PageContrat() {
                       </div>
                       <span className="whitespace-nowrap text-[13px]" style={{ ...MONO, color: C.gris }}>{euros(t.prix)} {t.unite}</span>
                       {inclus
-                        ? <span className="min-w-[132px] rounded-[10px] px-3.5 py-3 text-center text-sm font-semibold" style={{ background: C.peche, color: C.brun }}>Inclus au contrat</span>
+                        ? <span className="min-w-[132px] rounded-none px-3.5 py-3 text-center text-sm font-semibold" style={{ background: C.peche, color: C.brun }}>Inclus au contrat</span>
                         : <BoutonBascule actif={choix[t.id]} onClick={() => maj({ [t.id]: !choix[t.id] })}>{choix[t.id] ? 'Retirer' : 'Ajouter'}</BoutonBascule>}
                     </div>
                   );
@@ -274,19 +274,19 @@ export default function PageContrat() {
                 {b.annuel_ht != null && <div className="flex justify-between text-sm" style={{ color: C.gris }}><span>Réglé en une fois par an</span><span className="tabular-nums">{euros(b.annuel_ht)} HT</span></div>}
               </div>
               {integ && (
-                <div className="flex flex-col gap-0.5 rounded-[10px] px-3.5 py-3 text-sm" style={{ background: C.fond }}>
+                <div className="flex flex-col gap-0.5 rounded-none px-3.5 py-3 text-sm" style={{ background: C.fond }}>
                   <span className="flex justify-between"><span className="font-semibold">Parcours d'intégration, une fois</span><span className="tabular-nums">{euros(INTEGRATION_HT)} HT</span></span>
                   <span style={{ color: C.gris }}>Prise en charge par votre OPCO selon ses règles : nous vous rappelons pour fixer la date et monter le dossier. Il n'est pas ajouté au paiement en ligne.</span>
                 </div>
               )}
               {proprietaire ? (
                 <button type="button" onClick={clicSigner} disabled={envoi || inchange}
-                  className="mt-1.5 block rounded-[10px] px-4 py-3.5 text-center font-semibold text-white disabled:opacity-60"
+                  className="mt-1.5 block rounded-none px-4 py-3.5 text-center font-semibold text-white disabled:opacity-60"
                   style={{ background: C.brique }}>
                   {envoi ? 'Un instant…' : libelleSigner}
                 </button>
-              ) : <p className="mt-1.5 rounded-[10px] px-3.5 py-3 text-sm" style={{ background: C.fond, color: C.gris }}>Seul le propriétaire de l'espace peut signer le contrat.</p>}
-              {erreur && <p className="rounded-[10px] bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
+              ) : <p className="mt-1.5 rounded-none px-3.5 py-3 text-sm" style={{ background: C.fond, color: C.gris }}>Seul le propriétaire de l'espace peut signer le contrat.</p>}
+              {erreur && <p className="rounded-none bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
               <p className="mt-1 text-xs" style={{ color: C.gris }}>
                 1 heure de travail = {ACTIONS_PAR_HEURE} actions d'agent. Prix hors taxes.
                 {b.payant && !abonne && ' Paiement par carte sur la page sécurisée de Stripe ; factures et résiliation depuis « Gérer mon abonnement ».'}

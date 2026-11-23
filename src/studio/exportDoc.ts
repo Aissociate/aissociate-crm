@@ -144,22 +144,22 @@ export function documentHtml(d: DocExport, logoUrl: string | null): string {
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${echapper(d.titre)}</title><style>
 @page { size: A4; margin: 18mm 16mm 22mm; }
 * { box-sizing: border-box; }
-body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 10.5pt; line-height: 1.5; margin: 0; }
-.entete { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 18px; }
+body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #3a3129; font-size: 10.5pt; line-height: 1.5; margin: 0; }
+.entete { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #1b1713; padding-bottom: 10px; margin-bottom: 18px; }
 .entete img { max-height: 60px; max-width: 200px; object-fit: contain; }
-.coord { text-align: right; font-size: 8.5pt; color: #4b5563; }
-.coord .nom { font-size: 11pt; font-weight: 700; color: #111827; }
-h1 { font-size: 16pt; margin: 0 0 2px; color: #111827; }
-.meta { font-size: 8.5pt; color: #6b7280; margin-bottom: 16px; }
+.coord { text-align: right; font-size: 8.5pt; color: #615850; }
+.coord .nom { font-size: 11pt; font-weight: 700; color: #1b1713; }
+h1 { font-size: 16pt; margin: 0 0 2px; color: #1b1713; }
+.meta { font-size: 8.5pt; color: #7a6f64; margin-bottom: 16px; }
 h2 { font-size: 13pt; margin: 16px 0 6px; } h3 { font-size: 11.5pt; margin: 12px 0 4px; } h4 { font-size: 10.5pt; margin: 10px 0 4px; }
 p { margin: 0 0 8px; } ul, ol { margin: 0 0 8px; padding-left: 20px; } li { margin-bottom: 2px; }
 table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 9.5pt; page-break-inside: auto; }
-th { background: #f3f4f6; text-align: left; } th, td { border: 1px solid #d1d5db; padding: 4px 6px; vertical-align: top; }
+th { background: #f2ece4; text-align: left; } th, td { border: 1px solid #d9cec3; padding: 4px 6px; vertical-align: top; }
 tr { page-break-inside: avoid; }
-code { font-family: Consolas, monospace; background: #f3f4f6; padding: 0 3px; border-radius: 3px; }
-pre { font-family: Consolas, monospace; background: #f3f4f6; padding: 8px; white-space: pre-wrap; font-size: 9pt; }
-hr { border: 0; border-top: 1px solid #d1d5db; margin: 12px 0; }
-.pied { position: fixed; bottom: -14mm; left: 0; right: 0; text-align: center; font-size: 7.5pt; color: #9ca3af; }
+code { font-family: Consolas, monospace; background: #f2ece4; padding: 0 3px; border-radius: 3px; }
+pre { font-family: Consolas, monospace; background: #f2ece4; padding: 8px; white-space: pre-wrap; font-size: 9pt; }
+hr { border: 0; border-top: 1px solid #d9cec3; margin: 12px 0; }
+.pied { position: fixed; bottom: -14mm; left: 0; right: 0; text-align: center; font-size: 7.5pt; color: #a89c90; }
 </style></head><body>
 <div class="entete">
   <div>${logoUrl ? `<img src="${echapper(logoUrl)}" alt="">` : ''}</div>
@@ -183,14 +183,14 @@ export function documentWordHtml(d: DocExport & { html: string }, logoUrl: strin
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
 @page { size: 21cm 29.7cm; margin: 1.8cm 1.6cm 2cm; }
-body { font-family: Calibri, Arial, sans-serif; font-size: 10.5pt; color: #1f2937; }
+body { font-family: Calibri, Arial, sans-serif; font-size: 10.5pt; color: #3a3129; }
 table { border-collapse: collapse; } th, td { vertical-align: top; }
-.coord { text-align: right; font-size: 8.5pt; color: #4b5563; }
-.pied { font-size: 7.5pt; color: #9ca3af; text-align: center; margin-top: 24pt; }
+.coord { text-align: right; font-size: 8.5pt; color: #615850; }
+.pied { font-size: 7.5pt; color: #a89c90; text-align: center; margin-top: 24pt; }
 </style></head><body>
-<table style="width:100%;border-bottom:2px solid #111827;margin-bottom:14pt"><tr>
+<table style="width:100%;border-bottom:2px solid #1b1713;margin-bottom:14pt"><tr>
 <td>${logoUrl ? `<img src="${echapper(logoUrl)}" height="56" alt="">` : ''}</td>
-<td class="coord"><b style="font-size:11pt;color:#111827">${echapper(e.nom)}</b>${e.adresse ? `<br>${echapper(e.adresse)}` : ''}${e.contacts ? `<br>${echapper(e.contacts)}` : ''}</td>
+<td class="coord"><b style="font-size:11pt;color:#1b1713">${echapper(e.nom)}</b>${e.adresse ? `<br>${echapper(e.adresse)}` : ''}${e.contacts ? `<br>${echapper(e.contacts)}` : ''}</td>
 </tr></table>
 ${d.html}
 <p class="pied">${echapper(e.pied)}</p>

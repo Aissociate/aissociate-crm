@@ -753,7 +753,7 @@ export default function AssistantChat({
       <form
         onSubmit={(e) => { e.preventDefault(); void ask(input); }}
         className={jarvis
-          ? 'mx-auto mb-4 flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-line bg-surface p-2 shadow-lg shadow-brand-500/5'
+          ? 'mx-auto mb-4 flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-line bg-surface p-2 shadow-lg'
           : `flex items-end gap-2 border-t border-line bg-surface ${compact ? 'p-2' : 'p-3'}`}
       >
         {onEnregistrer && (

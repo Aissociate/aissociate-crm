@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 export default function Pricing() {
   return (
-    <section className="py-24 bg-gradient-to-b from-white via-neutral-50/50 to-white">
+    <section className="py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-orange-500 rounded-2xl mb-6">
@@ -17,9 +17,7 @@ export default function Pricing() {
         </div>
 
         <div className="max-w-2xl mx-auto">
-          <div className="bg-orange-500 rounded-3xl p-10 sm:p-12 text-white shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -ml-24 -mb-24"></div>
+          <div className="bg-orange-500 rounded-3xl p-10 sm:p-12 text-neutral-950 shadow-sm relative overflow-hidden">
 
             <div className="relative">
               <div className="flex items-center justify-center mb-8">

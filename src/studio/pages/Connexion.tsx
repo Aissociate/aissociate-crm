@@ -4,9 +4,10 @@ import { Lock } from 'lucide-react';
 import { appel, type Me } from '../api';
 import { Bouton } from '../composants';
 import { useStudioBrut } from '../StudioApp';
+import { Logo } from '@/components/Logo';
 
 const EQUIPE = [
-  { id: 'lea', p: 'Léa', c: '#f97316' }, { id: 'hugo', p: 'Hugo', c: '#ec4899' }, { id: 'sam', p: 'Sam', c: '#3b82f6' },
+  { id: 'lea', p: 'Léa', c: '#ea6a1e' }, { id: 'hugo', p: 'Hugo', c: '#ec4899' }, { id: 'sam', p: 'Sam', c: '#3b82f6' },
   { id: 'ines', p: 'Inès', c: '#10b981' }, { id: 'mael', p: 'Maël', c: '#8b5cf6' }, { id: 'nora', p: 'Nora', c: '#eab308' },
   { id: 'theo', p: 'Théo', c: '#0891b2' },
 ];
@@ -46,8 +47,7 @@ export default function Connexion() {
   return (
     <div className="grid min-h-screen font-sans lg:grid-cols-[1fr_1.1fr]">
       <section className="relative hidden flex-col justify-between overflow-hidden bg-neutral-950 p-10 text-white lg:flex">
-        <div className="pointer-events-none absolute -left-20 -top-20 h-96 w-96 rounded-full bg-orange-500/25 blur-3xl" />
-        <p className="relative text-xl font-bold">A(I)ssociate <span className="text-orange-400">Studio</span></p>
+        <Logo size="md" branche="Studio IA" fond="sombre" className="relative" />
         <div className="relative">
           <div className="mb-8 flex -space-x-3">
             {EQUIPE.map((a) => (
