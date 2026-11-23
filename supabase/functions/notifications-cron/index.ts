@@ -52,7 +52,7 @@ Deno.serve(async (req: Request) => {
       .eq("faite", false).lte("date_action", today);
     const parUser = new Map<string, number>();
     for (const a of actions ?? []) {
-      const owner = (a.contacts as { owner_id: string | null } | null)?.owner_id ?? a.auteur_id;
+      const owner = (a.contacts as unknown as { owner_id: string | null } | null)?.owner_id ?? a.auteur_id;
       if (!owner || !actifIds.has(owner)) continue;
       parUser.set(owner, (parUser.get(owner) ?? 0) + 1);
     }

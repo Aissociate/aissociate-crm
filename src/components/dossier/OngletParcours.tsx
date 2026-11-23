@@ -254,7 +254,7 @@ export default function OngletParcours({
     });
     if (error) throw new Error(error.message);
     setSurMesure(null);
-    formations.refresh();
+    void formations.refresh();
     onChanged();
     setInfo('Formation sur mesure créée (hors catalogue public) et rattachée au dossier.');
   });

@@ -38,7 +38,7 @@ export default function RechargesEspace({ workspaceId }: { workspaceId: string }
       { prix: cfg.recharge_grand_prix_ht || '30', credits: cfg.recharge_grand_credits || '350' },
     ]);
   }, [workspaceId]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   if (indisponible) return <p className="text-sm text-muted">Recharges indisponibles : migration « studio_recharges » non appliquée.</p>;
   if (!mvts) return null;

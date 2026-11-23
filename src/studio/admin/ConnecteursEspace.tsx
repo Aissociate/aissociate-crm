@@ -44,7 +44,7 @@ export default function ConnecteursEspace({ workspaceId }: { workspaceId: string
     const { data, error } = await db.from('studio_connecteurs').select('*').eq('workspace_id', workspaceId).order('created_at');
     if (error) setErreur(error.message); else setLignes((data ?? []) as Ligne[]);
   }, [workspaceId]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const maj = async (id: string, patch: Partial<Ligne>) => {
     setLignes((l) => l.map((x) => (x.id === id ? { ...x, ...patch } : x)));

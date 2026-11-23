@@ -50,14 +50,14 @@ export default function Entreprises() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const remove = async (e: Entreprise) => {
     if (!confirm(`Supprimer ${e.raison_sociale} ?`)) return;
     const { error } = await supabase.from('entreprises').delete().eq('id', e.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const filtered = data.filter((e) =>

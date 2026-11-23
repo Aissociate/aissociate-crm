@@ -59,7 +59,7 @@ export default function Evaluation() {
 
   useEffect(() => {
     let vivant = true;
-    (async () => {
+    void (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('evaluation', { body: { action: 'get', token } });
         if (error) throw error;

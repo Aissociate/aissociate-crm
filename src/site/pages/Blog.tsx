@@ -15,7 +15,7 @@ export default function Blog() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   async function loadData() {
@@ -50,19 +50,6 @@ export default function Blog() {
       month: 'long',
       year: 'numeric',
     });
-  }
-
-  const categoryColors: Record<string, string> = {
-    'formation': 'from-orange-600 to-amber-700',
-    'intelligence-artificielle': 'from-blue-500 to-cyan-600',
-    'business': 'from-emerald-500 to-teal-600',
-    'marketing': 'from-rose-500 to-pink-600',
-    'technologie': 'from-neutral-600 to-neutral-800',
-  };
-
-  function getCategoryColor(cat: BlogCategory | null | undefined): string {
-    if (!cat) return 'from-orange-600 to-amber-700';
-    return categoryColors[cat.slug] || 'from-orange-600 to-amber-700';
   }
 
   return (

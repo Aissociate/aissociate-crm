@@ -178,7 +178,7 @@ export default function ActionsAFaire() {
     if (a.faite) { alert("Une action déjà réalisée ne peut plus être décochée."); return; }
     if (a.date_action > TODAY) { alert("Cette action est datée dans le futur : elle ne peut pas être notée comme réalisée."); return; }
     await supabase.from('contact_actions').update({ faite: true }).eq('id', a.id);
-    actions.refresh();
+    void actions.refresh();
   };
 
   if (loading) return <div className="flex justify-center py-20"><Spinner className="h-8 w-8" /></div>;
@@ -299,7 +299,7 @@ export default function ActionsAFaire() {
           profiles={profiles.data}
           onClose={() => setFiche(null)}
           onEdit={() => setFiche(null)}
-          onUpdated={() => { contacts.refresh(); actions.refresh(); }}
+          onUpdated={() => { void contacts.refresh(); void actions.refresh(); }}
         />
       )}
     </div>

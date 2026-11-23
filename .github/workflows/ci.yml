@@ -26,15 +26,40 @@ jobs:
       - name: Tests unitaires (vitest)
         run: npm test
 
+      - name: Lint (ESLint sur src/)
+        run: npm run lint
+
       - name: Build (tsc + vite)
         run: npm run build
 
       - name: Tests de l'API (parseur, SQL, injections, JWT)
         run: npm --prefix api ci --no-audit --no-fund && npm --prefix api test
 
+  functions:
+    name: Types des fonctions serveur (deno check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Même version de Deno que functions-runtime/Dockerfile.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.1.4
+
+      # DENO_NO_PACKAGE_JSON : le package.json de la racine est celui du front ;
+      # en production les fonctions tournent sans lui (voir le Dockerfile).
+      - name: Vérifier les types (supabase/functions/*/index.ts)
+        env:
+          DENO_NO_PACKAGE_JSON: "1"
+        run: |
+          deno check --no-lock functions-runtime/main.ts
+          cd supabase/functions && deno check --no-lock */index.ts
+
   deploy:
     name: Déploiement VPS
-    needs: build
+    needs: [build, functions]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:

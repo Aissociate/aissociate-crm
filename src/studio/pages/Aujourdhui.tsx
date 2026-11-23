@@ -147,7 +147,7 @@ export default function Aujourdhui() {
 
       {document && (
         <EditeurDocument doc={document} agent={(document.agent_id && agents.get(document.agent_id)?.prenom) || 'Agent'} nomEspace={me.workspace.nom} gerer={gerer}
-          onClose={() => setDocument(null)} onSaved={() => { decisions.charger(); rafraichir(); }} />
+          onClose={() => setDocument(null)} onSaved={() => { void decisions.charger(); void rafraichir(); }} />
       )}
     </div>
   );

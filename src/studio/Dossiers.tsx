@@ -25,7 +25,7 @@ export function useDossiers(gerer: (e: unknown) => string) {
     try { setDossiers((await appel<{ dossiers: Dossier[] }>('dossiers')).dossiers); }
     catch (e) { setErreur(gerer(e)); }
   }, [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
   const options = useMemo(() => dossiers.map((d) => ({ id: d.id, chemin: cheminDe(dossiers, d.id) }))
     .sort((a, b) => a.chemin.localeCompare(b.chemin, 'fr')), [dossiers]);
   return { dossiers, options, charger, erreur, setErreur };
@@ -74,7 +74,7 @@ export function BarreDossiers({ dossiers, filtre, onFiltre, onChange, gerer }: {
             <ChevronRight className="h-3.5 w-3.5 text-neutral-300" />
             {renomme !== null && d.id === courant?.id ? (
               <input autoFocus value={renomme} maxLength={80} onChange={(e) => setRenomme(e.target.value)} className={champ}
-                onKeyDown={(e) => { if (e.key === 'Enter') renommer(); if (e.key === 'Escape') setRenomme(null); }} onBlur={() => setRenomme(null)} />
+                onKeyDown={(e) => { if (e.key === 'Enter') void renommer(); if (e.key === 'Escape') setRenomme(null); }} onBlur={() => setRenomme(null)} />
             ) : (
               <button onClick={() => onFiltre(d.id)} className={cx('text-xs', d.id === courant?.id ? 'font-semibold text-neutral-900' : 'text-neutral-500 hover:text-neutral-900')}>{d.nom}</button>
             )}
@@ -96,7 +96,7 @@ export function BarreDossiers({ dossiers, filtre, onFiltre, onChange, gerer }: {
         {nouveau !== null ? (
           <input autoFocus value={nouveau} maxLength={80} placeholder={courant ? `Sous-dossier de ${courant.nom}` : 'Nom du dossier'} className={champ}
             onChange={(e) => setNouveau(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') creer(); if (e.key === 'Escape') setNouveau(null); }} onBlur={() => !nouveau.trim() && setNouveau(null)} />
+            onKeyDown={(e) => { if (e.key === 'Enter') void creer(); if (e.key === 'Escape') setNouveau(null); }} onBlur={() => !nouveau.trim() && setNouveau(null)} />
         ) : (
           <button onClick={() => setNouveau('')} className="flex items-center gap-1.5 rounded-full border border-dashed border-neutral-300 px-3 py-1 text-xs text-neutral-500 hover:border-neutral-900 hover:text-neutral-900">
             <FolderPlus className="h-3.5 w-3.5" />{courant ? 'Sous-dossier' : 'Nouveau dossier'}

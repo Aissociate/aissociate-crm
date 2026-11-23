@@ -127,7 +127,7 @@ export default function StudioAdmin() {
     setUsage((us.data ?? []) as Usage[]); setAgents((ag.data ?? []) as AgentCat[]);
     setEntreprises((en.data ?? []) as { id: string; raison_sociale: string }[]);
   }, []);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const lienStudio = `${window.location.origin}/studio`;
 

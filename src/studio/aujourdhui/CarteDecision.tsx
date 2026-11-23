@@ -84,7 +84,7 @@ export function CarteDecision({ d, decisions, ctx }: { d: Decision; decisions: D
       <h2 id={`decision-${d.id}`} className="text-[23px] font-bold leading-tight tracking-tight">{d.titre}</h2>
       {edition ? (
         <EditeurLivrable id={d.id} titre={d.titre} contenu={d.contenu} action={d.action} gerer={ctx.gerer}
-          onCancel={() => setEdition(false)} onSaved={() => { setEdition(false); decisions.charger(); }} />
+          onCancel={() => setEdition(false)} onSaved={() => { setEdition(false); void decisions.charger(); }} />
       ) : (
         <>
           <Apercu d={d} onDocument={ctx.onDocument} />

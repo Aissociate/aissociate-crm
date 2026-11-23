@@ -126,7 +126,7 @@ export default function Parametres() {
   }, []);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       const { data } = await supabase.from('parametres').select('*').in('cle', ['organisme', 'smtp', 'imap', 'ai', 'mail_actions', 'agefice', 'chatbot', 'blog', 'linkedin', 'meta_ads', 'newsletter', 'email_signature', 'brevo', 'message_templates']);
       for (const row of data ?? []) {
         if (row.cle === 'organisme') setOrganisme((row.valeur as Organisme) ?? {});

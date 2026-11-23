@@ -181,7 +181,7 @@ export default function Contacts() {
     await supabase.from('import_batches').insert({
       source, count: ids.length, contact_ids: ids, created_by: session?.user.id ?? null,
     });
-    batches.refresh();
+    void batches.refresh();
   };
   const undoBatch = async (b: ImportBatch) => {
     if (!b.contact_ids.length) return;
@@ -193,8 +193,8 @@ export default function Contacts() {
         if (error) throw new Error(error.message);
       }
       await supabase.from('import_batches').update({ undone: true, undone_at: new Date().toISOString() }).eq('id', b.id);
-      batches.refresh();
-      refresh();
+      void batches.refresh();
+      void refresh();
       alert('Import annulé.');
     } catch (err) {
       alert(`Annulation impossible : ${err instanceof Error ? err.message : String(err)}`);
@@ -233,7 +233,7 @@ export default function Contacts() {
   const assign = async (c: Contact, ownerId: string) => {
     const { error } = await supabase.from('contacts').update({ owner_id: ownerId || null }).eq('id', c.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   // Attribution globale de la sélection à un conseiller (avec confirmation).
@@ -249,7 +249,7 @@ export default function Contacts() {
     }
     setDistributing(false);
     setSelected(new Set());
-    refresh();
+    void refresh();
   };
 
   // Changement de type en masse de la sélection (ex. requalifier des contacts en prospects).
@@ -264,7 +264,7 @@ export default function Contacts() {
     }
     setDistributing(false);
     setSelected(new Set());
-    refresh();
+    void refresh();
   };
 
   // Ouvre la modale de répartition (conseillers présélectionnés = conseillers actifs).
@@ -292,7 +292,7 @@ export default function Contacts() {
     setDistributing(false);
     setRrOpen(false);
     setSelected(new Set());
-    refresh();
+    void refresh();
     alert(`${targets.length} contact(s) répartis sur ${ids.length} conseiller(s) (round-robin).`);
   };
 
@@ -318,7 +318,7 @@ export default function Contacts() {
       // Round-robin sur les conseillers actifs ; si aucun -> non affecté (manuel)
       const r = await importProspectsFile(file, session?.user.id);
       await recordImport(r.created ?? [], 'csv');
-      refresh();
+      void refresh();
       alert(`${r.importes} nouveau(x) prospect(s) importé(s) sur ${r.lus} ligne(s) — répartis en round-robin.`);
     } catch (err) {
       alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
@@ -353,7 +353,7 @@ export default function Contacts() {
       const r = await importContactsMapped(mapRows, mapping, { ownerId, defaultType: mapType });
       await recordImport(r.created ?? [], 'csv_mapping');
       setMapOpen(false);
-      refresh();
+      void refresh();
       alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s) (${(r.created ?? []).length} créé(s)).`);
     } catch (err) {
       alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
@@ -372,7 +372,7 @@ export default function Contacts() {
       return;
     }
     const p = (res as { prospects?: { importes?: number; releads?: number } })?.prospects;
-    refresh();
+    void refresh();
     const relead = p?.releads
       ? ` ${p.releads} prospect(s) déjà connu(s) ont redéposé le formulaire : fiche annotée et repassée en « nouveau ».`
       : '';
@@ -400,12 +400,12 @@ export default function Contacts() {
     if (!error && newId && pendingActions) {
       await supabase.from('contact_actions').insert(seedActionsFromMail(newId, pendingActions));
       setPendingActions(null);
-      actionsCol.refresh();
+      void actionsCol.refresh();
     }
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   // Saisie interne : reprend le formulaire public et crée OU met à jour le contact
@@ -448,7 +448,7 @@ export default function Contacts() {
     if (error) { alert(error.message); return; }
     setIntakeMsg(existing ? 'Contact mis à jour ✓' : 'Contact créé ✓');
     setTimeout(() => { setIntakeMsg(null); setIntakeOpen(false); setIntake(emptyIntake()); }, 1200);
-    refresh();
+    void refresh();
   };
 
   const remove = async (c: Contact) => {
@@ -456,7 +456,7 @@ export default function Contacts() {
     const { error } = await supabase.from('contacts').delete().eq('id', c.id);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const allTags = [...new Set(data.flatMap((c) => c.tags ?? []))].sort();
@@ -725,7 +725,7 @@ export default function Contacts() {
                     className={`input max-w-[180px] py-1 text-xs ${!c.owner_id ? 'border-brand-500/50 text-brand-700 dark:text-brand-300' : ''}`}
                     value={c.owner_id ?? ''}
                     onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => { e.stopPropagation(); assign(c, e.target.value); }}
+                    onChange={(e) => { e.stopPropagation(); void assign(c, e.target.value); }}
                   >
                     <option value="">Non affecté</option>
                     {assignables.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
@@ -993,7 +993,7 @@ export default function Contacts() {
           profiles={profiles.data}
           onClose={() => setFiche(null)}
           onEdit={(c) => { setFiche(null); openEdit(c); }}
-          onUpdated={() => { refresh(); actionsCol.refresh(); }}
+          onUpdated={() => { void refresh(); void actionsCol.refresh(); }}
         />
       )}
 
@@ -1002,7 +1002,7 @@ export default function Contacts() {
         onClose={() => setDoublonsOpen(false)}
         contacts={data}
         isManager={isManager}
-        onMerged={() => { refresh(); actionsCol.refresh(); oppsCol.refresh(); }}
+        onMerged={() => { void refresh(); void actionsCol.refresh(); void oppsCol.refresh(); }}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Buffer } from "node:buffer";
 import { simpleParser } from "npm:mailparser@3.7.1";
-import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { ajouterJours, partiesLocales } from "../_shared/heure_locale.ts";
 
 const corsHeaders = {
@@ -48,7 +48,7 @@ async function enregistrerPiecesJointes(
   return sortie;
 }
 
-async function loadImap(sb: ReturnType<typeof createClient>): Promise<ImapCfg | null> {
+async function loadImap(sb: SupabaseClient): Promise<ImapCfg | null> {
   const { data } = await sb.from("parametres").select("valeur").eq("cle", "imap").maybeSingle();
   const c = (data?.valeur ?? {}) as Record<string, unknown>;
   const host = (c.host as string) || Deno.env.get("IMAP_HOST");

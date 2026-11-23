@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
     const logo = await embedImage(pdf, org.logo_url);
     // Cachet : celui des paramètres de l'organisme, à défaut celui déposé dans
     // la base documentaire (document intitulé « cachet + signature … »).
-    let cachetUrl = org.signature_url;
+    let cachetUrl: string | undefined = org.signature_url;
     if (!cachetUrl) {
       const { data: doc } = await sb.from("documents").select("fichier_url")
         .ilike("titre", "%cachet%signature%").eq("statut", "actif")

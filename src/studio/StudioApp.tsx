@@ -244,7 +244,7 @@ export default function StudioApp() {
 
   useEffect(() => {
     document.title = 'Studio IA — Aissociate';
-    rafraichir().finally(() => setChargement(false));
+    void rafraichir().finally(() => setChargement(false));
   }, [rafraichir]);
 
   const connecte = useCallback((token: string, data: Me) => { jeton.ecrire(token); setMe(data); }, []);

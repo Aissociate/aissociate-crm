@@ -42,7 +42,7 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
   // Papier à en-tête de « Mon entreprise », affiché autour du contenu (non modifiable ici).
   const [papier, setPapier] = useState<{ haut: string; bas: string } | null>(null);
   useEffect(() => {
-    chargerEntete().then((e) => {
+    void chargerEntete().then((e) => {
       const l = lignesEntete(e.entete, nomEspace);
       setPapier({
         haut: `<header class="papier" contenteditable="false"><div>${e.logo_url ? `<img src="${echapper(e.logo_url)}" alt="">` : ''}</div>`

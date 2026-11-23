@@ -83,13 +83,13 @@ export default function PageLivrables() {
   const agents = new Map(me.agents.map((a) => [a.id, a]));
 
   const charger = useCallback(() => appel<{ livrables: Livrable[] }>('livrables').then((r) => setLivrables(r.livrables)).catch((e) => setErreur(gerer(e))), [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const deciderDirect = async (id: string, statut: Livrable['statut'], raison?: Raison) => {
     setEnvoi(true);
     try {
       const r = await appel<{ livrables: Livrable[]; execute?: boolean; lien?: string | null; erreur_action?: string }>('livrable_decider', { id, statut, commentaire, raison });
-      setLivrables(r.livrables); setCommentaire(''); setErreur(''); setRefus(null); rafraichir();
+      setLivrables(r.livrables); setCommentaire(''); setErreur(''); setRefus(null); void rafraichir();
       const type = r.livrables.find((x) => x.id === id)?.type_action;
       if (r.execute) setInfo((type && ACTIONS[type]?.fait) || 'Action exécutée.');
       else if (r.erreur_action) setErreur(`Validé, mais le dépôt a échoué : ${r.erreur_action}`);
@@ -111,7 +111,7 @@ export default function PageLivrables() {
     if (!v || !confirm(`Revenir à la version du ${new Date(v.le).toLocaleString('fr-FR')} ? La version actuelle reste dans l'historique.`)) return;
     try {
       const r = await appel<{ livrables: Livrable[] }>('livrable_modifier', { id: l.id, champs: champsDepuis(v.titre, v.contenu, v.action) });
-      setLivrables(r.livrables); setInfo('Version restaurée : le livrable repasse « à valider ».'); setErreur(''); rafraichir();
+      setLivrables(r.livrables); setInfo('Version restaurée : le livrable repasse « à valider ».'); setErreur(''); void rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -127,7 +127,7 @@ export default function PageLivrables() {
         : 'Les livrables que vous soumettez sont validés par le propriétaire de l\'espace.'}>Livrables</Titre>
 
       <BarreDossiers dossiers={dossiers.dossiers} filtre={filtreDossier} onFiltre={setFiltreDossier} gerer={gerer}
-        onChange={() => { dossiers.charger(); charger(); }} />
+        onChange={() => { void dossiers.charger(); void charger(); }} />
       <div className="mb-4 flex flex-wrap gap-2">
         {FILTRES.map((s) => (
           <button key={s} onClick={() => setFiltre(s)}
@@ -172,7 +172,7 @@ export default function PageLivrables() {
                     <div className="mb-3 flex items-center gap-2 text-xs text-neutral-500">
                       Dossier :
                       <ChoixDossier options={dossiers.options} valeur={l.dossier_id ?? null} quoi="livrable" id={l.id} gerer={gerer}
-                        onRange={(d) => { setLivrables((x) => x?.map((y) => (y.id === l.id ? { ...y, dossier_id: d } : y)) ?? null); dossiers.charger(); }} />
+                        onRange={(d) => { setLivrables((x) => x?.map((y) => (y.id === l.id ? { ...y, dossier_id: d } : y)) ?? null); void dossiers.charger(); }} />
                     </div>
                     {l.type_action && (
                       <div className="mb-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
@@ -189,7 +189,7 @@ export default function PageLivrables() {
                     ) : edition === l.id ? (
                       <EditeurLivrable<Livrable> id={l.id} titre={l.titre} contenu={l.contenu} action={l.action} gerer={gerer}
                         onCancel={() => setEdition(null)}
-                        onSaved={(liste) => { setLivrables(liste); setEdition(null); setErreur(''); setInfo('Version enregistrée : le livrable est « à valider ».'); setFiltre('a_valider'); rafraichir(); }} />
+                        onSaved={(liste) => { setLivrables(liste); setEdition(null); setErreur(''); setInfo('Version enregistrée : le livrable est « à valider ».'); setFiltre('a_valider'); void rafraichir(); }} />
                     ) : (
                       <div className="max-h-[28rem] overflow-y-auto rounded-xl bg-neutral-50 p-4"><Markdown texte={l.contenu} />{mediasDuMessage(l.contenu).map((m) => <div key={m.id} className="mt-3"><MediaVue media={m} /></div>)}</div>
                     )}
@@ -270,7 +270,7 @@ export default function PageLivrables() {
         const d = livrables?.find((x) => x.id === docOuvert);
         return d ? (
           <EditeurDocument doc={d} agent={(d.agent_id && agents.get(d.agent_id)?.prenom) || 'Agent'} nomEspace={me.workspace.nom} gerer={gerer}
-            onClose={() => setDocOuvert(null)} onSaved={() => { charger(); rafraichir(); }} />
+            onClose={() => setDocOuvert(null)} onSaved={() => { void charger(); void rafraichir(); }} />
         ) : null;
       })()}
     </div>

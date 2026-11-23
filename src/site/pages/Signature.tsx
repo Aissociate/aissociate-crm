@@ -48,7 +48,7 @@ export default function Signature() {
   };
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         const d = await appeler('get');
         setEtat(d);

@@ -24,7 +24,7 @@ export default function SavoirsAgent({ agentId, prenom }: { agentId: string; pre
     if (error) { setErreur(error.message.includes('studio_agent_savoirs') ? 'Migration « studio_savoirs » non appliquée.' : error.message); setListe([]); return; }
     setListe((data ?? []) as Savoir[]);
   }, [agentId]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const importer = async (f: File) => {
     setErreur(''); setLecture(true);

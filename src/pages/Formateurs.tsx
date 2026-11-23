@@ -38,7 +38,7 @@ export default function Formateurs() {
     setDocs(data ?? []);
   }, []);
 
-  useEffect(() => { if (activeId) loadDocs(activeId); }, [activeId, loadDocs]);
+  useEffect(() => { if (activeId) void loadDocs(activeId); }, [activeId, loadDocs]);
 
   const save = async () => {
     setSaving(true);
@@ -49,7 +49,7 @@ export default function Formateurs() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    formateurs.refresh();
+    void formateurs.refresh();
   };
 
   const remove = async (f: Formateur) => {
@@ -57,7 +57,7 @@ export default function Formateurs() {
     const { error } = await supabase.from('formateurs').delete().eq('id', f.id);
     if (error) { alert(error.message); return; }
     if (selected === f.id) setSelected(null);
-    formateurs.refresh();
+    void formateurs.refresh();
   };
 
   // Ajout d'un document après téléversement dans le bucket privé "formateurs"

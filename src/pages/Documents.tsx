@@ -106,7 +106,7 @@ export default function Documents() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   // Nouvelle version : duplique le document en incrementant la version
@@ -118,14 +118,14 @@ export default function Documents() {
       dossier: d.dossier, dossier_id: d.dossier_id, chat_direction: d.chat_direction, chat_conseiller: d.chat_conseiller, contenu_texte: d.contenu_texte,
     });
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const remove = async (d: Document) => {
     if (!confirm(`Supprimer « ${d.titre} » ?`)) return;
     const { error } = await supabase.from('documents').delete().eq('id', d.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const filtered = data.filter((d) =>

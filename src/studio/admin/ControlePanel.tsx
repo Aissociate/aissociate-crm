@@ -32,7 +32,7 @@ export default function ControlePanel() {
       .eq('fonction', 'studio-controle').order('started_at', { ascending: false }).limit(1).maybeSingle();
     setPassage((data as Passage | null) ?? null);
   }, []);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const lancer = async () => {
     setEnCours(true); setErreur('');

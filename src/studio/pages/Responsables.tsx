@@ -27,7 +27,7 @@ export default function Responsables() {
   const charger = useCallback(async () => {
     try { setEtat(await appel<Etat>('responsables')); } catch (e) { setErreur(gerer(e)); }
   }, [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const agir = async (action: string, body: Record<string, unknown>, succes: (r: Reponse) => string) => {
     setErreur(''); setInfo(''); setEnvoi(true);
@@ -84,7 +84,7 @@ export default function Responsables() {
               </div>
               {etat.proprietaire && r.role !== 'proprietaire' && (r.actif ? (
                 <Bouton variante="fantome" disabled={envoi}
-                  onClick={() => { if (window.confirm(`Retirer l'accès de ${nomDe(r)} ? Son historique est conservé ; vous pourrez le réactiver.`)) agir('responsable_retirer', { id: r.id }, () => `${nomDe(r)} n'a plus accès au Studio.`); }}>
+                  onClick={() => { if (window.confirm(`Retirer l'accès de ${nomDe(r)} ? Son historique est conservé ; vous pourrez le réactiver.`)) void agir('responsable_retirer', { id: r.id }, () => `${nomDe(r)} n'a plus accès au Studio.`); }}>
                   <UserMinus className="h-4 w-4" /> Retirer
                 </Bouton>
               ) : (

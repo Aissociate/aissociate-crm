@@ -134,7 +134,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     });
     setBusy(false);
     if (error) { alert(error.message); return; }
-    setNewOpp({ titre: '', montant: '' }); setAddPanel(null); loadRefs();
+    setNewOpp({ titre: '', montant: '' }); setAddPanel(null); void loadRefs();
   };
   const addDoss = async () => {
     if (!newDoss.intitule.trim()) return;
@@ -145,7 +145,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     });
     setBusy(false);
     if (error) { alert(error.message); return; }
-    setNewDoss({ intitule: '' }); setAddPanel(null); loadRefs();
+    setNewDoss({ intitule: '' }); setAddPanel(null); void loadRefs();
   };
   // ── Coffre de documents rattachés au contact ─────────────────────────────────
   const addDoc = async (value: string, name?: string) => {
@@ -153,13 +153,13 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
       contact_id: c.id, titre: name || 'Document', fichier_url: value, created_by: session?.user.id ?? null,
     });
     if (error) { alert(error.message); return; }
-    loadRefs();
+    void loadRefs();
   };
   const removeDoc = async (d: ContactDocument) => {
     if (!confirm(`Supprimer « ${d.titre} » ?`)) return;
     const { error } = await supabase.from('contact_documents').delete().eq('id', d.id);
     if (error) { alert(error.message); return; }
-    loadRefs();
+    void loadRefs();
   };
 
   // ── Champs de suivi éditables ───────────────────────────────────────────────
@@ -225,7 +225,6 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
     setSavedField(keys[keys.length - 1]);
     setTimeout(() => setSavedField((s) => (s && keys.includes(s) ? null : s)), 1500);
     updatedRef.current();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
 
   const queueSave = useCallback((field: keyof Contact, value: string) => {
@@ -673,7 +672,7 @@ export default function ContactFiche({ contact: c, entreprises, financeurs, prof
                   participants={participations}
                   opportunites={opps}
                   actions={actions}
-                  onChanged={() => { loadRefs(); onUpdated(); }}
+                  onChanged={() => { void loadRefs(); onUpdated(); }}
                   onNavigate={onClose}
                 />
               </div>
