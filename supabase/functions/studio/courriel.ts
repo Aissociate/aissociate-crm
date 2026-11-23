@@ -86,11 +86,15 @@ export function mailReinitialisation(p: { prenom: string | null; lien: string })
 }
 
 /** E-mail d'accueil de l'essai : adresse de connexion, identifiant, mot de passe provisoire. */
-export function mailIdentifiants(p: { prenom: string | null; entreprise: string; email: string; motDePasse: string; site: string; finEssai: string; jours: number }) {
+/** `finEssai` null : contrat Stage gratuit, sans limite de durée (contrats.ts). */
+export function mailIdentifiants(p: { prenom: string | null; entreprise: string; email: string; motDePasse: string; site: string; finEssai: string | null; jours: number }) {
   const url = `${p.site.replace(/\/$/, "")}/studio/connexion`;
-  const fin = new Date(p.finEssai).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "Indian/Reunion" });
+  const fin = p.finEssai ? new Date(p.finEssai).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "Indian/Reunion" }) : "";
   const bonjour = `Bonjour${p.prenom ? ` ${p.prenom}` : ""},`;
-  const lignes = [
+  const lignes = !p.finEssai ? [
+    `Votre Studio IA${p.entreprise ? ` « ${p.entreprise} »` : ""} est prêt : vos agents commencent en stage, gratuitement et sans limite de durée.`,
+    `En stage, ils disposent de 10 heures de travail par mois, sans accès à vos outils. Pour leur ouvrir votre messagerie, votre agenda ou vos réseaux sociaux et leur donner plus d'heures, choisissez un contrat dans « Mon abonnement », quand vous voulez.`,
+  ] : [
     `Votre Studio IA${p.entreprise ? ` « ${p.entreprise} »` : ""} est prêt : vous pouvez l'essayer gratuitement pendant ${p.jours} jours, jusqu'au ${fin}.`,
     `Pendant l'essai, vos agents travaillent avec les quotas habituels et vous pouvez connecter un outil (messagerie, agenda ou réseau social). À la fin de l'essai, choisissez votre abonnement dans « Mon périmètre » pour continuer : sans abonnement, l'accès aux agents est suspendu.`,
   ];
