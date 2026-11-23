@@ -122,6 +122,7 @@ import * as ameliorations from "./ameliorations.ts";
 import * as harnais from "./harnais.ts";
 import * as courriel from "./courriel.ts";
 import * as essai from "./essai.ts";
+import * as contrats from "./contrats.ts";
 import * as cgv from "./cgv.ts";
 import * as dossiers from "./dossiers.ts";
 import { colonneSensibleAbsente, detecterSensible, DOSSIER_SENSIBLE, messageSensible } from "./sensible.ts";
@@ -314,6 +315,10 @@ type Session = {
     essai_fin: string | null; abonnement_statut: string | null;
     /** Modèle imposé à tous les agents de ce client (null = hérité). */
     modele: string | null;
+    /** Contrat de la grille (contrats.ts) ; null : espace CRM ou abonné de l'ancienne grille. */
+    contrat: string | null;
+    /** Badges d'accès (connecteurs) et casier (Go) du contrat ; null = sans limite. */
+    connecteurs_max: number | null; stockage_go: number | null;
   };
 };
 
@@ -321,7 +326,7 @@ type Session = {
 // Session
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele, essai_fin, abonnement_statut";
+const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele, essai_fin, abonnement_statut, contrat, connecteurs_max, stockage_go";
 
 function versSession(sessionId: string, u: Record<string, unknown>, w: Record<string, unknown>): Session {
   return {
@@ -333,6 +338,8 @@ function versSession(sessionId: string, u: Record<string, unknown>, w: Record<st
       contexte_entreprise: String(w.contexte_entreprise ?? ""), expire_le: w.expire_le as string | null,
       modele: (w.modele as string | null) || null,
       essai_fin: (w.essai_fin as string | null) ?? null, abonnement_statut: (w.abonnement_statut as string | null) ?? null,
+      contrat: (w.contrat as string | null) ?? null,
+      connecteurs_max: (w.connecteurs_max as number | null) ?? null, stockage_go: (w.stockage_go as number | null) ?? null,
     },
   };
 }
@@ -1003,19 +1010,29 @@ async function etatLiaison(sb: SupabaseClient, wsId: string, avecExpediteurs: bo
 
 /** Agents accessibles à l'espace : actifs au catalogue, inclus dans l'offre, non désactivés pour l'espace. */
 /** Refus d'un nouveau connecteur pendant l'essai gratuit (un seul permis) ; null sinon. */
+// Aussi : limite des badges d'accès du contrat (contrats.ts, colonne connecteurs_max).
 async function refusConnecteurEssai(sb: SupabaseClient, s: Session): Promise<string | null> {
-  if (!essai.enEssai(s.ws)) return null;
+  const max = s.ws.connecteurs_max;
+  if (!essai.enEssai(s.ws) && max == null) return null;
   const f = await facturationEspace(sb, s.ws.id);
-  return f.lignes.length >= essai.CONNECTEURS_ESSAI ? essai.MESSAGE_CONNECTEUR : null;
+  if (essai.enEssai(s.ws)) return f.lignes.length >= essai.CONNECTEURS_ESSAI ? essai.MESSAGE_CONNECTEUR : null;
+  if (max == null || f.lignes.length < max) return null;
+  return max === 0
+    ? "Votre contrat Stage ne donne aucun badge d'accès à vos outils. Choisissez un contrat ou ajoutez un badge dans « Mon abonnement »."
+    : `Vos ${max} badge${max > 1 ? "s" : ""} d'accès sont utilisés. Retirez une connexion ou ajoutez un badge (avenant) dans « Mon abonnement ».`;
 }
 
 /** Abonnement en ligne de l'espace (Mon périmètre) : ce qui est facturé et ce que l'équipe compte aujourd'hui. */
 async function etatAbonnement(sb: SupabaseClient, wsId: string, nbAgents: number) {
   const [{ data: w }, conn] = await Promise.all([
-    sb.from("studio_workspaces").select("abonnement_statut, abonnement_fin, abonnement_agents, abonnement_connecteurs, abonnement_mensuel, entete").eq("id", wsId).maybeSingle(),
+    sb.from("studio_workspaces").select("abonnement_statut, abonnement_fin, abonnement_agents, abonnement_connecteurs, abonnement_mensuel, entete, contrat, contrat_choix").eq("id", wsId).maybeSingle(),
     facturationEspace(sb, wsId),
   ]);
+  const enCours = Boolean(w?.abonnement_statut && stripe.STATUTS_EN_COURS.includes(String(w.abonnement_statut)) && w.abonnement_statut !== "incomplete");
   return {
+    // Grille des contrats : choix en vigueur (Stage par défaut) ; ancienne_grille = abonné facturé par agent.
+    contrat: w?.contrat ? contrats.normaliser(w.contrat_choix ?? { contrat: w.contrat }) : null,
+    ancienne_grille: enCours && !w?.contrat,
     statut: w?.abonnement_statut ?? null, fin: w?.abonnement_fin ?? null, mensuel_ht: w?.abonnement_mensuel ?? null,
     factures: { agents: w?.abonnement_agents ?? null, connecteurs: w?.abonnement_connecteurs ?? null },
     actuels: { agents: nbAgents, connecteurs: conn.erreur ? null : conn.nb_factures },
@@ -2359,8 +2376,8 @@ Deno.serve(async (req: Request) => {
 
       case "connecteur_enregistrer": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
-        if (essai.enEssai(s.ws)) {
-          // Mise à jour d'un connecteur déjà présent : permise ; nouveau connecteur : limité pendant l'essai.
+        if (essai.enEssai(s.ws) || s.ws.connecteurs_max != null) {
+          // Mise à jour d'un connecteur déjà présent : permise ; nouveau connecteur : limité (essai, badges du contrat).
           const { data: deja } = await sb.from("studio_connecteurs").select("id").eq("workspace_id", s.ws.id).eq("type", String(body.type ?? "")).maybeSingle();
           if (!deja) { const refus = await refusConnecteurEssai(sb, s); if (refus) return json({ error: refus }, 402); }
         }
@@ -2667,6 +2684,14 @@ Deno.serve(async (req: Request) => {
         parties.reduce((pos, p) => { octets.set(p, pos); return pos + p.length; }, 0);
         if (total > 1) await stock.remove(Array.from({ length: total - 1 }, (_, i) => fichiers.cheminMorceau(s.ws.id, jeton, i))).catch(() => undefined);
         if (octets.length > fichiers.TAILLE_MAX) return json({ error: `« ${nom} » dépasse ${fichiers.tailleLisible(fichiers.TAILLE_MAX)}.` }, 400);
+        // Casier du contrat (contrats.ts) : total des fichiers déposés de l'espace.
+        if (s.ws.stockage_go != null) {
+          const { data: docs } = await sb.from("studio_documents").select("taille").eq("workspace_id", s.ws.id).eq("type", "fichier");
+          const occupe = (docs ?? []).reduce((t, d) => t + (Number(d.taille) || 0), 0);
+          if (occupe + octets.length > s.ws.stockage_go * 1e9) {
+            return json({ error: `Votre casier de ${s.ws.stockage_go} Go est plein. Supprimez des fichiers ou ajoutez une armoire d'archives dans « Mon abonnement ».` }, 402);
+          }
+        }
         const mime = fichiers.mimeDe(nom, body.type as string);
         const chemin = fichiers.cheminFichier(s.ws.id, crypto.randomUUID(), nom);
         const { error: eStock } = await sb.storage.from("studio-medias").upload(chemin, octets, { contentType: mime, upsert: false });
@@ -2739,11 +2764,21 @@ Deno.serve(async (req: Request) => {
 
       case "abonnement_souscrire":
       case "abonnement_gerer":
+      case "abonnement_resilier":
       case "abonnement_synchroniser": {
         if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
         if (!stripe.stripeConfigure()) return json({ error: "Le paiement en ligne n'est pas encore ouvert. Contactez Aissociate." }, 503);
         const origine = origineSure(req);
         if (action === "abonnement_gerer") return json({ url: await stripe.sessionPortail(sb, { wsId: s.ws.id, email: s.user.email, origine }) });
+        // Résiliation (fin de période payée) : portail Stripe ouvert sur l'étape de résiliation ; le webhook ramène l'espace au Stage.
+        if (action === "abonnement_resilier") {
+          const { data: w } = await sb.from("studio_workspaces").select("stripe_abonnement, abonnement_statut").eq("id", s.ws.id).single();
+          if (!w?.stripe_abonnement || !stripe.STATUTS_EN_COURS.includes(String(w.abonnement_statut ?? ""))) return json({ error: "Aucun abonnement en cours à résilier." }, 400);
+          await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "resiliation_ouverte", detail: {} });
+          return json({ url: await stripe.sessionPortail(sb, { wsId: s.ws.id, email: s.user.email, origine, resilier: String(w.stripe_abonnement) }) });
+        }
+        // Nouvelles souscriptions : grille des contrats seulement (contrat_souscrire).
+        if (action === "abonnement_souscrire") return json({ error: "Choisissez votre contrat dans « Mon abonnement »." }, 410);
         const [agents, conn] = await Promise.all([agentsDuWorkspace(sb, s.ws), facturationEspace(sb, s.ws.id)]);
         if (conn.erreur) return json({ error: "Vos connecteurs n'ont pas pu être vérifiés : réessayez dans un instant." }, 503);
         if (!equipe.nbFactures(agents)) return json({ error: "Ajoutez au moins un agent spécialiste à votre équipe avant de vous abonner (Léa, votre assistante, est incluse)." }, 400);
@@ -2757,6 +2792,47 @@ Deno.serve(async (req: Request) => {
           return json({ error: "Un abonnement est déjà en place : gérez-le depuis « Gérer mon abonnement »." }, 409);
         }
         return json({ url: await stripe.sessionAbonnement(sb, { wsId: s.ws.id, email: s.user.email, origine, agents: equipe.nbFactures(agents), connecteurs: conn.nb_factures, prixConnecteur: conn.tarif.prix }) });
+      }
+
+      // Grille des contrats (page « Choisir mon contrat ») : souscription, changement, retour au Stage.
+      case "contrat_souscrire": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const choix = contrats.normaliser(body.choix);
+        const payant = contrats.bulletin(choix).payant;
+        const { data: w } = await sb.from("studio_workspaces").select("abonnement_statut, stripe_abonnement").eq("id", s.ws.id).single();
+        const enCours = Boolean(w?.stripe_abonnement && w.abonnement_statut && stripe.STATUTS_EN_COURS.includes(String(w.abonnement_statut)) && w.abonnement_statut !== "incomplete");
+        const acteur = `client:${s.user.email}`;
+        if (!payant) {
+          if (enCours) return json({ error: "Pour revenir au Stage gratuit, résiliez depuis « Gérer mon abonnement » : vous y passerez à la fin de la période payée." }, 409);
+          await stripe.appliquerContrat(sb, s.ws.id, choix);
+          await sb.from("studio_workspaces").update({ essai_fin: null, offre: s.ws.offre === "essai" ? "essentiel" : s.ws.offre }).eq("id", s.ws.id);
+          await journaliser(sb, { wsId: s.ws.id, acteur, action: "contrat_choisi", detail: { contrat: choix.contrat } });
+          return json({ ok: true });
+        }
+        if (!stripe.stripeConfigure()) return json({ error: "Le paiement en ligne n'est pas encore ouvert. Contactez Aissociate." }, 503);
+        if (enCours) {
+          const a = await stripe.modifierContrat(sb, s.ws.id, choix);
+          await journaliser(sb, { wsId: s.ws.id, acteur, action: "abonnement_mis_a_jour", detail: { contrat: choix, montant_ht: a.montant_ht } });
+          return json({ ok: true });
+        }
+        return json({ url: await stripe.sessionContrat(sb, { wsId: s.ws.id, email: s.user.email, origine: origineSure(req), choix }) });
+      }
+
+      // Parcours d'intégration (490 € HT, finançable OPCO) : demande à Aissociate, sans paiement en ligne.
+      case "integration_demander": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const contrat = contrats.contrat(String(body.contrat ?? s.ws.contrat ?? "stage"));
+        const texte = [
+          `Demande de parcours d'intégration (${contrats.INTEGRATION_HT} € HT, prise en charge OPCO possible).`,
+          "", `Espace : ${s.ws.nom}`, `Demandeur : ${[s.user.prenom, s.user.nom].filter(Boolean).join(" ") || "—"} <${s.user.email}>`,
+          `Contrat choisi : ${contrat.nom}`, "", "À faire : rappeler le client, proposer une date et monter le dossier OPCO.",
+        ].join("\n");
+        await courriel.envoyer(sb, {
+          a: courriel.ADRESSE_STUDIO, objet: `Studio IA : parcours d'intégration demandé (${s.ws.nom})`, texte,
+          html: `<pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${texte.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>`,
+        });
+        await journaliser(sb, { wsId: s.ws.id, acteur: `client:${s.user.email}`, action: "integration_demandee", detail: { contrat: contrat.id } });
+        return json({ ok: true });
       }
 
       // Le propriétaire ouvre lui-même un agent de plus ; l'abonnement en cours suit (prorata).

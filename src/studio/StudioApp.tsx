@@ -24,6 +24,7 @@ const Rapport = lazy(() => import('./pages/Rapport'));
 const ConnecterInvitation = lazy(() => import('./pages/ConnecterInvitation'));
 const Questionnaire = lazy(() => import('./pages/Questionnaire'));
 const Perimetre = lazy(() => import('./pages/Perimetre'));
+const Contrat = lazy(() => import('./pages/Contrat'));
 const Journal = lazy(() => import('./pages/Journal'));
 const Livrables = lazy(() => import('./pages/Livrables'));
 const ParEmail = lazy(() => import('./pages/ParEmail'));
@@ -222,7 +223,7 @@ function Coquille() {
               <span>Vos agents sont suspendus : aucune mission n'est traitée. <span className="underline">Voir mon périmètre</span></span>
             </NavLink>
           )}
-          <Suspense fallback={<Chargement />}>{essaiFini ? (pathname.endsWith('/compte') ? <Compte /> : <Perimetre />) : <SectionOnglets />}</Suspense>
+          <Suspense fallback={<Chargement />}>{essaiFini ? (pathname.endsWith('/compte') ? <Compte /> : pathname.endsWith('/contrat') ? <Contrat /> : <Perimetre />) : <SectionOnglets />}</Suspense>
         </div>
       </main>
     </div>
@@ -285,6 +286,7 @@ export default function StudioApp() {
             <Route path="reglages" element={<Connecteurs />} />
             <Route path="reglages/entreprise" element={<Entreprise />} />
             <Route path="reglages/perimetre" element={<Perimetre />} />
+            <Route path="reglages/perimetre/contrat" element={<Contrat />} />
             <Route path="reglages/compte" element={<Compte />} />
             <Route path="reglages/rapport" element={<Rapport />} />
             {/* Anciennes adresses : toujours servies, par redirection. */}

@@ -1,0 +1,42 @@
+import { describe, expect, it } from 'vitest';
+import { articles, bulletin, CHOIX_STAGE, choixDepuisArticles, clePrix, droits, normaliser } from './contrats';
+
+describe('grille des contrats', () => {
+  it('Temps plein CDD sans avenant : 149 € HT, expert et astreinte inclus', () => {
+    const ch = normaliser({ contrat: 'plein', expert: true, astreinte: true });
+    expect(ch.expert).toBe(false); // inclus au contrat : pas d'avenant facturé
+    const b = bulletin(ch);
+    expect(b.mensuel_ht).toBe(149);
+    expect(b.lignes).toHaveLength(1);
+    expect(droits(ch)).toMatchObject({ quota_messages_mois: 3033, connecteurs_max: 6, max_utilisateurs: 2, stockage_go: 25, expert: true, astreinte: true });
+  });
+
+  it('avenants et remise CDI lissée (2 mois offerts)', () => {
+    const ch = normaliser({ contrat: 'partiel', cdi: true, heures: 2, badges: 1, expert: true });
+    const b = bulletin(ch);
+    expect(b.brut_ht).toBe(59 + 19.8 + 4.9 + 19.9);
+    expect(b.remise_cdi_ht).toBe(17.27);
+    expect(b.mensuel_ht).toBe(86.33);
+    expect(b.annuel_ht).toBe(1036);
+    expect(droits(ch)).toMatchObject({ heures: 115, quota_messages_mois: 2300, connecteurs_max: 4, expert: true });
+  });
+
+  it('Stage : gratuit, rien à payer chez Stripe', () => {
+    expect(bulletin(CHOIX_STAGE).payant).toBe(false);
+    expect(articles(CHOIX_STAGE)).toEqual([]);
+    expect(droits(CHOIX_STAGE)).toMatchObject({ quota_messages_mois: 200, connecteurs_max: 0, max_utilisateurs: 1 });
+  });
+
+  it('bornes : quantités négatives ou absurdes ramenées', () => {
+    expect(normaliser({ contrat: 'inconnu', heures: -3, badges: 999 })).toMatchObject({ contrat: 'stage', heures: 0, badges: 50 });
+  });
+
+  it('aller-retour Stripe : articles → choix', () => {
+    const ch = normaliser({ contrat: 'equipe', cdi: true, responsables: 2, archives: 1 });
+    const a = articles(ch);
+    expect(a.find((x) => x.element === 'contrat_equipe')?.centimes).toBe(287000);
+    const relu = choixDepuisArticles(a.map((x) => ({ lookup_key: clePrix(x.element, ch.cdi), quantite: x.quantite })));
+    expect(relu).toEqual(ch);
+    expect(choixDepuisArticles([{ lookup_key: 'studio_agents_v2', quantite: 2 }])).toBeNull();
+  });
+});
