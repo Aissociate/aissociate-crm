@@ -1,77 +1,34 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Users } from 'lucide-react';
-import { differenceInCalendarDays } from 'date-fns';
+import { Plus, Pencil, Mail, Phone, Search, CloudDownload as DownloadCloud, FileSpreadsheet, UserCheck, ClipboardList, Tag, Columns3, Undo2, Users } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Badge, Spinner, EmptyState, ActionMenu } from '@/components/ui';
-import { CONTACT_TYPE_LABELS, OPP_STAGE_LABELS } from '@/lib/constants';
-import { cn, fullName, formatDate, ymdLocal, prochaineHeureOuvrable } from '@/lib/utils';
-import {
-  importProspectsFile, parseSpreadsheetWithHeaders, importContactsMapped,
-  guessMapping, CONTACT_IMPORT_FIELDS, type ColumnMapping,
-} from '@/lib/importExcel';
+import { PageHeader, Button, Table, Badge, Spinner, EmptyState, ActionMenu } from '@/components/ui';
+import { CONTACT_TYPE_LABELS } from '@/lib/constants';
+import { cn, fullName } from '@/lib/utils';
+import { importProspectsFile, parseSpreadsheetWithHeaders } from '@/lib/importExcel';
 import ContactFiche from '@/components/ContactFiche';
 import DoublonsContacts from '@/components/DoublonsContacts';
 import type {
   Contact, ContactType, Entreprise, Financeur, Profile,
   ContactAction, Opportunite, SessionParticipant, SessionFormation, ImportBatch,
 } from '@/lib/database.types';
+import { TODAY, REFRESH_MS, TYPES, empty, type MailSeed, type NouveauContactState } from './contacts/constantes';
+import { indexerPilotage } from './contacts/pilotage';
+import { CelluleSuivi } from './contacts/CelluleSuivi';
+import { BarreSelection } from './contacts/BarreSelection';
+import { ModaleRepartition } from './contacts/ModaleRepartition';
+import { ModaleContact } from './contacts/ModaleContact';
+import { ModaleSaisieDemande } from './contacts/ModaleSaisieDemande';
+import { ModaleImportCsv } from './contacts/ModaleImportCsv';
+import { ModaleImportsRecents } from './contacts/ModaleImportsRecents';
 
-const TODAY = new Date().toISOString().slice(0, 10);
-
-const REFRESH_MS = 5 * 60 * 1000; // rafraîchissement auto des prospects (5 min)
-
-const TYPES: ContactType[] = ['prospect', 'contact', 'apprenant', 'contact_entreprise', 'contact_financeur', 'formateur', 'encadrement'];
-
-// Types de demande du formulaire public (/formulaire) — repris dans la saisie interne.
-const REQUEST_TYPE_GROUPS: { label: string; options: string[] }[] = [
-  { label: 'Formations CPF', options: ["Création de contenus rédactionnels et visuels par l'IA générative"] },
-  { label: 'Formations OPCO', options: [
-    'Introduction aux IA pour les PME', 'Automatisation des process des PME',
-    "L'IA pour optimiser la relation client", "L'IA pour optimiser le marketing et la communication",
-    "L'IA pour optimiser la prospection commerciale", "L'IA pour optimiser les ressources humaines",
-    'Apprenez à maîtriser les marchés publics avec lemarchepublic.fr',
-  ] },
-  { label: 'Services', options: ['Assistance IA', 'Développement sur mesure', 'Employé virtuel'] },
-];
-
-const empty = (): Partial<Contact> => ({
-  type: 'prospect', civilite: '', nom: '', prenom: '', email: '',
-  telephone: '', fonction: '', entreprise_id: null, financeur_id: null, rgpd_consent: false, notes: '', tags: [],
-});
-
-const emptyIntake = () => ({ firstName: '', lastName: '', email: '', phone: '', company: '', requestType: '', message: '' });
-
-// ── Contact créé depuis la Messagerie (ticket « lien vers fiche dans contacts ») ──
-// Données transmises par la page Messagerie via l'état de navigation.
-type MailSeed = { sujet: string | null; recuLe: string | null };
-export type NouveauContactState = {
-  email: string; prenom: string; nom: string; telephone: string;
-  actionsMessagerie: MailSeed;
-};
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
-/** Les deux actions demandées à la création d'un contact depuis un mail entrant. */
-function seedActionsFromMail(contactId: string, seed: MailSeed) {
-  const recu = seed.recuLe ? new Date(seed.recuLe) : new Date();
-  const suite = prochaineHeureOuvrable();
-  return [
-    {
-      contact_id: contactId, date_action: ymdLocal(recu), heure_action: `${pad2(recu.getHours())}:${pad2(recu.getMinutes())}`,
-      type: 'email', faite: true,
-      description: `E-mail entrant reçu${seed.sujet ? ` : ${seed.sujet}` : ''}`,
-    },
-    {
-      contact_id: contactId, date_action: suite.date, heure_action: suite.heure,
-      type: 'email', faite: false,
-      description: 'Répondre à l\'e-mail entrant (première heure ouvrable)',
-    },
-  ];
-}
-
+/**
+ * Liste des contacts : filtres, tri, pagination, sélection et imports. Les modales, la barre
+ * d'actions de masse et la cellule « Suivi » sont dans `contacts/` ; cette page charge les
+ * données et tient l'état de la liste.
+ */
 export default function Contacts() {
   const { session, isManager } = useAuth();
   const { data, loading, refresh } = useCollection<Contact>('contacts', {
@@ -86,33 +43,17 @@ export default function Contacts() {
   const partsCol = useCollection<SessionParticipant>('session_participants');
   const sessCol = useCollection<SessionFormation>('sessions_formation');
 
-  // Maps contact_id -> info de pilotage
-  const nextAction: Record<string, ContactAction> = {};
-  for (const a of actionsCol.data) if (!a.faite && !nextAction[a.contact_id]) nextAction[a.contact_id] = a;
-  // Dernière interaction = action RÉALISÉE la plus récente par contact.
-  // actionsCol est trié par date_action croissante → la dernière rencontrée est la plus récente.
-  const lastInteraction: Record<string, ContactAction> = {};
-  for (const a of actionsCol.data) if (a.faite) lastInteraction[a.contact_id] = a;
-  const stageOf: Record<string, Opportunite['stage']> = {};
-  for (const o of oppsCol.data) if (o.contact_id && !['gagne', 'perdu'].includes(o.stage) && !stageOf[o.contact_id]) stageOf[o.contact_id] = o.stage;
-  const sessById = Object.fromEntries(sessCol.data.map((s) => [s.id, s]));
-  const nextSession: Record<string, SessionFormation> = {};
-  for (const p of partsCol.data) {
-    if (!p.contact_id) continue;
-    const s = sessById[p.session_id]; if (!s) continue;
-    const cur = nextSession[p.contact_id];
-    const better = !cur
-      || (s.date_debut >= TODAY && (cur.date_debut < TODAY || s.date_debut < cur.date_debut))
-      || (s.date_debut < TODAY && cur.date_debut < TODAY && s.date_debut > cur.date_debut);
-    if (better) nextSession[p.contact_id] = s;
-  }
 
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Partial<Contact>>(empty());
-  const [tagsText, setTagsText] = useState('');
-  const [saving, setSaving] = useState(false);
-  // Mail à journaliser en actions dès que le contact issu de la Messagerie est créé.
-  const [pendingActions, setPendingActions] = useState<MailSeed | null>(null);
+  // Index contact_id -> info de pilotage
+  const pilotage = useMemo(
+    () => indexerPilotage(actionsCol.data, oppsCol.data, partsCol.data, sessCol.data),
+    [actionsCol.data, oppsCol.data, partsCol.data, sessCol.data],
+  );
+  const { nextAction, lastInteraction } = pilotage;
+
+  // Modale « Nouveau contact / Modifier » : le contact de départ, et le mail à journaliser
+  // en actions quand le contact est créé depuis la Messagerie.
+  const [edition, setEdition] = useState<{ contact: Partial<Contact>; mailSeed: MailSeed | null } | null>(null);
 
   // Arrivée depuis la Messagerie : ouvre « Nouveau contact » pré-rempli.
   const location = useLocation();
@@ -120,10 +61,10 @@ export default function Contacts() {
   useEffect(() => {
     const seed = (location.state as { nouveauContact?: NouveauContactState } | null)?.nouveauContact;
     if (!seed) return;
-    setForm({ ...empty(), nom: seed.nom, prenom: seed.prenom, email: seed.email, telephone: seed.telephone });
-    setTagsText('');
-    setPendingActions(seed.actionsMessagerie);
-    setOpen(true);
+    setEdition({
+      contact: { ...empty(), nom: seed.nom, prenom: seed.prenom, email: seed.email, telephone: seed.telephone },
+      mailSeed: seed.actionsMessagerie,
+    });
     // L'état de navigation est consommé : un rafraîchissement ne doit pas rouvrir la modale.
     navigate('.', { replace: true, state: null });
   }, [location.state, navigate]);
@@ -143,11 +84,8 @@ export default function Contacts() {
   const [sort, setSort] = useState<{ col: 'nom' | 'type' | 'aff' | null; dir: 'asc' | 'desc' }>({ col: null, dir: 'asc' });
   const toggleSort = (col: 'nom' | 'type' | 'aff') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
   const sortArrow = (col: 'nom' | 'type' | 'aff') => (sort.col === col ? (sort.dir === 'asc' ? '↑' : '↓') : '↕');
-  // Saisie interne (formulaire de demande) — création/mise à jour d'un contact
+  // Saisie interne (formulaire de demande)
   const [intakeOpen, setIntakeOpen] = useState(false);
-  const [intake, setIntake] = useState(emptyIntake());
-  const [intakeSaving, setIntakeSaving] = useState(false);
-  const [intakeMsg, setIntakeMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [fiche, setFiche] = useState<Contact | null>(null);
   const [doublonsOpen, setDoublonsOpen] = useState(false);
@@ -165,12 +103,7 @@ export default function Contacts() {
   const fileRef = useRef<HTMLInputElement>(null);
   // Import CSV avec mapping de colonnes
   const mapFileRef = useRef<HTMLInputElement>(null);
-  const [mapOpen, setMapOpen] = useState(false);
-  const [mapHeaders, setMapHeaders] = useState<string[]>([]);
-  const [mapRows, setMapRows] = useState<Record<string, string>[]>([]);
-  const [mapping, setMapping] = useState<ColumnMapping>({});
-  const [mapOwner, setMapOwner] = useState<'none' | 'me'>('none');
-  const [mapType, setMapType] = useState<ContactType>('prospect');
+  const [mapFile, setMapFile] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
   // Lots d'import (annulation persistante en base, multi-poste).
   const batches = useCollection<ImportBatch>('import_batches', {
     filters: [{ column: 'undone', value: false }],
@@ -224,10 +157,7 @@ export default function Contacts() {
   const [distributing, setDistributing] = useState(false);
   // Sélection multiple + répartition round-robin (managers)
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkOwner, setBulkOwner] = useState('');
-  const [bulkType, setBulkType] = useState<ContactType>('prospect');
   const [rrOpen, setRrOpen] = useState(false);
-  const [rrConseillers, setRrConseillers] = useState<Set<string>>(new Set());
 
   // Affectation d'un prospect à un conseiller (managers uniquement)
   const assign = async (c: Contact, ownerId: string) => {
@@ -236,65 +166,12 @@ export default function Contacts() {
     void refresh();
   };
 
-  // Attribution globale de la sélection à un conseiller (avec confirmation).
-  const bulkAssign = async () => {
-    const ids = [...selected];
-    if (!ids.length) return;
-    const label = bulkOwner ? ownerName(bulkOwner) : 'Non affecté';
-    if (!confirm(`Attribuer ${ids.length} contact(s) à ${label} ?`)) return;
-    setDistributing(true);
-    for (let i = 0; i < ids.length; i += 200) {
-      const { error } = await supabase.from('contacts').update({ owner_id: bulkOwner || null }).in('id', ids.slice(i, i + 200));
-      if (error) { setDistributing(false); alert(error.message); return; }
-    }
-    setDistributing(false);
-    setSelected(new Set());
-    void refresh();
-  };
-
-  // Changement de type en masse de la sélection (ex. requalifier des contacts en prospects).
-  const bulkChangeType = async () => {
-    const ids = [...selected];
-    if (!ids.length) return;
-    if (!confirm(`Changer le type de ${ids.length} contact(s) en « ${CONTACT_TYPE_LABELS[bulkType]} » ?`)) return;
-    setDistributing(true);
-    for (let i = 0; i < ids.length; i += 200) {
-      const { error } = await supabase.from('contacts').update({ type: bulkType }).in('id', ids.slice(i, i + 200));
-      if (error) { setDistributing(false); alert(error.message); return; }
-    }
-    setDistributing(false);
-    setSelected(new Set());
-    void refresh();
-  };
-
-  // Ouvre la modale de répartition (conseillers présélectionnés = conseillers actifs).
-  const openRoundRobin = () => {
-    setRrConseillers(new Set(assignables.filter((p) => p.role === 'conseiller').map((p) => p.id)));
-    setRrOpen(true);
-  };
-  const toggleRrConseiller = (id: string) => setRrConseillers((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const openRoundRobin = () => setRrOpen(true);
 
   // Cibles de la répartition : la sélection si présente, sinon tous les prospects non affectés.
   const rrTargets = (): Contact[] => selected.size
     ? data.filter((c) => selected.has(c.id))
     : data.filter((c) => c.type === 'prospect' && !c.owner_id);
-
-  // Répartition round-robin sur les conseillers sélectionnés (partielle possible).
-  const runRoundRobin = async () => {
-    const ids = [...rrConseillers];
-    if (!ids.length) { alert('Sélectionnez au moins un conseiller.'); return; }
-    const targets = rrTargets();
-    if (!targets.length) { alert('Aucune cible à répartir.'); return; }
-    setDistributing(true);
-    for (let i = 0; i < targets.length; i++) {
-      await supabase.from('contacts').update({ owner_id: ids[i % ids.length] }).eq('id', targets[i].id);
-    }
-    setDistributing(false);
-    setRrOpen(false);
-    setSelected(new Set());
-    void refresh();
-    alert(`${targets.length} contact(s) répartis sur ${ids.length} conseiller(s) (round-robin).`);
-  };
 
   const ownerName = (id: string | null) => {
     const p = profiles.data.find((x) => x.id === id);
@@ -335,30 +212,9 @@ export default function Contacts() {
     try {
       const { headers, rows } = await parseSpreadsheetWithHeaders(file);
       if (!headers.length || !rows.length) { alert('CSV vide ou illisible (en-tête + au moins une ligne attendus).'); return; }
-      setMapHeaders(headers);
-      setMapRows(rows);
-      setMapping(guessMapping(headers));
-      setMapOwner(isManager ? 'none' : 'me');
-      setMapOpen(true);
+      setMapFile({ headers, rows });
     } catch (err) {
       alert(`Lecture du CSV impossible : ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const runMappedImport = async () => {
-    if (!mapping.nom && !mapping.nom_complet) { alert('Mappez au moins la colonne « Nom » ou « Nom complet ».'); return; }
-    setImporting(true);
-    try {
-      const ownerId = mapOwner === 'me' ? (session?.user.id ?? null) : null;
-      const r = await importContactsMapped(mapRows, mapping, { ownerId, defaultType: mapType });
-      await recordImport(r.created ?? [], 'csv_mapping');
-      setMapOpen(false);
-      void refresh();
-      alert(`${r.importes} contact(s) importé(s)/mis à jour sur ${r.lus} ligne(s) (${(r.created ?? []).length} créé(s)).`);
-    } catch (err) {
-      alert(`Échec de l'import : ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setImporting(false);
     }
   };
 
@@ -379,85 +235,8 @@ export default function Contacts() {
     alert(`${p?.importes ?? 0} nouveau(x) prospect(s) importé(s) depuis Google Sheets, en « non affecté ».${relead}`);
   };
 
-  const openNew = () => { setForm(empty()); setTagsText(''); setOpen(true); };
-  const openEdit = (c: Contact) => { setForm(c); setTagsText((c.tags ?? []).join(', ')); setOpen(true); };
-
-  const save = async () => {
-    setSaving(true);
-    const tags = tagsText.split(',').map((t) => t.trim()).filter(Boolean);
-    const payload = { ...form, tags, owner_id: form.owner_id ?? session?.user.id };
-    let newId: string | null = null;
-    let error;
-    if (form.id) {
-      ({ error } = await supabase.from('contacts').update(payload).eq('id', form.id));
-    } else {
-      const { data: ins, error: insErr } = await supabase.from('contacts').insert(payload).select('id').single();
-      error = insErr;
-      newId = ins?.id ?? null;
-    }
-    // Contact créé depuis la Messagerie : on journalise le mail entrant (déjà
-    // traité) et la réponse à effectuer à la première heure ouvrable.
-    if (!error && newId && pendingActions) {
-      await supabase.from('contact_actions').insert(seedActionsFromMail(newId, pendingActions));
-      setPendingActions(null);
-      void actionsCol.refresh();
-    }
-    setSaving(false);
-    if (error) { alert(error.message); return; }
-    setOpen(false);
-    void refresh();
-  };
-
-  // Saisie interne : reprend le formulaire public et crée OU met à jour le contact
-  // (dédoublonnage par e-mail). Type « Assistance » => tag « Assistance », sans affectation ;
-  // type « Employé virtuel » => tag « Agent IA ».
-  const submitIntake = async () => {
-    if (!intake.lastName.trim() && !intake.email.trim()) { alert('Renseignez au moins le nom ou l\'e-mail.'); return; }
-    setIntakeSaving(true);
-    const isAssist = /assistance/i.test(intake.requestType);
-    const assistTags = [
-      ...(isAssist ? ['Assistance'] : []),
-      ...(/employ[eé]s?[ -]virtuel|agents? ia/i.test(intake.requestType) ? ['Agent IA'] : []),
-    ];
-    let existing: Contact | null = null;
-    if (intake.email.trim()) {
-      const { data: ex } = await supabase.from('contacts').select('*').eq('email', intake.email.trim()).limit(1).maybeSingle();
-      existing = ex as Contact | null;
-    }
-    let error;
-    if (existing) {
-      const mergedTags = Array.from(new Set([...(existing.tags ?? []), ...assistTags]));
-      ({ error } = await supabase.from('contacts').update({
-        prenom: intake.firstName.trim() || existing.prenom,
-        telephone: intake.phone.trim() || existing.telephone,
-        formation_envisagee: intake.requestType || existing.formation_envisagee,
-        besoin_resume: intake.message.trim() || existing.besoin_resume,
-        tags: mergedTags,
-      }).eq('id', existing.id));
-    } else {
-      ({ error } = await supabase.from('contacts').insert({
-        type: 'prospect', nom: intake.lastName.trim() || '(lead)', prenom: intake.firstName.trim() || null,
-        email: intake.email.trim() || null, telephone: intake.phone.trim() || null,
-        statut_prospect: 'non assigné', besoin_resume: intake.message.trim() || null,
-        formation_envisagee: intake.requestType || null,
-        notes: 'Saisie interne (formulaire)' + (intake.company.trim() ? ' — entreprise : ' + intake.company.trim() : ''),
-        tags: ['nouveau prospect', ...assistTags], owner_id: null, // lead non assigné, pas d'affectation
-      }));
-    }
-    setIntakeSaving(false);
-    if (error) { alert(error.message); return; }
-    setIntakeMsg(existing ? 'Contact mis à jour ✓' : 'Contact créé ✓');
-    setTimeout(() => { setIntakeMsg(null); setIntakeOpen(false); setIntake(emptyIntake()); }, 1200);
-    void refresh();
-  };
-
-  const remove = async (c: Contact) => {
-    if (!confirm(`Supprimer le contact ${fullName(c.prenom, c.nom)} ?`)) return;
-    const { error } = await supabase.from('contacts').delete().eq('id', c.id);
-    if (error) { alert(error.message); return; }
-    setOpen(false);
-    void refresh();
-  };
+  const openNew = () => setEdition({ contact: empty(), mailSeed: null });
+  const openEdit = (c: Contact) => setEdition({ contact: c, mailSeed: null });
 
   const allTags = [...new Set(data.flatMap((c) => c.tags ?? []))].sort();
 
@@ -511,43 +290,6 @@ export default function Contacts() {
   const toggleSelect = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleSelectAll = () => setSelected((s) => (selectableIds.every((id) => s.has(id)) ? new Set() : new Set(selectableIds)));
 
-  const set = (k: keyof Contact, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
-
-  // Suivi d'un contact, en une cellule : ce qu'il faut faire, puis depuis quand
-  // on ne lui a pas parlé. Une absence d'action n'est signalée que sur un prospect.
-  const suiviCell = (c: Contact) => {
-    const na = nextAction[c.id];
-    const la = lastInteraction[c.id];
-    const retard = !!na && na.date_action < TODAY;
-    const jours = la ? differenceInCalendarDays(new Date(), new Date(`${la.date_action}T00:00:00`)) : null;
-    const dernier = jours === null ? 'Jamais contacté' : jours <= 0 ? "Contacté aujourd'hui" : jours === 1 ? 'Contacté hier' : `Contacté il y a ${jours} j`;
-    return (
-      <div className="flex flex-col gap-1 text-xs">
-        {na ? (
-          <span className={cn('flex items-center gap-1.5', retard ? 'font-medium text-red-600 dark:text-red-400' : 'text-fg')} title={na.description}>
-            <span className={cn('shrink-0 rounded px-1 tabular-nums', retard ? 'bg-red-500/10' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300')}>{formatDate(na.date_action, 'dd/MM')}</span>
-            <span className="max-w-[190px] truncate">{na.description}</span>
-          </span>
-        ) : c.type === 'prospect' ? (
-          <span className="font-medium text-amber-600 dark:text-amber-400">Aucune action prévue</span>
-        ) : null}
-        {(c.type === 'prospect' || la) && (
-          <span className="text-muted" title={la ? `${la.description} · ${formatDate(la.date_action)}` : undefined}>{dernier}</span>
-        )}
-        {(stageOf[c.id] || nextSession[c.id]) && (
-          <div className="flex flex-wrap gap-1">
-            {stageOf[c.id] && <Badge tone="brand">{OPP_STAGE_LABELS[stageOf[c.id]] ?? stageOf[c.id]}</Badge>}
-            {nextSession[c.id] && (
-              <Badge tone={nextSession[c.id].date_debut >= TODAY ? 'warning' : 'success'}>
-                {nextSession[c.id].date_debut >= TODAY ? 'Session ' : 'Réalisée '}{formatDate(nextSession[c.id].date_debut, 'dd/MM')}
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div>
       <PageHeader
@@ -564,7 +306,7 @@ export default function Contacts() {
                 { label: 'Récupérer les prospects du Google Sheet', icon: <DownloadCloud className="h-4 w-4" />, onClick: importProspects, disabled: importing, hidden: !isManager },
                 { label: `Annuler un import récent (${batches.data.length})`, icon: <Undo2 className="h-4 w-4" />, onClick: () => setImportsOpen(true), hidden: batches.data.length === 0 },
                 { label: 'Fusionner les doublons', icon: <Users className="h-4 w-4" />, onClick: () => setDoublonsOpen(true) },
-                { label: 'Saisir une demande reçue', hint: 'Comme le formulaire du site : crée ou met à jour le contact', icon: <ClipboardList className="h-4 w-4" />, onClick: () => { setIntake(emptyIntake()); setIntakeMsg(null); setIntakeOpen(true); }, hidden: !isManager },
+                { label: 'Saisir une demande reçue', hint: 'Comme le formulaire du site : crée ou met à jour le contact', icon: <ClipboardList className="h-4 w-4" />, onClick: () => setIntakeOpen(true), hidden: !isManager },
               ]}
             />
             <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouveau contact</Button>
@@ -583,30 +325,17 @@ export default function Contacts() {
         </div>
       )}
 
-      {/* Barre d'actions de masse sur la sélection (managers) */}
       {isManager && selected.size > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-sm">
-          <span className="font-medium text-brand-700 dark:text-brand-300">{selected.size} sélectionné(s)</span>
-          <span className="mx-1 text-muted">·</span>
-          <select className="input max-w-[200px] py-1 text-xs" value={bulkOwner} onChange={(e) => setBulkOwner(e.target.value)}>
-            <option value="">Non affecté</option>
-            {assignables.map((p) => <option key={p.id} value={p.id}>{fullName(p.prenom, p.nom)}</option>)}
-          </select>
-          <Button variant="secondary" onClick={bulkAssign} disabled={distributing}>
-            <UserCheck className="h-4 w-4" /> Attribuer
-          </Button>
-          <Button variant="secondary" onClick={openRoundRobin} disabled={distributing}>
-            <UserCheck className="h-4 w-4" /> Répartir
-          </Button>
-          <span className="mx-1 text-muted">·</span>
-          <select className="input max-w-[170px] py-1 text-xs" value={bulkType} onChange={(e) => setBulkType(e.target.value as ContactType)} title="Type cible">
-            {TYPES.map((t) => <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>)}
-          </select>
-          <Button variant="secondary" onClick={bulkChangeType} disabled={distributing}>
-            <Tag className="h-4 w-4" /> Changer le type
-          </Button>
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs font-medium text-muted underline-offset-2 hover:underline">Désélectionner</button>
-        </div>
+        <BarreSelection
+          selected={selected}
+          setSelected={setSelected}
+          assignables={assignables}
+          ownerName={ownerName}
+          distributing={distributing}
+          setDistributing={setDistributing}
+          refresh={refresh}
+          openRoundRobin={openRoundRobin}
+        />
       )}
 
       {/* Type de contact : une pastille par type présent, avec son effectif */}
@@ -744,7 +473,7 @@ export default function Contacts() {
                   <span className="text-xs text-muted">{c.owner_id ? ownerName(c.owner_id) : <Badge tone="warning">Non affecté</Badge>}</span>
                 )}
               </td>
-              <td className="px-4 py-3">{suiviCell(c)}</td>
+              <td className="px-4 py-3"><CelluleSuivi c={c} pilotage={pilotage} /></td>
               <td className="px-4 py-3">
                 <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => openEdit(c)} title="Modifier le contact" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
@@ -770,217 +499,55 @@ export default function Contacts() {
         </>
       )}
 
-      {/* Répartition round-robin (cibles = sélection ou prospects non affectés) */}
-      <Modal
-        open={rrOpen} onClose={() => setRrOpen(false)} title="Répartir entre les conseillers"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setRrOpen(false)}>Annuler</Button>
-            <Button onClick={runRoundRobin} disabled={distributing || rrConseillers.size === 0}>
-              <UserCheck className="h-4 w-4" /> {distributing ? 'Répartition…' : 'Confirmer la répartition'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="rounded-lg bg-surface-2 p-3 text-sm text-fg">
-            Répartir <strong>{rrTargets().length}</strong> {selected.size ? 'contact(s) sélectionné(s)' : 'prospect(s) non affecté(s)'} sur <strong>{rrConseillers.size}</strong> conseiller(s) sélectionné(s).
-          </p>
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Conseillers concernés</p>
-            {assignables.length === 0 ? (
-              <p className="text-sm text-muted">Aucun conseiller actif disponible.</p>
-            ) : (
-              <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
-                {assignables.map((p) => (
-                  <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-surface-2">
-                    <input type="checkbox" checked={rrConseillers.has(p.id)} onChange={() => toggleRrConseiller(p.id)} />
-                    <span className="text-fg">{fullName(p.prenom, p.nom)}</span>
-                    <span className="text-xs text-muted">· {p.role === 'directeur_commercial' ? 'directeur commercial' : p.role}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </Modal>
+      {rrOpen && (
+        <ModaleRepartition
+          assignables={assignables}
+          targets={rrTargets()}
+          surSelection={selected.size > 0}
+          distributing={distributing}
+          setDistributing={setDistributing}
+          setSelected={setSelected}
+          refresh={refresh}
+          onClose={() => setRrOpen(false)}
+        />
+      )}
 
-      <Modal
-        open={open} onClose={() => setOpen(false)}
-        title={form.id ? 'Modifier le contact' : 'Nouveau contact'}
-        footer={
-          <>
-            {form.id && (
-              <Button variant="danger" className="mr-auto" onClick={() => void remove(form as Contact)}><Trash2 className="h-4 w-4" /> Supprimer</Button>
-            )}
-            <Button variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button onClick={save} disabled={saving || !form.nom}>{saving ? 'Enregistrement…' : 'Enregistrer'}</Button>
-          </>
-        }
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Type"><select className="input" value={form.type} onChange={(e) => set('type', e.target.value)}>
-            {TYPES.map((t) => <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>)}
-          </select></Field>
-          <Field label="Civilité"><input className="input" value={form.civilite ?? ''} onChange={(e) => set('civilite', e.target.value)} /></Field>
-          <Field label="Prénom"><input className="input" value={form.prenom ?? ''} onChange={(e) => set('prenom', e.target.value)} /></Field>
-          <Field label="Nom" required><input className="input" value={form.nom ?? ''} onChange={(e) => set('nom', e.target.value)} /></Field>
-          <Field label="E-mail"><input className="input" type="email" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} /></Field>
-          <Field label="Téléphone"><input className="input" value={form.telephone ?? ''} onChange={(e) => set('telephone', e.target.value)} /></Field>
-          <Field label="Fonction"><input className="input" value={form.fonction ?? ''} onChange={(e) => set('fonction', e.target.value)} /></Field>
-          <Field label="Entreprise"><select className="input" value={form.entreprise_id ?? ''} onChange={(e) => set('entreprise_id', e.target.value || null)}>
-            <option value="">—</option>
-            {entreprises.data.map((e) => <option key={e.id} value={e.id}>{e.raison_sociale}</option>)}
-          </select></Field>
-          <Field label="Financeur (si contact financeur)"><select className="input" value={form.financeur_id ?? ''} onChange={(e) => set('financeur_id', e.target.value || null)}>
-            <option value="">—</option>
-            {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
-          </select></Field>
-          <div className="col-span-2">
-            <Field label="Tags" hint="Séparés par des virgules (ex. Assistance)">
-              <input className="input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="Assistance, VIP…" />
-            </Field>
-          </div>
-          <div className="col-span-2">
-            <Field label="Notes"><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field>
-          </div>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-muted">
-            <input type="checkbox" checked={!!form.rgpd_consent} onChange={(e) => set('rgpd_consent', e.target.checked)} />
-            Consentement RGPD recueilli
-          </label>
-        </div>
-      </Modal>
+      {edition && (
+        <ModaleContact
+          initial={edition.contact}
+          mailSeed={edition.mailSeed}
+          entreprises={entreprises.data}
+          financeurs={financeurs.data}
+          userId={session?.user.id}
+          onClose={() => setEdition(null)}
+          refresh={refresh}
+          onActionsSeeded={() => { void actionsCol.refresh(); }}
+        />
+      )}
 
-      {/* Imports récents : chacun peut être annulé (lots gardés en base) */}
-      <Modal
-        open={importsOpen} onClose={() => setImportsOpen(false)} title="Imports récents"
-        footer={<Button variant="secondary" onClick={() => setImportsOpen(false)}>Fermer</Button>}
-      >
-        <p className="mb-3 text-sm text-muted">Annuler un import supprime les contacts qu'il a créés. Ceux qu'il a seulement mis à jour ne changent pas.</p>
-        {batches.data.length === 0 ? <p className="text-sm text-muted">Aucun import à annuler.</p> : (
-          <ul className="space-y-2">
-            {batches.data.slice(0, 10).map((b) => (
-              <li key={b.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                <span className="text-fg"><strong>{b.count}</strong> contact(s) créé(s)</span>
-                <span className="text-xs text-muted">{formatDate(b.created_at, 'dd/MM/yyyy HH:mm')}</span>
-                <button onClick={() => undoBatch(b)} disabled={importing} className="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50">
-                  <Undo2 className="h-3.5 w-3.5" /> Annuler cet import
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Modal>
+      <ModaleImportsRecents
+        open={importsOpen}
+        onClose={() => setImportsOpen(false)}
+        batches={batches.data}
+        undoBatch={undoBatch}
+        importing={importing}
+      />
 
-      {/* Saisie interne — reprend le formulaire public (/formulaire) */}
-      <Modal
-        open={intakeOpen} onClose={() => setIntakeOpen(false)} wide
-        title="Saisir une demande reçue"
-        footer={
-          <>
-            {intakeMsg && <span className="mr-auto text-sm text-emerald-600">{intakeMsg}</span>}
-            <Button variant="secondary" onClick={() => setIntakeOpen(false)}>Annuler</Button>
-            <Button onClick={submitIntake} disabled={intakeSaving}>{intakeSaving ? 'Enregistrement…' : 'Créer / mettre à jour'}</Button>
-          </>
-        }
-      >
-        <p className="mb-4 text-xs text-muted">
-          Reprend le formulaire public. Le contact est <strong>créé</strong> ou <strong>mis à jour</strong> (dédoublonnage par e-mail).
-          Une demande de type <strong>Assistance</strong> ajoute le tag « Assistance » (sans affectation).
-        </p>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Prénom"><input className="input" value={intake.firstName} onChange={(e) => setIntake({ ...intake, firstName: e.target.value })} /></Field>
-          <Field label="Nom"><input className="input" value={intake.lastName} onChange={(e) => setIntake({ ...intake, lastName: e.target.value })} /></Field>
-          <Field label="E-mail" hint="Sert au dédoublonnage"><input className="input" type="email" value={intake.email} onChange={(e) => setIntake({ ...intake, email: e.target.value })} /></Field>
-          <Field label="Téléphone"><input className="input" value={intake.phone} onChange={(e) => setIntake({ ...intake, phone: e.target.value })} /></Field>
-          <Field label="Entreprise"><input className="input" value={intake.company} onChange={(e) => setIntake({ ...intake, company: e.target.value })} /></Field>
-          <Field label="Type de demande">
-            <select className="input" value={intake.requestType} onChange={(e) => setIntake({ ...intake, requestType: e.target.value })}>
-              <option value="">— Sélectionner —</option>
-              {REQUEST_TYPE_GROUPS.map((g) => (
-                <optgroup key={g.label} label={g.label}>
-                  {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                </optgroup>
-              ))}
-            </select>
-          </Field>
-          <div className="col-span-2">
-            <Field label="Message"><textarea className="input" rows={3} value={intake.message} onChange={(e) => setIntake({ ...intake, message: e.target.value })} /></Field>
-          </div>
-          {/assistance/i.test(intake.requestType) && (
-            <div className="col-span-2">
-              <Badge tone="info"><Tag className="mr-1 h-3 w-3" /> Sera tagué « Assistance »</Badge>
-            </div>
-          )}
-        </div>
-      </Modal>
+      {intakeOpen && <ModaleSaisieDemande onClose={() => setIntakeOpen(false)} refresh={refresh} />}
 
-      {/* Import CSV — mapping des colonnes */}
-      <Modal
-        open={mapOpen} onClose={() => setMapOpen(false)} wide
-        title="Importer un fichier CSV"
-        footer={<>
-          <Button variant="secondary" onClick={() => setMapOpen(false)}>Annuler</Button>
-          <Button onClick={runMappedImport} disabled={importing || (!mapping.nom && !mapping.nom_complet)}>
-            {importing ? 'Import…' : `Importer ${mapRows.length} ligne(s)`}
-          </Button>
-        </>}
-      >
-        <p className="mb-3 text-sm text-muted">
-          Associez chaque champ du contact à une colonne de votre fichier. Les colonnes ont été pré-mappées automatiquement ; ajustez si besoin. Au moins « Nom » ou « Nom complet » est requis.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {CONTACT_IMPORT_FIELDS.map((f) => (
-            <div key={f.key} className="flex items-center gap-2">
-              <label className="w-1/2 shrink-0 text-sm text-fg">{f.label}</label>
-              <select
-                className="input flex-1"
-                value={mapping[f.key] ?? ''}
-                onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value || undefined }))}
-              >
-                <option value="">{f.key === 'type' ? '— Valeur fixe ↓ —' : '— Ignorer —'}</option>
-                {mapHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
-              </select>
-              {/* Type non mappé à une colonne : on choisit une valeur fixe (types définis en base). */}
-              {f.key === 'type' && !mapping.type && (
-                <select className="input flex-1" value={mapType} onChange={(e) => setMapType(e.target.value as ContactType)} title="Type appliqué à tous les contacts importés">
-                  {TYPES.map((t) => <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>)}
-                </select>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4">
-          <p className="mb-1 text-sm font-medium text-fg">Affectation</p>
-          <select className="input max-w-xs" value={mapOwner} onChange={(e) => setMapOwner(e.target.value as 'none' | 'me')}>
-            <option value="me">M'attribuer ces contacts</option>
-            {isManager && <option value="none">Non affecté (à répartir ensuite)</option>}
-          </select>
-        </div>
-
-        {/* Aperçu des 3 premières lignes selon le mapping */}
-        <div className="mt-4">
-          <p className="mb-1 text-sm font-medium text-fg">Aperçu</p>
-          <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full text-xs">
-              <thead className="bg-surface-2 text-muted">
-                <tr>{CONTACT_IMPORT_FIELDS.filter((f) => mapping[f.key]).map((f) => <th key={f.key} className="px-2 py-1.5 text-left font-medium">{f.label}</th>)}</tr>
-              </thead>
-              <tbody>
-                {mapRows.slice(0, 3).map((r, i) => (
-                  <tr key={i} className="border-t border-line">
-                    {CONTACT_IMPORT_FIELDS.filter((f) => mapping[f.key]).map((f) => (
-                      <td key={f.key} className="px-2 py-1.5 text-fg">{r[mapping[f.key] as string] ?? ''}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-2 text-xs text-muted">Dédoublonnage par e-mail (ou téléphone/nom) ; réimporter le même fichier met à jour les contacts.</p>
-        </div>
-      </Modal>
+      {mapFile && (
+        <ModaleImportCsv
+          mapHeaders={mapFile.headers}
+          mapRows={mapFile.rows}
+          isManager={isManager}
+          userId={session?.user.id}
+          importing={importing}
+          setImporting={setImporting}
+          recordImport={recordImport}
+          refresh={refresh}
+          onClose={() => setMapFile(null)}
+        />
+      )}
 
       {fiche && (
         <ContactFiche
