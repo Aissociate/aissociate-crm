@@ -19,7 +19,7 @@ const ACCUEIL_SITE = "Bonjour, je suis Sam, l'agent IA d'Aissociate. Une questio
 
 /** Suggestions de départ, selon la page d'où écrit le visiteur. */
 export function suggestions(page: string): string[] {
-  if (page.startsWith('/agents-ia')) return ["Je suis artisan, je n'ai pas le temps pour mes réseaux", 'Combien coûte un contrat ?', 'Puis-je essayer gratuitement ?'];
+  if (page === '/' || page.startsWith('/agents-ia')) return ["Je suis artisan, je n'ai pas le temps pour mes réseaux", 'Combien coûte un contrat ?', 'Puis-je essayer gratuitement ?'];
   if (page.startsWith('/formations') || page.startsWith('/aides')) return ['Comment financer une formation ?', 'Je veux être rappelé par un conseiller', "C'est quoi, vos agents IA ?"];
   return ['Que proposez-vous aux TPE ?', "C'est quoi, vos agents IA ?", 'Je veux être rappelé par un conseiller'];
 }
@@ -27,7 +27,7 @@ export function suggestions(page: string): string[] {
 const page = () => (typeof window === 'undefined' ? '/' : window.location.pathname);
 const neuf = (): EtatSam => ({
   conversation: crypto.randomUUID(),
-  messages: [{ role: 'assistant', content: page().startsWith('/agents-ia') ? ACCUEIL_STUDIO : ACCUEIL_SITE }],
+  messages: [{ role: 'assistant', content: (page() === '/' || page().startsWith('/agents-ia')) ? ACCUEIL_STUDIO : ACCUEIL_SITE }],
   enregistre: false, complements: 0, attente: false, erreur: '',
 });
 

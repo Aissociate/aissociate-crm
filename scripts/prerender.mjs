@@ -74,7 +74,7 @@ const faqPage = (items) => ({
   mainEntity: items.map((q) => ({ '@type': 'Question', name: q.question, acceptedAnswer: { '@type': 'Answer', text: q.answer } })),
 });
 
-// ⚠️ À garder aligné avec la FAQ rendue dans src/site/pages/OrganismHome.tsx
+// ⚠️ À garder aligné avec la FAQ rendue dans src/site/pages/OrganismHome.tsx (/formation-ia)
 const HOME_FAQ = [
   { question: "Vos formations en intelligence artificielle sont-elles éligibles au CPF ?", answer: "Oui. Plusieurs de nos formations IA sont certifiantes et éligibles au CPF. Les autres sont finançables via votre OPCO, France Travail ou le plan de développement des compétences de votre entreprise." },
   { question: "AIssociate est-il un organisme de formation certifié Qualiopi ?", answer: "Oui, AIssociate est un organisme de formation certifié Qualiopi — gage de qualité reconnu par l'État et condition d'accès aux financements (CPF, OPCO, France Travail)." },
@@ -86,11 +86,38 @@ const HOME_FAQ = [
 
 const routes = [
   {
+    // Accueil du site = page « Studio IA » (produit phare), alignée sur le <SEO> de src/site/pages/AgentsIA.tsx.
+    // L'ancienne accueil « organisme de formation » est sur /formation-ia ; /agents-ia redirige ici (deploy/nginx.conf).
     path: '/',
+    title: "Studio IA : votre équipe d'agents IA — stage gratuit, contrats dès 59 €/mois | Aissociate",
+    description: "Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Ils commencent en stage gratuit, sans limite de durée ; contrats dès 59 € HT/mois, agents illimités, accompagnement à La Réunion.",
+    keywords: 'agent IA PME, agents IA La Réunion, agent IA gratuit, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
+    schemas: [
+      {
+        '@context': 'https://schema.org', '@type': 'Service',
+        name: "Studio IA — équipe d'agents IA pour TPE et PME",
+        serviceType: 'Agents IA spécialisés installés et accompagnés (assistante, marketing, commercial, SEO, juridique, RH)',
+        provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate' },
+        areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
+        url: `${SITE}/`, inLanguage: 'fr-FR',
+        offers: [
+          // Mêmes montants que supabase/functions/studio/contrats.ts.
+          { '@type': 'Offer', name: 'Stage gratuit', price: '0', priceCurrency: 'EUR', description: '10 h de travail par mois, sans limite de durée ni carte bancaire' },
+          { '@type': 'Offer', name: 'Contrat temps partiel', price: '59', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 75 h de travail, 3 badges d\'accès ; sans engagement en CDD, 2 mois offerts en CDI annuel' },
+          { '@type': 'Offer', name: 'Contrat temps plein', price: '149', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 151,67 h de travail, 6 badges, 2 responsables, mode expert et astreinte' },
+          { '@type': 'Offer', name: 'Contrat équipe complète', price: '287', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 201,67 h de travail, 12 badges, 3 responsables, mode expert, astreinte et SAV prioritaire' },
+          { '@type': 'Offer', name: "Parcours d'intégration", price: '490', priceCurrency: 'EUR', description: 'HT, une fois ; une demi-journée avec un formateur, finançable par l\'OPCO' },
+        ],
+      },
+      WEBSITE, ORG, breadcrumb([{ name: 'Accueil', url: canon('/') }]),
+    ],
+  },
+  {
+    path: '/formation-ia',
     title: 'Formation IA à La Réunion — Qualiopi, CPF & OPCO | Aissociate',
     description: "Organisme de formation et expert IA certifié Qualiopi à La Réunion. Formez vos équipes à l'IA générative : ChatGPT, prompt engineering, automatisation des process. Finançable CPF, OPCO, France Travail — présentiel ou distanciel.",
     keywords: 'formation IA La Réunion, formation intelligence artificielle Réunion, formation IA 974, expert IA Réunion, consultant IA 974, formation IA Qualiopi, formation IA CPF, OPCO intelligence artificielle, ChatGPT entreprise, IA générative PME, automatisation IA, prompt engineering',
-    schemas: [WEBSITE, ORG, faqPage(HOME_FAQ), breadcrumb([{ name: 'Accueil', url: canon('/') }])],
+    schemas: [ORG, faqPage(HOME_FAQ), breadcrumb([{ name: 'Accueil', url: canon('/') }, { name: 'Formation IA', url: canon('/formation-ia') }])],
   },
   // NB : /formations est prérendu dans prerenderFormations() — son corps et son
   // schéma ItemList sont construits à partir de la liste réelle des formations.
@@ -128,32 +155,6 @@ const routes = [
         url: `${SITE}/developpement/`, inLanguage: 'fr-FR',
       },
       breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Développement', url: `${SITE}/developpement` }]),
-    ],
-  },
-  {
-    // Page « Agents IA » (employés virtuels) : aligné sur le <SEO> de src/site/pages/AgentsIA.tsx.
-    path: '/agents-ia',
-    title: "Studio IA : votre équipe d'agents IA — stage gratuit, contrats dès 59 €/mois | Aissociate",
-    description: "Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Ils commencent en stage gratuit, sans limite de durée ; contrats dès 59 € HT/mois, agents illimités, accompagnement à La Réunion.",
-    keywords: 'agent IA PME, agents IA La Réunion, agent IA gratuit, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion',
-    schemas: [
-      {
-        '@context': 'https://schema.org', '@type': 'Service',
-        name: "Studio IA — équipe d'agents IA pour TPE et PME",
-        serviceType: 'Agents IA spécialisés installés et accompagnés (assistante, marketing, commercial, SEO, juridique, RH)',
-        provider: { '@type': 'Organization', '@id': `${SITE}/#organization`, name: 'Aissociate' },
-        areaServed: { '@type': 'AdministrativeArea', name: 'La Réunion' },
-        url: `${SITE}/agents-ia/`, inLanguage: 'fr-FR',
-        offers: [
-          // Mêmes montants que supabase/functions/studio/contrats.ts.
-          { '@type': 'Offer', name: 'Stage gratuit', price: '0', priceCurrency: 'EUR', description: '10 h de travail par mois, sans limite de durée ni carte bancaire' },
-          { '@type': 'Offer', name: 'Contrat temps partiel', price: '59', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 75 h de travail, 3 badges d\'accès ; sans engagement en CDD, 2 mois offerts en CDI annuel' },
-          { '@type': 'Offer', name: 'Contrat temps plein', price: '149', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 151,67 h de travail, 6 badges, 2 responsables, mode expert et astreinte' },
-          { '@type': 'Offer', name: 'Contrat équipe complète', price: '287', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 201,67 h de travail, 12 badges, 3 responsables, mode expert, astreinte et SAV prioritaire' },
-          { '@type': 'Offer', name: "Parcours d'intégration", price: '490', priceCurrency: 'EUR', description: 'HT, une fois ; une demi-journée avec un formateur, finançable par l\'OPCO' },
-        ],
-      },
-      breadcrumb([{ name: 'Accueil', url: SITE }, { name: 'Agents IA', url: `${SITE}/agents-ia` }]),
     ],
   },
   {
@@ -427,7 +428,7 @@ async function generateSitemap(formations, blogArticles) {
     { loc: '/formations', priority: '0.95', changefreq: 'weekly' },
     { loc: '/assistance', priority: '0.75', changefreq: 'monthly' },
     { loc: '/developpement', priority: '0.75', changefreq: 'monthly' },
-    { loc: '/agents-ia', priority: '0.8', changefreq: 'monthly' },
+    { loc: '/formation-ia', priority: '0.9', changefreq: 'weekly' },
     { loc: '/aides-formation', priority: '0.8', changefreq: 'monthly' },
     { loc: '/blog', priority: '0.85', changefreq: 'daily' },
     { loc: '/contact', priority: '0.75', changefreq: 'monthly' },

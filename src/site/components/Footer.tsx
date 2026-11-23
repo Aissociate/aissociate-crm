@@ -6,7 +6,8 @@ import { Logo } from '@/components/Logo';
 const SERVICES = [
   { to: '/formations', label: 'Formations IA' },
   { to: '/aides-formation', label: 'Financer ma formation (CPF, OPCO)' },
-  { to: '/agents-ia', label: 'Studio IA : votre équipe d\'agents IA' },
+  { to: '/', label: 'Studio IA : votre équipe d\'agents IA' },
+  { to: '/formation-ia', label: 'Organisme de formation IA (Qualiopi)' },
   { to: '/assistance', label: 'Assistance & chatbots IA' },
   { to: '/developpement', label: 'Développement d\'agents IA' },
   { to: '/blog', label: 'Blog IA' },

@@ -8,7 +8,7 @@ import { trackClick } from '@/lib/track';
 const LIENS = [
   { to: '/formations', label: 'Formations' },
   { to: '/aides-formation', label: 'Financements' },
-  { to: '/agents-ia', label: 'Agents IA', nouveau: true },
+  { to: '/', label: 'Agents IA', nouveau: true },
   { to: '/assistance', label: 'Assistance' },
   { to: '/developpement', label: 'Développement' },
   { to: '/blog', label: 'Blog' },
@@ -38,6 +38,7 @@ export default function Header() {
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={l.to === '/'}
                 className={({ isActive }) =>
                   `flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`
                 }
@@ -83,6 +84,7 @@ export default function Header() {
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={l.to === '/'}
                 onClick={fermer}
                 className={({ isActive }) =>
                   `flex items-center gap-2 rounded-xl px-4 py-2.5 font-medium ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-700 hover:bg-neutral-50'}`

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import SupabaseNotice from '@/components/SupabaseNotice';
 import Layout from '@/components/Layout';
@@ -89,13 +89,15 @@ export default function App() {
     <Routes>
       {/* ── Site vitrine public (layout SiteFrame = AuthProvider du site + bouton Admin) ── */}
       <Route element={<SiteFrame />}>
-        <Route path="/" element={<OrganismHome />} />
+        {/* Accueil = Studio IA (produit phare) ; l'ancienne accueil « organisme de formation » vit sur /formation-ia */}
+        <Route path="/" element={<SiteAgentsIA />} />
+        <Route path="/formation-ia" element={<OrganismHome />} />
         <Route path="/formations" element={<SiteFormationsList />} />
         <Route path="/formations/closer-ia-cpf" element={<SiteFormationDetail />} />
         <Route path="/formations/:id" element={<SiteFormationDetailPage />} />
         <Route path="/assistance" element={<SiteAssistance />} />
         <Route path="/developpement" element={<SiteDevelopment />} />
-        <Route path="/agents-ia" element={<SiteAgentsIA />} />
+        <Route path="/agents-ia" element={<Navigate to="/" replace />} />
         <Route path="/blog" element={<SiteBlog />} />
         <Route path="/blog/:slug" element={<SiteBlogArticle />} />
         <Route path="/aides-formation" element={<SiteAides />} />
