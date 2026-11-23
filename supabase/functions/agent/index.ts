@@ -41,6 +41,7 @@ import { executerMetier } from "../_shared/agent/outils_metier.ts";
 import { buildTools, chargerDroits, runReadTool, runWriteProposal, type Ctx } from "../_shared/agent/outils.ts";
 import { appliquerAnnulation, instantane, planAnnulation, type Annulation } from "./annulation.ts";
 import { transcrire } from "../_shared/stt.ts";
+import { journaliserEmail } from "../_shared/journal_email.ts";
 import { decrirePiecesJointes, listerPiecesJointes, piecesPourEnvoi } from "../_shared/agent/pieces_jointes.ts";
 
 const corsHeaders = {
@@ -128,23 +129,21 @@ async function executeAction(
       // l'envoi est invisible dans la Messagerie et l'historique de la fiche)
       // + une action sur la fiche contact si elle est connue.
       const { data: me } = await db.auth.getUser();
-      const { data: mailRow } = await db.from("emails").insert({
+      const mailId = await journaliserEmail(db, {
         destinataires: [String(a.destinataire)],
         sujet: String(a.sujet), corps,
-        statut: "envoye", canal: "email", direction: "sortant", lu: true,
         contact_id: a.contact_id ? String(a.contact_id) : null,
         dossier_id: a.dossier_id ? String(a.dossier_id) : null,
         attachments,
-        sent_at: new Date().toISOString(),
         owner_id: me?.user?.id ?? null,
-      }).select("id").maybeSingle();
+      }, { origine: "ia_assistant", libelle: "Assistant IA" });
       if (a.contact_id) {
         await db.from("contact_actions").insert({
           contact_id: String(a.contact_id), date_action: maintenantLocal().date, heure_action: maintenantLocal().heure,
           type: "email", description: `Email envoyé (assistant IA) — ${a.sujet}`, faite: true,
         });
       }
-      return { ok: true, entite: "emails", entite_id: mailRow?.id ?? null, resultat: { envoye_a: a.destinataire } };
+      return { ok: true, entite: "emails", entite_id: mailId, resultat: { envoye_a: a.destinataire } };
     }
     case "proposer_deplacement_opportunite": {
       const { error } = await db.from("opportunites").update({ stage: String(a.etape), colonne_manuelle: String(a.etape), position: null }).eq("id", String(a.opportunite_id));

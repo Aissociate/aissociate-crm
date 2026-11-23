@@ -172,7 +172,10 @@ export type Email = {
   sent_at: string | null; owner_id: string | null; created_at: string;
   direction: EmailDirection; message_id: string | null; lu: boolean;
   attachments: EmailAttachment[] | null; canal: EmailCanal;
+  /** Qui a envoyé (sortants) — null sur les lignes anciennes et les entrants. */
+  origine?: EmailOrigine | null; origine_libelle?: string | null;
 };
+export type EmailOrigine = 'utilisateur' | 'ia_assistant' | 'ia_studio' | 'automatique';
 export type PieceVersion = {
   id: string; piece_id: string; version: number; fichier_url: string | null;
   commentaire: string | null; created_by: string | null; created_at: string;

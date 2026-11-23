@@ -19,6 +19,7 @@
 // passage est journalisé dans `job_runs` (« Santé des jobs »).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { journaliserEmail } from "../_shared/journal_email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -143,11 +144,10 @@ Deno.serve(async (req: Request) => {
         const envoyeLe = new Date().toISOString();
         await sb.from("evaluation_liens").update({ statut: "envoye", sent_at: envoyeLe }).eq("id", l.id);
         // Trace en Messagerie, comme un envoi depuis le CRM.
-        await sb.from("emails").insert({
-          destinataires: [l.destinataire_email], copie: [], sujet: l.libelle, corps: texte,
-          statut: "envoye", canal: "email", direction: "sortant",
-          contact_id: l.contact_id, dossier_id: l.dossier_id, sent_at: envoyeLe, attachments: [],
-        });
+        await journaliserEmail(sb, {
+          destinataires: [l.destinataire_email], sujet: l.libelle, corps: texte,
+          contact_id: l.contact_id, dossier_id: l.dossier_id, sent_at: envoyeLe,
+        }, { origine: "automatique", libelle: "Questionnaires Qualiopi (automatique)" });
         envoyes++;
       } catch (e) {
         erreurs.push(e instanceof Error ? e.message : String(e));

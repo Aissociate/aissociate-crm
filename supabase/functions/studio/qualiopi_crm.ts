@@ -6,6 +6,7 @@
 // seulement si qualiopiActif(espace, agent).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
+import { journaliserEmail } from "../_shared/journal_email.ts";
 import * as q from "./qualiopi.ts";
 import type { DefinitionOutil } from "./outils.ts";
 import { datesLisibles, joursSession } from "../qualiopi-doc/modeles.ts";
@@ -440,12 +441,10 @@ export async function executerEnvoi(sb: SupabaseClient, wsId: string, a: q.Actio
       await sb.from("qualiopi_dossier_docs").update({ statut: "envoye" }).eq("id", a.doc_id).in("statut", ["a_generer", "genere"]);
     }
     // Trace en Messagerie du CRM, comme les évaluations envoyées par le cron.
-    try {
-      await sb.from("emails").insert({
-        destinataires: [a.a], copie: [], sujet: a.objet, corps: texte, statut: "envoye", canal: "email", direction: "sortant",
-        contact_id: a.contact_id, sent_at: maintenant, attachments: [],
-      });
-    } catch { /* la trace ne doit jamais faire échouer l'envoi */ }
+    // (journaliserEmail n'échoue jamais : la trace ne bloque pas l'envoi)
+    await journaliserEmail(sb, {
+      destinataires: [a.a], sujet: a.objet, corps: texte, contact_id: a.contact_id, sent_at: maintenant,
+    }, { origine: "ia_studio", libelle: "Nora (Studio)" });
     return { ok: true, id: livrableId ?? a.participant_id, lien: null };
   } catch (e) {
     return { ok: false, erreur: e instanceof Error ? e.message : String(e) };

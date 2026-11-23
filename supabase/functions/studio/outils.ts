@@ -11,6 +11,8 @@
 //   portant l'action à exécuter. Le dépôt a lieu au « VALIDÉ » du propriétaire.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
+import { journaliserEmail } from "../_shared/journal_email.ts";
+import { espacesOrganisme } from "./qualiopi.ts";
 import { nomDocument, refLivrable } from "./liaison.ts";
 import * as agenda from "./agenda.ts";
 import { adressesValides } from "./agenda.ts";
@@ -1272,6 +1274,17 @@ async function nomDepot(sb: SupabaseClient, wsId: string, titre: string, livrabl
   } catch { return titre; } // nom de secours : le dépôt ne doit pas échouer pour un nom
 }
 
+/** Prénom de l'agent auteur d'un livrable (« Léa »), pour signer la trace en Messagerie. */
+async function prenomAgent(sb: SupabaseClient, wsId: string, livrableId?: string): Promise<string | null> {
+  if (!livrableId) return null;
+  try {
+    const { data: l } = await sb.from("studio_livrables").select("agent_id").eq("id", livrableId).eq("workspace_id", wsId).maybeSingle();
+    if (!l?.agent_id) return null;
+    const { data: a } = await sb.from("studio_agents").select("prenom").eq("id", l.agent_id).maybeSingle();
+    return (a?.prenom as string | undefined) ?? null;
+  } catch { return null; }
+}
+
 export async function executerAction(sb: SupabaseClient, wsId: string, action: ActionLivrable, livrableId?: string): Promise<{ ok: true; lien: string | null; id: string } | { ok: false; erreur: string }> {
   try {
     if (action.type === "routine_activer") {
@@ -1327,6 +1340,13 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
         if (action.type === "gmail_envoyer") {
           const pieces = await Promise.all((action.pieces ?? []).map(async (p) => ({ filename: p.nom, contentType: p.mime, url: await lien(p) })));
           const r = await bureau.envoyerMail(wsId, compteId, { a: action.a, cc: action.cc, objet: action.objet, corps: action.corps, reponseA: action.reponse_a_id, pieces });
+          // Espace de l'organisme (Aissociate) : l'e-mail part de sa boîte via Zernio,
+          // hors SMTP du CRM — on le trace dans la Messagerie du CRM pour qu'il y figure.
+          if (espacesOrganisme().includes(wsId.toLowerCase())) {
+            await journaliserEmail(sb, {
+              destinataires: action.a, copie: action.cc ?? [], sujet: action.objet, corps: action.corps,
+            }, { origine: "ia_studio", libelle: `${(await prenomAgent(sb, wsId, livrableId)) ?? "Agent"} (Studio)` });
+          }
           return { ok: true, id: r.id, lien: r.lien };
         }
         const r = await bureau.creerRdv(wsId, compteId, action);

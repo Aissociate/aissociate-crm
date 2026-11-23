@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2, Forward } from 'lucide-react';
+import { Plus, Mail, MailOpen, Trash2, Info, RefreshCw, CircleCheck as CheckCircle2, UserCog, TriangleAlert, ChevronDown, ChevronRight, MessagesSquare, Reply, Paperclip, MessageCircle, ArrowDownUp, Pencil, Clock, Search, UserRound, UserPlus, CheckCheck, CircleSlash2, Forward, Send, Bot } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,12 +15,12 @@ import { OPP_STAGE_LABELS } from '@/lib/constants';
 import { usePipelineColonnes } from '@/lib/pipeline';
 import type {
   Email, Contact, EmailDirection, EmailCanal, Profile, Formateur, Candidat,
-  Opportunite, OpportuniteStage, ConversationClose, Entreprise, Financeur,
+  Opportunite, OpportuniteStage, ConversationClose, Entreprise, Financeur, EmailOrigine,
 } from '@/lib/database.types';
 
 type SmtpCfg = { host?: string; user?: string; password?: string; from?: string };
 type SyncInfo = { last_at?: string; ok?: boolean; imported?: number; skipped?: number; error?: string };
-type View = 'conversations' | 'orphelins';
+type View = 'conversations' | 'envoyes' | 'orphelins';
 // Fréquence du cron `imap-sync` (pg_cron) — informatif pour l'utilisateur.
 const SYNC_EVERY = '5 minutes';
 
@@ -104,6 +104,29 @@ export default function Messagerie() {
   }
 
   const ownerName = (id: string | null) => { const p = profiles.data.find((x) => x.id === id); return p ? fullName(p.prenom, p.nom) : null; };
+
+  // ── Expéditeur d'un message sortant : IA, automate ou utilisateur ──
+  // Les lignes antérieures à la colonne `origine` sont déduites : un envoi
+  // rattaché à un utilisateur (owner_id) est le sien, sinon il est automatique.
+  const expediteurDe = (e: Email): { origine: EmailOrigine; label: string } => {
+    const o: EmailOrigine = e.origine ?? (e.owner_id ? 'utilisateur' : 'automatique');
+    if (o === 'ia_assistant') return { origine: o, label: e.origine_libelle || 'Assistant IA' };
+    if (o === 'ia_studio') return { origine: o, label: e.origine_libelle || 'Agent IA (Studio)' };
+    if (o === 'automatique') return { origine: o, label: e.origine_libelle || 'Envoi automatique' };
+    return { origine: o, label: ownerName(e.owner_id) ?? e.origine_libelle ?? 'Utilisateur' };
+  };
+  const estIA = (o: EmailOrigine) => o === 'ia_assistant' || o === 'ia_studio';
+  const badgeExpediteur = (e: Email) => {
+    const x = expediteurDe(e);
+    return (
+      <Badge tone={estIA(x.origine) ? 'info' : x.origine === 'automatique' ? 'neutral' : 'brand'}>
+        <span className="inline-flex items-center gap-1">
+          {estIA(x.origine) ? <Bot className="h-3 w-3" /> : x.origine === 'automatique' ? <Clock className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
+          {estIA(x.origine) ? `IA · ${x.label}` : x.label}
+        </span>
+      </Badge>
+    );
+  };
 
   // ── Résolution de l'INTERLOCUTEUR d'un message (clé de regroupement) ──
   // Un e-mail connu et un WhatsApp du même contact partagent la même clé
@@ -388,6 +411,32 @@ export default function Messagerie() {
       return cmp !== 0 ? cmp : (a.lastAt < b.lastAt ? 1 : -1);
     });
 
+  // ── Vue « Envoyés » : tous les e-mails partis du CRM, un par ligne ──
+  const [expFilter, setExpFilter] = useState<'' | 'ia' | 'humain' | 'automatique'>('');
+  const [openSent, setOpenSent] = useState<string | null>(null);
+  const atOf = (e: Email) => e.sent_at ?? e.created_at;
+  const sentAll = data.filter((e) => e.direction === 'sortant' && e.canal !== 'whatsapp' && e.statut !== 'brouillon');
+  const sentMatches = (e: Email): boolean => {
+    const x = expediteurDe(e);
+    if (expFilter === 'ia' && !estIA(x.origine)) return false;
+    if (expFilter === 'humain' && x.origine !== 'utilisateur') return false;
+    if (expFilter === 'automatique' && x.origine !== 'automatique') return false;
+    const j = atOf(e).slice(0, 10);
+    if (dateDebut && j < dateDebut) return false;
+    if (dateFin && j > dateFin) return false;
+    if (!needle) return true;
+    if (resolvePeer(e).label.toLowerCase().includes(needle)) return true;
+    if (x.label.toLowerCase().includes(needle)) return true;
+    if (scopes.has('destinataire') && [...e.destinataires, ...(e.copie ?? [])].some((d) => d.toLowerCase().includes(needle))) return true;
+    if (scopes.has('objet') && (e.sujet ?? '').toLowerCase().includes(needle)) return true;
+    if (scopes.has('corps') && (e.corps ?? '').toLowerCase().includes(needle)) return true;
+    if (scopes.has('piece_jointe') && (e.attachments ?? []).some((a) => (a.filename ?? '').toLowerCase().includes(needle))) return true;
+    return false;
+  };
+  const sentList = sentAll.filter(sentMatches)
+    .sort((a, b) => (atOf(a) < atOf(b) ? 1 : -1) * (chrono ? -1 : 1));
+  const sentIA = sentAll.filter((e) => estIA(expediteurDe(e).origine)).length;
+
   // ── Lien vers la fiche Contact (ticket « Messagerie : lien vers fiche dans contacts ») ──
   // Interlocuteur connu : ouverture de sa fiche par-dessus la messagerie.
   // Interlocuteur inconnu : bascule vers Contacts, formulaire « Nouveau contact »
@@ -444,7 +493,7 @@ export default function Messagerie() {
 
   // Sélection (par conversation -> tous ses messages)
   const convoIds = (c: Convo) => c.emails.map((e) => e.id);
-  const visibleIds = convos.flatMap(convoIds);
+  const visibleIds = view === 'envoyes' ? sentList.map((e) => e.id) : convos.flatMap(convoIds);
   const convoSelected = (c: Convo) => { const ids = convoIds(c); return ids.length > 0 && ids.every((id) => selection.has(id)); };
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selection.has(id));
   const toggleConvo = (c: Convo) => setSelection((s) => { const n = new Set(s); const ids = convoIds(c); const has = ids.every((id) => n.has(id)); ids.forEach((id) => (has ? n.delete(id) : n.add(id))); return n; });
@@ -459,7 +508,10 @@ export default function Messagerie() {
     refresh();
   };
 
-  const tabs: [View, string, typeof MessagesSquare, number][] = [['conversations', 'Conversations', MessagesSquare, mainConvos.length]];
+  const tabs: [View, string, typeof MessagesSquare, number][] = [
+    ['conversations', 'Conversations', MessagesSquare, mainConvos.length],
+    ['envoyes', 'Envoyés', Send, sentAll.length],
+  ];
   if (isAdmin) tabs.push(['orphelins', 'Orphelins', TriangleAlert, orphanConvos.length]);
 
   // Pastille canal (e-mail / WhatsApp)
@@ -565,6 +617,14 @@ export default function Messagerie() {
               Effacer
             </button>
           )}
+          {view === 'envoyes' ? (
+            <select className="input max-w-[210px] py-2 text-sm" value={expFilter} onChange={(e) => setExpFilter(e.target.value as typeof expFilter)} title="Qui a envoyé">
+              <option value="">Expéditeur : tous</option>
+              <option value="ia">Envoyés par une IA ({sentIA})</option>
+              <option value="humain">Envoyés par un utilisateur</option>
+              <option value="automatique">Envois automatiques</option>
+            </select>
+          ) : (<>
           <select className="input max-w-[210px] py-2 text-sm" value={reponseFilter} onChange={(e) => setReponseFilter(e.target.value as typeof reponseFilter)}>
             <option value="">Réponse : toutes</option>
             <option value="non_repondu">Sans réponse apportée</option>
@@ -580,6 +640,7 @@ export default function Messagerie() {
             <option value="date">Trier par date</option>
             <option value="conseiller">Trier par conseiller</option>
           </select>
+          </>)}
         </div>
 
         {/* Périmètre de la recherche : à restreindre ou étendre au besoin. */}
@@ -599,10 +660,10 @@ export default function Messagerie() {
         </div>
       </div>
 
-      {!loading && convos.length > 0 && (
+      {!loading && visibleIds.length > 0 && (
         <div className="mb-3 flex items-center justify-between gap-2">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} /> Tout sélectionner ({convos.length})
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} /> Tout sélectionner ({view === 'envoyes' ? sentList.length : convos.length})
           </label>
           {selection.size > 0 && (
             <div className="flex items-center gap-2">
@@ -616,6 +677,69 @@ export default function Messagerie() {
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
+      ) : view === 'envoyes' ? (
+        sentList.length === 0 ? (
+          <EmptyState title="Aucun e-mail envoyé" message={sentAll.length ? 'Aucun envoi ne correspond aux filtres.' : undefined} />
+        ) : (
+          <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+            {sentList.map((e) => {
+              const peer = resolvePeer(e);
+              const ouvert = openSent === e.id;
+              return (
+                <div key={e.id} className={selection.has(e.id) ? 'bg-brand-500/5' : ''}>
+                  <div className="flex items-start gap-2.5 p-3">
+                    <input
+                      type="checkbox" className="mt-2 shrink-0" checked={selection.has(e.id)} title="Sélectionner ce message"
+                      onChange={() => setSelection((sel) => { const n = new Set(sel); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; })}
+                    />
+                    <button onClick={() => setOpenSent(ouvert ? null : e.id)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                      <div className={cn('mt-0.5 shrink-0 rounded-full p-2', TONE_TILE[estIA(expediteurDe(e).origine) ? 'info' : 'brand'])}>
+                        {estIA(expediteurDe(e).origine) ? <Bot className="h-5 w-5" /> : <Send className="h-5 w-5" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-fg">{e.sujet || '(sans objet)'}</p>
+                          {e.attachments && e.attachments.length > 0 && <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />}
+                          <span className="ml-auto shrink-0 text-xs text-muted">{formatDate(atOf(e), 'dd/MM/yyyy HH:mm')}</span>
+                          {ouvert ? <ChevronDown className="h-4 w-4 shrink-0 text-muted" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted" />}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-muted">
+                          À {e.destinataires.join(', ') || '—'}{e.copie?.length ? ` · copie : ${e.copie.join(', ')}` : ''}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                          {badgeExpediteur(e)}
+                          {peer.kind ? <Badge tone={KIND_TONE[peer.kind]}>{KIND_LABEL[peer.kind]} · {peer.label}</Badge> : <Badge tone="warning">Non rattaché</Badge>}
+                          {e.statut === 'echec' ? <Badge tone="danger">non délivré</Badge> : <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
+                        </div>
+                      </div>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      {peer.contactId && (
+                        <button onClick={() => { const ct = contacts.data.find((x) => x.id === peer.contactId); if (ct) setFiche(ct); }} title="Ouvrir la fiche du contact" className="rounded p-1.5 text-muted hover:text-brand-600">
+                          <UserRound className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button onClick={() => forward(e)} title="Transférer ce message" className="rounded p-1.5 text-muted hover:text-brand-600"><Forward className="h-4 w-4" /></button>
+                      <button onClick={() => remove(e)} title="Supprimer ce message" className="rounded p-1.5 text-muted hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                  {ouvert && (
+                    <div className="border-t border-line bg-surface-2/40 p-3">
+                      {e.corps
+                        ? <p className="whitespace-pre-wrap break-words text-sm text-fg"><LinkedText text={e.corps} /></p>
+                        : <p className="text-sm text-muted">(message vide)</p>}
+                      {e.attachments && e.attachments.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {e.attachments.map((a, i) => <PieceJointeLien key={i} piece={a} />)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : convos.length === 0 ? (
         <EmptyState
           title={view === 'orphelins' ? 'Aucun message orphelin' : 'Aucune conversation'}
@@ -720,6 +844,7 @@ export default function Messagerie() {
                                   {e.statut === 'echec'
                                     ? <Badge tone="danger">non délivré</Badge>
                                     : e.direction === 'sortant' && !wa && <Badge tone={e.statut === 'envoye' ? 'success' : 'neutral'}>{e.statut}</Badge>}
+                                  {e.direction === 'sortant' && !wa && e.statut !== 'brouillon' && badgeExpediteur(e)}
                                   {formatDate(e.sent_at ?? e.created_at, 'dd/MM/yyyy HH:mm')}
                                 </span>
                               </div>
