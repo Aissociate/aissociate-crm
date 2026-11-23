@@ -39,6 +39,8 @@
 //           livrable_modifier {id, champs} (version précédente gardée, repasse à valider)
 //           aujourdhui → { decisions, faits, minutes_semaine, a_venir } (écran d'accueil : faits.ts)
 //           equipe → { etats: { [agent]: { decisions, au_travail } }, connexions } (« Mon équipe »)
+//   client  responsables → { responsables, max, actifs } | responsable_inviter {email, prenom?, nom?}
+//           responsable_retirer {id} | responsable_reactiver {id}   (propriétaire ; limite = contrat, responsables.ts)
 //   chat {…, pouvoir, mission: true} : mission guidée, la réponse est soumise d'office comme livrable à valider
 //   admin   admin_provisionner {demande_id, agents?, offre?, nom?, abonnement_mensuel?} → identifiants provisoires
 //           admin_suspendre {workspace_id, suspendu} | admin_journal {workspace_id} (lignes + vérification de la chaîne)
@@ -107,8 +109,9 @@ async function etatConnexions(wsId: string) {
 }
 import {
   deciderLivrable, depenseJour, etatEspace, garde, journaliser, lireJournal, listerLivrables, modifierLivrable, provisionner, refusRecents,
-  soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
+  motDePasseProvisoire, soumettreLivrable, soumettreOnboarding, suspendre, verifierJournal,
 } from "./gouvernance.ts";
+import * as responsables from "./responsables.ts";
 import { agentmailConfigure, creerBoite, secretsWebhook } from "./agentmail.ts";
 import { verifierSvix } from "./liaison.ts";
 import { traiterMail, type Executeur, type MessageRecu } from "./liaison_traitement.ts";
@@ -1908,7 +1911,7 @@ async function admin(sb: SupabaseClient, action: string, body: Record<string, un
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "E-mail invalide" }, 400);
     const { data: ws } = await sb.from("studio_workspaces").select("max_utilisateurs").eq("id", String(body.workspace_id)).maybeSingle();
     if (!ws) return json({ error: "Espace introuvable" }, 404);
-    const { count } = await sb.from("studio_users").select("id", { count: "exact", head: true }).eq("workspace_id", String(body.workspace_id));
+    const { count } = await sb.from("studio_users").select("id", { count: "exact", head: true }).eq("workspace_id", String(body.workspace_id)).eq("actif", true);
     if ((count ?? 0) >= ws.max_utilisateurs) {
       return json({ error: `Limite de ${ws.max_utilisateurs} utilisateurs atteinte pour cet espace (modifiable dans la fiche de l'espace).` }, 400);
     }
@@ -2741,6 +2744,28 @@ Deno.serve(async (req: Request) => {
           recharges: { ...credits, paiement_en_ligne: stripe.stripeConfigure() },
           abonnement: stripe.stripeConfigure() ? await etatAbonnement(sb, s.ws.id, equipe.nbFactures(agents)) : null,
         });
+      }
+
+      // ── Responsables de l'espace (responsables.ts) : la liste est visible de tous, la gestion réservée au propriétaire ──
+      case "responsables": {
+        return json({ ...(await responsables.lister(sb, s.ws.id)), proprietaire: s.user.role === "proprietaire", moi: s.user.id });
+      }
+      case "responsable_inviter":
+      case "responsable_retirer":
+      case "responsable_reactiver": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        const par = [s.user.prenom, s.user.nom].filter(Boolean).join(" ") || s.user.email;
+        const r = action === "responsable_inviter"
+          ? await responsables.inviter(sb, {
+            wsId: s.ws.id, nomEspace: String(s.ws.nom ?? ""), par, email: String(body.email ?? ""),
+            prenom: body.prenom ? String(body.prenom).trim().slice(0, 80) : null, nom: body.nom ? String(body.nom).trim().slice(0, 80) : null,
+            site: origineSure(req), motDePasse: motDePasseProvisoire(),
+          })
+          : action === "responsable_retirer"
+            ? await responsables.retirer(sb, s.ws.id, String(body.id ?? ""), s.user.email)
+            : await responsables.reactiver(sb, s.ws.id, String(body.id ?? ""), s.user.email);
+        if ("erreur" in r) return json({ error: r.erreur }, r.statut);
+        return json({ ...r, ...(await responsables.lister(sb, s.ws.id)) });
       }
 
       case "recharge_acheter": {

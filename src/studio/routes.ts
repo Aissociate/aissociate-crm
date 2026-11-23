@@ -52,6 +52,7 @@ export const SECTIONS: Section[] = [
       { chemin: `${BASE}/reglages`, label: 'Connecteurs' },
       { chemin: `${BASE}/reglages/entreprise`, label: 'Mon entreprise' },
       { chemin: `${BASE}/reglages/perimetre`, label: 'Mon périmètre' },
+      { chemin: `${BASE}/reglages/responsables`, label: 'Responsables' },
       { chemin: `${BASE}/reglages/compte`, label: 'Mon compte' },
       { chemin: `${BASE}/reglages/rapport`, label: 'Rapport mensuel' },
     ],

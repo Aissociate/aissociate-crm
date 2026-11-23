@@ -17,6 +17,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
 import * as contrats from "./contrats.ts";
+import * as responsables from "./responsables_limite.ts";
 
 const API = "https://api.stripe.com/v1";
 export const TVA_POURCENT = 8.5; // La Réunion
@@ -272,6 +273,8 @@ export async function appliquerContrat(sb: SupabaseClient, wsId: string, choix: 
     contrat: choix.contrat, contrat_choix: choix, quota_messages_mois: d.quota_messages_mois, connecteurs_max: d.connecteurs_max,
     max_utilisateurs: d.max_utilisateurs, stockage_go: d.stockage_go, astreinte: d.astreinte, modele,
   }).eq("id", wsId);
+  // Contrat inférieur : les responsables au-delà de la nouvelle limite sont désactivés (jamais le propriétaire).
+  await responsables.ajuster(sb, wsId, d.max_utilisateurs);
 }
 
 /** Portail client Stripe (carte, factures, résiliation), avec une configuration propre au Studio. */
