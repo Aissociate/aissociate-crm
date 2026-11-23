@@ -135,7 +135,7 @@ export default function Questionnaire() {
           </p>
           {fini === 'essai' || fini === 'deja_client'
             ? <Link to="/studio/connexion" className="mt-6 inline-block rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white">Se connecter</Link>
-            : <Link to="/agents-ia" className="mt-6 inline-block text-sm text-neutral-500 underline">Retour à la présentation</Link>}
+            : <Link to="/" className="mt-6 inline-block text-sm text-neutral-500 underline">Retour à la présentation</Link>}
         </div>
       </div>
     );
@@ -145,7 +145,7 @@ export default function Questionnaire() {
     <div className="min-h-screen bg-[#F2ECE4] font-sans text-neutral-900">
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <Link to="/agents-ia" aria-label="Aissociate Studio IA"><Logo size="sm" branche="Studio IA" fond="clair" /></Link>
+          <Link to="/" aria-label="Aissociate Studio IA"><Logo size="sm" branche="Studio IA" fond="clair" /></Link>
           <span className="text-xs text-neutral-500">Étape {etape + 1} sur {SECTIONS.length}</span>
         </div>
         <div className="h-1 bg-neutral-100"><div className="h-1 bg-orange-500 transition-all" style={{ width: `${((etape + 1) / SECTIONS.length) * 100}%` }} /></div>

@@ -12,7 +12,7 @@ import { bulletin, COMPTEURS, CONTRATS, INTEGRATION_HT, INTERRUPTEURS, normalise
 import SamDemo from '../components/SamDemo';
 
 /**
- * Page de vente « Studio IA » (/agents-ia) : l'équipe d'agents IA d'Aissociate.
+ * Page d'accueil du site (/) : page de vente « Studio IA » : l'équipe d'agents IA d'Aissociate.
  * Structure en tunnel (accroche → histoire → mécanisme → équipe → preuve →
  * offre empilée → garantie → pour qui → FAQ → appel à l'action + P.-S.).
  * Le formulaire envoie au CRM comme les autres formulaires du site
@@ -182,10 +182,10 @@ export default function AgentsIA() {
         title={`Studio IA : votre équipe d'agents IA — stage gratuit, contrats dès ${PRIX_MIN} €/mois | Aissociate`}
         description={`Sept agents IA spécialistes (assistante, marketing, commercial, SEO, juridique, RH, comptabilité) qui connaissent votre entreprise. Ils commencent en stage gratuit, sans limite de durée ; contrats dès ${PRIX_MIN} € HT/mois, agents illimités, accompagnement à La Réunion.`}
         keywords="agent IA PME, agents IA La Réunion, agent IA gratuit, assistant IA entreprise 974, IA marketing réseaux sociaux, automatisation TPE Réunion"
-        url={`${SITE_URL}/agents-ia`}
+        url={`${SITE_URL}/`}
         image={`${SITE_URL}/agents-ia/studio/equipe-og.jpg`}
         imageAlt="Studio IA Aissociate : l'équipe d'agents IA"
-        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Agents IA', url: `${SITE_URL}/agents-ia` }]}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }]}
         faqData={faq}
       />
       <Header />

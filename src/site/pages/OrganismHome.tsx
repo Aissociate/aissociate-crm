@@ -40,8 +40,8 @@ export default function OrganismHome() {
         title="Formation IA à La Réunion — Qualiopi, CPF & OPCO | Aissociate"
         description="Organisme de formation et expert IA certifié Qualiopi à La Réunion. Formez vos équipes à l'IA générative : ChatGPT, prompt engineering, automatisation des process. Finançable CPF, OPCO, France Travail — présentiel ou distanciel."
         keywords="formation IA La Réunion, formation intelligence artificielle Réunion, formation IA 974, expert IA Réunion, consultant IA 974, formation IA Qualiopi, formation IA CPF, OPCO intelligence artificielle, ChatGPT entreprise, IA générative PME, automatisation IA, prompt engineering"
-        url={SITE_URL}
-        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }]}
+        url={`${SITE_URL}/formation-ia/`}
+        breadcrumbs={[{ name: 'Accueil', url: SITE_URL }, { name: 'Formation IA', url: `${SITE_URL}/formation-ia/` }]}
         organizationData={{
           name: 'Aissociate',
           description: "Organisme de formation certifié Qualiopi spécialisé en intelligence artificielle générative à La Réunion. Formations finançables CPF, OPCO et France Travail.",
