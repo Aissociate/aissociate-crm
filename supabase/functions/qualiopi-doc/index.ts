@@ -16,18 +16,10 @@ import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { PDFDocument, StandardFonts, rgb, type PDFImage } from "npm:pdf-lib@1.17.1";
 import { joursSession, modeleDocument } from "./modeles.ts";
 import { rendreModele } from "./rendu.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 // Normalise vers WinAnsi (Latin-1) : conserve les accents et « », convertit
 // les caractères typographiques non supportés.

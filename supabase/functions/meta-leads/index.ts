@@ -15,14 +15,10 @@
 // - État (dernière synchro) dans `parametres.meta_leads_etat` ; journal dans `job_runs`.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 const PAGE_PAR_DEFAUT = "112479281807858"; // page Facebook « Aissociate »
 const PREMIER_IMPORT_JOURS = 30;           // profondeur du tout premier import

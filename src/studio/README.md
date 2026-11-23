@@ -112,7 +112,7 @@ Le premier niveau renseigné l'emporte :
 3. `studio_agents.modele` : cet agent, par défaut ;
 4. `parametres.ai.model_studio` (s'il est autorisé), sinon `deepseek/deepseek-v4.1-flash-1017`.
 
-Seuls les modèles de `MODELES_STUDIO` (dans `supabase/functions/studio/index.ts`) sont acceptés : DeepSeek V4.1 Flash, Mistral Large 4 et Claude Haiku 5.5. Tout autre réglage enregistré en base est ignoré.
+Seuls les modèles de `MODELES_STUDIO` (dans `supabase/functions/studio/socle.ts`) sont acceptés : DeepSeek V4.1 Flash, Mistral Large 4 et Claude Haiku 5.5. Tout autre réglage enregistré en base est ignoré.
 
 La clé reste celle du CRM : le secret `OPENROUTER_API_KEY`, sinon `parametres.ai.openrouter_key`.
 Les réponses arrivent en flux SSE (`meta`, `delta`, `done`, `error`) et le raisonnement

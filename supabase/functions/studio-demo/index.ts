@@ -21,14 +21,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 // Présentation, offre et liens : source unique partagée avec l'assistant du CRM.
 import { AUTRES_SERVICES, STUDIO_OFFRE, STUDIO_PRESENTATION } from "../_shared/site_aissociate.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-const json = (b: unknown, status = 200) =>
-  new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 const MODELE = "deepseek/deepseek-v4.1-flash-1017";
 const MAX_TOURS = 24;            // messages du prospect par conversation

@@ -43,12 +43,10 @@ import { appliquerAnnulation, instantane, planAnnulation, type Annulation } from
 import { transcrire } from "../_shared/stt.ts";
 import { journaliserEmail } from "../_shared/journal_email.ts";
 import { decrirePiecesJointes, listerPiecesJointes, piecesPourEnvoi } from "../_shared/agent/pieces_jointes.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 const MAX_ROUNDS = 8;
 const TOOL_RESULT_MAX = 14000;
@@ -64,10 +62,6 @@ function maintenantLocal(): { date: string; heure: string } {
     timeZone: "Indian/Reunion", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(new Date()).map((x) => [x.type, x.value]));
   return { date: `${p.year}-${p.month}-${p.day}`, heure: `${p.hour}:${p.minute}` };
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

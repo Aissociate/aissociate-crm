@@ -20,17 +20,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliserEmail } from "../_shared/journal_email.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 const DAY = 86400000;
 const DELAI_FROID_JOURS = 30; // même valeur que src/lib/evaluation.ts
 const LIBELLES: Record<string, string> = {

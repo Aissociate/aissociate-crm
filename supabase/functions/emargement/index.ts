@@ -12,15 +12,10 @@
 //   action 'sign' → vérifie le code puis enregistre les demi-journées cochées
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
+const corsHeaders = enTetesCors("POST, GET, OPTIONS");
+const json = reponseJson(corsHeaders);
 const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]!));
 
 const MAX_TENTATIVES = 8;      // plus permissif : la saisie est différée

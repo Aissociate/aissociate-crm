@@ -5,18 +5,10 @@
 //   action 'submit' → enregistre la réponse et marque l'envoi « répondu »
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors("POST, GET, OPTIONS");
+const json = reponseJson(corsHeaders);
 
 // Note moyenne (échelles 1-5) pour agréger la satisfaction.
 function computeNote(schema: { id: string; type: string; echelle?: number }[], reponses: Record<string, unknown>): number | null {

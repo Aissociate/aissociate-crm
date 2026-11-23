@@ -9,18 +9,10 @@
 //    JAMAIS exposé au navigateur.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 // Somme des actions « lead » (formulaires Meta + conversions pixel lead).
 function sumLeads(actions: unknown): number {

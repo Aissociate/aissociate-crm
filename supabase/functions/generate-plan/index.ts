@@ -5,24 +5,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 const DEFAULT_PROMPT =
   "Tu es un ingénieur pédagogique. À partir des données JSON d'un plan de formation, " +
   "rédige un plan structuré et professionnel à présenter à un partenaire/financeur. " +
   "Réponds UNIQUEMENT par un objet JSON valide " +
   '{"titre": string, "sections": [{"titre": string, "contenu": string}]}. En français.';
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
 
 // Nettoie le texte pour l'encodage WinAnsi de pdf-lib (Helvetica)
 function clean(s: string): string {

@@ -3,12 +3,10 @@ import { Buffer } from "node:buffer";
 import { simpleParser } from "npm:mailparser@3.7.1";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { ajouterJours, partiesLocales } from "../_shared/heure_locale.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 interface ImapCfg { host: string; port: number; user: string; pass: string; }
 
@@ -626,9 +624,3 @@ async function recordSync(
   }
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
