@@ -44,6 +44,13 @@ describe('orchestration par Léa', () => {
     expect(p).toContain('Marc (Comptabilité) — id compta');
     expect(p).toContain(NOM_MISSION);
   });
+  it('dit à Léa qui a accès aux connecteurs réservés, et seulement s\'il y en a', () => {
+    const p = perimetreOrchestrateur([{ id: 'hugo', prenom: 'Hugo', metier: 'Marketing', connecteurs: ['API — Brevo : envoi de mailing en masse'] }, C[1]]);
+    expect(p).toContain('Hugo (Marketing) — id hugo\n  Connecteurs réservés : API — Brevo : envoi de mailing en masse');
+    expect(p).toContain('confie-le à l\'un d\'eux');
+    expect(perimetreOrchestrateur(C)).not.toContain('Connecteurs réservés');
+    expect(perimetreOrchestrateur(C)).not.toContain('connecteur réservé');
+  });
   it('sans spécialiste, Léa traite seule et ne parle pas de mission', () => {
     expect(perimetreOrchestrateur([])).not.toContain(NOM_MISSION);
   });

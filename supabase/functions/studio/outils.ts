@@ -35,6 +35,7 @@ import type { ActionRoutine } from "./routine_outil.ts";
 import * as mcpClient from "./mcp_client.ts";
 import type { ActionMcp } from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
+import * as acces from "./acces.ts";
 import type { ActionApi } from "./api_client.ts";
 import { apercuActionQualiopi, modifierActionQualiopi, qualiopiActif, titreActionQualiopi, type ActionQualiopi } from "./qualiopi.ts";
 import * as qualiopiCrm from "./qualiopi_crm.ts";
@@ -688,7 +689,7 @@ async function enAttente(sb: SupabaseClient, wsId: string, type: string, champ: 
 
 export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const zernioOk = zernio.zernioConfigure();
-  const [boites, { data: docs }, comptesReseaux, { count: nbFlux }, comptesApps, serveursMcp, apisChargees] = await Promise.all([
+  const [tousBoites, { data: docs }, tousReseaux, { count: nbFlux }, tousApps, tousMcp, toutesApis, reglesAcces] = await Promise.all([
     zernioOk ? bureau.boitesEspace(ctx.wsId).catch(() => [] as bureau.Boite[]) : Promise.resolve([] as bureau.Boite[]),
     ctx.sb.from("studio_documents").select("titre, dossier_id").eq("workspace_id", ctx.wsId).eq("actif", true)
       .order("created_at", { ascending: false }).limit(80),
@@ -699,7 +700,14 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
     mcpClient.chargerServeurs(ctx.sb, ctx.wsId).catch(() => [] as mcpClient.ServeurCharge[]),
     // API « connecté » de l'espace (api_client.ts), avec leur description OpenAPI quand elle se lit.
     apiClient.chargerApis(ctx.sb, ctx.wsId).catch(() => [] as apiClient.ApiChargee[]),
+    // Connecteurs réservés à certains agents (acces.ts) : l'agent ne reçoit que les siens.
+    acces.chargerAcces(ctx.sb, ctx.wsId).catch(() => new Map() as acces.Acces),
   ]);
+  const boites = acces.filtrer(tousBoites, (b) => acces.cleZernio(b.id), reglesAcces, ctx.agentId);
+  const comptesReseaux = acces.filtrer(tousReseaux, (c) => acces.cleZernio(c.id), reglesAcces, ctx.agentId);
+  const comptesApps = acces.filtrer(tousApps, (c) => acces.cleZernio(c.id), reglesAcces, ctx.agentId);
+  const serveursMcp = acces.filtrer(tousMcp, (s) => s.serveur.type, reglesAcces, ctx.agentId);
+  const apisChargees = acces.filtrer(toutesApis, (a) => a.api.type, reglesAcces, ctx.agentId);
   const mcp = mcpClient.definitionsMcp(serveursMcp);
   // Conformité Qualiopi : Nora, dans l'espace de l'organisme (Aissociate) seulement.
   const qualiopi = qualiopiActif(ctx.wsId, ctx.agentId)

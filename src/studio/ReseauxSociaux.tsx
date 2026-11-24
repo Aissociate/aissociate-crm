@@ -2,6 +2,7 @@
 // Le serveur rattache chaque compte au profil Zernio de l'espace ; le navigateur ne voit jamais la clé.
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Plus, RefreshCw, Unplug } from 'lucide-react';
+import { AgentsConnecteur, cleZernio } from './AccesAgents';
 import { useStudio } from './StudioApp';
 import { appel } from './api';
 import { Bouton, cx } from './composants';
@@ -106,6 +107,7 @@ export function ComptesReseau({ reseaux, reseau }: { reseaux: Reseaux; reseau: R
             </div>
             {c.lien && <a href={c.lien} target="_blank" rel="noreferrer" className="rounded-lg p-1.5 text-neutral-400 hover:text-neutral-700" aria-label={`Ouvrir ${c.nom}`}><ExternalLink className="h-4 w-4" /></a>}
           </div>
+          <AgentsConnecteur cle={cleZernio(c.id)} nom={`${NOMS_RESEAUX[c.reseau] ?? c.reseau} (${c.nom})`} />
           {proprietaire && (
             <div className="mt-2 flex flex-wrap gap-1">
               <button onClick={() => reseaux.connecter(reseau, c.id)} disabled={occupe} title="Ressaisir le compte"

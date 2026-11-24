@@ -3,7 +3,7 @@
 import { type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { lancerMedia, quotaMediaAtteint } from "./medias.ts";
 import { construirePrompt, selectionnerRessources, type AgentPrompt, type Creation, type EnteteEntreprise } from "./contexte.ts";
-import { connecteursActifs } from "./connecteurs.ts";
+import { connecteursActifs, connecteursReservesParAgent } from "./connecteurs.ts";
 import * as veille from "./veille.ts";
 import { historique, type Passage } from "./routines.ts";
 import { garde, journaliser, refusRecents, soumettreLivrable } from "./gouvernance.ts";
@@ -149,7 +149,7 @@ export async function chat(sb: SupabaseClient, s: Session, body: Record<string, 
     sb.from("studio_messages").select("content, created_at, agent_id, studio_conversations!inner(titre)")
       .eq("workspace_id", s.ws.id).eq("epingle", true).is("media_id", null)
       .order("created_at", { ascending: false }).limit(6),
-    connecteursActifs(sb, s.ws.id),
+    connecteursActifs(sb, s.ws.id, agent.id),
     chargerHarness(sb),
     // Papier à en-tête (« Mon entreprise ») : coordonnées officielles données aux agents.
     sb.from("studio_workspaces").select("entete, logo_chemin").eq("id", s.ws.id).maybeSingle(),
@@ -186,9 +186,14 @@ export async function chat(sb: SupabaseClient, s: Session, body: Record<string, 
   }).catch(() => null);
   const aujourdhui = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" });
   // Les super-pouvoirs des collègues (sans leur gabarit) : Léa peut les activer en confiant une mission.
+  // Léa sait aussi qui a accès aux connecteurs réservés (acces.ts), pour confier ce qui en a besoin.
+  const reserves = equipe.estOrchestrateur(agent.id)
+    ? await connecteursReservesParAgent(sb, s.ws.id).catch(() => new Map<string, string[]>())
+    : new Map<string, string[]>();
   const collegues: equipe.Collegue[] = agents.filter((a) => a.id !== agent.id).map((a) => ({
     id: a.id, prenom: a.prenom, metier: a.metier,
     pouvoirs: (a.super_pouvoirs ?? []).map(({ id, titre, media, champs }) => ({ id, titre, media, champs })),
+    connecteurs: reserves.get(a.id),
   }));
   // Super-pouvoirs média (visuel, vidéo) : l'agent les lance lui-même avec l'outil creer_media.
   const sesMedias = pouvoirs.pouvoirsMedia(agent.super_pouvoirs);
@@ -324,7 +329,9 @@ export async function chat(sb: SupabaseClient, s: Session, body: Record<string, 
           nbConsultations++;
           emit("outil", { libelle: `${collegue.prenom} est consulté…` });
           const sys = construirePrompt({
-            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo, pack,
+            agent: collegue, equipe: agents, ws: s.ws, ressources, creations, harness, aujourdhui, entete, logo, pack,
+            // Ses connecteurs à lui : un connecteur réservé à d'autres agents n'y figure pas (acces.ts).
+            connecteurs: await connecteursActifs(sb, s.ws.id, collegue.id).catch(() => connecteurs),
             savoirs: await chargerSavoirs(sb, collegue.id, q),
           }) + "\n\n" + equipe.consigneConsulte(agent);
           const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -398,7 +405,9 @@ export async function chat(sb: SupabaseClient, s: Session, body: Record<string, 
               sesOutils.consigne += `\n\n${pouvoirs.consigneMedia(sesMediasC)}`;
             }
             const sys = construirePrompt({
-              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, connecteurs, harness, aujourdhui, entete, logo, pack,
+              agent: collegue, equipe: agents, ws: s.ws, ressources, creations, harness, aujourdhui, entete, logo, pack,
+              // Ses connecteurs à lui : un connecteur réservé à d'autres agents n'y figure pas (acces.ts).
+              connecteurs: await connecteursActifs(sb, s.ws.id, collegue.id).catch(() => connecteurs),
               savoirs: await chargerSavoirs(sb, collegue.id, consigne),
               refus: await refusRecents(sb, s.ws.id, collegue.id),
             }) + (sesOutils ? `\n\n${sesOutils.consigne}` : "") + "\n\n" + equipe.consigneMission(agent);
