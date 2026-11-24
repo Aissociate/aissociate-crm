@@ -4,12 +4,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import nodemailer from "npm:nodemailer@6.9.15";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 interface EmailPayload {
   to?: string | string[];
@@ -108,9 +106,3 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}

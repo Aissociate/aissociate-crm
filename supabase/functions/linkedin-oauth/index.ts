@@ -13,15 +13,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { exchangeToken, LI_VERSION, readCfg, saveCfg, tokenFields } from "../_shared/linkedin.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
+const corsHeaders = enTetesCors("GET, POST, OPTIONS");
+const json = reponseJson(corsHeaders);
 
 const SCOPES = "w_organization_social r_organization_admin";
 const REDIRECT_URI = `${Deno.env.get("SUPABASE_URL")}/functions/v1/linkedin-oauth`;

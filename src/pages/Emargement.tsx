@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarCheck, CalendarPlus, Link2, Check, Send, Loader as Loader2, ShieldCheck, UserCheck, UserPlus, FileDown } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
+import { journaliserEnvoi } from '@/lib/journalEmail';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Card, Button, Field, Modal, Spinner, Badge, EmptyState, SearchSelect, type Tone } from '@/components/ui';
+import { PageHeader, Card, Button, Field, Modal, Spinner, Badge, EmptyState, SearchSelect } from '@/components/ui';
 import { formatDate, fullName, ymdLocal } from '@/lib/utils';
 import { functionErrorMessage } from '@/lib/invokeError';
 import type {
@@ -15,7 +16,6 @@ const DEMIS: { key: 'matin' | 'apres_midi'; label: string }[] = [
   { key: 'apres_midi', label: 'Après-midi' },
 ];
 
-const STATUT_TONE: Record<string, Tone> = { present: 'success', absent: 'danger', excuse: 'warning' };
 const STATUT_LABEL: Record<string, string> = { present: 'Présent', absent: 'Absent', excuse: 'Excusé' };
 
 /** Toutes les dates entre deux bornes incluses (une session peut durer plusieurs jours). */
@@ -220,13 +220,12 @@ export default function Emargement() {
     ].join('\n');
     const { error } = await supabase.functions.invoke('send-email', { body: { to: p.email, subject: sujet, html, text: texte } });
     if (error) return false;
-    await supabase.from('emails').insert({
-      destinataires: [p.email], copie: [], sujet, corps: texte,
-      statut: 'envoye', canal: 'email', direction: 'sortant',
-      expediteur: smtpFrom ?? profile?.email ?? null,
-      contact_id: p.contact_id, sent_at: new Date().toISOString(),
-      owner_id: auth?.user.id ?? null, attachments: [],
+    const logErr = await journaliserEnvoi({
+      destinataire: p.email, sujet, corps: texte,
+      expediteur: smtpFrom ?? profile?.email ?? null, ownerId: auth?.user.id ?? null,
+      contactId: p.contact_id,
     });
+    if (logErr) console.error('[émargement] mail envoyé, non enregistré dans la Messagerie :', logErr);
     return true;
   };
 

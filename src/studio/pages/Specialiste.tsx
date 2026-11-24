@@ -11,9 +11,9 @@ import { useDictee } from '../aujourdhui/DemanderLea';
 import { autonomie, champManquant, guider, recoit, valeursInitiales } from '../missionGuidee';
 import { useStudio } from '../StudioApp';
 
-const CL_CHAMP = 'min-h-[50px] w-full rounded-xl border border-[#D6D3CF] bg-white px-3.5 text-base text-[#141414] outline-none focus:border-[#141414]';
+const CL_CHAMP = 'min-h-[50px] w-full rounded-xl border border-[#D9CEC3] bg-white px-3.5 text-base text-[#17120E] outline-none focus:border-[#17120E]';
 const CL_PASTILLE = 'min-h-[46px] rounded-full border px-4 text-base';
-const actif = (on: boolean) => (on ? 'border-[#141414] bg-[#141414] text-white' : 'border-[#D6D3CF] bg-white text-[#141414] hover:bg-[#F6F5F3]');
+const actif = (on: boolean) => (on ? 'border-[#17120E] bg-[#17120E] text-white' : 'border-[#D9CEC3] bg-white text-[#17120E] hover:bg-[#F2ECE4]');
 
 export default function Specialiste() {
   const { me } = useStudio();
@@ -25,7 +25,7 @@ export default function Specialiste() {
   const { seul, demande } = autonomie(agent.id);
 
   return (
-    <div className="flex flex-col gap-[26px] text-[17px] leading-normal text-[#141414]">
+    <div className="flex flex-col gap-[26px] text-[17px] leading-normal text-[#17120E]">
       <nav aria-label="Choisir un spécialiste" className="flex flex-wrap gap-2">
         {me.agents.map((a) => (
           <Link key={a.id} to={`/studio/equipe/${a.id}`} aria-current={a.id === agent.id ? 'page' : undefined}
@@ -41,7 +41,7 @@ export default function Specialiste() {
             <Avatar prenom={agent.prenom} couleur={agent.couleur} photo={agent.photo} taille={72} />
             <div className="min-w-0">
               <h1 className="text-[clamp(28px,3.2vw,38px)] font-extrabold leading-[1.1] tracking-[-0.025em]">{agent.prenom}</h1>
-              <p className="mt-0.5 text-[#5F5B57]">{agent.metier}</p>
+              <p className="mt-0.5 text-[#615850]">{agent.metier}</p>
             </div>
           </header>
           {(agent.description || agent.accroche) && <p className="max-w-[60ch] text-lg">{agent.description || agent.accroche}</p>}
@@ -55,12 +55,12 @@ export default function Specialiste() {
                   return (
                     <button key={p.id} type="button" aria-pressed={choisi} onClick={() => setParams({ p: p.id }, { replace: true })}
                       className={cx('flex min-h-[124px] flex-col gap-2 rounded-2xl bg-white px-[18px] py-4 text-left',
-                        choisi ? 'border-2 border-[#141414] shadow-[0_10px_26px_rgba(20,20,20,0.10)]' : 'border border-[#E7E5E2] hover:border-[#D6D3CF]')}>
+                        choisi ? 'border-2 border-[#17120E] shadow-[0_10px_26px_rgba(20,20,20,0.10)]' : 'border border-[#E6DCD2] hover:border-[#D9CEC3]')}>
                       <span className="flex items-center gap-2.5">
-                        <span aria-hidden className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-[#FDEEE2] text-[#B24A0C]"><Zap className="h-[18px] w-[18px]" /></span>
+                        <span aria-hidden className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-none bg-[#FDEEE2] text-[#B24A0C]"><Zap className="h-[18px] w-[18px]" /></span>
                         <span className="text-[17px] font-bold leading-tight">{p.titre}</span>
                       </span>
-                      <span className="text-[15px] leading-snug text-[#5F5B57]">{recoit(p)}</span>
+                      <span className="text-[15px] leading-snug text-[#615850]">{recoit(p)}</span>
                     </button>
                   );
                 })}
@@ -69,19 +69,19 @@ export default function Specialiste() {
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <p className="rounded-[14px] border border-[#E7E5E2] bg-white px-4 py-3.5 text-[15px]"><span className="block text-xs font-semibold uppercase tracking-[0.06em] text-[#2E6B48]">Fait seul</span>{seul}</p>
-            <p className="rounded-[14px] border border-[#E7E5E2] bg-white px-4 py-3.5 text-[15px]"><span className="block text-xs font-semibold uppercase tracking-[0.06em] text-[#B24A0C]">Vous demande toujours</span>{demande}</p>
+            <p className="rounded-none border border-[#E6DCD2] bg-white px-4 py-3.5 text-[15px]"><span className="block text-xs font-semibold uppercase tracking-[0.06em] text-[#2E6B48]">Fait seul</span>{seul}</p>
+            <p className="rounded-none border border-[#E6DCD2] bg-white px-4 py-3.5 text-[15px]"><span className="block text-xs font-semibold uppercase tracking-[0.06em] text-[#B24A0C]">Vous demande toujours</span>{demande}</p>
           </div>
         </section>
 
-        <aside aria-label="Lancer la mission" className="flex min-w-0 flex-[1_1_380px] flex-col gap-[18px] rounded-[20px] border border-[#E7E5E2] bg-white p-6">
+        <aside aria-label="Lancer la mission" className="flex min-w-0 flex-[1_1_380px] flex-col gap-[18px] rounded-none border border-[#E6DCD2] bg-white p-6">
           {pouvoir
             ? <Mission key={`${agent.id}:${pouvoir.id}`} agent={agent} pouvoir={pouvoir} />
             : <p className="text-base">{agent.prenom} n'a pas de pouvoir spécial : écrivez-lui directement.</p>}
-          <div className="mt-auto flex flex-col gap-1 border-t border-[#E7E5E2] pt-4">
-            <p className="text-[14.5px] text-[#5F5B57]">Votre besoin n'est pas dans la liste ?</p>
+          <div className="mt-auto flex flex-col gap-1 border-t border-[#E6DCD2] pt-4">
+            <p className="text-[14.5px] text-[#615850]">Votre besoin n'est pas dans la liste ?</p>
             <Link to={`/studio/assistants/${me.agents.some((a) => a.id === ORCHESTRATEUR) ? ORCHESTRATEUR : agent.id}`}
-              className="inline-flex min-h-[44px] items-center self-start text-base font-semibold text-[#B24A0C] underline underline-offset-[3px] hover:text-[#141414]">
+              className="inline-flex min-h-[44px] items-center self-start text-base font-semibold text-[#B24A0C] underline underline-offset-[3px] hover:text-[#17120E]">
               {me.agents.some((a) => a.id === ORCHESTRATEUR) && agent.id !== ORCHESTRATEUR ? 'Décrivez-le à Léa avec vos mots' : `Décrivez-le à ${agent.prenom} avec vos mots`}
             </Link>
           </div>
@@ -98,7 +98,7 @@ function ChampMission({ c, valeur, onChange, facultatif }: { c: Champ; valeur: s
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="text-base font-semibold">
-        {c.label} {(facultatif || !c.requis) && <span className="font-normal text-[#5F5B57]">(facultatif)</span>}
+        {c.label} {(facultatif || !c.requis) && <span className="font-normal text-[#615850]">(facultatif)</span>}
       </label>
       {c.type === 'choix' ? (
         <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={CL_CHAMP}>
@@ -113,7 +113,7 @@ function ChampMission({ c, valeur, onChange, facultatif }: { c: Champ; valeur: s
           {dictee.disponible && (
             <button type="button" onClick={dictee.basculer} aria-pressed={dictee.ecoute} aria-label={dictee.ecoute ? 'Arrêter la dictée' : `Dicter : ${c.label}`}
               className={cx('flex w-[50px] shrink-0 items-center justify-center self-start rounded-xl border min-h-[50px]',
-                dictee.ecoute ? 'border-[#B24A0C] bg-[#FDEEE2] text-[#B24A0C]' : 'border-[#D6D3CF] bg-[#F6F5F3] text-[#141414]')}>
+                dictee.ecoute ? 'border-[#B24A0C] bg-[#FDEEE2] text-[#B24A0C]' : 'border-[#D9CEC3] bg-[#F2ECE4] text-[#17120E]')}>
               <Mic className={cx('h-5 w-5', dictee.ecoute && 'animate-pulse')} aria-hidden />
             </button>
           )}
@@ -150,7 +150,7 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
           onMeta: (m) => { acceptee.current = true; setPartie({ conversation: m.conversation_id }); setEnvoi(false); },
           onDelta: () => { /* le texte se lit dans la conversation ou dans « Aujourd'hui » */ },
         });
-        rafraichir();
+        void rafraichir();
       }
     } catch (e) {
       // Refus avant le départ (quota, champ manquant, suspension) : on le dit ; après, l'erreur est dans la conversation.
@@ -169,14 +169,14 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
             : "Vous n'avez rien à surveiller : le résultat arrivera dans « Aujourd'hui », prêt à valider. Rien ne part sans votre accord."}
         </p>
         <div className="flex flex-wrap gap-2.5">
-          <Link to={pouvoir.media ? '/studio/documents/contenus' : '/studio'} className="inline-flex min-h-[48px] items-center rounded-xl bg-[#141414] px-5 text-base font-semibold text-white hover:bg-[#2B2B2B]">
+          <Link to={pouvoir.media ? '/studio/documents/contenus' : '/studio'} className="inline-flex min-h-[48px] items-center rounded-xl bg-[#17120E] px-5 text-base font-semibold text-white hover:bg-[#2E261F]">
             {pouvoir.media ? 'Voir mes contenus' : "Voir Aujourd'hui"}
           </Link>
           <button type="button" onClick={() => { setPartie(null); setValeurs(valeursInitiales(pouvoir)); }}
-            className="min-h-[48px] rounded-xl border border-[#D6D3CF] bg-white px-[18px] text-base hover:bg-[#F6F5F3]">Autre mission</button>
+            className="min-h-[48px] rounded-xl border border-[#D9CEC3] bg-white px-[18px] text-base hover:bg-[#F2ECE4]">Autre mission</button>
         </div>
         {partie.conversation && (
-          <Link to={`/studio/assistants/${agent.id}?c=${partie.conversation}`} className="inline-flex min-h-[44px] items-center text-[15px] text-[#5F5B57] underline underline-offset-[3px]">
+          <Link to={`/studio/assistants/${agent.id}?c=${partie.conversation}`} className="inline-flex min-h-[44px] items-center text-[15px] text-[#615850] underline underline-offset-[3px]">
             Suivre le travail de {agent.prenom}
           </Link>
         )}
@@ -185,7 +185,7 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
   }
 
   return (
-    <form className="flex flex-col gap-[18px]" onSubmit={(e) => { e.preventDefault(); if (!manquant && !envoi) lancer(); }}>
+    <form className="flex flex-col gap-[18px]" onSubmit={(e) => { e.preventDefault(); if (!manquant && !envoi) void lancer(); }}>
       <div className="flex flex-col gap-1">
         <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B24A0C]">Pouvoir spécial</p>
         <h2 className="text-[23px] font-bold leading-tight">{pouvoir.titre}</h2>
@@ -193,7 +193,7 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
       {guide.choix && (
         <div className="flex flex-col gap-2.5">
           <p id="question-mission" className="text-base font-semibold">
-            {guide.question} {!guide.choix.requis && <span className="font-normal text-[#5F5B57]">(facultatif)</span>}
+            {guide.question} {!guide.choix.requis && <span className="font-normal text-[#615850]">(facultatif)</span>}
           </p>
           <div role="group" aria-labelledby="question-mission" className="flex flex-wrap gap-2">
             {guide.choix.options?.map((o) => {
@@ -213,10 +213,10 @@ function Mission({ agent, pouvoir }: { agent: Agent; pouvoir: SuperPouvoir }) {
       {guide.autres.map((c) => <ChampMission key={c.nom} c={c} valeur={valeurs[c.nom] ?? ''} onChange={(v) => fixer(c.nom, v)} />)}
       {erreur && <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-[15px] text-red-800" role="alert">{erreur}</p>}
       <button type="submit" disabled={Boolean(manquant) || envoi}
-        className="min-h-[54px] rounded-[14px] bg-[#141414] text-[17px] font-semibold text-white hover:bg-[#2B2B2B] disabled:bg-[#B9B5B0]">
+        className="min-h-[54px] rounded-none bg-[#17120E] text-[17px] font-semibold text-white hover:bg-[#2E261F] disabled:bg-[#A89C90]">
         {envoi ? 'Transmission…' : `Confier à ${agent.prenom}`}
       </button>
-      <p className="text-[14.5px] text-[#5F5B57]" aria-live="polite">
+      <p className="text-[14.5px] text-[#615850]" aria-live="polite">
         {manquant ? `Il manque : « ${manquant === guide.choix ? guide.question : manquant.label} »`
           : pouvoir.media ? `${agent.prenom} prépare, puis vous retrouvez le résultat dans « Mes documents ».`
             : `${agent.prenom} prépare, puis vous validez dans « Aujourd'hui ».`}

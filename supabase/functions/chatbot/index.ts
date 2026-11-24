@@ -10,19 +10,13 @@
 //   documents de la base documentaire activés pour ce chat).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 const DEFAULT_DIR = "Tu es l'assistant interne de l'organisme de formation. Tu réponds à la direction sur l'activité. Cite tes sources entre crochets (ex. [D1]). En français, factuel.";
 const DEFAULT_CONS = "Tu es l'assistant interne destiné aux conseillers. Tu réponds à partir de la documentation et des dossiers accessibles. Cite tes sources entre crochets (ex. [D1]). En français, factuel.";
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
 
 type Droits = {
   documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;

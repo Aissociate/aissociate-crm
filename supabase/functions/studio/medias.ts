@@ -172,11 +172,33 @@ export async function statutMedia(sb: SupabaseClient, apiKey: string, wsId: stri
       }
     }
   }
+  // Visuel supprimé par le client : la ligne reste (coûts, quota), sans fichier.
+  if (m.statut === "pret" && !m.chemin && m.erreur === SUPPRIME) {
+    return { id: m.id, type: m.type, statut: "echec", mime: m.mime, erreur: MESSAGE_SUPPRIME, url: null };
+  }
   return {
     id: m.id, type: m.type, statut: m.statut, mime: m.mime,
     erreur: m.statut === "echec" ? (m.erreur ?? "Échec de la génération") : null,
     url: m.statut === "pret" && m.chemin ? await urlSignee(sb, m.chemin) : null,
   };
+}
+
+/** Marque d'un visuel supprimé (colonne erreur) et message montré à sa place. */
+export const SUPPRIME = "supprime";
+export const MESSAGE_SUPPRIME = "Ce visuel a été supprimé.";
+
+/**
+ * Suppression d'un visuel ou d'une vidéo prêt : le fichier est effacé du stockage ; la ligne reste
+ * (sans fichier ni dossier) pour que les coûts et le quota du mois restent justes.
+ */
+export async function supprimerMedia(sb: SupabaseClient, wsId: string, id: string): Promise<{ ok: true; prompt: string; type: string } | { erreur: string }> {
+  const { data: m } = await sb.from("studio_medias").select("id, type, statut, chemin, prompt").eq("id", id).eq("workspace_id", wsId).maybeSingle();
+  if (!m || m.statut !== "pret" || !m.chemin) return { erreur: "Visuel introuvable ou déjà supprimé." };
+  const { error: e1 } = await sb.storage.from(BUCKET).remove([String(m.chemin)]);
+  if (e1) return { erreur: `Suppression du fichier impossible : ${e1.message}` };
+  const { error } = await sb.from("studio_medias").update({ chemin: null, dossier_id: null, erreur: SUPPRIME }).eq("id", m.id);
+  if (error) return { erreur: error.message };
+  return { ok: true, prompt: String(m.prompt ?? ""), type: String(m.type) };
 }
 
 export async function urlSignee(sb: SupabaseClient, chemin: string): Promise<string | null> {

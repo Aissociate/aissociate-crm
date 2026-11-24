@@ -7,10 +7,13 @@
 //   2. harness « périmètre » (spécialiste + relais) — éditable dans le CRM
 //   3. harness « règles communes » — éditable dans le CRM
 //   4. base de connaissances de l'agent (référence Aissociate, à citer) — CRM
+//   4 bis. contexte métier : pack du secteur de l'entreprise (metier.ts) — CRM
 //   5. fiche entreprise, consignes du client pour cet agent
 //   6. outils connectés (connecteurs au statut « connecte »)
 //   7. ressources (notes et fichiers) pertinentes
 //   8. contenus déjà validés (réponses « gardées » par l'équipe)
+
+import { blocMetier, type PackMetier } from "./metier.ts";
 
 export type Champ = { nom: string; label: string; type: "texte" | "long" | "choix"; options?: string[]; requis?: boolean; aide?: string };
 export type SuperPouvoir = {
@@ -141,6 +144,8 @@ export function construirePrompt(p: {
   perimetre?: string;
   /** Derniers refus du propriétaire pour cet agent (gouvernance.ts › refusRecents). */
   refus?: Refus[];
+  /** Pack du secteur de l'entreprise (metier.ts), entre les savoirs de l'agent et la fiche entreprise. */
+  pack?: PackMetier | null;
 }): string {
   const { agent, ws } = p;
   const parts = [
@@ -156,6 +161,8 @@ Quand ta réponse s'appuie sur l'un de ces documents, termine-la par une ligne �
 
 ${savoirs.map((s, i) => `### [S${i + 1}] ${s.titre}${s.source ? ` — référence : ${s.source}` : ""}\n${s.extrait}`).join("\n\n")}`);
   }
+  const metier = blocMetier(p.pack, agent.id);
+  if (metier) parts.push(metier);
   if (p.aujourdhui) parts.push(`Date du jour : ${p.aujourdhui}.`);
   parts.push(`## Entreprise cliente : ${ws.nom}\n${ws.contexte_entreprise.trim()
     || "(Fiche entreprise non encore renseignée : invite l'utilisateur à la compléter dans « Mon entreprise » pour des réponses plus personnalisées.)"}`);

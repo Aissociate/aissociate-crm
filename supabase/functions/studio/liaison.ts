@@ -12,7 +12,7 @@ function b64(octets: ArrayBuffer): string {
   for (const o of new Uint8Array(octets)) s += String.fromCharCode(o);
   return btoa(s);
 }
-function deb64(t: string): Uint8Array<ArrayBuffer> {
+function deb64(t: string) {
   const bin = atob(t);
   const out = new Uint8Array(new ArrayBuffer(bin.length));
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

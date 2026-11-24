@@ -2,24 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Thèmes : tokens sémantiques ── */
+/* ── Charte Aissociate (docs/charte) ──
+   Jetons de marque, puis tokens sémantiques de l'interface (clair / sombre). */
 :root {
-  --app: 241 245 249;
+  --fond: #ffffff;
+  --fond-alt: #f2ece4;
+  --encre: #17120e;
+  --encre-douce: #615850;
+  --filet: #e6dcd2;
+  --orange: #ea6a1e;
+  --orange-texte: #b24a0c;
+  --sur-orange: #17120e;
+  --taupe: #483c32;
+  --sable: #f2ece4;
+  --noir: #0e0c0a;
+  --font-display: Archivo, "Helvetica Neue", Arial, sans-serif;
+  --font-texte: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --app: 250 247 243;
   --surface: 255 255 255;
-  --surface-2: 248 250 252;
-  --fg: 15 23 42;
-  --muted: 100 116 139;
-  --line: 226 232 240;
+  --surface-2: 242 236 228;
+  --fg: 23 18 14;
+  --muted: 97 88 80;
+  --line: 230 220 210;
   color-scheme: light;
 }
 
+/* Thème sombre de la charte (fond noir #0E0C0A, orange clair #F0823F) */
 .dark {
-  --app: 8 12 24;
-  --surface: 17 24 39;
-  --surface-2: 30 41 59;
-  --fg: 241 245 249;
-  --muted: 148 163 184;
-  --line: 39 51 73;
+  --fond: #0e0c0a;
+  --fond-alt: #1b1713;
+  --encre: #ffffff;
+  --encre-douce: #b3a79a;
+  --filet: #3a3129;
+  --orange: #f0823f;
+  --orange-texte: #f4a26c;
+
+  --app: 14 12 10;
+  --surface: 27 23 19;
+  --surface-2: 38 32 27;
+  --fg: 255 255 255;
+  --muted: 179 167 154;
+  --line: 58 49 41;
   color-scheme: dark;
 }
 
@@ -29,11 +54,28 @@ html, body, #root {
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-texte);
   -webkit-font-smoothing: antialiased;
   background-color: rgb(var(--app));
   color: rgb(var(--fg));
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Titres en Archivo, approche légèrement négative (jamais en 900 orange : réservé au « AI »). */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+/* Styles de texte de la charte */
+.titre-1 { font: 800 48px/1.05 var(--font-display); letter-spacing: -0.02em; }
+.titre-2 { font: 700 32px/1.15 var(--font-display); letter-spacing: -0.015em; }
+.titre-3 { font: 700 22px/1.3 var(--font-display); letter-spacing: -0.01em; }
+.etiquette {
+  font: 500 12px/1.4 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--orange-texte);
 }
 
 /* ── Composants — CSS pur pour compatibilité PostCSS maximale ── */
@@ -41,21 +83,20 @@ body {
 .input {
   display: block;
   width: 100%;
-  border-radius: 0.5rem;
+  border-radius: 0;
   border: 1px solid rgb(var(--line));
   background-color: rgb(var(--surface));
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
   color: rgb(var(--fg));
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .input::placeholder { color: rgb(var(--muted) / 0.7); }
 .input:focus {
-  border-color: #f97316;
-  box-shadow: 0 0 0 3px rgb(249 115 22 / 0.3);
+  border-color: var(--orange);
+  box-shadow: 0 0 0 1px var(--orange);
 }
 .input:disabled { cursor: not-allowed; opacity: 0.6; }
 
@@ -73,7 +114,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: 0;
   padding: 0.5rem 0.875rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -86,20 +127,20 @@ body {
 
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  border-radius: 0; padding: 0.5rem 0.875rem;
   font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none;
   background-color: #ea6a1e;
-  color: #ffffff;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  color: #17120e;
+  font-weight: 600;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-primary:hover { background-color: #f97316; }
-.btn-primary:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(249 115 22 / 0.4); }
+.btn-primary:hover { background-color: #f0823f; }
+.btn-primary:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px #17120e; }
 .btn-primary:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  border-radius: 0; padding: 0.5rem 0.875rem;
   font-size: 0.875rem; font-weight: 500; cursor: pointer;
   border: 1px solid rgb(var(--line));
   background-color: rgb(var(--surface));
@@ -107,24 +148,24 @@ body {
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 .btn-secondary:hover { background-color: rgb(var(--surface-2)); }
-.btn-secondary:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(249 115 22 / 0.3); }
+.btn-secondary:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 3px var(--orange); }
 .btn-secondary:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-danger {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  border-radius: 0; padding: 0.5rem 0.875rem;
   font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none;
-  background-color: #dc2626;
+  background-color: #b42318;
   color: #ffffff;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-danger:hover { background-color: #ef4444; }
+.btn-danger:hover { background-color: #912018; }
 .btn-danger:focus { box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(239 68 68 / 0.4); }
 .btn-danger:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-ghost {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-  border-radius: 0.5rem; padding: 0.5rem 0.875rem;
+  border-radius: 0; padding: 0.5rem 0.875rem;
   font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none;
   background-color: transparent;
   color: rgb(var(--muted));
@@ -134,10 +175,9 @@ body {
 .btn-ghost:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .card {
-  border-radius: 0.75rem;
+  border-radius: 0;
   border: 1px solid rgb(var(--line));
   background-color: rgb(var(--surface));
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06);
 }
 
 /* Helpers sémantiques */
@@ -148,16 +188,9 @@ body {
 .text-muted { color: rgb(var(--muted)); }
 .border-line { border-color: rgb(var(--line)); }
 
-/* Dégradé de marque */
-.brand-gradient {
-  background-image: linear-gradient(135deg, #f7a823 0%, #ea3c2a 100%);
-}
-.brand-text-gradient {
-  background-image: linear-gradient(135deg, #f7a823 0%, #ea3c2a 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+/* Anciennes classes « dégradé de marque » : la charte n'a plus de dégradé, l'orange est un aplat. */
+.brand-gradient { background-color: var(--orange); }
+.brand-text-gradient { color: var(--orange); }
 
 /* Scrollbars discrètes */
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
@@ -179,36 +212,36 @@ body {
 .scroll-x::-webkit-scrollbar-thumb:hover { background: rgb(var(--muted)); }
 
 /* ── Blog article : HTML généré par IA ── */
-.blog-content { color: #1e293b; line-height: 1.75; font-size: 1.125rem; }
-.blog-content p { color: #334155; margin-bottom: 1.5rem; line-height: 1.8; }
+.blog-content { color: #17120e; line-height: 1.75; font-size: 1.125rem; }
+.blog-content p { color: #2e261f; margin-bottom: 1.5rem; line-height: 1.8; }
 .blog-content h1, .blog-content h2, .blog-content h3,
 .blog-content h4, .blog-content h5, .blog-content h6 {
-  color: #0f172a; font-weight: 700; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3;
+  color: #17120e; font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3;
 }
 .blog-content h2 { font-size: 1.75rem; }
 .blog-content h3 { font-size: 1.375rem; }
 .blog-content h4 { font-size: 1.125rem; }
-.blog-content strong, .blog-content b { color: #0f172a; font-weight: 700; }
-.blog-content em, .blog-content i { color: #334155; }
-.blog-content a { color: #ea580c; text-decoration: underline; }
-.blog-content a:hover { color: #c2410c; }
-.blog-content ul, .blog-content ol { color: #334155; padding-left: 1.5rem; margin-bottom: 1.5rem; }
+.blog-content strong, .blog-content b { color: #17120e; font-weight: 700; }
+.blog-content em, .blog-content i { color: #2e261f; }
+.blog-content a { color: #b24a0c; text-decoration: underline; }
+.blog-content a:hover { color: #923c0a; }
+.blog-content ul, .blog-content ol { color: #2e261f; padding-left: 1.5rem; margin-bottom: 1.5rem; }
 .blog-content li { margin-bottom: 0.5rem; line-height: 1.7; }
 .blog-content blockquote {
-  border-left: 4px solid #f97316; padding: 0.75rem 1.25rem;
-  background: #fff7ed; color: #9a3412; font-style: italic; margin: 1.5rem 0;
-  border-radius: 0 0.5rem 0.5rem 0;
+  border-left: 4px solid #ea6a1e; padding: 0.75rem 1.25rem;
+  background: #f2ece4; color: #2e261f; font-style: italic; margin: 1.5rem 0;
+  border-radius: 0;
 }
 .blog-content code {
-  background: #f1f5f9; color: #0f172a; padding: 0.15rem 0.4rem;
-  border-radius: 0.25rem; font-size: 0.875em;
+  background: #f2ece4; color: #17120e; padding: 0.15rem 0.4rem;
+  border-radius: 0; font-size: 0.875em;
 }
-.blog-content pre { background: #1e293b; color: #e2e8f0; padding: 1.25rem; border-radius: 0.75rem; overflow-x: auto; margin-bottom: 1.5rem; }
+.blog-content pre { background: #17120e; color: #f2ece4; padding: 1.25rem; border-radius: 0; overflow-x: auto; margin-bottom: 1.5rem; }
 .blog-content pre code { background: transparent; color: inherit; padding: 0; }
-.blog-content hr { border-color: #e2e8f0; margin: 2.5rem 0; }
-.blog-content table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; color: #334155; }
-.blog-content th { background: #f8fafc; color: #0f172a; font-weight: 600; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; text-align: left; }
-.blog-content td { padding: 0.75rem 1rem; border: 1px solid #e2e8f0; }
+.blog-content hr { border-color: #e6dcd2; margin: 2.5rem 0; }
+.blog-content table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; color: #2e261f; }
+.blog-content th { background: #f2ece4; color: #17120e; font-weight: 600; padding: 0.75rem 1rem; border: 1px solid #e6dcd2; text-align: left; }
+.blog-content td { padding: 0.75rem 1rem; border: 1px solid #e6dcd2; }
 
 /* Slide-over animation */
 @keyframes slide-in-right {
@@ -224,20 +257,13 @@ body {
   width: 88px;
   height: 88px;
   border-radius: 9999px;
-  background:
-    radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.9), transparent 38%),
-    radial-gradient(circle at 50% 50%, #fb9a3c, #ea6a1e 55%, #7c2d12 100%);
-  box-shadow: 0 0 40px 6px rgb(249 115 22 / 0.35), inset 0 0 18px rgb(255 255 255 / 0.25);
+  background: var(--orange);
   animation: orbe-respire 4s ease-in-out infinite;
 }
-.mode-avance-fond {
-  background:
-    radial-gradient(ellipse 60% 40% at 50% 0%, rgb(249 115 22 / 0.10), transparent 70%),
-    rgb(var(--app));
-}
+.mode-avance-fond { background: rgb(var(--app)); }
 @keyframes orbe-respire {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 40px 6px rgb(249 115 22 / 0.30), inset 0 0 18px rgb(255 255 255 / 0.25); }
-  50% { transform: scale(1.05); box-shadow: 0 0 56px 12px rgb(249 115 22 / 0.45), inset 0 0 18px rgb(255 255 255 / 0.25); }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 @media (prefers-reduced-motion: reduce) {
   .orbe-ia { animation: none; }

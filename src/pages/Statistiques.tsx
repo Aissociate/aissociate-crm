@@ -11,7 +11,7 @@ import ConseillerActivite from '@/components/ConseillerActivite';
 import type { Dossier, Opportunite, Financeur, DossierStatut } from '@/lib/database.types';
 
 // Palette de graphiques : marque en tête, puis tons sémantiques (cf. Badge), nuances de marque, neutre.
-const COLORS = ['#ea6a1e', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#fb9a3c', '#fdba74', '#64748b'];
+const COLORS = ['#ea6a1e', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#f0823f', '#fdba74', '#7a6f64'];
 const GRID = 'rgb(148 163 184 / 0.2)';
 
 export default function Statistiques() {
@@ -46,7 +46,7 @@ export default function Statistiques() {
     <div>
       <PageHeader
         title="Statistiques & reporting"
-        subtitle={isManager ? 'Indicateurs collectifs de l\'activité (4.8)' : 'Vos indicateurs individuels (4.8)'}
+        subtitle={isManager ? 'Indicateurs collectifs de l\'activité' : 'Vos indicateurs individuels (4.8)'}
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

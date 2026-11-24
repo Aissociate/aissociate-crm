@@ -25,16 +25,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { transcrire } from "../_shared/stt.ts";
 import { partiesLocales } from "../_shared/heure_locale.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 const PROMPT_ANALYSE = `Tu es l'assistant d'un organisme de formation. On te donne la transcription d'un entretien téléphonique ou en présentiel entre un conseiller et un prospect ou un stagiaire.
 

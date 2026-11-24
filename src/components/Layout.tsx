@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FolderKanban, Mail, Send, UsersRound, CalendarDays, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Wallet, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, TrendingUp, GraduationCap, FolderKanban, Mail, Send, UsersRound, CalendarDays, ListTodo, Settings, ShieldCheck, BadgeCheck, LogOut, Menu, X, Bug, Bot, ReceiptText, Newspaper, Mic, Search, FileSpreadsheet, Wallet, Sparkles, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/lib/constants';
 import { initials, cn, isConseillerInactif } from '@/lib/utils';
@@ -20,30 +20,23 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const SECTIONS: { title: string; items: NavItem[] }[] = [
+// Menu en deux niveaux. Le premier tient en neuf entrées : ce qu'un conseiller
+// ouvre chaque jour pour traiter ses leads et monter ses dossiers. Tout le reste
+// (gestion, marketing, réglages) est rangé sous « Plus », replié par défaut.
+const PRINCIPAL: { title: string; items: NavItem[] }[] = [
   {
-    title: 'Pilotage',
+    title: 'Au quotidien',
     items: [
       { to: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-      { to: '/assistant', label: 'Assistant IA', icon: Bot },
       { to: '/actions', label: 'Actions à faire', icon: ListTodo },
-    ],
-  },
-  {
-    title: 'CRM',
-    items: [
       { to: '/contacts', label: 'Contacts', icon: Users },
-      { to: '/entreprises', label: 'Entreprises', icon: Building2 },
-      { to: '/pipeline', label: 'Pipeline commercial', icon: TrendingUp },
+      { to: '/pipeline', label: 'Pipeline', icon: TrendingUp },
       { to: '/messagerie', label: 'Messagerie', icon: Mail },
-      { to: '/mobile', label: 'Capture mobile', icon: Mic },
-      { to: '/conseillers', label: 'Conseillers', icon: UsersRound, managerOnly: true },
     ],
   },
   {
-    title: 'Formation',
+    title: 'Dossiers',
     items: [
-      { to: '/catalogue', label: 'Catalogue', icon: GraduationCap },
       { to: '/devis', label: 'Devis', icon: ReceiptText },
       // Dossier client : parcours (devis, montage, formation, clôture), documents
       // et échanges. Plans de formation, Positionnement et Évaluations n'ont pas
@@ -52,34 +45,29 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       // Émargement et Formateurs s'ouvrent depuis le Calendrier.
       { to: '/calendrier', label: 'Calendrier', icon: CalendarDays },
       // L'Espace documentaire est un onglet de la conformité Qualiopi.
-      { to: '/qualiopi', label: 'Conformité Qualiopi', icon: BadgeCheck },
-    ],
-  },
-  {
-    title: 'Gestion',
-    items: [
-      { to: '/tresorerie', label: 'Trésorerie', icon: Wallet, managerOnly: true },
-      { to: '/bpf', label: 'BPF', icon: FileSpreadsheet, managerOnly: true },
-    ],
-  },
-  {
-    title: 'Marketing',
-    items: [
-      { to: '/blog-admin', label: 'Blog', icon: Newspaper, managerOnly: true },
-      { to: '/newsletter', label: 'Newsletter', icon: Send, managerOnly: true },
-      // Studio IA : espaces agentiques des entreprises clientes (module src/studio).
-      { to: '/studio-admin', label: 'Studio IA clients', icon: Sparkles, managerOnly: true },
-    ],
-  },
-  {
-    title: 'Administration',
-    items: [
-      { to: '/administration', label: 'Administration', icon: ShieldCheck, adminOnly: true },
-      { to: '/parametres', label: 'Paramètres', icon: Settings, adminOnly: true },
-      { to: '/tickets', label: 'Développement', icon: Bug },
+      { to: '/qualiopi', label: 'Qualiopi', icon: BadgeCheck },
     ],
   },
 ];
+
+const PLUS: NavItem[] = [
+  { to: '/assistant', label: 'Assistant IA', icon: Bot },
+  { to: '/entreprises', label: 'Entreprises', icon: Building2 },
+  { to: '/catalogue', label: 'Catalogue', icon: GraduationCap },
+  { to: '/mobile', label: 'Capture mobile', icon: Mic },
+  { to: '/conseillers', label: 'Conseillers', icon: UsersRound, managerOnly: true },
+  { to: '/tresorerie', label: 'Trésorerie', icon: Wallet, managerOnly: true },
+  { to: '/bpf', label: 'BPF', icon: FileSpreadsheet, managerOnly: true },
+  { to: '/blog-admin', label: 'Blog', icon: Newspaper, managerOnly: true },
+  { to: '/newsletter', label: 'Newsletter', icon: Send, managerOnly: true },
+  // Studio IA : espaces agentiques des entreprises clientes (module src/studio).
+  { to: '/studio-admin', label: 'Studio IA clients', icon: Sparkles, managerOnly: true },
+  { to: '/administration', label: 'Administration', icon: ShieldCheck, adminOnly: true },
+  { to: '/parametres', label: 'Paramètres', icon: Settings, adminOnly: true },
+  { to: '/tickets', label: 'Développement', icon: Bug },
+];
+
+const CLE_PLUS = 'menu-plus-ouvert';
 
 export default function Layout() {
   const { profile, role, isAdmin, isManager, signOut } = useAuth();
@@ -104,9 +92,23 @@ export default function Layout() {
     else if (location.pathname === '/commande') navigate('/dashboard');
   };
   const rail = modeAvance;
-  const sections = rail
-    ? [{ title: 'Mode avancé', items: [{ to: '/commande', label: 'Poste de commande', icon: Sparkles }] as NavItem[] }, ...SECTIONS]
-    : SECTIONS;
+
+  // « Plus » : replié par défaut, choix gardé dans le navigateur. Il s'ouvre de
+  // lui-même quand la page affichée s'y trouve, pour qu'on voie où l'on est.
+  const dansPlus = PLUS.some((i) => location.pathname.startsWith(i.to));
+  const [plusOuvert, setPlusOuvert] = useState(() => {
+    try { return localStorage.getItem(CLE_PLUS) === '1'; } catch { return false; }
+  });
+  const basculerPlus = () => setPlusOuvert((o) => {
+    try { localStorage.setItem(CLE_PLUS, o ? '0' : '1'); } catch { /* préférence d'affichage seulement */ }
+    return !o;
+  });
+  const plusVisible = plusOuvert || dansPlus;
+
+  const sections = [
+    ...(rail ? [{ title: 'Mode avancé', items: [{ to: '/commande', label: 'Poste de commande', icon: Sparkles }] as NavItem[] }] : []),
+    ...PRINCIPAL,
+  ];
   const pleinePage = location.pathname === '/commande';
 
   // Recherche globale : Ctrl+K / ⌘K ou clic sur le bouton de la sidebar.
@@ -150,6 +152,55 @@ export default function Layout() {
     const t = setInterval(load, 60000);
     return () => { on = false; clearInterval(t); void supabase.removeChannel(channel); };
   }, [location.pathname]);
+
+  // Pastille « actions en retard ou dues aujourd'hui » (RLS : chacun ne compte
+  // que les siennes). C'est le premier signal que regarde un conseiller.
+  const [actionsDues, setActionsDues] = useState(0);
+  useEffect(() => {
+    let on = true;
+    const d = new Date();
+    const auj = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    supabase.from('contact_actions')
+      .select('id', { count: 'exact', head: true })
+      .eq('faite', false).lte('date_action', auj)
+      .then(({ count }) => { if (on) setActionsDues(count ?? 0); });
+    return () => { on = false; };
+  }, [location.pathname]);
+
+  const pastille = (to: string): { n: number; titre: string } | null => {
+    if (to === '/messagerie' && unreadMails > 0) return { n: unreadMails, titre: `${unreadMails} mail(s) entrant(s) non lu(s)` };
+    if (to === '/actions' && actionsDues > 0) return { n: actionsDues, titre: `${actionsDues} action(s) en retard ou à faire aujourd'hui` };
+    return null;
+  };
+
+  const lien = (item: NavItem) => {
+    const p = pastille(item.to);
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        onClick={() => setOpen(false)}
+        title={rail ? item.label : undefined}
+        className={({ isActive }) =>
+          cn(
+            'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+            rail && 'lg:justify-center lg:px-0',
+            isActive
+              ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+              : 'text-muted hover:bg-surface-2 hover:text-fg',
+          )
+        }
+      >
+        <item.icon className="h-5 w-5 shrink-0" />
+        <span className={cn('flex-1', rail && 'lg:hidden')}>{item.label}</span>
+        {p && (
+          <span className={cn('inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white', item.to === '/actions' ? 'bg-red-500' : 'bg-brand-500', rail && 'lg:absolute lg:right-0.5 lg:top-0.5 lg:min-w-[16px] lg:px-1 lg:text-[10px]')} title={p.titre}>
+            {p.n > 99 ? '99+' : p.n}
+          </span>
+        )}
+      </NavLink>
+    );
+  };
 
   const visible = (item: NavItem) =>
     (!item.managerOnly || isManager) && (!item.adminOnly || isAdmin);
@@ -198,37 +249,25 @@ export default function Layout() {
                 <p className={cn('px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted/70', rail && 'lg:hidden')}>
                   {section.title}
                 </p>
-                <div className="space-y-0.5">
-                  {items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.to === '/'}
-                      onClick={() => setOpen(false)}
-                      title={rail ? item.label : undefined}
-                      className={({ isActive }) =>
-                        cn(
-                          'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
-                          rail && 'lg:justify-center lg:px-0',
-                          isActive
-                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
-                            : 'text-muted hover:bg-surface-2 hover:text-fg',
-                        )
-                      }
-                    >
-                      <item.icon className="h-5 w-5 shrink-0" />
-                      <span className={cn('flex-1', rail && 'lg:hidden')}>{item.label}</span>
-                      {item.to === '/messagerie' && unreadMails > 0 && (
-                        <span className={cn('inline-flex min-w-[18px] items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white', rail && 'lg:absolute lg:right-0.5 lg:top-0.5 lg:min-w-[16px] lg:px-1 lg:text-[10px]')} title={`${unreadMails} mail(s) entrant(s) non lu(s)`}>
-                          {unreadMails > 99 ? '99+' : unreadMails}
-                        </span>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
+                <div className="space-y-0.5">{items.map(lien)}</div>
               </div>
             );
           })}
+
+          {/* Tout ce qui ne sert pas chaque jour */}
+          <div>
+            <button
+              onClick={basculerPlus}
+              aria-expanded={plusVisible}
+              title={rail ? (plusVisible ? 'Replier « Plus »' : 'Plus') : undefined}
+              className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:bg-surface-2 hover:text-fg', rail && 'lg:justify-center lg:px-0')}
+            >
+              <MoreHorizontal className="h-5 w-5 shrink-0" />
+              <span className={cn('flex-1 text-left', rail && 'lg:hidden')}>Plus</span>
+              <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', plusVisible && 'rotate-180', rail && 'lg:hidden')} />
+            </button>
+            {plusVisible && <div className="mt-0.5 space-y-0.5">{PLUS.filter(visible).map(lien)}</div>}
+          </div>
         </nav>
 
         <div className={cn('border-t border-line p-3', rail && 'lg:px-2')}>

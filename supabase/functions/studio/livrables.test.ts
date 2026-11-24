@@ -108,7 +108,10 @@ describe('aucun autre chemin vers une action externe', () => {
 
   it('aucun module n\'écrit le statut « publié » hors de livrables.ts', () => {
     const ecrivains = sources.filter((f) => /statut:\s*["']publie["']/.test(lire(f)));
-    expect(ecrivains).toEqual(['livrables.ts']);
+    // harnais.ts publie une version de harnais métier (studio_packs_metier), pas un livrable :
+    // il ne touche jamais studio_livrables.
+    expect(ecrivains).toEqual(['harnais.ts', 'livrables.ts']);
+    expect(lire('harnais.ts')).not.toMatch(/studio_livrables/);
   });
 });
 

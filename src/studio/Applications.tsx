@@ -49,7 +49,7 @@ export function useApplications() {
     const p = new URLSearchParams(window.location.search);
     const m = messageRetour(p);
     if (m) { setRetour(m); window.history.replaceState(null, '', window.location.pathname); }
-    charger();
+    void charger();
   }, [charger]);
 
   const connecter = async (app: string, reconnecter?: string) => {

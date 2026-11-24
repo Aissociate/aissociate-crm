@@ -24,7 +24,6 @@ const AIDE: Record<Quoi, string> = {
 // eslint-disable-next-line react-refresh/only-export-components
 export const fournisseurDe = (q: Quoi): Fournisseur => (q === 'email' ? 'imap' : q);
 /** Action d'un compte connecté : icône et libellé visible (une icône seule ne se devine pas). */
-// eslint-disable-next-line react-refresh/only-export-components
 export const CL_ACTION = 'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50';
 
 /** Message lisible au retour de la page de connexion (paramètres ajoutés par Zernio). */
@@ -76,7 +75,7 @@ export function useMessageries() {
     const p = new URLSearchParams(window.location.search);
     const m = messageRetour(p);
     if (m) { setRetour(m); window.history.replaceState(null, '', window.location.pathname); }
-    charger();
+    void charger();
   }, [charger]);
 
   const aller = async (cle: string, action: string, corps: Record<string, unknown>) => {

@@ -4,7 +4,7 @@ import { Plus, Pencil, Trash2, Building2, Search } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Spinner, EmptyState } from '@/components/ui';
 import type { Entreprise } from '@/lib/database.types';
 
 const STATUTS_JURIDIQUES = ['', 'EI', 'EURL', 'SARL', 'SASU', 'SAS', 'SA', 'SCI', 'Association', 'Autre'];
@@ -50,14 +50,14 @@ export default function Entreprises() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const remove = async (e: Entreprise) => {
     if (!confirm(`Supprimer ${e.raison_sociale} ?`)) return;
     const { error } = await supabase.from('entreprises').delete().eq('id', e.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   const filtered = data.filter((e) =>

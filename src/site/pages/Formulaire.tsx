@@ -95,7 +95,7 @@ const Formulaire = () => {
           title="Demande envoyée - Aissociate"
           description="Votre demande a été envoyée avec succès"
         />
-        <div className="min-h-screen bg-[#f6f6f4] flex items-center justify-center px-4 py-12">
+        <div className="min-h-screen bg-[#F2ECE4] flex items-center justify-center px-4 py-12">
           <div className="max-w-md w-full bg-white rounded-2xl shadow-sm p-8 text-center">
             <div className="w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-12 h-12 text-white" />
@@ -108,7 +108,7 @@ const Formulaire = () => {
             </p>
             <a
               href="/"
-              className="inline-block bg-orange-500 text-white px-8 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-all"
+              className="inline-block bg-orange-500 text-neutral-950 px-8 py-3 rounded-xl font-semibold hover:bg-orange-400 transition-all"
             >
               Retour à l'accueil
             </a>
@@ -124,7 +124,7 @@ const Formulaire = () => {
         title="Demande de contact - Aissociate"
         description="Contactez-nous pour vos besoins en formation IA, assistance ou développement"
       />
-      <div className="min-h-screen bg-[#f6f6f4] py-12 px-4">
+      <div className="min-h-screen bg-[#F2ECE4] py-12 px-4">
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-2xl shadow-sm p-8 md:p-12">
             <div className="text-center mb-8">
@@ -296,7 +296,7 @@ const Formulaire = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-orange-500 text-white px-8 py-4 rounded-xl font-semibold hover:bg-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-sm"
+                className="w-full bg-orange-500 text-neutral-950 px-8 py-4 rounded-xl font-semibold hover:bg-orange-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-sm"
               >
                 {loading ? (
                   <>

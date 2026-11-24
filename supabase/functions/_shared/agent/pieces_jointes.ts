@@ -129,7 +129,7 @@ async function resoudre(db: SupabaseClient, cles: string[]): Promise<{ ok: Resol
   await Promise.all([...parSource].map(async ([src, ids]) => {
     const s = SOURCES[src];
     const { data } = await db.from(s.table).select(s.select).in("id", ids);
-    for (const r of (data ?? []) as Ligne[]) if (r.fichier_url) trouvees.set(`${src}:${r.id}`, enPiece(src, r));
+    for (const r of (data ?? []) as unknown as Ligne[]) if (r.fichier_url) trouvees.set(`${src}:${r.id}`, enPiece(src, r));
   }));
   return {
     ok: uniques.map((k) => trouvees.get(k)).filter((x): x is Resolue => !!x),

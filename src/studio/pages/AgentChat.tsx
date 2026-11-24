@@ -55,7 +55,7 @@ export default function AgentChat() {
     catch (e) { gerer(e); }
   }, [agentId, gerer]);
 
-  useEffect(() => { chargerListe(); }, [chargerListe]);
+  useEffect(() => { void chargerListe(); }, [chargerListe]);
 
   // Ouverture d'une conversation existante (?c=…).
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function AgentChat() {
         setAttente(attendre);
         if (attendre) minuteur = window.setTimeout(charger, 3000);
       }).catch((e) => { if (actif) { setAttente(false); setErreur(gerer(e)); } });
-    charger();
+    void charger();
     return () => { actif = false; window.clearTimeout(minuteur); setAttente(false); };
   }, [params, gerer]);
 
@@ -88,7 +88,7 @@ export default function AgentChat() {
       setDocuments(r.livrables.filter((l) => l.format === 'html' && l.conversation_id === conv));
     } catch { /* liste facultative */ }
   }, []);
-  useEffect(() => { chargerDocuments(convId); if (!convId) setDocOuvert(null); }, [convId, chargerDocuments]);
+  useEffect(() => { void chargerDocuments(convId); if (!convId) setDocOuvert(null); }, [convId, chargerDocuments]);
 
   // Clic sur « L-xxxxxxxx » dans une réponse : le document s'ouvre dans le panneau de droite,
   // même s'il vient d'une autre conversation.
@@ -134,8 +134,8 @@ export default function AgentChat() {
         });
         setMessages((m) => [...m.slice(0, -1), { role: 'assistant', id: r.message_id ?? undefined, content: r.content, media: r.media }]);
         setParams({ c: r.conversation_id }, { replace: true });
-        chargerListe();
-        rafraichir();
+        void chargerListe();
+        void rafraichir();
         return;
       }
       const fin = await discuter(
@@ -155,7 +155,7 @@ export default function AgentChat() {
             return [...m.slice(0, -1), { ...der, outils: [...(der.outils ?? []), l] }];
           }),
           // Document créé ou modifié par l'agent : il s'ouvre aussitôt à droite.
-          onDocument: (d) => { chargerDocuments(convEnCours.current).then(() => setDocOuvert(d.id)); },
+          onDocument: (d) => { void chargerDocuments(convEnCours.current).then(() => setDocOuvert(d.id)); },
           // Visuel ou vidéo lancé par l'agent : il apparaît tout de suite, « en cours de création ».
           onMedia: (md) => setMessages((m) => {
             const der = m[m.length - 1];
@@ -174,8 +174,8 @@ export default function AgentChat() {
         // Mise à jour de l'URL sans recharger les messages déjà affichés.
         window.history.replaceState(null, '', `/studio/assistants/${agent.id}?c=${fin.conversation_id}`);
       }
-      chargerListe();
-      rafraichir();
+      void chargerListe();
+      void rafraichir();
     } catch (e) {
       if (ctrl.signal.aborted) return;
       setErreur(gerer(e));
@@ -211,15 +211,17 @@ export default function AgentChat() {
     if (msg && !initial.current && !params.get('c')) {
       initial.current = true;
       navigate(location.pathname, { replace: true, state: null });
-      envoyer(msg);
+      void envoyer(msg);
     }
   }, [location, params, navigate, envoyer]);
+
+  // Déclaré avant le retour anticipé : un hook ne doit jamais être appelé sous condition.
+  const [envoiConsigne, setEnvoiConsigne] = useState(false);
 
   if (!agent) return <Navigate to="/studio/equipe" replace />;
 
   // Pendant que l'agent travaille, le champ sert à ajouter une consigne qui oriente sa réflexion.
   const travaille = enCours || attente;
-  const [envoiConsigne, setEnvoiConsigne] = useState(false);
   const consigner = async (texte: string) => {
     const conv = convEnCours.current ?? convId;
     if (!texte.trim() || !conv || envoiConsigne) return;
@@ -235,7 +237,7 @@ export default function AgentChat() {
       });
     } catch (e) { setErreur(gerer(e)); } finally { setEnvoiConsigne(false); }
   };
-  const soumettre = (e: FormEvent) => { e.preventDefault(); if (travaille) consigner(saisie); else envoyer(saisie); };
+  const soumettre = (e: FormEvent) => { e.preventDefault(); if (travaille) void consigner(saisie); else void envoyer(saisie); };
   const nouvelle = () => { setParams({}); setMessages([]); setConvId(null); };
 
   const majMessage = async (i: number, action: 'retour' | 'epingler', valeur: number | boolean) => {
@@ -245,7 +247,7 @@ export default function AgentChat() {
     setMessages((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
     try {
       await appel(action, action === 'retour' ? { message_id: m.id, valeur } : { message_id: m.id, epingle: valeur });
-      if (action === 'retour') rafraichir();
+      if (action === 'retour') void rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -254,7 +256,7 @@ export default function AgentChat() {
     try {
       await appel('livrable_soumettre', { message_id: messageId });
       setSoumis((s) => ({ ...s, [messageId]: true }));
-      rafraichir();
+      void rafraichir();
     } catch (e) { setErreur(gerer(e)); }
   };
 
@@ -262,7 +264,7 @@ export default function AgentChat() {
     if (!confirm('Supprimer cette conversation ?')) return;
     try { await appel('conversation_delete', { conversation_id: id }); } catch (e) { setErreur(gerer(e)); }
     if (id === convId) nouvelle();
-    chargerListe();
+    void chargerListe();
   };
 
   const copier = async (texte: string, cle: string) => {
@@ -452,10 +454,10 @@ export default function AgentChat() {
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 disabled:opacity-40"><Paperclip className="h-4 w-4" /></button>
             <textarea
               value={saisie} onChange={(e) => setSaisie(e.target.value)} rows={2}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (travaille) consigner(saisie); else envoyer(saisie); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (travaille) void consigner(saisie); else void envoyer(saisie); } }}
               onPaste={(e) => {
                 const images = [...e.clipboardData.files].filter(estImage);
-                if (images.length) { e.preventDefault(); joindre(images); }
+                if (images.length) { e.preventDefault(); void joindre(images); }
               }}
               placeholder={travaille ? `Ajoutez une consigne pour orienter le travail de ${agent.prenom}…` : `Confiez une mission à ${agent.prenom}…`}
               aria-label={travaille ? 'Consigne pour orienter le travail en cours' : 'Votre demande'}
@@ -465,7 +467,7 @@ export default function AgentChat() {
               <>
                 {saisie.trim() && (
                   <button type="submit" disabled={envoiConsigne} title="Envoyer la consigne : elle sera prise en compte à l'étape suivante"
-                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-orange-500 px-3 text-xs font-semibold text-white disabled:bg-neutral-300">
+                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-orange-500 px-3 text-xs font-semibold text-neutral-950 disabled:bg-neutral-300">
                     {envoiConsigne ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CornerDownRight className="h-3.5 w-3.5" aria-hidden />} Consigne
                   </button>
                 )}
@@ -476,7 +478,7 @@ export default function AgentChat() {
               </>
             ) : (
               <button type="submit" disabled={(!saisie.trim() && !pieces.length) || lecture || attente} aria-label="Envoyer"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-neutral-950 disabled:bg-neutral-300"><ArrowUp className="h-4 w-4" /></button>
             )}
           </div>
         </form>

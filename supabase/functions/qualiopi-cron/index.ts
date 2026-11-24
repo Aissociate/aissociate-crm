@@ -19,17 +19,11 @@
 // passage est journalisé dans `job_runs` (« Santé des jobs »).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { journaliserEmail } from "../_shared/journal_email.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 const DAY = 86400000;
 const DELAI_FROID_JOURS = 30; // même valeur que src/lib/evaluation.ts
 const LIBELLES: Record<string, string> = {
@@ -143,11 +137,10 @@ Deno.serve(async (req: Request) => {
         const envoyeLe = new Date().toISOString();
         await sb.from("evaluation_liens").update({ statut: "envoye", sent_at: envoyeLe }).eq("id", l.id);
         // Trace en Messagerie, comme un envoi depuis le CRM.
-        await sb.from("emails").insert({
-          destinataires: [l.destinataire_email], copie: [], sujet: l.libelle, corps: texte,
-          statut: "envoye", canal: "email", direction: "sortant",
-          contact_id: l.contact_id, dossier_id: l.dossier_id, sent_at: envoyeLe, attachments: [],
-        });
+        await journaliserEmail(sb, {
+          destinataires: [l.destinataire_email], sujet: l.libelle, corps: texte,
+          contact_id: l.contact_id, dossier_id: l.dossier_id, sent_at: envoyeLe,
+        }, { origine: "automatique", libelle: "Questionnaires Qualiopi (automatique)" });
         envoyes++;
       } catch (e) {
         erreurs.push(e instanceof Error ? e.message : String(e));

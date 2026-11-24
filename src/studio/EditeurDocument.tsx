@@ -17,15 +17,15 @@ const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').r
 
 const BASE = `<style>
 html { background: #f5f5f4; }
-body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 15px; line-height: 1.55; margin: 0; }
+body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #3a3129; font-size: 15px; line-height: 1.55; margin: 0; }
 .feuille { background: #fff; max-width: 820px; margin: 24px auto; padding: 32px 48px 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); min-height: 80vh; display: flex; flex-direction: column; }
-.papier { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 20px; user-select: none; }
+.papier { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #1b1713; padding-bottom: 10px; margin-bottom: 20px; user-select: none; }
 .papier img { max-height: 60px; max-width: 200px; object-fit: contain; }
-.papier .coord { text-align: right; font-size: 12px; color: #4b5563; } .papier .nom { font-size: 14px; font-weight: 700; color: #111827; }
+.papier .coord { text-align: right; font-size: 12px; color: #615850; } .papier .nom { font-size: 14px; font-weight: 700; color: #1b1713; }
 #doc { flex: 1; outline: none; min-height: 40vh; }
-.pied { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 8px; text-align: center; font-size: 11px; color: #9ca3af; user-select: none; }
+.pied { margin-top: 24px; border-top: 1px solid #e6dcd2; padding-top: 8px; text-align: center; font-size: 11px; color: #a89c90; user-select: none; }
 img { max-width: 100%; height: auto; }
-table { border-collapse: collapse; max-width: 100%; } th, td { border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: top; }
+table { border-collapse: collapse; max-width: 100%; } th, td { border: 1px solid #d9cec3; padding: 4px 8px; vertical-align: top; }
 </style>`;
 
 export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSaved, gerer }: {
@@ -42,7 +42,7 @@ export default function EditeurDocument({ doc, agent, nomEspace, onClose, onSave
   // Papier à en-tête de « Mon entreprise », affiché autour du contenu (non modifiable ici).
   const [papier, setPapier] = useState<{ haut: string; bas: string } | null>(null);
   useEffect(() => {
-    chargerEntete().then((e) => {
+    void chargerEntete().then((e) => {
       const l = lignesEntete(e.entete, nomEspace);
       setPapier({
         haut: `<header class="papier" contenteditable="false"><div>${e.logo_url ? `<img src="${echapper(e.logo_url)}" alt="">` : ''}</div>`

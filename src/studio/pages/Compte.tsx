@@ -43,7 +43,7 @@ export default function Compte({ premiereConnexion = false }: { premiereConnexio
 
   if (premiereConnexion) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-4 font-sans">
+      <div className="flex min-h-screen items-center justify-center bg-[#F2ECE4] px-4 font-sans">
         <Carte className="w-full max-w-md p-8">
           <h1 className="text-xl font-semibold">Bienvenue {me.user.prenom ?? ''} !</h1>
           <p className="mb-6 mt-1 text-sm text-neutral-500">Choisissez votre mot de passe personnel pour accéder à votre Studio.</p>

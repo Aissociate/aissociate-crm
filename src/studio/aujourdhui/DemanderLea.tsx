@@ -68,25 +68,25 @@ export default function DemanderLea() {
   return (
     <div>
       <form onSubmit={soumettre} data-tuto="mission"
-        className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-[18px] border-[1.5px] border-[#141414] bg-white py-2 pl-5 pr-2">
+        className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-none border-[1.5px] border-[#17120E] bg-white py-2 pl-5 pr-2">
         <label htmlFor="demande-lea" className="whitespace-nowrap text-[15px] font-bold">Demander à {agent.prenom}</label>
         <input id="demande-lea" type="text" value={demande} onChange={(e) => setDemande(e.target.value)} autoComplete="off"
           placeholder={agent.demandes[0]?.prompt ?? 'Ex. : prépare la relance des factures en retard'}
-          className="min-h-[44px] min-w-[10rem] flex-1 border-0 bg-transparent text-base text-[#141414] outline-none placeholder:text-[#8A8580]" />
+          className="min-h-[44px] min-w-[10rem] flex-1 border-0 bg-transparent text-base text-[#17120E] outline-none placeholder:text-[#7A6F64]" />
         {dictee.disponible && (
           <button type="button" onClick={dictee.basculer} aria-pressed={dictee.ecoute}
             aria-label={dictee.ecoute ? 'Arrêter la dictée' : 'Dicter la demande'}
             className={cx('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border',
-              dictee.ecoute ? 'border-[#B24A0C] bg-[#FDEEE2] text-[#B24A0C]' : 'border-[#D6D3CF] bg-[#F6F5F3] text-[#141414]')}>
+              dictee.ecoute ? 'border-[#B24A0C] bg-[#FDEEE2] text-[#B24A0C]' : 'border-[#D9CEC3] bg-[#F2ECE4] text-[#17120E]')}>
             <Mic className={cx('h-5 w-5', dictee.ecoute && 'animate-pulse')} aria-hidden />
           </button>
         )}
         <button type="submit" disabled={!demande.trim()} aria-label={`Envoyer à ${agent.prenom}`}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#141414] text-white disabled:bg-[#B9B5B0]">
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#17120E] text-white disabled:bg-[#A89C90]">
           <ArrowRight className="h-5 w-5" aria-hidden />
         </button>
       </form>
-      <p className="mt-2 text-[13.5px] text-[#5F5B57]" aria-live="polite">
+      <p className="mt-2 text-[13.5px] text-[#615850]" aria-live="polite">
         {dictee.ecoute ? 'Je vous écoute… Parlez, puis vérifiez le texte avant d\'envoyer.'
           : seule ? `${agent.prenom} prépare, vous validez.` : `${agent.prenom} répartit la demande dans l'équipe, relit, puis vous répond.`}
       </p>

@@ -16,7 +16,7 @@ export default function HarnessPanel() {
   const [etat, setEtat] = useState('');
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       const [{ data: conf }, def] = await Promise.all([
         db.from('studio_config').select('cle, valeur').in('cle', ['harness_regles', 'harness_perimetre']),
         supabase.functions.invoke('studio', { body: { action: 'admin_harness_defaut' } }),

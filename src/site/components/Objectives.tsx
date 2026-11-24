@@ -36,8 +36,7 @@ export default function Objectives() {
   ];
 
   return (
-    <section className="py-24 bg-[#f6f6f4] relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,rgba(251,146,60,0.08),transparent_50%)]"></div>
+    <section className="py-24 bg-[#F2ECE4] relative overflow-hidden">
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
@@ -62,7 +61,7 @@ export default function Objectives() {
                 className="group bg-white rounded-2xl p-8 shadow-lg hover:shadow-sm transition-all duration-300 hover:-translate-y-2 border border-neutral-200 hover:border-orange-200"
               >
                 <div className="flex items-start gap-5">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${objective.color} rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg`}>
+                  <div className={`w-14 h-14 bg-neutral-700 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg`}>
                     <Icon className="w-7 h-7 text-white" />
                   </div>
                   <div>

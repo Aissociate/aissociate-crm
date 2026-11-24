@@ -15,6 +15,8 @@ export type ActionLivrable =
   | { type: 'reseaux_repondre_commentaire'; texte: string; compte: { nom: string }; cite?: string | null }
   | { type: 'reseaux_envoyer_message'; texte: string; compte: { nom: string }; destinataire: string }
   | { type: 'mailing_envoyer'; objet: string; contenu: string; liste: string | null; destinataires: number }
+  // Envoi Qualiopi à un stagiaire (espace de l'organisme) : destinataire et pièces fixés, objet et texte modifiables.
+  | { type: 'qualiopi_envoyer'; nom: string; a: string; objet: string; corps: string; lien: string | null }
   // Applications reliées en un clic : titre et texte modifiables (le compte et la cible sont fixés à la proposition).
   | { type: 'app_blog_article' | 'app_crm_contact' | 'app_crm_note' | 'app_youtube_video' | 'app_message'; titre: string; contenu: string };
 
@@ -31,6 +33,7 @@ export function champsDepuis(titre: string, contenu: string, action: ActionLivra
   if (action?.type === 'reseaux_repondre_commentaire' || action?.type === 'reseaux_envoyer_message') return { texte: action.texte };
   if (action?.type === 'drive_creer_document' || action?.type.startsWith('app_')) return { titre: (action as { titre: string }).titre, contenu: (action as { contenu: string }).contenu };
   if (action?.type === 'mailing_envoyer') return { objet: action.objet, contenu: action.contenu };
+  if (action?.type === 'qualiopi_envoyer') return { objet: action.objet, corps: action.corps };
   return { titre, contenu };
 }
 
@@ -73,6 +76,14 @@ export default function EditeurLivrable<L>({ id, titre, contenu, action, onSaved
         <>
           <Libelle texte="À"><input className={champ} value={v.a} onChange={(e) => setV({ ...v, a: e.target.value })} /></Libelle>
           <Libelle texte="Cc"><input className={champ} value={v.cc} onChange={(e) => setV({ ...v, cc: e.target.value })} /></Libelle>
+          <Libelle texte="Objet"><input className={champ} value={v.objet} onChange={(e) => setV({ ...v, objet: e.target.value })} /></Libelle>
+          <Libelle texte="Texte de l'e-mail"><TexteAuto value={v.corps} onChange={(t) => setV({ ...v, corps: t })} lignes={12} /></Libelle>
+        </>
+      ) : action?.type === 'qualiopi_envoyer' ? (
+        <>
+          <p className="text-xs text-neutral-500">
+            À : {action.nom} &lt;{action.a}&gt;, par la messagerie du CRM.{action.lien ? ` Gardez {{lien}} : il devient le lien personnel du stagiaire.` : ''}
+          </p>
           <Libelle texte="Objet"><input className={champ} value={v.objet} onChange={(e) => setV({ ...v, objet: e.target.value })} /></Libelle>
           <Libelle texte="Texte de l'e-mail"><TexteAuto value={v.corps} onChange={(t) => setV({ ...v, corps: t })} lignes={12} /></Libelle>
         </>

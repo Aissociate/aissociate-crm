@@ -39,7 +39,7 @@ export default function Contacts() {
     catch (x) { setErreur(gerer(x)); return null; }
     finally { setOccupe(false); }
   }, [gerer, recherche]);
-  useEffect(() => { agir('contacts'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void agir('contacts'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fermer = () => { setMode(null); setLignes([]); setListes(''); setConsent(false); setUnique({ email: '', prenom: '', nom: '' }); };
 
@@ -126,7 +126,7 @@ export default function Contacts() {
       )}
 
       <div>
-        <form className="mb-3 flex gap-2" onSubmit={(ev) => { ev.preventDefault(); agir('contacts'); }}>
+        <form className="mb-3 flex gap-2" onSubmit={(ev) => { ev.preventDefault(); void agir('contacts'); }}>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
             <input value={recherche} onChange={(ev) => setRecherche(ev.target.value)} placeholder="Rechercher un contact" className={cx(champ, 'pl-9')} />
@@ -151,7 +151,7 @@ export default function Contacts() {
                   )}
                   {proprio && (
                     <button title="Supprimer (droit à l'effacement)" disabled={occupe}
-                      onClick={() => { if (confirm(`Supprimer définitivement ${c.email} ?`)) agir('contact_supprimer', { id: c.id }); }}
+                      onClick={() => { if (confirm(`Supprimer définitivement ${c.email} ?`)) void agir('contact_supprimer', { id: c.id }); }}
                       className="rounded-lg p-2 text-neutral-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
                   )}
                 </li>

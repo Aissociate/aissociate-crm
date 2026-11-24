@@ -86,11 +86,15 @@ export function mailReinitialisation(p: { prenom: string | null; lien: string })
 }
 
 /** E-mail d'accueil de l'essai : adresse de connexion, identifiant, mot de passe provisoire. */
-export function mailIdentifiants(p: { prenom: string | null; entreprise: string; email: string; motDePasse: string; site: string; finEssai: string; jours: number }) {
+/** `finEssai` null : contrat Stage gratuit, sans limite de durée (contrats.ts). */
+export function mailIdentifiants(p: { prenom: string | null; entreprise: string; email: string; motDePasse: string; site: string; finEssai: string | null; jours: number }) {
   const url = `${p.site.replace(/\/$/, "")}/studio/connexion`;
-  const fin = new Date(p.finEssai).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "Indian/Reunion" });
+  const fin = p.finEssai ? new Date(p.finEssai).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "Indian/Reunion" }) : "";
   const bonjour = `Bonjour${p.prenom ? ` ${p.prenom}` : ""},`;
-  const lignes = [
+  const lignes = !p.finEssai ? [
+    `Votre Studio IA${p.entreprise ? ` « ${p.entreprise} »` : ""} est prêt : vos agents commencent en stage, gratuitement et sans limite de durée.`,
+    `En stage, ils disposent de 10 heures de travail par mois, sans accès à vos outils. Pour leur ouvrir votre messagerie, votre agenda ou vos réseaux sociaux et leur donner plus d'heures, choisissez un contrat dans « Mon abonnement », quand vous voulez.`,
+  ] : [
     `Votre Studio IA${p.entreprise ? ` « ${p.entreprise} »` : ""} est prêt : vous pouvez l'essayer gratuitement pendant ${p.jours} jours, jusqu'au ${fin}.`,
     `Pendant l'essai, vos agents travaillent avec les quotas habituels et vous pouvez connecter un outil (messagerie, agenda ou réseau social). À la fin de l'essai, choisissez votre abonnement dans « Mon périmètre » pour continuer : sans abonnement, l'accès aux agents est suspendu.`,
   ];
@@ -110,5 +114,32 @@ export function mailIdentifiants(p: { prenom: string | null; entreprise: string;
 <p><a href="${echapper(url)}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px">Ouvrir mon Studio IA</a></p>
 <p style="color:#6b7280;font-size:13px">À la première connexion, vous choisirez votre propre mot de passe puis accepterez nos conditions générales de vente et notre accord de traitement des données.</p>
 <p>Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.</p><p>L'équipe Aissociate</p></div>`;
-  return { objet: "Votre Studio IA est prêt : vos identifiants pour l'essai gratuit", html, texte };
+  return { objet: p.finEssai ? "Votre Studio IA est prêt : vos identifiants pour l'essai gratuit" : "Votre Studio IA est prêt : vos identifiants", html, texte };
+}
+
+/** Invitation d'un responsable par le propriétaire de l'espace (responsables.ts). */
+export function mailInvitationResponsable(p: { prenom: string | null; invitePar: string; espace: string; email: string; motDePasse: string; site: string }) {
+  const url = `${p.site.replace(/\/$/, "")}/studio/connexion`;
+  const bonjour = `Bonjour${p.prenom ? ` ${p.prenom}` : ""},`;
+  const lignes = [
+    `${p.invitePar} vous a ajouté comme responsable du Studio IA${p.espace ? ` « ${p.espace} »` : ""}.`,
+    "Vous pouvez désormais donner des consignes à l'équipe d'agents IA, valider leurs propositions et suivre leur travail.",
+  ];
+  const texte = [
+    bonjour, "", ...lignes, "",
+    `Adresse : ${url}`, `Identifiant : ${p.email}`, `Mot de passe provisoire : ${p.motDePasse}`, "",
+    "À la première connexion, vous choisirez votre propre mot de passe puis accepterez nos conditions générales.",
+    "", "Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.", "", "L'équipe Aissociate",
+  ].join("\n");
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#17120e;max-width:560px">
+<p>${echapper(bonjour)}</p>${lignes.map((l) => `<p>${echapper(l)}</p>`).join("")}
+<table style="border-collapse:collapse;margin:18px 0;background:#f2ece4"><tbody>
+<tr><td style="padding:10px 16px;color:#615850">Adresse</td><td style="padding:10px 16px"><a href="${echapper(url)}">${echapper(url)}</a></td></tr>
+<tr><td style="padding:10px 16px;color:#615850">Identifiant</td><td style="padding:10px 16px">${echapper(p.email)}</td></tr>
+<tr><td style="padding:10px 16px;color:#615850">Mot de passe provisoire</td><td style="padding:10px 16px;font-family:monospace;font-size:16px"><b>${echapper(p.motDePasse)}</b></td></tr>
+</tbody></table>
+<p><a href="${echapper(url)}" style="display:inline-block;background:#ea6a1e;color:#17120e;font-weight:bold;text-decoration:none;padding:10px 18px">Ouvrir le Studio IA</a></p>
+<p style="color:#615850;font-size:13px">À la première connexion, vous choisirez votre propre mot de passe puis accepterez nos conditions générales.</p>
+<p>Une question ? Répondez simplement à cet e-mail ou écrivez à contact@aissociate.re.</p><p>L'équipe Aissociate</p></div>`;
+  return { objet: `${p.invitePar} vous invite sur le Studio IA`, html, texte };
 }

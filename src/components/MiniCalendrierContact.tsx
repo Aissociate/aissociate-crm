@@ -8,7 +8,6 @@ import { fr } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, CircleCheck as CheckCircle2, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui';
 import { OPP_STAGE_LABELS } from '@/lib/constants';
 import { usePipelineColonnes } from '@/lib/pipeline';
@@ -65,7 +64,6 @@ interface Props {
 export default function MiniCalendrierContact({
   contact, sessions, participants, opportunites, actions, onChanged, onNavigate,
 }: Props) {
-  const { session: auth } = useAuth();
   const { colonnes: colonnesPipeline } = usePipelineColonnes();
   const [mois, setMois] = useState<Date>(new Date());
   const [jour, setJour] = useState<Date>(new Date());
@@ -258,7 +256,7 @@ export default function MiniCalendrierContact({
               className={cn(
                 'flex h-9 flex-col items-center justify-center rounded-md text-xs transition-colors',
                 !isSameMonth(d, mois) && 'text-muted/50',
-                actif ? 'bg-brand-600 font-semibold text-white'
+                actif ? 'bg-brand-600 font-semibold text-neutral-950'
                   : inscrit ? 'bg-brand-500/15 font-semibold text-brand-600 hover:bg-brand-500/25 dark:text-brand-400'
                     : 'text-fg hover:bg-surface-2',
                 isSameDay(d, new Date()) && !actif && 'ring-1 ring-inset ring-brand-400',

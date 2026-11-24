@@ -112,7 +112,7 @@ Le premier niveau renseigné l'emporte :
 3. `studio_agents.modele` : cet agent, par défaut ;
 4. `parametres.ai.model_studio` (s'il est autorisé), sinon `deepseek/deepseek-v4.1-flash-1017`.
 
-Seuls les modèles de `MODELES_STUDIO` (dans `supabase/functions/studio/index.ts`) sont acceptés : DeepSeek V4.1 Flash, Mistral Large 4 et Claude Haiku 5.5. Tout autre réglage enregistré en base est ignoré.
+Seuls les modèles de `MODELES_STUDIO` (dans `supabase/functions/studio/socle.ts`) sont acceptés : DeepSeek V4.1 Flash, Mistral Large 4 et Claude Haiku 5.5. Tout autre réglage enregistré en base est ignoré.
 
 La clé reste celle du CRM : le secret `OPENROUTER_API_KEY`, sinon `parametres.ai.openrouter_key`.
 Les réponses arrivent en flux SSE (`meta`, `delta`, `done`, `error`) et le raisonnement
@@ -127,6 +127,27 @@ un fichier PDF, TXT, MD ou CSV.
 - Il doit terminer sa réponse par « Sources : titre (référence) » et ne jamais citer un document absent de la liste.
 - Le client voit seulement les titres et références consultés, jamais le contenu brut.
 - Si la migration `20261112100000_studio_savoirs.sql` n'est pas appliquée, la fonction continue de tourner, sans base.
+
+## Harnais métier généré par l'IA (`harnais.ts`, `harnais_regles.ts`, `metier.ts`) — voir `docs/studio-packs-metier.md`
+Le harnais est le savoir du **secteur du client** (boulangerie, courtage…) et le **cadre d'exercice de chaque agent**
+dans ce métier. À ne pas confondre avec la base de connaissances ci-dessus, qui est le savoir de la **fonction de l'agent**.
+- **Génération automatique** dès que le secteur (question A2) est renseigné : `provisionner` → `harnais.apresCreation`,
+  en arrière-plan. Deux passes OpenRouter (`parametres.ai.model_harnais`, sinon `anthropic/claude-sonnet-4.5`) :
+  génération, puis relecture critique (sources douteuses → « Bonne pratique du secteur (à vérifier) », règles fausses
+  corrigées, faits inventés retirés). Contrôle du résultat : `nettoyerHarnais`. Environ 7 000 tokens par passe.
+- Résultat : règles sourcées, cas de relais, informations à connaître, vocabulaire, 4 à 6 fiches de référence, un cadre
+  par agent actif, 10 questions d'évaluation. Enregistré comme pack `ws-<id espace>` (nouvelle version, l'ancienne
+  archivée) et branché aussitôt (`pack_code`). Trace : `job_runs` (`studio-harnais`), journal de l'espace (`harnais_genere`).
+- Statut sur l'espace (`harnais_statut`) : vide = à générer (rattrapage par `taches_cron`, 2 espaces par passage),
+  `en_cours`, `pret`, `echec` (+ `harnais_erreur`), `a_lancer` (espaces antérieurs à la migration et espaces du contrôle
+  quotidien : seulement depuis le CRM).
+- CRM › Studio IA clients › un espace : statut, bouton « Générer le harnais » / « Régénérer » (`admin_harnais`), aperçu
+  (règles, relais, cadres, corrections de la relecture, coût) ; le menu « Pack métier » permet de choisir à la place un
+  pack de catalogue écrit à la main (`boulangerie` v1, fourni par la migration).
+- `chargerPack` (index.ts) ajoute le bloc « Ton contexte métier » (et le cadre de l'agent concerné) à tous les agents,
+  y compris en consultation et en mission, entre les savoirs de l'agent et la fiche entreprise ; fiches dans un budget
+  de 6 000 caractères (`studio_recherche_pack_savoirs`).
+- Sans la migration `20261125100000_studio_packs_metier.sql`, ou sans harnais, le prompt est identique à avant.
 
 ## Exports Word / PDF et papier à en-tête
 Chaque réponse texte d'un agent, ainsi que chaque contenu gardé, propose deux boutons : **Word** et **PDF**.
@@ -319,6 +340,21 @@ et la table `studio_nango_connexions` ne servent plus.
   « Synthèse » : 12 documents max lus ensemble (120 000 caractères). Un document sensible désactivé n'est
   jamais lu. En cas d'échec, un livrable « Traitement en lot — n non traités » fait le bilan. Limite connue :
   une étape interrompue par l'hébergeur arrête la chaîne (rien n'est rejoué).
+
+## Conformité Qualiopi de Nora (`qualiopi.ts`, `qualiopi_crm.ts`) — espace Aissociate seulement
+
+Dans l'espace de l'organisme de formation (`ESPACE_AISSOCIATE`, réglable par `STUDIO_ESPACES_ORGANISME`), Nora reçoit
+4 outils et 5 super-pouvoirs ajoutés par le code (`pouvoirsQualiopi`, aucune ligne en base, prompt système inchangé).
+Aucun autre agent, aucun autre espace n'y a accès ; l'exécution d'un envoi revérifie l'espace.
+
+- Lecture : `qualiopi_sessions`, `qualiopi_session` (stagiaires, checklist `qualiopi_dossier_docs`, `evaluation_liens`, émargement, devis).
+- Production (`qualiopi_produire`), avec les générateurs du CRM : `qualiopi-doc` (convocation, livret d'accueil,
+  attestation de fin, certificat de réalisation, modèles de `qualiopi-doc/modeles.ts`), `generate-agefice` (convention,
+  mode direct par session), `generate-plan` (programme), `generate-devis`, demi-journées d'émargement. Le fichier est
+  rangé dans la ligne de checklist de la session ou du stagiaire (jamais de retour en arrière d'un statut).
+- Envois (`qualiopi_proposer_envois`) : une décision `qualiopi_envoyer` par stagiaire ; au « VALIDÉ », `send-email`
+  (SMTP du CRM), lien personnel créé ou retrouvé (`emargement_acces`, `evaluation_liens`), pièce « envoyée », trace
+  dans `emails`. Le questionnaire à froid reste envoyé seul par `qualiopi-cron` à J+30 ; Nora relance les sans-réponse.
 
 ## Dossiers (`dossiers.ts`, `src/studio/Dossiers.tsx`)
 Arborescence par espace (`studio_dossiers`, 5 niveaux) pour ranger ressources (notes, fichiers, compétences),

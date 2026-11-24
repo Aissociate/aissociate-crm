@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { appel } from '../api';
 import { Bouton, cx } from '../composants';
 import { AGENTS_CATALOGUE, SECTIONS, type Question, type Reponses } from '../../../supabase/functions/studio/questionnaire';
+import { Logo } from '@/components/Logo';
 
 const BROUILLON = 'studio.questionnaire';
 const champ = 'w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none focus:border-neutral-900 focus:bg-white';
@@ -122,29 +123,29 @@ export default function Questionnaire() {
 
   if (fini) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-4 font-sans">
+      <div className="flex min-h-screen items-center justify-center bg-[#F2ECE4] px-4 font-sans">
         <div className="max-w-md rounded-2xl border border-neutral-200 bg-white p-8 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="h-6 w-6" /></div>
           <h1 className="text-2xl font-semibold">{fini === 'essai' ? 'Votre Studio est prêt !' : 'Merci, c\'est bien reçu !'}</h1>
           <p className="mt-3 text-sm text-neutral-600">
-            {fini === 'essai' && <>Vos identifiants viennent de vous être envoyés par e-mail (pensez à vérifier les indésirables). Votre essai gratuit de 7 jours démarre aujourd'hui : vos agents vous attendent déjà.</>}
-            {fini === 'essai_sans_mail' && <>Votre espace d'essai est créé, mais l'e-mail avec vos identifiants n'a pas pu partir. Nous vous les envoyons au plus vite : écrivez-nous à contact@aissociate.re si vous ne les recevez pas.</>}
+            {fini === 'essai' && <>Vos identifiants viennent de vous être envoyés par e-mail (pensez à vérifier les indésirables). Vos agents démarrent aujourd'hui en stage, gratuitement et sans limite de durée : ils vous attendent déjà.</>}
+            {fini === 'essai_sans_mail' && <>Votre espace est créé, mais l'e-mail avec vos identifiants n'a pas pu partir. Nous vous les envoyons au plus vite : écrivez-nous à contact@aissociate.re si vous ne les recevez pas.</>}
             {fini === 'deja_client' && <>Cette adresse e-mail a déjà un accès au Studio : connectez-vous avec vos identifiants habituels (ou « Mot de passe oublié ? » sur la page de connexion).</>}
             {fini === 'demande' && <>Nous étudions vos réponses et revenons vers vous sous 48 h ouvrées avec votre plan de démarrage. Vos identifiants d'accès au Studio vous seront transmis dès que votre espace sera prêt.</>}
           </p>
           {fini === 'essai' || fini === 'deja_client'
             ? <Link to="/studio/connexion" className="mt-6 inline-block rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white">Se connecter</Link>
-            : <Link to="/agents-ia" className="mt-6 inline-block text-sm text-neutral-500 underline">Retour à la présentation</Link>}
+            : <Link to="/" className="mt-6 inline-block text-sm text-neutral-500 underline">Retour à la présentation</Link>}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f6f4] font-sans text-neutral-900">
+    <div className="min-h-screen bg-[#F2ECE4] font-sans text-neutral-900">
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <Link to="/agents-ia" className="text-lg font-bold">A(I)ssociate <span className="text-orange-500">Studio</span></Link>
+          <Link to="/" aria-label="Aissociate Studio IA"><Logo size="sm" branche="Studio IA" fond="clair" /></Link>
           <span className="text-xs text-neutral-500">Étape {etape + 1} sur {SECTIONS.length}</span>
         </div>
         <div className="h-1 bg-neutral-100"><div className="h-1 bg-orange-500 transition-all" style={{ width: `${((etape + 1) / SECTIONS.length) * 100}%` }} /></div>
@@ -153,7 +154,7 @@ export default function Questionnaire() {
       <main className="mx-auto max-w-3xl px-4 py-8">
         {etape === 0 && (
           <p className="mb-6 text-sm text-neutral-600">
-            <b className="text-neutral-900">Essai gratuit de 7 jours, sans carte bancaire.</b> Décrivez votre entreprise en 10 minutes : à la fin,
+            <b className="text-neutral-900">Gratuit, sans limite de durée ni carte bancaire.</b> Décrivez votre entreprise en 10 minutes : à la fin,
             votre espace s'ouvre aussitôt avec les agents choisis, et vos identifiants arrivent par e-mail. Vos agents démarrent
             avec ces informations. Vos réponses sont gardées sur cet appareil si vous faites une pause.
           </p>
@@ -196,7 +197,7 @@ export default function Questionnaire() {
             <ArrowLeft className="h-4 w-4" /> Précédent
           </Bouton>
           <Bouton onClick={suivant} disabled={envoi}>
-            {derniere ? (envoi ? 'Ouverture de votre espace…' : 'Ouvrir mon essai gratuit') : <>Suivant <ArrowRight className="h-4 w-4" /></>}
+            {derniere ? (envoi ? 'Ouverture de votre espace…' : 'Ouvrir mon espace gratuit') : <>Suivant <ArrowRight className="h-4 w-4" /></>}
           </Bouton>
         </div>
       </main>

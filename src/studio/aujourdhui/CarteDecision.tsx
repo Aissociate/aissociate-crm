@@ -19,9 +19,9 @@ export function texteDuHtml(html: string): string {
   return doc.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 }
 
-export const CL_PRINCIPAL = 'inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#141414] px-[22px] text-base font-semibold text-white hover:bg-[#2B2B2B] disabled:bg-[#B9B5B0]';
-export const CL_SECONDAIRE = 'inline-flex min-h-[48px] items-center justify-center rounded-xl border border-[#D6D3CF] bg-white px-[18px] text-base font-medium text-[#141414] hover:bg-[#F6F5F3]';
-const CL_LIEN = 'min-h-[44px] rounded-lg px-2.5 text-[15px] text-[#5F5B57] underline underline-offset-[3px] hover:text-[#141414]';
+export const CL_PRINCIPAL = 'inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#17120E] px-[22px] text-base font-semibold text-white hover:bg-[#2E261F] disabled:bg-[#A89C90]';
+export const CL_SECONDAIRE = 'inline-flex min-h-[48px] items-center justify-center rounded-xl border border-[#D9CEC3] bg-white px-[18px] text-base font-medium text-[#17120E] hover:bg-[#F2ECE4]';
+const CL_LIEN = 'min-h-[44px] rounded-lg px-2.5 text-[15px] text-[#615850] underline underline-offset-[3px] hover:text-[#17120E]';
 
 export type Contexte = { agents: Map<string, Agent>; proprietaire: boolean; gerer: (e: unknown) => string; onDocument: (d: Decision) => void };
 
@@ -45,10 +45,10 @@ export function Portee({ texte }: { texte: string }) {
 export function Apercu({ d, onDocument, compact }: { d: Decision; onDocument: (d: Decision) => void; compact?: boolean }) {
   const medias = useMemo(() => mediasDuMessage(d.contenu), [d.contenu]);
   return (
-    <div className={cx('overflow-y-auto rounded-xl border border-[#EEEDEA] bg-[#F6F5F3] px-4 py-3.5 text-[15px]', compact ? 'max-h-56' : 'max-h-72')}>
+    <div className={cx('overflow-y-auto rounded-xl border border-[#E6DCD2] bg-[#F2ECE4] px-4 py-3.5 text-[15px]', compact ? 'max-h-56' : 'max-h-72')}>
       {d.format === 'html' ? (
         <>
-          <p className="line-clamp-5 text-[#141414]">{texteDuHtml(d.contenu).slice(0, 700)}</p>
+          <p className="line-clamp-5 text-[#17120E]">{texteDuHtml(d.contenu).slice(0, 700)}</p>
           <button type="button" onClick={() => onDocument(d)} className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 font-medium text-[#B24A0C] underline underline-offset-[3px]">
             <FileType className="h-4 w-4" aria-hidden /> Ouvrir le document
           </button>
@@ -75,16 +75,16 @@ export function CarteDecision({ d, decisions, ctx }: { d: Decision; decisions: D
   const { agent, suite } = ligneAgent(d, ctx.agents);
   const p = presenter(d);
   return (
-    <article aria-labelledby={`decision-${d.id}`} className="flex flex-col gap-4 rounded-[18px] border border-[#E7E5E2] bg-white p-6">
+    <article aria-labelledby={`decision-${d.id}`} className="flex flex-col gap-4 rounded-none border border-[#E6DCD2] bg-white p-6">
       <div className="flex flex-wrap items-center gap-3">
         {agent && <Avatar prenom={agent.prenom} couleur={agent.couleur} photo={agent.photo} taille={40} />}
-        <p className="min-w-[160px] flex-1 text-sm text-[#5F5B57]"><b className="font-semibold text-[#141414]">{agent?.prenom ?? 'Votre équipe'}</b> · {suite}</p>
+        <p className="min-w-[160px] flex-1 text-sm text-[#615850]"><b className="font-semibold text-[#17120E]">{agent?.prenom ?? 'Votre équipe'}</b> · {suite}</p>
         {p.portee && <Portee texte={p.portee} />}
       </div>
       <h2 id={`decision-${d.id}`} className="text-[23px] font-bold leading-tight tracking-tight">{d.titre}</h2>
       {edition ? (
         <EditeurLivrable id={d.id} titre={d.titre} contenu={d.contenu} action={d.action} gerer={ctx.gerer}
-          onCancel={() => setEdition(false)} onSaved={() => { setEdition(false); decisions.charger(); }} />
+          onCancel={() => setEdition(false)} onSaved={() => { setEdition(false); void decisions.charger(); }} />
       ) : (
         <>
           <Apercu d={d} onDocument={ctx.onDocument} />
@@ -99,7 +99,7 @@ export function CarteDecision({ d, decisions, ctx }: { d: Decision; decisions: D
               <button type="button" className={CL_LIEN} onClick={() => decisions.demanderRaison(d.id)}>Refuser</button>
             </div>
           ) : (
-            <p className="text-[15px] text-[#5F5B57]">Seul le propriétaire de l'espace peut valider ou refuser.</p>
+            <p className="text-[15px] text-[#615850]">Seul le propriétaire de l'espace peut valider ou refuser.</p>
           )}
         </>
       )}
@@ -112,11 +112,11 @@ export function LigneRepliee({ d, decisions, ctx }: { d: Decision; decisions: De
   const p = presenter(d);
   return (
     <button type="button" onClick={() => decisions.ouvrir(d.id)}
-      className="flex min-h-[68px] w-full items-center gap-3.5 rounded-2xl border border-[#E7E5E2] bg-white px-[18px] py-3 text-left text-[#141414] hover:border-[#D6D3CF]">
+      className="flex min-h-[68px] w-full items-center gap-3.5 rounded-2xl border border-[#E6DCD2] bg-white px-[18px] py-3 text-left text-[#17120E] hover:border-[#D9CEC3]">
       {agent && <Avatar prenom={agent.prenom} couleur={agent.couleur} photo={agent.photo} taille={36} />}
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-[17px] font-semibold leading-snug">{d.titre}</span>
-        <span className="truncate text-sm text-[#5F5B57]">{[agent?.prenom, p.portee].filter(Boolean).join(' · ')}</span>
+        <span className="truncate text-sm text-[#615850]">{[agent?.prenom, p.portee].filter(Boolean).join(' · ')}</span>
       </span>
       <span className="shrink-0 text-[15px] font-semibold underline underline-offset-[3px]">Ouvrir</span>
     </button>
@@ -131,7 +131,7 @@ export function LigneSuite({ d, suite, decisions, ctx }: { d: Decision; suite: S
 
   if (suite.etat === 'envoi') {
     return (
-      <div role="status" className="relative overflow-hidden rounded-[14px] border border-[#E7E5E2] bg-white px-[18px] py-3.5">
+      <div role="status" className="relative overflow-hidden rounded-none border border-[#E6DCD2] bg-white px-[18px] py-3.5">
         <div className="flex items-center gap-3">
           <p className="flex-1 text-[15px]"><b className="font-semibold">{d.titre}</b> : c'est noté, ça part dans quelques secondes.</p>
           <button type="button" className={annuler} onClick={() => decisions.annulerEnvoi(d.id)}>Annuler</button>
@@ -144,7 +144,7 @@ export function LigneSuite({ d, suite, decisions, ctx }: { d: Decision; suite: S
   }
   if (suite.etat === 'fait') {
     return (
-      <div role="status" className="flex items-center gap-3 rounded-[14px] border border-[#E7E5E2] bg-white px-[18px] py-3.5">
+      <div role="status" className="flex items-center gap-3 rounded-none border border-[#E6DCD2] bg-white px-[18px] py-3.5">
         <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2E6B48] text-white"><Check className="h-4 w-4" /></span>
         <p className="flex-1 text-[15px]"><b className="font-semibold">{d.titre}</b> : {suite.texte}</p>
         {suite.lien && <a href={suite.lien} target="_blank" rel="noreferrer" className="shrink-0 text-sm font-medium text-[#B24A0C] underline underline-offset-[3px]">Voir</a>}
@@ -153,7 +153,7 @@ export function LigneSuite({ d, suite, decisions, ctx }: { d: Decision; suite: S
   }
   if (suite.etat === 'echec') {
     return (
-      <div role="alert" className="rounded-[14px] border border-red-200 bg-red-50 px-[18px] py-3.5 text-[15px] text-red-800">
+      <div role="alert" className="rounded-none border border-red-200 bg-red-50 px-[18px] py-3.5 text-[15px] text-red-800">
         <b className="font-semibold">{d.titre}</b> : {suite.texte}{' '}
         <Link to="/studio/aujourdhui/livrables" className="font-medium underline">Réessayer depuis « Tous les livrables »</Link>
       </div>
@@ -161,12 +161,12 @@ export function LigneSuite({ d, suite, decisions, ctx }: { d: Decision; suite: S
   }
   if (suite.etat === 'raison') {
     return (
-      <div className="flex flex-col gap-3 rounded-[14px] border border-[#E7E5E2] bg-white px-[18px] py-4">
+      <div className="flex flex-col gap-3 rounded-none border border-[#E6DCD2] bg-white px-[18px] py-4">
         <p className="text-[15px]"><b className="font-semibold">{d.titre}</b> : dites à {prenom} pourquoi vous refusez, pour qu'il en tienne compte la prochaine fois.</p>
         <div role="group" aria-label="Raison du refus" className="flex flex-wrap gap-2">
           {(Object.keys(RAISONS_REFUS) as Raison[]).map((k) => (
             <button key={k} type="button" onClick={() => decisions.refuser(d.id, k)}
-              className="min-h-[44px] rounded-full border border-[#D6D3CF] bg-white px-4 text-[15px] text-[#141414] hover:bg-[#F6F5F3]">{RAISONS_REFUS[k]}</button>
+              className="min-h-[44px] rounded-full border border-[#D9CEC3] bg-white px-4 text-[15px] text-[#17120E] hover:bg-[#F2ECE4]">{RAISONS_REFUS[k]}</button>
           ))}
           <button type="button" className={annuler} onClick={() => decisions.renoncerRefus(d.id)}>Finalement non</button>
         </div>
@@ -174,7 +174,7 @@ export function LigneSuite({ d, suite, decisions, ctx }: { d: Decision; suite: S
     );
   }
   return (
-    <div role="status" className="flex items-center gap-3 rounded-[14px] border border-dashed border-[#D6D3CF] px-[18px] py-3.5 text-[#5F5B57]">
+    <div role="status" className="flex items-center gap-3 rounded-none border border-dashed border-[#D9CEC3] px-[18px] py-3.5 text-[#615850]">
       <p className="flex-1 text-[15px]">{d.titre} : refusé ({RAISONS_REFUS[suite.raison].toLowerCase()}). {prenom} en tiendra compte la prochaine fois.</p>
       {ctx.proprietaire && <button type="button" className={annuler} onClick={() => decisions.annulerRefus(d.id)}>Annuler</button>}
     </div>

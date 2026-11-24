@@ -15,7 +15,7 @@ export default function Blog() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   async function loadData() {
@@ -52,19 +52,6 @@ export default function Blog() {
     });
   }
 
-  const categoryColors: Record<string, string> = {
-    'formation': 'from-orange-600 to-amber-700',
-    'intelligence-artificielle': 'from-blue-500 to-cyan-600',
-    'business': 'from-emerald-500 to-teal-600',
-    'marketing': 'from-rose-500 to-pink-600',
-    'technologie': 'from-neutral-600 to-neutral-800',
-  };
-
-  function getCategoryColor(cat: BlogCategory | null | undefined): string {
-    if (!cat) return 'from-orange-600 to-amber-700';
-    return categoryColors[cat.slug] || 'from-orange-600 to-amber-700';
-  }
-
   return (
     <div className="min-h-screen bg-white">
       <SEO
@@ -92,14 +79,14 @@ export default function Blog() {
         </div>
       </section>
 
-      <section className="py-20 bg-gradient-to-b from-white via-neutral-50/50 to-white">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap gap-3 justify-center mb-12">
             <button
               onClick={() => setActiveCategory(null)}
               className={`px-6 py-2 rounded-full font-semibold transition-all ${
                 !activeCategory
-                  ? 'bg-orange-500 text-white shadow-lg'
+                  ? 'bg-orange-500 text-neutral-950 shadow-lg'
                   : 'bg-white border-2 border-neutral-200 text-neutral-700 hover:border-orange-300 hover:shadow-md'
               }`}
             >
@@ -114,7 +101,7 @@ export default function Blog() {
                   onClick={() => setActiveCategory(cat.id)}
                   className={`px-6 py-2 rounded-full font-semibold transition-all ${
                     activeCategory === cat.id
-                      ? 'bg-orange-500 text-white shadow-lg'
+                      ? 'bg-orange-500 text-neutral-950 shadow-lg'
                       : 'bg-white border-2 border-neutral-200 text-neutral-700 hover:border-orange-300 hover:shadow-md'
                   }`}
                 >
@@ -149,12 +136,12 @@ export default function Blog() {
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
                     ) : (
-                      <div className={`w-full h-full bg-gradient-to-br ${getCategoryColor(article.blog_categories)} flex items-center justify-center`}>
+                      <div className={`w-full h-full bg-neutral-700 flex items-center justify-center`}>
                         <BookOpen className="w-12 h-12 text-white/60" />
                       </div>
                     )}
                     {article.blog_categories && (
-                      <div className={`absolute top-4 left-4 bg-gradient-to-r ${getCategoryColor(article.blog_categories)} text-white px-3 py-1 rounded-full text-sm font-semibold`}>
+                      <div className={`absolute top-4 left-4 bg-neutral-700 text-white px-3 py-1 rounded-full text-sm font-semibold`}>
                         {article.blog_categories.name}
                       </div>
                     )}
@@ -207,7 +194,7 @@ export default function Blog() {
                 placeholder="Votre adresse email"
                 className="flex-1 px-4 py-3 rounded-xl border-2 border-neutral-200 focus:border-orange-400 focus:outline-none"
               />
-              <button className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all whitespace-nowrap">
+              <button className="bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-3 rounded-xl font-semibold transition-all whitespace-nowrap">
                 S'abonner
               </button>
             </div>

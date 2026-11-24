@@ -9,6 +9,8 @@ import { nettoyerHtml } from "./html.ts";
 import { AGENTS_CATALOGUE, ficheEntreprise, scorer, validerReponses, type Reponses } from "./questionnaire.ts";
 import { journaliser, verifierChaine, type LigneJournal } from "./journal.ts";
 import * as courriel from "./courriel.ts";
+import * as harnais from "./harnais.ts";
+import * as contrats from "./contrats.ts";
 import { apercuAction, executerAction, modifierAction, titreAction, type ActionLivrable } from "./outils.ts";
 import { deciderLivrable as decider, raisonRefus, RAISONS_REFUS } from "./livrables.ts";
 import type { Refus } from "./contexte.ts";
@@ -158,7 +160,8 @@ async function essaiAutomatique(sb: SupabaseClient, demandeId: string, site: str
   const cfg = await chargerConfig(sb, ["essai_auto", "essai_jours"]);
   if (cfg.essai_auto !== "true" || !site) return { essai: false };
   const jours = Math.min(60, Math.max(1, Math.round(Number(cfg.essai_jours) || 7)));
-  const p = await provisionner(sb, { demande_id: demandeId, offre: "essai" }, null, { essaiJours: jours });
+  // Depuis le 23/11/2026 : contrat Stage gratuit, sans limite de durée (contrats.ts), au lieu de l'essai.
+  const p = await provisionner(sb, { demande_id: demandeId, offre: "stage" }, null);
   if ("erreur" in p) {
     console.error("[studio] essai automatique:", p.erreur);
     return { essai: false, deja_client: String(p.erreur).includes("déjà un accès") };
@@ -166,7 +169,7 @@ async function essaiAutomatique(sb: SupabaseClient, demandeId: string, site: str
   try {
     const m = courriel.mailIdentifiants({
       prenom: p.prenom, entreprise: p.nom.replace(/^Démo — /, ""), email: p.email, motDePasse: p.mot_de_passe,
-      site, finEssai: String(p.essai_fin), jours,
+      site, finEssai: p.essai_fin, jours,
     });
     if (controle) controle.courriel({ a: p.email, ...m });
     else await courriel.envoyer(sb, { a: p.email, ...m });
@@ -203,13 +206,20 @@ export async function provisionner(sb: SupabaseClient, body: Record<string, unkn
   if (!agents.length) return { erreur: "Choisissez au moins un agent.", statut: 400 };
 
   const reponses = (d.reponses ?? {}) as Reponses;
-  const offre = ["essai", "essentiel", "pro", "sur_mesure"].includes(String(body.offre)) ? String(body.offre) : "sur_mesure";
+  // « stage » : contrat Stage gratuit de la grille (formule Essentiel pour le choix des agents).
+  const stage = String(body.offre) === "stage";
+  const offre = stage ? "essentiel" : ["essai", "essentiel", "pro", "sur_mesure"].includes(String(body.offre)) ? String(body.offre) : "sur_mesure";
   const essaiFin = offre === "essai" ? new Date(Date.now() + (options.essaiJours ?? 7) * 86_400_000).toISOString() : null;
+  const droitsStage = contrats.droits(contrats.CHOIX_STAGE);
   const { data: ws, error } = await sb.from("studio_workspaces").insert({
     nom: String(body.nom ?? d.entreprise).trim().slice(0, 120) || d.entreprise,
     offre, secteur: String(reponses.A2 ?? "").slice(0, 120) || null,
     contexte_entreprise: ficheEntreprise(reponses),
-    quota_messages_mois: nombreOuNull(cfg.defaut_quota_messages_mois) ?? 300,
+    ...(stage ? {
+      contrat: "stage", contrat_choix: contrats.CHOIX_STAGE, connecteurs_max: droitsStage.connecteurs_max,
+      max_utilisateurs: droitsStage.max_utilisateurs, stockage_go: droitsStage.stockage_go, astreinte: false,
+    } : {}),
+    quota_messages_mois: stage ? droitsStage.quota_messages_mois : nombreOuNull(cfg.defaut_quota_messages_mois) ?? 300,
     quota_images_mois: nombreOuNull(cfg.defaut_quota_images_mois) ?? 30,
     quota_videos_mois: nombreOuNull(cfg.defaut_quota_videos_mois) ?? 5,
     budget_ia_jour_eur: nombreOuNull(cfg.defaut_budget_ia_jour_eur),
@@ -238,6 +248,9 @@ export async function provisionner(sb: SupabaseClient, body: Record<string, unkn
   }
   await sb.from("studio_credentials").insert({ user_id: u.id, password_hash: await hasherMotDePasse(motDePasse), doit_changer: true });
   await sb.from("studio_onboarding").update({ statut: "provisionnee", workspace_id: ws.id, traite_par: managerId }).eq("id", d.id);
+  // Harnais métier généré par l'IA à partir du secteur (A2), en arrière-plan (harnais.ts).
+  await harnais.apresCreation(sb, ws.id, String(d.email), String(reponses.A2 ?? "").trim() || null)
+    .catch((e) => console.error("[studio] harnais à la création :", e instanceof Error ? e.message : String(e)));
   await journaliser(sb, {
     wsId: ws.id, acteur: "crm", action: "espace_cree",
     detail: { demande: d.id, agents, score: d.score, drapeaux: d.drapeaux },

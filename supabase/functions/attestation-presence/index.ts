@@ -9,18 +9,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "npm:pdf-lib@1.17.1";
 import { partiesLocales } from "../_shared/heure_locale.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 // Normalise vers WinAnsi (Latin-1), comme qualiopi-doc.
 function clean(s: unknown): string {
@@ -111,7 +103,7 @@ Deno.serve(async (req: Request) => {
     const logo = await embedImage(pdf, org.logo_url);
     // Cachet : celui des paramètres de l'organisme, à défaut celui déposé dans
     // la base documentaire (document intitulé « cachet + signature … »).
-    let cachetUrl = org.signature_url;
+    let cachetUrl: string | undefined = org.signature_url;
     if (!cachetUrl) {
       const { data: doc } = await sb.from("documents").select("fichier_url")
         .ilike("titre", "%cachet%signature%").eq("statut", "actif")

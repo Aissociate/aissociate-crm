@@ -1,11 +1,15 @@
 // « Mon périmètre » : ce que couvre la formule, consommation du mois, plafond
 // IA du jour et interrupteur d'urgence (suspendre / relancer les agents).
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BatteryCharging, CreditCard, Lock, PauseCircle, PlayCircle, Plus } from 'lucide-react';
 import { appel } from '../api';
 import { Avatar, Bouton, Carte, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
 import { useStudio } from '../StudioApp';
+import { bulletin, contrat as contratDe, droits, type Choix } from '../../../supabase/functions/studio/contrats';
+
+const PAGE_CONTRAT = '/studio/reglages/perimetre/contrat';
 
 type Quota = { utilise?: number; max: number | null };
 type Perimetre = {
@@ -23,6 +27,8 @@ type Abonnement = {
   actuels: { agents: number; connecteurs: number | null };
   prix_connecteur: number; tva_pourcent: number | null; test: boolean; estimation_ht: number;
   agent_suivant_ht?: number; premier_agent_ht?: number; dernier_palier_ht?: number;
+  /** Grille des contrats : contrat en vigueur (null : espace hors grille) ; abonné facturé par agent. */
+  contrat?: Choix | null; ancienne_grille?: boolean;
 };
 const OFFRES: Record<string, string> = { essai: 'Essai gratuit', essentiel: 'Essentiel', pro: 'Pro', sur_mesure: 'Sur mesure' };
 const STATUTS: Record<string, string> = {
@@ -73,7 +79,10 @@ export default function PagePerimetre() {
     const r = u.searchParams.get('paiement');
     if (!r) return;
     setMerci(r === 'recharge' ? 'Paiement reçu : vos crédits apparaissent dans quelques secondes (actualisez la page si besoin).'
-      : r === 'abonnement' ? 'Abonnement activé : merci ! Votre facture est disponible dans « Gérer mon abonnement ».'
+      : r === 'abonnement' ? 'Contrat signé : merci ! Vos agents ont leurs nouvelles heures et leurs badges dans quelques secondes (actualisez la page si besoin). Votre facture est dans « Gérer mon abonnement ».'
+      : r === 'contrat' ? 'Avenant signé : la différence est calculée au prorata sur votre prochaine facture.'
+      : r === 'stage' ? 'Vous êtes en Stage gratuit.'
+      : r === 'resilie' ? 'Résiliation enregistrée : votre contrat reste actif jusqu\'à la fin de la période payée, puis vos agents repassent en Stage gratuit. Tout ce que vous avez créé est conservé.'
       : 'Paiement annulé : rien n\'a été débité.');
     u.searchParams.delete('paiement');
     window.history.replaceState(null, '', u.pathname + u.search);
@@ -93,7 +102,7 @@ export default function PagePerimetre() {
   };
 
   const charger = useCallback(() => appel<Perimetre>('perimetre').then(setP).catch((e) => setErreur(gerer(e))), [gerer]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const appliquerBascule = async () => {
     if (!p) return;
@@ -133,6 +142,53 @@ export default function PagePerimetre() {
   if (!p) return erreur ? <p className="text-sm text-red-700">{erreur}</p> : <Chargement />;
   const carteAbonnement = p.abonnement && (() => {
         const a = p.abonnement;
+        // Grille des contrats (tout espace sauf les abonnés de l'ancienne formule par agent).
+        if (!a.ancienne_grille) {
+          const ch = a.contrat ?? null;
+          const c = contratDe(ch?.contrat ?? 'stage');
+          const enCoursC = a.statut != null && EN_COURS.includes(a.statut);
+          const b = ch ? bulletin(ch) : null;
+          const dr = ch ? droits(ch) : null;
+          const avenants = ch ? b!.lignes.filter((l) => l.cle.startsWith('avenant_')) : [];
+          return (
+            <Carte>
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="min-w-[12rem]">
+                  <p className="flex items-center gap-2 font-semibold"><CreditCard className="h-5 w-5 text-neutral-500" />Mon contrat
+                    {a.test && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700">mode test</span>}</p>
+                  <p className="mt-2 text-2xl font-semibold">{ch ? c.nom : 'Aucun contrat'}{ch && c.prix > 0 ? <span className="text-base font-normal text-neutral-400"> · {ch.cdi ? 'CDI annuel' : 'CDD mensuel'}</span> : null}</p>
+                  <p className="mt-1 text-3xl font-semibold">{eur(b?.mensuel_ht ?? 0)}<span className="text-base font-normal text-neutral-400"> HT / mois</span></p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {enCoursC ? (STATUTS[a.statut!] ?? a.statut) : ch?.contrat === 'stage' ? 'Gratuit, sans limite de durée' : a.statut ? STATUTS[a.statut] ?? a.statut : ''}
+                    {enCoursC && a.fin ? ` · prochaine échéance le ${new Date(a.fin).toLocaleDateString('fr-FR')}` : ''}
+                  </p>
+                </div>
+                <div className="min-w-0 flex-1 text-sm text-neutral-600">
+                  {dr && (
+                    <ul className="grid gap-1 sm:grid-cols-2">
+                      <li>{String(dr.heures).replace('.', ',')} h de travail par mois ({dr.quota_messages_mois} actions)</li>
+                      <li>{dr.connecteurs_max} badge{dr.connecteurs_max > 1 ? 's' : ''} d'accès à vos outils</li>
+                      <li>{dr.max_utilisateurs} responsable{dr.max_utilisateurs > 1 ? 's' : ''}</li>
+                      <li>Casier de {dr.stockage_go} Go</li>
+                      <li>{dr.expert ? 'Qualification Expert' : 'Modèle standard'}{dr.astreinte ? ' · astreinte' : ''}</li>
+                      <li>Agents illimités</li>
+                    </ul>
+                  )}
+                  {avenants.length > 0 && <p className="mt-2 text-neutral-500">Avenants : {avenants.map((l) => `${l.libelle.toLowerCase()}${l.quantite > 1 ? ` × ${l.quantite}` : ''}`).join(', ')}.</p>}
+                  <p className="mt-2 text-neutral-500">{tvaTexte(a.tva_pourcent)}. Contrat et avenants modifiables à tout moment ; la différence est calculée au prorata.</p>
+                  {proprietaire ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link to={PAGE_CONTRAT} className="inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">
+                        {enCoursC ? 'Modifier mon contrat' : 'Choisir mon contrat'}
+                      </Link>
+                      {enCoursC && <Bouton variante="clair" disabled={envoi} onClick={() => versStripe('abonnement_gerer')}>Gérer mon abonnement</Bouton>}
+                    </div>
+                  ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace gère le contrat.</p>}
+                </div>
+              </div>
+            </Carte>
+          );
+        }
         const enCours = a.statut != null && EN_COURS.includes(a.statut);
         const ecart = enCours && a.actuels.connecteurs != null
           && (a.factures.agents !== a.actuels.agents || a.factures.connecteurs !== a.actuels.connecteurs);
@@ -166,11 +222,10 @@ export default function PagePerimetre() {
                       <>
                         {ecart && <Bouton variante="noir" disabled={envoi} onClick={() => setMajAbo(true)}>Mettre à jour mon abonnement</Bouton>}
                         <Bouton variante="clair" disabled={envoi} onClick={() => versStripe('abonnement_gerer')}>Gérer mon abonnement</Bouton>
+                        <Link to={PAGE_CONTRAT} className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium text-neutral-700 underline hover:text-neutral-900">Voir les nouveaux contrats</Link>
                       </>
                     ) : (
-                      <Bouton variante="noir" disabled={envoi || a.actuels.connecteurs == null} onClick={() => versStripe('abonnement_souscrire')}>
-                        S'abonner par carte · {eur(a.estimation_ht)} HT / mois
-                      </Bouton>
+                      <Link to={PAGE_CONTRAT} className="inline-flex items-center justify-center rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">Choisir mon contrat</Link>
                     )}
                   </div>
                 ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace gère l'abonnement.</p>}
@@ -230,7 +285,9 @@ export default function PagePerimetre() {
           <p className="mb-4 text-sm text-neutral-500">
             {me.essai
               ? (essaiFini ? 'Essai gratuit terminé' : `Essai gratuit jusqu'au ${new Date(me.essai.fin).toLocaleDateString('fr-FR')}`)
-              : `Formule ${OFFRES[p.offre] ?? p.offre}${p.expire_le ? ` — jusqu'au ${new Date(p.expire_le).toLocaleDateString('fr-FR')}` : ''}`}
+              : p.abonnement?.contrat && !p.abonnement.ancienne_grille
+                ? `Contrat ${contratDe(p.abonnement.contrat.contrat).nom} · agents illimités`
+                : `Formule ${OFFRES[p.offre] ?? p.offre}${p.expire_le ? ` — jusqu'au ${new Date(p.expire_le).toLocaleDateString('fr-FR')}` : ''}`}
             {p.quotas.utilisateurs.max ? ` · ${p.quotas.utilisateurs.max} accès inclus` : ''}
           </p>
           <ul className="space-y-2">
@@ -316,6 +373,7 @@ export default function PagePerimetre() {
         titre={ajout ? `Ajouter ${p.agents.find((x) => x.id === ajout)?.prenom ?? 'cet agent'} à votre équipe ?` : ''}
         message={(() => {
           const a = p.abonnement;
+          if (a && !a.ancienne_grille) return "L'agent rejoint votre équipe tout de suite, sans supplément : votre contrat comprend des agents illimités.";
           const plus = a?.agent_suivant_ht != null ? eur(a.agent_suivant_ht) : null;
           if (a?.statut && EN_COURS.includes(a.statut)) return `Votre abonnement augmente${plus ? ` de ${plus} HT par mois` : ''} ; la différence pour le mois en cours est calculée au prorata sur votre prochaine facture.`;
           if (me.essai && !essaiFini) return `L'agent est disponible tout de suite, sans frais pendant l'essai.${plus ? ` Il ajoutera ${plus} HT par mois à votre abonnement si vous vous abonnez.` : ''}`;
@@ -341,6 +399,13 @@ export default function PagePerimetre() {
         annuler={{ onClick: () => setDemandeSuspension(false) }}
         enCours={envoi}
       />
+      {proprietaire && p.abonnement?.statut && EN_COURS.includes(p.abonnement.statut) && (
+        <p className="pt-6 text-center text-xs text-neutral-400">
+          <button type="button" disabled={envoi} onClick={() => versStripe('abonnement_resilier')} className="underline decoration-neutral-300 hover:text-neutral-600">
+            Résilier mon abonnement
+          </button>
+        </p>
+      )}
     </div>
   );
 }

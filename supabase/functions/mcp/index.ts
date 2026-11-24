@@ -21,21 +21,15 @@ import {
   cacheSessions, extraireJeton, marquerUtilisation, MESSAGES_REFUS, sessionUtilisateur, verifierJeton, type JetonValide,
 } from "../_shared/mcp_jeton.ts";
 import { traiterCorps, versOutilsMcp, type Serveur } from "../_shared/mcp_protocole.ts";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const sansSession = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Mcp-Session-Id, Mcp-Protocol-Version",
-};
-
-function json(body: unknown, status = 200, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json", ...extra } });
-}
+const corsHeaders = enTetesCors("POST, OPTIONS", "Content-Type, Authorization, Accept, Mcp-Session-Id, Mcp-Protocol-Version");
+const json = reponseJson(corsHeaders);
 
 // Service : jetons, rôle, paramètres, ouverture de session. JAMAIS la donnée métier.
 const admin = createClient(SUPABASE_URL, SERVICE, sansSession);

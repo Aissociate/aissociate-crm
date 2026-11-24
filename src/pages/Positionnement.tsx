@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
+import { journaliserEnvoi } from '@/lib/journalEmail';
 import { supabase } from '@/lib/supabase';
 import { uploadFile } from '@/lib/storage';
 import {
@@ -193,14 +194,12 @@ export default function Positionnement() {
       // send-email ne fait qu'expédier en SMTP : sans cette ligne, le mail
       // partait bien mais restait invisible dans la Messagerie et l'historique
       // du contact. Même journalisation que ComposeMessageModal.
-      const { error: logErr } = await supabase.from('emails').insert({
-        destinataires: [l.destinataire_email], copie: [], sujet: l.libelle, corps: texte,
-        statut: 'envoye', canal: 'email', direction: 'sortant',
-        expediteur: smtpFrom ?? profile?.email ?? null,
-        contact_id: l.contact_id, dossier_id: l.dossier_id,
-        sent_at: envoyeLe, owner_id: session?.user.id ?? null, attachments: [],
+      const logErr = await journaliserEnvoi({
+        destinataire: l.destinataire_email, sujet: l.libelle, corps: texte,
+        expediteur: smtpFrom ?? profile?.email ?? null, ownerId: session?.user.id ?? null,
+        contactId: l.contact_id, dossierId: l.dossier_id, envoyeLe,
       });
-      if (logErr) setErreur(`Mail envoyé, mais non enregistré dans la Messagerie : ${logErr.message}`);
+      if (logErr) setErreur(`Mail envoyé, mais non enregistré dans la Messagerie : ${logErr}`);
       await liens.refresh();
     } catch (e) {
       setErreur(`Envoi impossible (SMTP non configuré ?). ${e instanceof Error ? e.message : ''}`);
@@ -759,7 +758,7 @@ export default function Positionnement() {
       <ConventionPositionnementModal
         open={conventionOpen} onClose={() => setConventionOpen(false)}
         repondants={repondantsChoisis} positionnements={reponses.data}
-        onLie={() => { reponses.refresh(); plans.refresh(); plansPdf.refresh(); }}
+        onLie={() => { void reponses.refresh(); void plans.refresh(); void plansPdf.refresh(); }}
         contacts={contacts.data}
         dossiers={dossiers.data} sessions={sessions.data}
       />

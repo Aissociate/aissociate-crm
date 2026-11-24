@@ -85,7 +85,7 @@ export default function Program() {
 
   return (
     <section className="py-24 bg-white relative overflow-hidden">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px),linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)] opacity-30"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#f2ece4_1px,transparent_1px),linear-gradient(to_bottom,#f2ece4_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)] opacity-30"></div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
@@ -143,7 +143,7 @@ export default function Program() {
               key={index}
               className="group bg-white rounded-3xl shadow-sm border border-neutral-200 overflow-hidden hover:shadow-sm transition-all duration-300 hover:-translate-y-3"
             >
-              <div className={`relative bg-gradient-to-r ${day.color} p-8 text-white overflow-hidden`}>
+              <div className={`relative bg-neutral-700 p-8 text-white overflow-hidden`}>
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-3">

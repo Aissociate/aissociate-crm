@@ -28,7 +28,7 @@ export default function Veille() {
     catch (x) { setErreur(gerer(x)); return false; }
     finally { setOccupe(null); }
   }, [gerer]);
-  useEffect(() => { agir('flux'); }, [agir]);
+  useEffect(() => { void agir('flux'); }, [agir]);
 
   if (!e) return erreur ? <p className="text-sm text-red-700">{erreur}</p> : <Chargement />;
   const articles = source ? e.articles.filter((a) => a.source === source) : e.articles;
@@ -60,7 +60,7 @@ export default function Veille() {
                 </div>
                 <Interrupteur actif={f.actif} label={f.actif ? 'Mettre en pause' : 'Réactiver'} onChange={(v) => agir('flux_basculer', { id: f.id, actif: v }, f.id)} />
                 <button title="Ne plus suivre" disabled={occupe !== null}
-                  onClick={() => { if (confirm(`Ne plus suivre « ${f.titre || f.url} » ?`)) agir('flux_supprimer', { id: f.id }, f.id); }}
+                  onClick={() => { if (confirm(`Ne plus suivre « ${f.titre || f.url} » ?`)) void agir('flux_supprimer', { id: f.id }, f.id); }}
                   className="rounded-lg p-2 text-neutral-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
               </li>
             ))}

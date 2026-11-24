@@ -1,5 +1,6 @@
 // Paiement en ligne Stripe du Studio : recharges de crédits (paiement unique) et
-// abonnement mensuel (agents au tarif dégressif + connecteurs au-delà des inclus).
+// abonnement : contrats de la grille (contrats.ts, CDD mensuel ou CDI annuel) et, pour les
+// abonnés d'avant le 23/11/2026, ancienne grille (agents au tarif dégressif + connecteurs en sus).
 //
 // Compte Stripe PARTAGÉ avec d'autres produits d'Aissociate : tout objet du Studio porte
 // metadata.app = "studio", et le Studio a son propre webhook (cette fonction, en-tête
@@ -15,6 +16,8 @@
 // une seule fois par session Stripe (index unique sur studio_recharges.stripe_ref).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
+import * as contrats from "./contrats.ts";
+import * as responsables from "./responsables_limite.ts";
 
 const API = "https://api.stripe.com/v1";
 export const TVA_POURCENT = 8.5; // La Réunion
@@ -100,9 +103,12 @@ export function lireAbonnement(a: Abonnement) {
   const conn = articles.find((x) => String(x.price?.lookup_key ?? "").startsWith("studio_connecteur_"));
   const nAgents = agents?.quantity ?? 0, nConn = conn?.quantity ?? 0;
   const fin = a.current_period_end ?? articles[0]?.current_period_end;
+  // Grille des contrats (contrats.ts) : montant mensuel lissé, remise CDI comprise.
+  const contrat = contrats.choixDepuisArticles(articles.map((x) => ({ lookup_key: x.price?.lookup_key, quantite: x.quantity ?? 1 })));
   return {
     agents: nAgents, connecteurs: nConn, articleAgents: agents?.id ?? null, articleConnecteurs: conn?.id ?? null,
-    montant_ht: Math.round((montantAgents(nAgents) + nConn * (conn?.price?.unit_amount ?? 0) / 100) * 100) / 100,
+    contrat, articles: articles.map((x) => x.id),
+    montant_ht: contrat ? contrats.bulletin(contrat).mensuel_ht : Math.round((montantAgents(nAgents) + nConn * (conn?.price?.unit_amount ?? 0) / 100) * 100) / 100,
     fin: fin ? new Date(fin * 1000).toISOString() : null,
   };
 }
@@ -152,6 +158,10 @@ const prixAgents = () => prix(CLE_AGENTS, "Studio IA — agents (abonnement mens
   tiers: PALIERS_AGENTS.map((c, i) => ({ up_to: i === PALIERS_AGENTS.length - 1 ? "inf" : i + 1, unit_amount: c })),
 });
 const prixConnecteur = (centimes: number) => prix(cleConnecteur(centimes), "Studio IA — connecteur supplémentaire", { unit_amount: centimes });
+
+/** Prix d'un élément de la grille des contrats (mensuel, ou annuel pour un CDI). */
+const prixContrat = (a: { element: string; nom: string; centimes: number }, cdi: boolean) =>
+  prix(contrats.clePrix(a.element, cdi), a.nom, { unit_amount: a.centimes, recurring: { interval: cdi ? "year" : "month" } });
 
 /** Client Stripe de l'espace (créé au premier paiement, coordonnées de « Mon entreprise ») et sa zone de TVA. */
 async function clientStripe(sb: SupabaseClient, wsId: string, email: string): Promise<{ id: string; reunion: boolean }> {
@@ -209,8 +219,67 @@ export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; e
   return s.url;
 }
 
+/** Page de souscription d'un contrat de la grille (contrat + avenants, CDD mensuel ou CDI annuel). */
+export async function sessionContrat(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; choix: contrats.Choix }) {
+  const elements = contrats.articles(p.choix);
+  if (!elements.length) throw new Error("Rien à payer pour ce contrat.");
+  const [client, ...prixIds] = await Promise.all([clientStripe(sb, p.wsId, p.email), ...elements.map((a) => prixContrat(a, p.choix.cdi))]);
+  const fixe = !TAXE_AUTOMATIQUE || client.reunion;
+  const taxe = parametresTaxe(fixe, fixe ? await tauxTva() : null);
+  const meta = { app: "studio", workspace_id: p.wsId };
+  const s = await appel<{ url: string }>("POST", "/checkout/sessions", {
+    mode: "subscription", customer: client.id, locale: "fr", ...taxe.session,
+    line_items: elements.map((a, i) => ({ price: prixIds[i], quantity: a.quantite })),
+    subscription_data: { metadata: { ...meta, grille: contrats.VERSION }, ...(fixe ? { default_tax_rates: taxe.lignes.tax_rates } : {}), description: "Studio IA — Aissociate" },
+    metadata: { ...meta, nature: "abonnement" },
+    success_url: `${p.origine}/studio/perimetre?paiement=abonnement`,
+    cancel_url: `${p.origine}/studio/reglages/perimetre/contrat?paiement=annule`,
+  });
+  return s.url;
+}
+
+/**
+ * Change le contrat d'un abonnement en cours (y compris un abonnement de l'ancienne grille par
+ * agent) : tous les articles sont remplacés, la différence est calculée au prorata.
+ */
+export async function modifierContrat(sb: SupabaseClient, wsId: string, choix: contrats.Choix) {
+  const { data: w } = await sb.from("studio_workspaces").select("stripe_abonnement").eq("id", wsId).single();
+  if (!w?.stripe_abonnement) throw new Error("Aucun abonnement en ligne pour cet espace.");
+  const elements = contrats.articles(choix);
+  if (!elements.length) throw new Error("Pour revenir au Stage gratuit, résiliez depuis « Gérer mon abonnement » : vous y passerez à la fin de la période payée.");
+  const a = lireAbonnement(await appel<Abonnement>("GET", `/subscriptions/${w.stripe_abonnement}`));
+  const prixIds = await Promise.all(elements.map((x) => prixContrat(x, choix.cdi)));
+  const items = [
+    ...a.articles.map((id) => ({ id, deleted: true })),
+    ...elements.map((x, i) => ({ price: prixIds[i], quantity: x.quantite })),
+  ];
+  const maj = await appel<Abonnement>("POST", `/subscriptions/${w.stripe_abonnement}`, {
+    items, proration_behavior: "create_prorations", metadata: { app: "studio", workspace_id: wsId, grille: contrats.VERSION },
+  });
+  await enregistrerAbonnement(sb, maj);
+  return lireAbonnement(maj);
+}
+
+/** Modèle d'IA de la qualification Expert (doit figurer dans MODELES_STUDIO d'index.ts). */
+export const MODELE_EXPERT = "anthropic/claude-haiku-5.5";
+
+/** Applique à l'espace les droits d'un contrat : quota d'heures, badges, responsables, casier, Expert. */
+export async function appliquerContrat(sb: SupabaseClient, wsId: string, choix: contrats.Choix) {
+  const d = contrats.droits(choix);
+  const { data: w } = await sb.from("studio_workspaces").select("modele").eq("id", wsId).maybeSingle();
+  // Expert : modèle supérieur, sans écraser un modèle posé à la main depuis le CRM.
+  const modele = d.expert ? (w?.modele || MODELE_EXPERT) : (w?.modele === MODELE_EXPERT ? null : w?.modele ?? null);
+  await sb.from("studio_workspaces").update({
+    contrat: choix.contrat, contrat_choix: choix, quota_messages_mois: d.quota_messages_mois, connecteurs_max: d.connecteurs_max,
+    max_utilisateurs: d.max_utilisateurs, stockage_go: d.stockage_go, astreinte: d.astreinte, modele,
+  }).eq("id", wsId);
+  // Contrat inférieur : les responsables au-delà de la nouvelle limite sont désactivés (jamais le propriétaire).
+  await responsables.ajuster(sb, wsId, d.max_utilisateurs);
+}
+
 /** Portail client Stripe (carte, factures, résiliation), avec une configuration propre au Studio. */
-export async function sessionPortail(sb: SupabaseClient, p: { wsId: string; email: string; origine: string }) {
+// `resilier` : le portail s'ouvre directement sur la résiliation de cet abonnement (fin de période).
+export async function sessionPortail(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; resilier?: string | null }) {
   const client = (await clientStripe(sb, p.wsId, p.email)).id;
   const l = await appel<{ data: { id: string; active: boolean; metadata?: Record<string, string> }[] }>("GET", "/billing_portal/configurations", { limit: 100 });
   const config = l.data.find((c) => c.active && c.metadata?.app === "studio")?.id ?? (await appel<{ id: string }>("POST", "/billing_portal/configurations", {
@@ -222,7 +291,15 @@ export async function sessionPortail(sb: SupabaseClient, p: { wsId: string; emai
     },
     metadata: { app: "studio" },
   })).id;
-  return (await appel<{ url: string }>("POST", "/billing_portal/sessions", { customer: client, configuration: config, return_url: `${p.origine}/studio/perimetre`, locale: "fr" })).url;
+  return (await appel<{ url: string }>("POST", "/billing_portal/sessions", {
+    customer: client, configuration: config, return_url: `${p.origine}/studio/perimetre`, locale: "fr",
+    ...(p.resilier ? {
+      flow_data: {
+        type: "subscription_cancel", subscription_cancel: { subscription: p.resilier },
+        after_completion: { type: "redirect", redirect: { return_url: `${p.origine}/studio/perimetre?paiement=resilie` } },
+      },
+    } : {}),
+  })).url;
 }
 
 /** Aligne l'abonnement sur l'équipe actuelle (prorata au jour près). */
@@ -230,6 +307,8 @@ export async function synchroniser(sb: SupabaseClient, wsId: string, agents: num
   const { data: w } = await sb.from("studio_workspaces").select("stripe_abonnement").eq("id", wsId).single();
   if (!w?.stripe_abonnement) throw new Error("Aucun abonnement en ligne pour cet espace.");
   const a = lireAbonnement(await appel<Abonnement>("GET", `/subscriptions/${w.stripe_abonnement}`));
+  // Contrat de la grille : agents illimités, rien à aligner.
+  if (a.contrat) return a;
   const items: Record<string, unknown>[] = [];
   if (a.articleAgents) items.push({ id: a.articleAgents, quantity: agents });
   else items.push({ price: await prixAgents(), quantity: agents });
@@ -252,7 +331,13 @@ async function enregistrerAbonnement(sb: SupabaseClient, a: Abonnement) {
   }).eq("id", wsId);
   // Abonnement payé : l'espace d'essai devient un espace client (formule Essentiel).
   if (["active", "trialing"].includes(a.status)) {
-    await sb.from("studio_workspaces").update({ offre: "essentiel" }).eq("id", wsId).eq("offre", "essai");
+    await sb.from("studio_workspaces").update({ offre: "essentiel", essai_fin: null }).eq("id", wsId).eq("offre", "essai");
+  }
+  // Grille des contrats : droits du contrat payé ; abonnement terminé → retour au Stage gratuit.
+  if (l.contrat && ["active", "trialing", "past_due"].includes(a.status)) await appliquerContrat(sb, wsId, l.contrat);
+  else if (["canceled", "incomplete_expired", "unpaid"].includes(a.status)) {
+    const { data: w } = await sb.from("studio_workspaces").select("contrat, stripe_abonnement").eq("id", wsId).maybeSingle();
+    if (w?.contrat && w.stripe_abonnement === a.id) await appliquerContrat(sb, wsId, contrats.CHOIX_STAGE);
   }
 }
 

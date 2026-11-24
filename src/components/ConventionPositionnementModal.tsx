@@ -284,7 +284,7 @@ export default function ConventionPositionnementModal({
       // L'effectif saisi est mémorisé sur le plan, pour son PDF et les prochaines conventions.
       if (pid && nombre(nbPax)) await supabase.from('plans_formation').update({ nb_participants: pax }).eq('id', pid);
       if (pid) await lierReponses(pid);
-      pdfs.refresh();
+      void pdfs.refresh();
     } catch (e) {
       setErreur(`Génération impossible : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -319,7 +319,7 @@ export default function ConventionPositionnementModal({
       if (!res || res.error) throw new Error(res?.error ?? 'Réponse vide');
       setPlanIA(res); setPlanId(res.planId); setDureeH(String(res.duree_heures));
       if (nombre(nbPax)) await supabase.from('plans_formation').update({ nb_participants: pax }).eq('id', res.planId);
-      plans.refresh(); onLie?.();
+      void plans.refresh(); onLie?.();
 
       if (avecPdfPlan) {
         setEtape("Mise en forme du plan en PDF par l'IA (1 à 2 minutes)…");
@@ -346,7 +346,7 @@ export default function ConventionPositionnementModal({
             userId: session?.user.id ?? null,
             contactId: signataireId || null, entrepriseId: entrepriseId || null,
           });
-          pdfs.refresh();
+          void pdfs.refresh();
         } catch (e) {
           // Le plan est enregistré : la convention peut se faire sans son PDF.
           setAvertissement(`PDF du plan non produit : ${e instanceof Error ? e.message : String(e)}`);

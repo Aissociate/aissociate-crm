@@ -22,8 +22,10 @@ export function AccesAgentsProvider({ children }: { children: ReactNode }) {
     appel<{ acces: Acces }>('acces_connecteurs').then((r) => setAcces(r.acces ?? {})).catch(() => setAcces({}));
   }, []);
   const regler = useCallback(async (cle: string, nom: string, agents: string[] | null) => {
-    try { setAcces((await appel<{ acces: Acces }>('acces_connecteur_regler', { cle, nom, agents })).acces ?? {}); }
-    catch (e) { throw new Error(gerer(e)); }
+    let erreur: string;
+    try { setAcces((await appel<{ acces: Acces }>('acces_connecteur_regler', { cle, nom, agents })).acces ?? {}); return; }
+    catch (e) { erreur = gerer(e); }
+    throw new Error(erreur);
   }, [gerer]);
   return <AccesContext.Provider value={{ acces, regler }}>{children}</AccesContext.Provider>;
 }

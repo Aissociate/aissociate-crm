@@ -1,21 +1,26 @@
 import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ArrowRight, Menu, MessageCircle, PhoneCall, X } from 'lucide-react';
-import AdminLogo from './AdminLogo';
+import { Logo } from '@/components/Logo';
 import { trackClick } from '@/lib/track';
 
 // Même langage visuel que la page /agents-ia : neutres, orange plein, angles doux.
 const LIENS = [
   { to: '/formations', label: 'Formations' },
   { to: '/aides-formation', label: 'Financements' },
-  { to: '/agents-ia', label: 'Agents IA', nouveau: true },
+  { to: '/', label: 'Agents IA', nouveau: true },
   { to: '/assistance', label: 'Assistance' },
   { to: '/developpement', label: 'Développement' },
   { to: '/blog', label: 'Blog' },
+  // Lien affiché sur grand écran seulement dans la barre (sinon elle déborde vers 1024 px) ; toujours dans le menu mobile.
+  { to: '/affiliation', label: 'Affiliation', grandEcran: true },
 ];
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Sur l'accueil (Studio IA), le bouton principal mène au stage gratuit ; ailleurs, au formulaire de contact.
+  const { pathname } = useLocation();
+  const cta = pathname === '/' ? { to: '/studio/demarrer?depuis=entete', texte: 'Essayer gratuitement' } : { to: '/formulaire', texte: 'Nous contacter' };
   const fermer = () => setIsMenuOpen(false);
 
   return (
@@ -29,16 +34,8 @@ export default function Header() {
       </a>
       <nav aria-label="Navigation principale" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5" onClick={fermer}>
-            <AdminLogo
-              src="https://storage.googleapis.com/msgsndr/QgFd2CSdLClLqXBncDm0/media/65f8015e1a9195ba3d84f818.jpeg"
-              alt="AIssociate Logo"
-              className="h-10 w-10 rounded-xl object-contain"
-            />
-            <div className="leading-tight">
-              <div className="text-lg font-semibold tracking-tight text-neutral-950">AIssociate</div>
-              <div className="text-[11px] text-neutral-500">Formation &amp; agents IA · La Réunion</div>
-            </div>
+          <Link to="/" className="flex shrink-0 items-center" onClick={fermer} aria-label="Aissociate, accueil">
+            <Logo size="sm" tagline fond="clair" />
           </Link>
 
           <div className="hidden items-center gap-1 lg:flex">
@@ -46,12 +43,13 @@ export default function Header() {
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={l.to === '/'}
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`
+                  `${l.grandEcran ? 'hidden xl:flex' : 'flex'} items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`
                 }
               >
                 {l.label}
-                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Essai gratuit</span>}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-neutral-950">Gratuit</span>}
               </NavLink>
             ))}
           </div>
@@ -67,10 +65,10 @@ export default function Header() {
               0692 24 68 60
             </a>
             <Link
-              to="/formulaire"
-              className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+              to={cta.to}
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-neutral-950 transition-colors hover:bg-orange-400"
             >
-              Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              {cta.texte} <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
 
@@ -91,13 +89,14 @@ export default function Header() {
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={l.to === '/'}
                 onClick={fermer}
                 className={({ isActive }) =>
                   `flex items-center gap-2 rounded-xl px-4 py-2.5 font-medium ${isActive ? 'bg-neutral-100 text-neutral-950' : 'text-neutral-700 hover:bg-neutral-50'}`
                 }
               >
                 {l.label}
-                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">Essai gratuit</span>}
+                {l.nouveau && <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-neutral-950">Gratuit</span>}
               </NavLink>
             ))}
             <a
@@ -119,11 +118,11 @@ export default function Header() {
               WhatsApp
             </a>
             <Link
-              to="/formulaire"
-              className="mx-4 !mt-4 flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-semibold text-white"
+              to={cta.to}
+              className="mx-4 !mt-4 flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-semibold text-neutral-950"
               onClick={fermer}
             >
-              Nous contacter <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              {cta.texte} <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         )}

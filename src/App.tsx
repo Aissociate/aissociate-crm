@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import SupabaseNotice from '@/components/SupabaseNotice';
 import Layout from '@/components/Layout';
@@ -59,6 +59,8 @@ import SiteBlog from '@/site/pages/Blog';
 import SiteBlogArticle from '@/site/pages/BlogArticle';
 import SiteAides from '@/site/pages/AidesFormation';
 import SiteContact from '@/site/pages/Contact';
+import SiteAffiliation from '@/site/pages/Affiliation';
+import SiteAffiliationTest from '@/site/pages/AffiliationTest';
 import SiteFormulaire from '@/site/pages/Formulaire';
 import SiteMentionsLegales from '@/site/pages/MentionsLegales';
 import SiteConfidentialite from '@/site/pages/Confidentialite';
@@ -89,17 +91,21 @@ export default function App() {
     <Routes>
       {/* ── Site vitrine public (layout SiteFrame = AuthProvider du site + bouton Admin) ── */}
       <Route element={<SiteFrame />}>
-        <Route path="/" element={<OrganismHome />} />
+        {/* Accueil = Studio IA (produit phare) ; l'ancienne accueil « organisme de formation » vit sur /formation-ia */}
+        <Route path="/" element={<SiteAgentsIA />} />
+        <Route path="/formation-ia" element={<OrganismHome />} />
         <Route path="/formations" element={<SiteFormationsList />} />
         <Route path="/formations/closer-ia-cpf" element={<SiteFormationDetail />} />
         <Route path="/formations/:id" element={<SiteFormationDetailPage />} />
         <Route path="/assistance" element={<SiteAssistance />} />
         <Route path="/developpement" element={<SiteDevelopment />} />
-        <Route path="/agents-ia" element={<SiteAgentsIA />} />
+        <Route path="/agents-ia" element={<Navigate to="/" replace />} />
         <Route path="/blog" element={<SiteBlog />} />
         <Route path="/blog/:slug" element={<SiteBlogArticle />} />
         <Route path="/aides-formation" element={<SiteAides />} />
         <Route path="/contact" element={<SiteContact />} />
+        <Route path="/affiliation" element={<SiteAffiliation />} />
+        <Route path="/affiliation/test" element={<SiteAffiliationTest />} />
         <Route path="/formulaire" element={<SiteFormulaire />} />
         <Route path="/mentions-legales" element={<SiteMentionsLegales />} />
         <Route path="/confidentialite" element={<SiteConfidentialite />} />

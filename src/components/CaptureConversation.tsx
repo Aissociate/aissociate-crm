@@ -74,7 +74,7 @@ export default function CaptureConversation({ onAnalyse, onFermer }: {
   const occupe = etape !== 'preparation';
 
   return (
-    <div className="mx-auto mb-3 w-full max-w-3xl rounded-2xl border border-brand-500/30 bg-surface p-4 shadow-lg shadow-brand-500/5">
+    <div className="mx-auto mb-3 w-full max-w-3xl rounded-2xl border border-brand-500/30 bg-surface p-4 shadow-lg">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-medium text-fg">Conversation enregistrée</p>

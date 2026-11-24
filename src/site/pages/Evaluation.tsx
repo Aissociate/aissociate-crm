@@ -26,7 +26,7 @@ function Coquille({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-app">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        <div className="mb-6 flex justify-center"><Logo size="md" tagline /></div>
+        <div className="mb-6 flex justify-center"><Logo size="md" tagline fond="clair" /></div>
         {children}
         <p className="mt-8 text-center text-xs text-muted">
           Aissociate · Organisme de formation certifié Qualiopi — vos réponses restent confidentielles.
@@ -59,7 +59,7 @@ export default function Evaluation() {
 
   useEffect(() => {
     let vivant = true;
-    (async () => {
+    void (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('evaluation', { body: { action: 'get', token } });
         if (error) throw error;
@@ -193,7 +193,7 @@ export default function Evaluation() {
 
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
         <header className="mb-8">
-          <div className="mb-4"><Logo size="md" tagline /></div>
+          <div className="mb-4"><Logo size="md" tagline fond="clair" /></div>
           <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-3xl">{ctx.libelle}</h1>
           {ctx.formation && <p className="mt-1 text-sm font-medium text-brand-600 dark:text-brand-400">{ctx.formation}</p>}
           <p className="mt-3 max-w-[64ch] text-sm leading-relaxed text-muted">

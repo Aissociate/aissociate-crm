@@ -1,3 +1,7 @@
+// ⚠ Depuis le 23/11/2026, le contrat Stage gratuit (contrats.ts) remplace l'essai : plus aucun
+// espace n'est créé avec `essai_fin` et la migration studio_contrats a basculé les essais en Stage.
+// Ce module reste pour un espace d'essai qu'Aissociate recréerait à la main.
+//
 // Essai gratuit : un espace créé à la fin du questionnaire a `essai_fin` (7 jours par défaut).
 // Pendant l'essai : quotas habituels, un seul connecteur. Après : accès bloqué (seuls Mon
 // périmètre, l'abonnement, le mot de passe et les CGV restent ouverts) tant qu'aucun
@@ -10,6 +14,7 @@ export const CONNECTEURS_ESSAI = 1;
 /** Actions encore permises une fois l'essai terminé. */
 export const ACTIONS_APRES_ESSAI = new Set([
   "me", "logout", "change_password", "cgv", "cgv_accepter", "perimetre", "abonnement_souscrire", "abonnement_gerer", "agent_ajouter",
+  "contrat_souscrire", "integration_demander", "abonnement_resilier",
   "entete", "entete_update", "bug_signaler",
 ]);
 

@@ -31,6 +31,23 @@ type Workspace = {
   expire_le: string | null; created_at: string; modele: string | null;
   suspendu?: boolean; budget_ia_jour_eur?: number | null;
   essai_fin?: string | null; abonnement_statut?: string | null; abonnement_fin?: string | null;
+  /** Pack métier du secteur (studio_packs_metier.code) ; absent tant que la migration n'est pas appliquée. */
+  pack_code?: string | null;
+  /** Harnais généré par l'IA (harnais.ts) : null/a_lancer, en_cours, pret, echec. */
+  harnais_statut?: string | null; harnais_maj?: string | null; harnais_erreur?: string | null;
+};
+
+/** Pack métier de catalogue publié (dernière version), proposé dans la fiche de l'espace. */
+type PackDispo = { code: string; nom: string; version: number };
+/** Harnais propre à l'espace, tel qu'affiché dans la fiche. */
+type HarnaisVu = {
+  nom: string; version: number; publie_le: string | null; cout_usd: number | null;
+  regles: { texte: string; source: string }[]; relais: { situation: string; consigne: string }[];
+  fiche_type: { libelle: string; requis?: boolean }[]; cadres: { agent_id: string; cadre: string }[]; remarques: string[];
+};
+
+const STATUTS_HARNAIS: Record<string, string> = {
+  en_cours: 'Génération en cours (2 à 4 minutes)…', pret: 'Prêt', echec: 'Échec', a_lancer: 'Pas encore généré',
 };
 
 /** Où en est le client : essai en cours ou terminé, abonnement Stripe (mêmes règles que essai.ts). */
@@ -110,7 +127,7 @@ export default function StudioAdmin() {
     setUsage((us.data ?? []) as Usage[]); setAgents((ag.data ?? []) as AgentCat[]);
     setEntreprises((en.data ?? []) as { id: string; raison_sociale: string }[]);
   }, []);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const lienStudio = `${window.location.origin}/studio`;
 
@@ -220,6 +237,37 @@ function EspaceModal({
   const [identifiants, setIdentifiants] = useState<string | null>(null);
   const [erreur, setErreur] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  // null : table absente (migration studio_packs_metier non appliquée) → champ masqué, rien envoyé.
+  const [packs, setPacks] = useState<PackDispo[] | null>(null);
+
+  const [harnaisVu, setHarnaisVu] = useState<HarnaisVu | null>(null);
+  const [statutHarnais, setStatutHarnais] = useState<string | null>(espace?.harnais_statut ?? null);
+
+  useEffect(() => {
+    if (!espace || espace.harnais_statut === undefined) return;
+    db.from('studio_packs_metier').select('nom, version, publie_le, cout_usd, regles, relais, fiche_type, cadres, remarques')
+      .eq('code', `ws-${espace.id}`).eq('statut', 'publie').order('version', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setHarnaisVu((data as HarnaisVu | null) ?? null));
+  }, [espace]);
+
+  const genererHarnais = async () => {
+    if (!espace) return;
+    setErreur('');
+    try {
+      await adminStudio({ action: 'admin_harnais', workspace_id: espace.id });
+      setStatutHarnais('en_cours');
+    } catch (e) { setErreur(e instanceof Error ? e.message : String(e)); }
+  };
+
+  useEffect(() => {
+    db.from('studio_packs_metier').select('code, nom, version').eq('statut', 'publie').is('workspace_id', null).order('version', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) return;
+        const vus = new Map<string, PackDispo>();
+        for (const p of (data ?? []) as PackDispo[]) if (!vus.has(p.code)) vus.set(p.code, p);
+        setPacks([...vus.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr')));
+      });
+  }, []);
 
   useEffect(() => {
     if (!espace) return;
@@ -240,6 +288,7 @@ function EspaceModal({
       ...(f.budget_ia_jour_eur !== undefined ? { budget_ia_jour_eur: f.budget_ia_jour_eur != null ? Number(f.budget_ia_jour_eur) : null } : {}),
       actif: f.actif !== false, contexte_entreprise: f.contexte_entreprise ?? '', expire_le: f.expire_le || null,
       modele: f.modele || null,
+      ...(packs ? { pack_code: f.pack_code || null } : {}),
     };
     try {
       if (!ligne.nom) throw new Error("Nom de l'espace requis");
@@ -308,6 +357,15 @@ function EspaceModal({
             </select>
           </Field>
           <Field label="Secteur d'activité"><input className="input" value={f.secteur ?? ''} onChange={(e) => set('secteur', e.target.value)} /></Field>
+          {packs && (
+            <Field label="Pack métier" hint="Règles, interdits et savoirs du secteur, ajoutés à tous les agents de l'espace (dernière version publiée).">
+              <select className="input" value={f.pack_code ?? ''} onChange={(e) => set('pack_code', e.target.value || null)}>
+                <option value="">— Aucun —</option>
+                {espace && harnaisVu && <option value={`ws-${espace.id}`}>Harnais généré pour ce client : {harnaisVu.nom} (v{harnaisVu.version})</option>}
+                {packs.map((p) => <option key={p.code} value={p.code}>{p.nom} (v{p.version}, catalogue)</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Taille">
             <select className="input" value={f.taille ?? ''} onChange={(e) => set('taille', e.target.value)}>
               <option value="">—</option>{TAILLES.map((t) => <option key={t} value={t}>{t} pers.</option>)}
@@ -334,6 +392,41 @@ function EspaceModal({
           <ModeleSelect value={f.modele ?? null} onChange={(v) => set('modele', v)} modeles={catalogue.modeles} chargement={catalogue.chargement}
             herite="le modèle de chaque agent" />
         </Field>
+        {espace && espace.harnais_statut !== undefined && (
+          <div className="rounded-lg border border-line p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-medium text-fg">Harnais métier généré par l'IA</p>
+                <p className="text-xs text-muted">
+                  {STATUTS_HARNAIS[statutHarnais ?? ''] ?? 'À générer (automatique sous quelques minutes)'}
+                  {statutHarnais === 'pret' && espace.harnais_maj ? ` · ${new Date(espace.harnais_maj).toLocaleString('fr-FR')}` : ''}
+                  {statutHarnais === 'echec' && espace.harnais_erreur ? ` : ${espace.harnais_erreur}` : ''}
+                </p>
+              </div>
+              <Button variant="secondary" onClick={genererHarnais} disabled={statutHarnais === 'en_cours' || !f.secteur?.trim()}>
+                {harnaisVu ? 'Régénérer' : 'Générer le harnais'}
+              </Button>
+            </div>
+            {!f.secteur?.trim() && <p className="mt-1 text-xs text-muted">Renseignez et enregistrez le secteur d'activité pour générer le harnais.</p>}
+            {harnaisVu && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-brand-500">
+                  {harnaisVu.nom} · v{harnaisVu.version} · {harnaisVu.regles.length} règles · {harnaisVu.cadres.length} cadres d'agent
+                  {harnaisVu.cout_usd != null ? ` · ${Number(harnaisVu.cout_usd).toFixed(3)} $` : ''}
+                </summary>
+                <div className="mt-2 space-y-3 text-xs text-fg">
+                  <div><p className="font-medium">Règles</p><ul className="list-disc pl-4">{harnaisVu.regles.map((r, i) => <li key={i}>{r.texte} <span className="text-muted">({r.source})</span></li>)}</ul></div>
+                  <div><p className="font-medium">Passer la main à l'entreprise</p><ul className="list-disc pl-4">{harnaisVu.relais.map((r, i) => <li key={i}>{r.situation} : {r.consigne}</li>)}</ul></div>
+                  <div><p className="font-medium">Cadres d'exercice</p>{harnaisVu.cadres.map((c) => (
+                    <div key={c.agent_id} className="mt-1"><p className="font-medium">{agents.find((a) => a.id === c.agent_id)?.prenom ?? c.agent_id}</p><p className="whitespace-pre-line text-muted">{c.cadre}</p></div>
+                  ))}</div>
+                  <div><p className="font-medium">Informations à connaître</p><p className="text-muted">{harnaisVu.fiche_type.map((c) => c.libelle).join(' · ')}</p></div>
+                  {harnaisVu.remarques.length > 0 && <div><p className="font-medium">Corrections de la relecture</p><ul className="list-disc pl-4 text-muted">{harnaisVu.remarques.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
         <Field label="Fiche entreprise (lue par tous les agents)" hint="Le propriétaire de l'espace peut aussi la compléter depuis le Studio.">
           <textarea className="input min-h-[120px]" value={f.contexte_entreprise ?? ''} onChange={(e) => set('contexte_entreprise', e.target.value)} />
         </Field>

@@ -254,7 +254,7 @@ export default function OngletParcours({
     });
     if (error) throw new Error(error.message);
     setSurMesure(null);
-    formations.refresh();
+    void formations.refresh();
     onChanged();
     setInfo('Formation sur mesure créée (hors catalogue public) et rattachée au dossier.');
   });
@@ -530,6 +530,7 @@ export default function OngletParcours({
                 <span className="text-muted">{formatMoney(dv.total_ht)}</span>
                 <Badge tone={dv.statut === 'accepte' ? 'success' : dv.statut === 'refuse' || dv.statut === 'expire' ? 'danger' : 'neutral'}>{dv.statut}</Badge>
                 {dv.fichier_url && <FileLink bucket="devis" value={dv.fichier_url} />}
+                <Link to={`/devis?ouvrir=${dv.id}`} className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">Modifier</Link>
                 <AddToDossierButton contactId={dossier.contact_id} dossiers={[dossier]} cibles={[dossier]}
                   fichierUrl={dv.fichier_url} sourceBucket="devis" pieceLibelle="Devis signé" documentLabel="devis" onDone={onChanged} />
               </li>
@@ -538,7 +539,7 @@ export default function OngletParcours({
         )}
         <p className="text-xs text-muted">
           Pièce « Devis signé » : {pieceDeposee('Devis signé') ? 'déposée' : 'pas encore déposée (bouton dossier sur le devis signé)'}.{' '}
-          <Link to="/devis" className="font-medium text-brand-600 hover:underline dark:text-brand-400">Créer ou modifier un devis</Link>
+          <Link to={dossier.contact_id ? `/devis?contact=${dossier.contact_id}&dossier=${dossier.id}` : '/devis'} className="font-medium text-brand-600 hover:underline dark:text-brand-400">Créer un devis pour ce dossier</Link>
         </p>
       </Etape>
 

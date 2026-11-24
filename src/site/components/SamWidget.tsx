@@ -34,7 +34,7 @@ export default function SamWidget() {
   if (!ouvert) {
     const enCours = messages.length > 1;
     return (
-      <button type="button" onClick={() => { setOuvert(true); trackClick('sam'); }} aria-label="Parler à Sam, l'agent IA d'Aissociate"
+      <button type="button" onClick={() => { setOuvert(true); void trackClick('sam'); }} aria-label="Parler à Sam, l'agent IA d'Aissociate"
         className="group fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full bg-neutral-950 py-1.5 pl-1.5 pr-4 text-sm font-semibold text-white shadow-xl ring-1 ring-white/15 transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">
         <span className="relative">
           <img src="/agents-ia/studio/sam.webp" alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover object-top" style={{ background: '#3b82f6' }} />

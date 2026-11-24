@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Check, Plus, Trash2, Save, FileCheck2, History, FileText, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2, FolderLock, Landmark, Mail, FileSignature } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, FileCheck2, History, FileText, FolderPlus, Paperclip, UserRound, PenLine, Send, Bot, Loader as Loader2, FolderLock, Landmark, Mail, FileSignature } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCollection } from '@/hooks/useCollection';
-import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, TONE_BADGE } from '@/components/ui';
+import { PageHeader, Button, Card, Spinner, Badge, Field, Modal, ActionMenu, TONE_BADGE } from '@/components/ui';
 import { FileUpload, FileLink } from '@/components/FileUpload';
 import { copyToBucket } from '@/lib/storage';
 import ContactFiche from '@/components/ContactFiche';
@@ -347,16 +347,25 @@ export default function DossierDetail() {
         subtitle={`${dossier.reference}${financeur ? ` · ${financeur.nom}` : ''}`}
         actions={
           <>
-            <Button variant="ghost" title="Ouvrir l'assistant IA sur ce dossier"
-              onClick={() => navigate('/assistant', { state: { assistantContexte: { type: 'dossier', id: dossier.id, label: `${dossier.reference} — ${dossier.intitule}` } } })}>
-              <Bot className="h-4 w-4" /> Assistant
-            </Button>
             {contact && (
               <Button variant="secondary" onClick={() => setFicheOpen(true)} title="Ouvrir la fiche du contact">
                 <UserRound className="h-4 w-4" /> {fullName(contact.prenom, contact.nom)}
               </Button>
             )}
-            <Badge tone={DOSSIER_STATUT_TONES[dossier.statut]}>{DOSSIER_STATUT_LABELS[dossier.statut]}</Badge>
+            {/* Le statut se change ici, à côté du titre : plus besoin d'aller le chercher dans une carte. */}
+            <select
+              className={cn('rounded-full border-0 px-3 py-1.5 text-sm font-medium', TONE_BADGE[DOSSIER_STATUT_TONES[dossier.statut]])}
+              value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })} aria-label="Statut du dossier"
+            >
+              {/* Un ancien statut (« en instruction ») reste affiché tant qu'on ne le change pas. */}
+              {[...new Set([...STATUTS, dossier.statut])].map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
+            </select>
+            <ActionMenu
+              items={[
+                { label: "Demander à l'assistant IA", icon: <Bot className="h-4 w-4" />, onClick: () => navigate('/assistant', { state: { assistantContexte: { type: 'dossier', id: dossier.id, label: `${dossier.reference} — ${dossier.intitule}` } } }) },
+                { label: 'Supprimer le dossier', icon: <Trash2 className="h-4 w-4" />, onClick: () => void removeDossier(), danger: true },
+              ]}
+            />
           </>
         }
       />
@@ -391,32 +400,21 @@ export default function DossierDetail() {
             ) : <p className="text-sm text-muted">Aucun financeur rattaché au dossier.</p>}
           </Card>
           <Card>
-            <h2 className="mb-4 font-semibold text-fg">Statut & financement</h2>
+            <h2 className="mb-4 font-semibold text-fg">Financement</h2>
             <div className="space-y-4">
-              <Field label="Statut du dossier">
-                <select className="input" value={dossier.statut} onChange={(e) => patch({ statut: e.target.value as DossierStatut })}>
-                  {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
-                </select>
-              </Field>
               <Field label="Montant demandé (€)">
                 <input className="input" type="number" value={dossier.montant_demande ?? 0}
-                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} />
+                  onChange={(e) => setDossier({ ...dossier, montant_demande: Number(e.target.value) })} onBlur={() => void saveMeta()} />
               </Field>
               <Field label="Montant accordé (€)">
                 <input className="input" type="number" value={dossier.montant_accorde ?? 0}
-                  onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} />
+                  onChange={(e) => setDossier({ ...dossier, montant_accorde: Number(e.target.value) })} onBlur={() => void saveMeta()} />
               </Field>
               <Field label="Notes">
                 <textarea className="input" rows={4} value={dossier.notes ?? ''}
-                  onChange={(e) => setDossier({ ...dossier, notes: e.target.value })} />
+                  onChange={(e) => setDossier({ ...dossier, notes: e.target.value })} onBlur={() => void saveMeta()} />
               </Field>
-              <Button onClick={saveMeta} disabled={saving} className="w-full">
-                <Save className="h-4 w-4" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
-              </Button>
-              <button onClick={removeDossier}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10">
-                <Trash2 className="h-4 w-4" /> Supprimer le dossier
-              </button>
+              <p className="text-xs text-muted">{saving ? 'Enregistrement…' : 'Enregistré dès que vous quittez un champ.'}</p>
             </div>
           </Card>
           {/* Workflow */}
@@ -437,7 +435,7 @@ export default function DossierDetail() {
                         }`}
                       >
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                          done ? 'bg-emerald-500 text-white' : current ? 'bg-brand-600 text-white' : 'bg-surface-2 text-muted'
+                          done ? 'bg-emerald-500 text-neutral-950' : current ? 'bg-brand-600 text-neutral-950' : 'bg-surface-2 text-muted'
                         }`}>
                           {done ? <Check className="h-3.5 w-3.5" /> : e.ordre}
                         </span>

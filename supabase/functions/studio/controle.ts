@@ -2,8 +2,8 @@
 //
 // Chaque jour (pg_cron, action controle_cron) ou à la demande (CRM, admin_controle), un client
 // fictif parcourt le Studio de bout en bout, par les mêmes portes qu'un vrai client :
-// questionnaire → espace d'essai et e-mail d'identifiants → connexion → nouveau mot de passe →
-// CGV → essai en cours → ajout d'un agent → limite d'un connecteur → fin d'essai → abonnement et
+// questionnaire → espace en Stage gratuit et e-mail d'identifiants → connexion → nouveau mot de passe →
+// CGV → Stage en cours → ajout d'un agent → aucun badge d'accès en Stage → contrat et
 // recharge (Stripe) → confirmation de paiement (webhook signé) → déblocage → mot de passe oublié. S'ajoutent la configuration, les pages
 // publiques, les services externes (Stripe, SMTP, OpenRouter, Zernio) et l'activité réelle
 // des dernières 24 h (identifiants non envoyés, webhooks non livrés, tâches en erreur).
@@ -21,6 +21,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { soumettreOnboarding } from "./gouvernance.ts";
 import * as courriel from "./courriel.ts";
 import * as stripe from "./stripe.ts";
+import * as contrats from "./contrats.ts";
 import * as cgv from "./cgv.ts";
 import * as zernio from "./zernio.ts";
 import * as recharges from "./recharges.ts";
@@ -129,13 +130,13 @@ type Parcours = {
 };
 
 async function parcours(sb: SupabaseClient, res: Resultat[]) {
-  const E = "Parcours d'un client (essai → abonnement)";
+  const E = "Parcours d'un client (Stage → contrat)";
   const ts = Date.now();
   const p: Parcours = { email: `parcours-${ts}@${DOMAINE_TEST}`, ts, essaiJours: 7 };
   const prerequis = (ok: unknown, quoi: string): Issue | null => ok ? null : { niveau: "ignore", detail: `Non testé : ${quoi} a échoué.` };
 
   try {
-    await controler(res, E, "parcours.questionnaire", "Questionnaire → espace d'essai", async () => {
+    await controler(res, E, "parcours.questionnaire", "Questionnaire → espace en Stage", async () => {
       const { data: cfg } = await sb.from("studio_config").select("cle, valeur").in("cle", ["essai_auto", "essai_jours", "onboarding_ouvert"]);
       const c = Object.fromEntries((cfg ?? []).map((x) => [x.cle, String(x.valeur)]));
       if (c.onboarding_ouvert === "false") return { niveau: "alerte", detail: "Les inscriptions sont fermées (studio_config onboarding_ouvert = false) : le questionnaire refuse toute demande.", diagnostic: "Inscriptions fermées volontairement ?", solution: "Si ce n'est pas voulu : CRM › Studio IA clients › Réglages, rouvrir les inscriptions (onboarding_ouvert = true)." };
@@ -148,14 +149,13 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       if (!r.essai) echec("La demande est enregistrée mais aucun espace d'essai n'a été ouvert.", "Le provisionnement automatique a échoué (provisionner) : agents introuvables, contrainte de base de données ou e-mail déjà utilisé.", `Chercher « [studio] essai automatique » dans ${LOGS}. Les demandes concernées restent dans CRM › Studio IA clients › Demandes et peuvent être provisionnées à la main.`);
       const { data: d } = await sb.from("studio_onboarding").select("workspace_id, statut, identifiants_envoyes_le").eq("id", r.id).single();
       p.wsId = d?.workspace_id ?? undefined;
-      const { data: w } = await sb.from("studio_workspaces").select("offre, essai_fin, actif").eq("id", p.wsId ?? "").maybeSingle();
+      const { data: w } = await sb.from("studio_workspaces").select("offre, essai_fin, actif, contrat, connecteurs_max").eq("id", p.wsId ?? "").maybeSingle();
       const { data: u } = await sb.from("studio_users").select("role, actif").eq("workspace_id", p.wsId ?? "").maybeSingle();
       if (!w || !u) echec("Espace ou propriétaire introuvable après le provisionnement.", "Le provisionnement est incomplet.", `Vérifier provisionner (gouvernance.ts) et ${LOGS}.`);
-      const ecart = Math.abs(new Date(String(w.essai_fin)).getTime() - (Date.now() + p.essaiJours * 86_400_000));
-      if (w.offre !== "essai" || !w.essai_fin || ecart > 3_600_000) echec(`Espace créé avec offre « ${w.offre} », fin d'essai ${w.essai_fin ?? "absente"}.`, "L'espace n'est pas créé en essai de la bonne durée.", "Vérifier provisionner (option essaiJours) et studio_config essai_jours.");
+      if (w.contrat !== "stage" || w.essai_fin || w.connecteurs_max !== 0) echec(`Espace créé avec le contrat « ${w.contrat} », fin d'essai ${w.essai_fin ?? "absente"}, ${w.connecteurs_max} badge(s).`, "L'espace n'est pas créé en Stage gratuit (contrats.ts).", "Vérifier provisionner (offre « stage ») dans gouvernance.ts et la migration studio_contrats.");
       if (u.role !== "proprietaire" || !u.actif) echec(`Propriétaire créé avec le rôle « ${u.role} », actif = ${u.actif}.`, "Le compte du client n'a pas les bons droits.", "Vérifier provisionner (insertion studio_users).");
       if (!d?.identifiants_envoyes_le) echec("L'envoi des identifiants n'est pas noté sur la demande.", "L'e-mail d'identifiants n'a pas été préparé.", "Vérifier essaiAutomatique (gouvernance.ts).");
-      return `Espace d'essai de ${p.essaiJours} jours créé, propriétaire actif.`;
+      return "Espace en Stage gratuit créé, propriétaire actif.";
     });
 
     await controler(res, E, "parcours.mail", "E-mail d'identifiants", async () => {
@@ -206,15 +206,14 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       return `Accès bloqué avant acceptation, ${docs.length} document(s) affiché(s), accès ouvert après acceptation.`;
     });
 
-    await controler(res, E, "parcours.essai", "Essai en cours", async () => {
+    await controler(res, E, "parcours.essai", "Stage en cours", async () => {
       const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
       const me = await studio("me", { token: p.token });
-      const e = me.data.essai as { jours_restants?: number; termine?: boolean } | null;
-      if (me.statut !== 200 || !e) echec(`Le Studio n'indique pas d'essai en cours (HTTP ${me.statut}).`, "Le bandeau d'essai ne s'affiche pas.", "Vérifier construireMe et essai.enEssai (essai.ts).");
-      if (e.termine || (e.jours_restants ?? 0) < p.essaiJours - 1) echec(`Essai indiqué : ${e.jours_restants} jour(s) restant(s), terminé = ${e.termine}.`, "Le décompte de l'essai est faux.", "Vérifier essai.joursRestants / essaiTermine (essai.ts).");
+      const ws = me.data.workspace as { contrat?: string } | undefined;
+      if (me.statut !== 200 || ws?.contrat !== "stage") echec(`Le Studio n'indique pas le contrat Stage (HTTP ${me.statut}, contrat « ${ws?.contrat} »).`, "L'espace n'est pas reconnu comme Stage.", "Vérifier SELECT_WS / versSession (index.ts).");
       const agents = (me.data.agents ?? []) as { id: string }[];
       if (!agents.some((a) => a.id === AGENTS_CATALOGUE[0].id)) echec(`Agents visibles pendant l'essai : ${agents.map((a) => a.id).join(", ") || "aucun"} (demandé : ${AGENTS_CATALOGUE[0].id}).`, "Le client en essai ne voit pas l'agent qu'il a choisi : il ne peut rien tester.", "Vérifier agentsDuWorkspace (index.ts, offre « essai » → agents Essentiel) et studio_agents.offres / studio_workspace_agents.");
-      return `${e.jours_restants} jour(s) d'essai restant(s), ${agents.length} agent(s) visible(s).`;
+      return `Stage en cours, ${agents.length} agent(s) visible(s).`;
     });
 
     await controler(res, E, "parcours.agent", "Ajout d'un agent par le client", async () => {
@@ -228,15 +227,14 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       return `Agent ajouté, ${agents.length} agents dans l'équipe.`;
     });
 
-    await controler(res, E, "parcours.connecteur", "Un seul connecteur pendant l'essai", async () => {
+    await controler(res, E, "parcours.connecteur", "Aucun badge d'accès en Stage", async () => {
       const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
-      await sb.from("studio_connecteurs").insert({ workspace_id: p.wsId, type: "google", statut: "connecte", infos: { adresse: `connecteur@${DOMAINE_TEST}` } });
-      const r = await studio("connecteur_enregistrer", { token: p.token, type: "outlook", adresse: `deuxieme@${DOMAINE_TEST}`, accord: true });
+      const r = await studio("connecteur_enregistrer", { token: p.token, type: "outlook", adresse: `premier@${DOMAINE_TEST}`, accord: true });
       await sb.from("studio_connecteurs").delete().eq("workspace_id", p.wsId);
-      if (r.statut === 200) echec("Un deuxième connecteur a été accepté pendant l'essai.", "La limite d'un connecteur pendant l'essai n'est plus appliquée.", "Vérifier refusConnecteurEssai (index.ts) et facturationEspace (facturation.ts).");
+      if (r.statut === 200) echec("Un connecteur a été accepté en Stage.", "La limite des badges d'accès du contrat n'est plus appliquée.", "Vérifier refusConnecteurEssai (index.ts), connecteurs_max et facturationEspace (facturation.ts).");
       if (r.statut === 503) echec(`Contrôle impossible (HTTP 503) : ${erreurDe(r.data)}`, "Les connecteurs de l'espace n'ont pas pu être comptés (Zernio indisponible ?).", "Voir le contrôle Zernio ci-dessous.", "alerte");
-      if (r.statut !== 402) echec(`Deuxième connecteur : HTTP ${r.statut} au lieu de 402 (${erreurDe(r.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
-      return "Deuxième connecteur refusé pendant l'essai (402).";
+      if (r.statut !== 402) echec(`Connecteur en Stage : HTTP ${r.statut} au lieu de 402 (${erreurDe(r.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
+      return "Connecteur refusé en Stage (402).";
     });
 
     await controler(res, E, "parcours.recharge", "Page de paiement d'une recharge (Stripe)", async () => {
@@ -249,23 +247,13 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       return "Page de paiement Stripe de la recharge créée (mode test).";
     });
 
-    await controler(res, E, "parcours.fin_essai", "Blocage à la fin de l'essai", async () => {
-      const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
-      await sb.from("studio_workspaces").update({ essai_fin: new Date(Date.now() - 60_000).toISOString() }).eq("id", p.wsId);
-      const bloque = await studio("conversations", { token: p.token });
-      if (bloque.statut !== 402 || !bloque.data.essai_termine) echec(`Essai terminé, accès aux agents : HTTP ${bloque.statut} au lieu de 402.`, "Un client dont l'essai est fini garde l'accès aux agents sans abonnement.", "Vérifier le garde essai.essaiTermine (index.ts) et ACTIONS_APRES_ESSAI (essai.ts).");
-      const per = await studio("perimetre", { token: p.token });
-      if (per.statut !== 200) echec(`Essai terminé, « Mon périmètre » : HTTP ${per.statut} (${erreurDe(per.data)}).`, "Le client bloqué ne peut plus atteindre la page d'abonnement.", "Vérifier ACTIONS_APRES_ESSAI (essai.ts) et l'action perimetre.");
-      return "Agents bloqués (402), « Mon périmètre » reste accessible pour s'abonner.";
-    });
-
-    await controler(res, E, "parcours.abonnement", "Page de paiement de l'abonnement (Stripe)", async () => {
+    await controler(res, E, "parcours.abonnement", "Page de paiement d'un contrat (Stripe)", async () => {
       const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
       if (!stripe.stripeConfigure()) echec("STRIPE_SECRET_KEY absente : le client ne peut pas s'abonner en ligne.", "Paiement en ligne non configuré.", "Supabase › Edge Functions › Secrets : poser STRIPE_SECRET_KEY.");
       if (!stripe.modeTest()) return { niveau: "ignore", detail: "Stripe en mode live (compte partagé) : le contrôle ne crée pas de session de paiement. Prix et webhook sont vérifiés plus bas." };
-      const a = await studio("abonnement_souscrire", { token: p.token });
-      if (a.statut !== 200 || !String(a.data.url ?? "").startsWith("https://checkout.stripe.com")) echec(`Abonnement après l'essai : HTTP ${a.statut} (${erreurDe(a.data)}).`, "Un client dont l'essai est fini ne peut pas ouvrir la page de paiement de l'abonnement.", `Vérifier sessionAbonnement (stripe.ts), la clé Stripe et ${LOGS}.`);
-      return "Essai terminé : page de paiement Stripe de l'abonnement créée (mode test).";
+      const a = await studio("contrat_souscrire", { token: p.token, choix: { contrat: "plein", badges: 1 } });
+      if (a.statut !== 200 || !String(a.data.url ?? "").startsWith("https://checkout.stripe.com")) echec(`Contrat Temps plein : HTTP ${a.statut} (${erreurDe(a.data)}).`, "Un client en Stage ne peut pas ouvrir la page de paiement de son contrat.", `Vérifier sessionContrat (stripe.ts), la clé Stripe et ${LOGS}.`);
+      return "Page de paiement Stripe du contrat créée (mode test).";
     });
 
     await controler(res, E, "parcours.webhook", "Confirmation de paiement (webhook) et déblocage", async () => {
@@ -279,13 +267,14 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
         data: { object: {
           id: `sub_controle_${p.ts}`, object: "subscription", customer: p.stripeClient ?? `cus_controle_${p.ts}`, status: "active",
           current_period_end: fin, metadata: { app: "studio", workspace_id: p.wsId },
-          items: { data: [{ id: `si_controle_${p.ts}`, quantity: 1, current_period_end: fin, price: { lookup_key: stripe.CLE_AGENTS, unit_amount: stripe.PALIERS_AGENTS[0] } }] },
+          items: { data: [{ id: `si_controle_${p.ts}`, quantity: 1, current_period_end: fin, price: { lookup_key: contrats.clePrix("contrat_plein", false), unit_amount: 14900 } }] },
         } },
       });
       if (r.statut === 401) echec("Le Studio refuse un événement signé avec son propre secret.", "Vérification de signature défaillante.", "Vérifier verifierSignature (stripe.ts).");
       if (r.statut !== 200) echec(`Événement d'abonnement : HTTP ${r.statut} (${erreurDe(r.data)}).`, "Le Studio ne sait plus enregistrer un abonnement payé.", `Vérifier traiterEvenement / enregistrerAbonnement (stripe.ts) et ${LOGS}.`);
-      const { data: w } = await sb.from("studio_workspaces").select("offre, abonnement_statut, abonnement_agents").eq("id", p.wsId).single();
+      const { data: w } = await sb.from("studio_workspaces").select("offre, abonnement_statut, contrat, connecteurs_max, quota_messages_mois").eq("id", p.wsId).single();
       if (w?.abonnement_statut !== "active" || w?.offre !== "essentiel") echec(`Après paiement : offre « ${w?.offre} », abonnement « ${w?.abonnement_statut} ».`, "L'abonnement payé n'est pas reporté sur l'espace.", "Vérifier enregistrerAbonnement (stripe.ts).");
+      if (w?.contrat !== "plein" || w?.connecteurs_max !== 6 || w?.quota_messages_mois !== 3033) echec(`Après paiement du Temps plein : contrat « ${w?.contrat} », ${w?.connecteurs_max} badge(s), quota ${w?.quota_messages_mois}.`, "Les droits du contrat payé ne sont pas appliqués à l'espace.", "Vérifier appliquerContrat (stripe.ts) et contrats.droits.");
       const debloque = await studio("conversations", { token: p.token });
       if (debloque.statut !== 200) echec(`Abonné, l'accès aux agents répond encore HTTP ${debloque.statut}.`, "Un client qui a payé reste bloqué.", "Vérifier essai.enEssai (statuts ABONNEMENT_PAYE) dans essai.ts.");
 
@@ -298,7 +287,7 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       const apres = await recharges.solde(sb, p.wsId!);
       if (r1.statut !== 200 || apres - avant !== 10) echec(`Recharge payée : HTTP ${r1.statut}, solde ${avant} → ${apres} (attendu +10).`, "Une recharge payée n'est pas créditée.", "Vérifier traiterEvenement (branche recharge) et la table studio_recharges.");
       if (r2.statut !== 200) echec(`Événement de recharge rejoué : HTTP ${r2.statut}.`, "Un événement envoyé deux fois par Stripe provoque une erreur.", "Vérifier l'index unique studio_recharges.stripe_ref.", "alerte");
-      return "Abonnement payé → espace débloqué ; recharge payée créditée une seule fois (événement rejoué ignoré).";
+      return "Contrat payé → droits du Temps plein appliqués ; recharge payée créditée une seule fois (événement rejoué ignoré).";
     });
     await controler(res, E, "parcours.mot_de_passe_oublie", "Mot de passe oublié (lien de réinitialisation)", async () => {
       const pre = prerequis(p.wsId && p.token, "la connexion"); if (pre) return pre;
@@ -402,8 +391,8 @@ async function services(sb: SupabaseClient, res: Resultat[]) {
     if (!stripe.stripeConfigure()) echec("STRIPE_SECRET_KEY absente.", "Paiement en ligne non configuré.", "Poser STRIPE_SECRET_KEY dans les secrets de la fonction.");
     const compte = await stripe.appel<{ id: string; charges_enabled?: boolean }>("GET", "/account").catch((e) => echec(`Clé refusée par Stripe : ${e.message}`, "Clé Stripe révoquée, expirée ou erronée.", "Stripe › Développeurs › Clés API : régénérer la clé et mettre à jour STRIPE_SECRET_KEY."));
     const notes: string[] = [`compte ${compte.id} en mode ${stripe.modeTest() ? "test" : "live"}`];
-    const prix = await stripe.appel<{ data: unknown[] }>("GET", "/prices", { lookup_keys: [stripe.CLE_AGENTS], active: true, limit: 1 });
-    notes.push(prix.data.length ? "prix des agents en place" : "prix des agents créé au premier abonnement");
+    const prix = await stripe.appel<{ data: unknown[] }>("GET", "/prices", { lookup_keys: [contrats.clePrix("contrat_plein", false)], active: true, limit: 1 });
+    notes.push(prix.data.length ? "prix des contrats en place" : "prix des contrats créés au premier abonnement");
     const points = await stripe.appel<{ data: { url: string; status: string; enabled_events: string[] }[] }>("GET", "/webhook_endpoints", { limit: 100 });
     const nous = points.data.filter((w) => w.url.startsWith(urlFonction()));
     if (!nous.length) echec(`${notes.join(", ")} ; aucun webhook ne pointe vers ${urlFonction()}.`, "Stripe ne prévient pas le Studio des paiements : abonnements et recharges ne sont jamais pris en compte.", "Stripe › Développeurs › Webhooks : créer un point de terminaison vers l'URL de la fonction studio, puis copier son secret dans STRIPE_WEBHOOK_SECRET.");

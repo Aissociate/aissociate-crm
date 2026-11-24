@@ -7,15 +7,10 @@
 // Déduplication via notifications.dedupe_key ; journalise dans job_runs.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
+const corsHeaders = enTetesCors("POST, GET, OPTIONS");
+const json = reponseJson(corsHeaders);
 
 type Notif = { user_id: string; type: string; titre: string; corps: string | null; lien: string | null; dedupe_key: string };
 
@@ -52,7 +47,7 @@ Deno.serve(async (req: Request) => {
       .eq("faite", false).lte("date_action", today);
     const parUser = new Map<string, number>();
     for (const a of actions ?? []) {
-      const owner = (a.contacts as { owner_id: string | null } | null)?.owner_id ?? a.auteur_id;
+      const owner = (a.contacts as unknown as { owner_id: string | null } | null)?.owner_id ?? a.auteur_id;
       if (!owner || !actifIds.has(owner)) continue;
       parUser.set(owner, (parUser.get(owner) ?? 0) + 1);
     }

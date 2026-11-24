@@ -45,21 +45,21 @@ export default function Formations() {
     setSaving(false);
     if (error) { alert(error.message); return; }
     setOpen(false);
-    refresh();
+    void refresh();
   };
 
   const remove = async (f: Formation) => {
     if (!confirm(`Supprimer « ${f.intitule} » ?`)) return;
     const { error } = await supabase.from('formations').delete().eq('id', f.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   return (
     <div>
       <PageHeader
         title="Catalogue de formations"
-        subtitle={isManager ? 'Gestion du catalogue (4.3)' : 'Consultation du catalogue (lecture seule)'}
+        subtitle={isManager ? 'Gestion du catalogue' : 'Consultation du catalogue (lecture seule)'}
         actions={isManager
           ? <Button onClick={openNew}><Plus className="h-4 w-4" /> Nouvelle formation</Button>
           : <Badge className="bg-surface-2 text-muted"><Lock className="mr-1 h-3 w-3" /> Lecture seule</Badge>}

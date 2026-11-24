@@ -23,7 +23,7 @@ export default function ResetPassword() {
       if (event === 'PASSWORD_RECOVERY') setReady(true);
     });
     // Si la session est déjà établie (rechargement de page), on autorise aussi.
-    supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getSession().then(({ data }) => {
       if (data.session) setReady(true);
     });
     return () => sub.subscription.unsubscribe();
@@ -53,8 +53,6 @@ export default function ResetPassword() {
 
   return (
     <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-app p-6">
-      <div className="pointer-events-none absolute -top-32 -right-24 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-orange-500/10 blur-3xl" />
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
 
       <div className="card relative w-full max-w-md p-8">

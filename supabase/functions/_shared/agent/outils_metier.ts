@@ -12,6 +12,7 @@
 // Chaque fonction renvoie `null` quand l'outil ne relève pas de ce module :
 // index.ts garde ainsi la main sur ses propres outils.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
+import { journaliserEmail } from "../journal_email.ts";
 
 export type DroitsMetier = {
   contacts?: boolean; dossiers?: boolean; formations?: boolean; pipeline?: boolean;
@@ -463,12 +464,11 @@ async function envoyerMail(
 ): Promise<string | null> {
   const r = await appelFonction(x, "send-email", { to, subject: sujet, html, text: texte });
   if (!r.ok) return r.erreur ?? "Envoi impossible";
-  await x.db.from("emails").insert({
-    destinataires: [to], copie: [], sujet, corps: texte,
-    statut: "envoye", canal: "email", direction: "sortant",
+  await journaliserEmail(x.db, {
+    destinataires: [to], sujet, corps: texte,
     contact_id: liens.contact_id ?? null, dossier_id: liens.dossier_id ?? null,
-    sent_at: new Date().toISOString(), owner_id: await moi(x.db), attachments: [],
-  });
+    owner_id: await moi(x.db),
+  }, { origine: "ia_assistant", libelle: "Assistant IA" });
   return null;
 }
 

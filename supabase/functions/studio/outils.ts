@@ -11,6 +11,8 @@
 //   portant l'action à exécuter. Le dépôt a lieu au « VALIDÉ » du propriétaire.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { journaliser } from "./journal.ts";
+import { journaliserEmail } from "../_shared/journal_email.ts";
+import { espacesOrganisme } from "./qualiopi.ts";
 import { nomDocument, refLivrable } from "./liaison.ts";
 import * as agenda from "./agenda.ts";
 import { adressesValides } from "./agenda.ts";
@@ -35,6 +37,8 @@ import type { ActionMcp } from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
 import * as acces from "./acces.ts";
 import type { ActionApi } from "./api_client.ts";
+import { apercuActionQualiopi, modifierActionQualiopi, qualiopiActif, titreActionQualiopi, type ActionQualiopi } from "./qualiopi.ts";
+import * as qualiopiCrm from "./qualiopi_crm.ts";
 
 export type DefinitionOutil = {
   type: "function";
@@ -61,7 +65,9 @@ export type ActionLivrable =
   // Outil d'un serveur MCP du client qui écrit (mcp_client.ts) : appelé au « VALIDÉ ».
   | ActionMcp
   // Requête qui écrit (POST, PUT, PATCH, DELETE) vers une API du client (api_client.ts) : envoyée au « VALIDÉ ».
-  | ActionApi;
+  | ActionApi
+  // Document ou lien Qualiopi envoyé à un stagiaire par le CRM (qualiopi.ts), espace de l'organisme seulement.
+  | ActionQualiopi;
 
 const lisibleReunion = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} à ${d.slice(11, 16)}`;
 
@@ -70,6 +76,7 @@ const libelleCompte = (c: { reseau: zernio.Reseau; nom: string }) => `${zernio.N
 /** Titre affiché d'un livrable porteur d'une action. */
 export function titreAction(a: ActionLivrable): string {
   if (apps.estActionApp(a)) return apps.titreActionApp(a);
+  if (a.type === "qualiopi_envoyer") return titreActionQualiopi(a);
   if (a.type === "mailing_envoyer") return `Mailing — ${a.objet}`;
   if (a.type === "gmail_envoyer") return `E-mail — ${a.objet}`;
   if (a.type === "agenda_creer") return `Rendez-vous — ${a.titre}`;
@@ -89,6 +96,7 @@ export function titreAction(a: ActionLivrable): string {
 /** Contenu affiché d'un livrable porteur d'une action (régénéré après chaque modification). */
 export function apercuAction(a: ActionLivrable): string {
   if (apps.estActionApp(a)) return apps.apercuActionApp(a);
+  if (a.type === "qualiopi_envoyer") return apercuActionQualiopi(a);
   if (a.type === "mailing_envoyer") {
     return `**Destinataires :** ${a.liste ? `liste « ${a.liste} »` : "tous les abonnés"} (${a.destinataires} au moment de la proposition), un e-mail chacun depuis votre messagerie (45 par heure au plus), avec lien de désinscription  \n**Objet :** ${a.objet}\n\n---\n\n${a.contenu}`;
   }
@@ -130,6 +138,7 @@ export function apercuAction(a: ActionLivrable): string {
 export function modifierAction(a: ActionLivrable, champs: Record<string, unknown>): ActionLivrable | { erreur: string } {
   const txt = (k: string, max: number) => String(champs[k] ?? "").trim().slice(0, max);
   if (apps.estActionApp(a)) return apps.modifierActionApp(a, champs);
+  if (a.type === "qualiopi_envoyer") return modifierActionQualiopi(a, champs);
   if (a.type === "mailing_envoyer") {
     const objet = txt("objet", 200), contenu = txt("contenu", 50_000);
     return objet && contenu ? { ...a, objet, contenu } : { erreur: "Objet et contenu du mailing requis." };
@@ -700,6 +709,12 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
   const serveursMcp = acces.filtrer(tousMcp, (s) => s.serveur.type, reglesAcces, ctx.agentId);
   const apisChargees = acces.filtrer(toutesApis, (a) => a.api.type, reglesAcces, ctx.agentId);
   const mcp = mcpClient.definitionsMcp(serveursMcp);
+  // Conformité Qualiopi : Nora, dans l'espace de l'organisme (Aissociate) seulement.
+  const qualiopi = qualiopiActif(ctx.wsId, ctx.agentId)
+    ? qualiopiCrm.outilsQualiopi({ sb: ctx.sb, wsId: ctx.wsId, acteur: ctx.acteur, agentId: ctx.agentId, essai: Boolean(ctx.essai),
+        // proposer est défini plus bas : appelé seulement pendant la conversation.
+        proposer: (titre, contenu, action, quoi) => proposer(titre, contenu, action, quoi) })
+    : null;
   const apis = apiClient.definitionsApi(apisChargees);
   const aVeille = (nbFlux ?? 0) > 0;
   const reseaux = comptesReseaux.length > 0;
@@ -784,6 +799,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       ...(ctx.equipe?.length ? [routineChat.definitionRoutine(ctx.equipe)] : []),
       ...mcp.definitions,
       ...apis.definitions,
+      ...(qualiopi?.definitions ?? []),
     ],
     consigne: [
       consigneBase(index, arbre), CONSIGNE_DOCUMENT, CONSIGNE_ARTICLE, CONSIGNE_WEB, CONSIGNE_AJOUT_FLUX, aVeille && CONSIGNE_VEILLE, boiteFichiers && consigneFichiers(boiteFichiers), boiteMail && consigneMail(boiteMail), mail && CONSIGNE_MAILING,
@@ -791,10 +807,12 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
       ctx.equipe?.length && routineChat.CONSIGNE_ROUTINE,
       mcpClient.consigneMcp(serveursMcp),
       apiClient.consigneApi(apisChargees),
+      qualiopi?.consigne,
     ].filter(Boolean).join("\n\n"),
     async executer(nom, argsJson) {
       let a: Record<string, string> = {};
       try { a = JSON.parse(argsJson || "{}"); } catch { return { resultat: "Arguments illisibles.", libelle: "Outil" }; }
+      if (qualiopi?.noms.has(nom)) return await qualiopi.executer(nom, a);
       // Outil d'un serveur MCP du client : lecture tout de suite, écriture proposée au dirigeant.
       const viaMcp = mcp.table.get(nom);
       if (viaMcp) {
@@ -924,7 +942,7 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
               ?? (data ?? []).find((x) => x.titre.toLowerCase().includes(cible.toLowerCase()));
             if (l) { id = l.id; nomCible = l.titre; }
           } else {
-            const { data } = await ctx.sb.from("studio_medias").select("id, prompt").eq("workspace_id", ctx.wsId).eq("statut", "pret")
+            const { data } = await ctx.sb.from("studio_medias").select("id, prompt").eq("workspace_id", ctx.wsId).eq("statut", "pret").not("chemin", "is", null)
               .ilike("prompt", `%${cible.replace(/[%_\\]/g, "")}%`).order("created_at", { ascending: false }).limit(1).maybeSingle();
             if (data) { id = data.id; nomCible = String(data.prompt ?? "").slice(0, 60); }
           }
@@ -1078,9 +1096,10 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
           const texte = String(a.texte ?? "").trim().slice(0, 5000), medias = zernio.mediasValides(adresses);
           if (medias === null) return { resultat: "Adresse de média invalide (https publique, ou référence media:… d'un visuel créé).", libelle: "Publication non préparée" };
           const { data: trouves } = studio.length
-            ? await ctx.sb.from("studio_medias").select("id, type, statut").eq("workspace_id", ctx.wsId).in("id", studio)
-            : { data: [] as { id: string; type: string; statut: string }[] };
-          const visuels = studio.map((id) => (trouves ?? []).find((m) => m.id === id)).filter((m) => m && m.statut !== "echec")
+            ? await ctx.sb.from("studio_medias").select("id, type, statut, chemin").eq("workspace_id", ctx.wsId).in("id", studio)
+            : { data: [] as { id: string; type: string; statut: string; chemin: string | null }[] };
+          // Échoué ou supprimé (prêt sans fichier) : inutilisable.
+          const visuels = studio.map((id) => (trouves ?? []).find((m) => m.id === id)).filter((m) => m && m.statut !== "echec" && !(m.statut === "pret" && !m.chemin))
             .map((m) => ({ id: m!.id, type: m!.type === "video" ? "video" as const : "image" as const }));
           if (visuels.length < studio.length) return { resultat: "Visuel introuvable ou dont la création a échoué : vérifie la référence media:… (ou crée-le d'abord).", libelle: "Publication non préparée" };
           const erreur = zernio.controlePublication(choisis.map((c) => c!.reseau), texte, [...medias, ...visuels.map((v) => v.id)]);
@@ -1263,6 +1282,17 @@ async function nomDepot(sb: SupabaseClient, wsId: string, titre: string, livrabl
   } catch { return titre; } // nom de secours : le dépôt ne doit pas échouer pour un nom
 }
 
+/** Prénom de l'agent auteur d'un livrable (« Léa »), pour signer la trace en Messagerie. */
+async function prenomAgent(sb: SupabaseClient, wsId: string, livrableId?: string): Promise<string | null> {
+  if (!livrableId) return null;
+  try {
+    const { data: l } = await sb.from("studio_livrables").select("agent_id").eq("id", livrableId).eq("workspace_id", wsId).maybeSingle();
+    if (!l?.agent_id) return null;
+    const { data: a } = await sb.from("studio_agents").select("prenom").eq("id", l.agent_id).maybeSingle();
+    return (a?.prenom as string | undefined) ?? null;
+  } catch { return null; }
+}
+
 export async function executerAction(sb: SupabaseClient, wsId: string, action: ActionLivrable, livrableId?: string): Promise<{ ok: true; lien: string | null; id: string } | { ok: false; erreur: string }> {
   try {
     if (action.type === "routine_activer") {
@@ -1273,6 +1303,7 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       return { ok: true, id: action.tache_id, lien: null };
     }
     if (action.type === "routine_creer") return await routineChat.creerRoutineValidee(sb, wsId, action);
+    if (action.type === "qualiopi_envoyer") return await qualiopiCrm.executerEnvoi(sb, wsId, action, livrableId);
     if (action.type === "mcp_appel") {
       const s = await mcpClient.serveurDeLEspace(sb, wsId, action.connecteur_id);
       if (!s) return { ok: false, erreur: "Ce serveur MCP n'est plus relié à votre espace." };
@@ -1317,6 +1348,13 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
         if (action.type === "gmail_envoyer") {
           const pieces = await Promise.all((action.pieces ?? []).map(async (p) => ({ filename: p.nom, contentType: p.mime, url: await lien(p) })));
           const r = await bureau.envoyerMail(wsId, compteId, { a: action.a, cc: action.cc, objet: action.objet, corps: action.corps, reponseA: action.reponse_a_id, pieces });
+          // Espace de l'organisme (Aissociate) : l'e-mail part de sa boîte via Zernio,
+          // hors SMTP du CRM — on le trace dans la Messagerie du CRM pour qu'il y figure.
+          if (espacesOrganisme().includes(wsId.toLowerCase())) {
+            await journaliserEmail(sb, {
+              destinataires: action.a, copie: action.cc ?? [], sujet: action.objet, corps: action.corps,
+            }, { origine: "ia_studio", libelle: `${(await prenomAgent(sb, wsId, livrableId)) ?? "Agent"} (Studio)` });
+          }
           return { ok: true, id: r.id, lien: r.lien };
         }
         const r = await bureau.creerRdv(wsId, compteId, action);
@@ -1334,7 +1372,7 @@ export async function executerAction(sb: SupabaseClient, wsId: string, action: A
       const liens: string[] = [];
       for (const v of action.visuels ?? []) {
         const { data: m } = await sb.from("studio_medias").select("statut, chemin").eq("id", v.id).eq("workspace_id", wsId).maybeSingle();
-        if (!m || m.statut === "echec") return { ok: false, erreur: "Le visuel de cette publication a échoué ou a été supprimé : demandez-en un nouveau." };
+        if (!m || m.statut === "echec" || (m.statut === "pret" && !m.chemin)) return { ok: false, erreur: "Le visuel de cette publication a échoué ou a été supprimé : demandez-en un nouveau." };
         if (m.statut !== "pret" || !m.chemin) return { ok: false, erreur: "Le visuel est encore en cours de création : validez à nouveau dans une minute." };
         const { data: signe } = await sb.storage.from("studio-medias").createSignedUrl(String(m.chemin), dureeLien(action.programme));
         if (!signe?.signedUrl) return { ok: false, erreur: "Lien du visuel impossible à préparer." };

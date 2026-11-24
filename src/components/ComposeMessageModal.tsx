@@ -361,7 +361,7 @@ export default function ComposeMessageModal({
         <div className="inline-flex rounded-lg border border-line p-0.5 text-sm">
           {(['email', 'whatsapp'] as EmailCanal[]).map((ch) => (
             <button key={ch} onClick={() => setCanal(ch)}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${canal === ch ? (ch === 'whatsapp' ? 'bg-emerald-600 text-white' : 'bg-brand-600 text-white') : 'text-muted hover:text-fg'}`}>
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${canal === ch ? (ch === 'whatsapp' ? 'bg-emerald-600 text-neutral-950' : 'bg-brand-600 text-neutral-950') : 'text-muted hover:text-fg'}`}>
               {channelIcon(ch, 'h-4 w-4')} {ch === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
             </button>
           ))}

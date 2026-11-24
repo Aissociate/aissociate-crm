@@ -35,7 +35,7 @@ export default function LiaisonEspace({ workspaceId, nomEspace, agents }: { work
     catch (x) { setErreur(x instanceof Error ? x.message : String(x)); }
     finally { setEnvoi(false); }
   }, [workspaceId]);
-  useEffect(() => { agir(); }, [agir]);
+  useEffect(() => { void agir(); }, [agir]);
 
   const suggestion = nomEspace.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 

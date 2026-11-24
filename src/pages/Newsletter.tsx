@@ -3,7 +3,7 @@ import { Mail, Sparkles, Eye, Send, Trash2, Loader as Loader2, Users } from 'luc
 import { useCollection } from '@/hooks/useCollection';
 import { supabase } from '@/lib/supabase';
 import { functionErrorMessage } from '@/lib/invokeError';
-import { PageHeader, Card, Button, Modal, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { PageHeader, Button, Modal, Table, Spinner, EmptyState, Badge } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
 import type { Newsletter as NL } from '@/lib/database.types';
 
@@ -21,7 +21,7 @@ export default function Newsletter() {
       const r = res as { ok?: boolean; skipped?: boolean; reason?: string; articles?: number; statut?: string; total?: number; sentNow?: number; queued?: number; days?: number; warning?: string; error?: string };
       if (r?.error) throw new Error(r.error);
       if (r?.skipped) { alert(r.reason ?? 'Aucune actualité à compiler cette semaine.'); return; }
-      refresh();
+      void refresh();
       const tail = r?.warning ? `\n⚠ ${r.warning}` : '';
       alert(r?.statut === 'envoye'
         ? `Newsletter générée et envoyée à ${r.sentNow ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).${tail}`
@@ -43,7 +43,7 @@ export default function Newsletter() {
       if (error) throw new Error(await functionErrorMessage(error));
       const r = res as { ok?: boolean; total?: number; sentNow?: number; queued?: number; days?: number; error?: string };
       if (r?.error) throw new Error(r.error);
-      refresh();
+      void refresh();
       alert((r?.queued ?? 0) > 0
         ? `Envoi lancé : ${r?.sentNow ?? 0} envoyé(s) aujourd'hui, ${r?.queued} en file. Le reste part automatiquement à raison de 300/jour (≈ ${r?.days ?? 1} jour(s)).`
         : `Newsletter envoyée à ${r?.sentNow ?? 0}${r?.total ? ` / ${r.total}` : ''} destinataire(s).`);
@@ -58,7 +58,7 @@ export default function Newsletter() {
     if (!confirm(`Supprimer l'édition « ${n.sujet} » ?`)) return;
     const { error } = await supabase.from('newsletters').delete().eq('id', n.id);
     if (error) { alert(error.message); return; }
-    refresh();
+    void refresh();
   };
 
   return (
@@ -122,7 +122,7 @@ export default function Newsletter() {
       <Modal open={!!preview} onClose={() => setPreview(null)} wide title={preview?.sujet ?? 'Aperçu'}
         footer={<>
           <Button variant="secondary" onClick={() => setPreview(null)}>Fermer</Button>
-          {preview?.statut === 'brouillon' && <Button onClick={() => { const p = preview; setPreview(null); if (p) send(p); }}><Send className="h-4 w-4" /> Envoyer à toute la base</Button>}
+          {preview?.statut === 'brouillon' && <Button onClick={() => { const p = preview; setPreview(null); if (p) void send(p); }}><Send className="h-4 w-4" /> Envoyer à toute la base</Button>}
         </>}>
         {preview && (
           <iframe title="Aperçu newsletter" srcDoc={preview.contenu_html} className="h-[60vh] w-full rounded-lg border border-line bg-white" />

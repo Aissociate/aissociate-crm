@@ -16,7 +16,7 @@ export default function BlogArticle() {
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    if (slug) loadArticle(slug);
+    if (slug) void loadArticle(slug);
   }, [slug]);
 
   async function loadArticle(articleSlug: string) {
@@ -86,7 +86,7 @@ export default function BlogArticle() {
           <p className="text-neutral-500 mb-8">Cet article n'existe pas ou n'est plus disponible.</p>
           <Link
             to="/blog"
-            className="inline-flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transition-all"
+            className="inline-flex items-center gap-2 bg-orange-500 text-neutral-950 px-6 py-3 rounded-xl font-semibold hover:bg-orange-400 transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour au blog
@@ -143,7 +143,7 @@ export default function BlogArticle() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
             {article.blog_categories && (
-              <span className="inline-block bg-orange-500 text-white px-4 py-1 rounded-full text-sm font-semibold mb-4">
+              <span className="inline-block bg-orange-500 text-neutral-950 px-4 py-1 rounded-full text-sm font-semibold mb-4">
                 {article.blog_categories.name}
               </span>
             )}
@@ -195,7 +195,7 @@ export default function BlogArticle() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   to="/formulaire"
-                  className="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
+                  className="inline-block bg-orange-500 hover:bg-orange-400 text-neutral-950 px-8 py-3 rounded-xl font-semibold transition-all  shadow-lg"
                 >
                   Demander un devis gratuit
                 </Link>

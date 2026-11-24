@@ -9,18 +9,10 @@
 //    JAMAIS exposé au navigateur.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.47.10";
+import { enTetesCors, reponseJson } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const corsHeaders = enTetesCors();
+const json = reponseJson(corsHeaders);
 
 // Somme des actions « lead » (formulaires Meta + conversions pixel lead).
 function sumLeads(actions: unknown): number {
@@ -96,7 +88,7 @@ Deno.serve(async (req: Request) => {
             name: c.campaign_name as string,
             spend: Number(c.spend ?? 0), impressions: Number(c.impressions ?? 0),
             clicks: Number(c.clicks ?? 0), leads: sumLeads(c.actions),
-          })).sort((a, b) => b.spend - a.spend)
+          })).sort((a: { spend: number }, b: { spend: number }) => b.spend - a.spend)
         : [];
 
       return json({

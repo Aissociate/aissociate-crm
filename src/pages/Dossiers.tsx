@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, ChevronRight, UserRound } from 'lucide-react';
+import { Plus, Search, ChevronRight, ChevronDown, UserRound } from 'lucide-react';
 import { useCollection } from '@/hooks/useCollection';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge } from '@/components/ui';
+import { PageHeader, Button, Modal, Field, Table, Spinner, EmptyState, Badge, SearchSelect } from '@/components/ui';
 import { DOSSIER_STATUT_TONES, DOSSIER_STATUT_LABELS } from '@/lib/constants';
 import ContactFiche from '@/components/ContactFiche';
-import { formatMoney, genReference, fullName } from '@/lib/utils';
+import { cn, formatMoney, genReference, fullName } from '@/lib/utils';
 import { DEFAULT_PIECES } from '@/lib/dossierClient';
 import type { Dossier, DossierStatut, Contact, Entreprise, Financeur, Formation, Workflow, Profile } from '@/lib/database.types';
 
@@ -51,9 +51,17 @@ const empty = (): Partial<Dossier> => ({
 });
 
 export default function Dossiers() {
-  const { session } = useAuth();
+  const { session, isManager } = useAuth();
   const navigate = useNavigate();
-  const { data, loading, refresh } = useCollection<Dossier>('dossiers', {
+  // Synthèse chiffrée : ouverte d'office pour la direction, repliable par chacun.
+  const [synthese, setSynthese] = useState<boolean>(() => {
+    try { const v = localStorage.getItem('dossiers-synthese'); return v === null ? isManager : v === '1'; } catch { return isManager; }
+  });
+  const basculerSynthese = () => setSynthese((o) => {
+    try { localStorage.setItem('dossiers-synthese', o ? '0' : '1'); } catch { /* préférence d'affichage */ }
+    return !o;
+  });
+  const { data, loading } = useCollection<Dossier>('dossiers', {
     orderBy: { column: 'created_at', ascending: false },
   });
   const contacts = useCollection<Contact>('contacts');
@@ -115,12 +123,19 @@ export default function Dossiers() {
     return p ? fullName(p.prenom, p.nom) : 'Non affecté';
   };
 
-  const filtered = data.filter((d) =>
-    (`${d.reference} ${d.intitule}`.toLowerCase().includes(q.toLowerCase())) &&
-    (!statutFilter || d.statut === statutFilter) &&
+  const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const nomContact = (d: Dossier) => {
+    const ct = d.contact_id ? contacts.data.find((c) => c.id === d.contact_id) : null;
+    return ct ? fullName(ct.prenom, ct.nom) : '';
+  };
+  // Tout sauf le statut : sert aussi aux compteurs des pastilles.
+  const horsStatut = data.filter((d) =>
+    (!q.trim() || norm(`${d.reference} ${d.intitule} ${nomContact(d)}`).includes(norm(q.trim()))) &&
     (!financeurFilter || (financeurFilter === 'aucun' ? !d.financeur_id : d.financeur_id === financeurFilter)) &&
     (!conseillerFilter || (conseillerFilter === 'aucun' ? !conseillerDe(d) : conseillerDe(d) === conseillerFilter)),
   );
+  const filtered = statutFilter ? horsStatut.filter((d) => d.statut === statutFilter) : horsStatut;
+  const statutsPresents = STATUTS.filter((s) => s === statutFilter || data.some((d) => d.statut === s));
 
   // ── Tableau de synthèse ─────────────────────────────────────────────────────
   // « En cours » au sens du suivi commercial : brouillon + déposé + accordé.
@@ -139,28 +154,40 @@ export default function Dossiers() {
   return (
     <div>
       <PageHeader
-        title="Dossiers de formation"
-        subtitle="Gestion des dossiers par financeur, workflow et pièces (4.2)"
+        title="Dossiers clients"
+        subtitle="Un dossier par client et par formation : parcours, documents et échanges"
         actions={<Button onClick={() => { setForm(empty()); setOpen(true); }}><Plus className="h-4 w-4" /> Nouveau dossier</Button>}
       />
 
       {/* ── Synthèse : dossiers en cours (brouillon + déposé + accordé) ─────── */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SyntheseBadge titre="En cours par avancement" lignes={parAvancement} total={enCours.length} />
-        <SyntheseBadge titre="En cours par financeur" lignes={parFinanceur} total={enCours.length} />
-        <SyntheseBadge titre="En cours par conseiller" lignes={parConseiller} total={enCours.length} />
-        <SyntheseBadge titre="Soldés par conseiller" lignes={soldesParConseiller} total={soldesParConseiller.reduce((s, [, n]) => s + n, 0)} />
+      <button onClick={basculerSynthese} aria-expanded={synthese} className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-fg">
+        <ChevronDown className={cn('h-4 w-4 transition-transform', synthese && 'rotate-180')} />
+        Synthèse — {enCours.length} dossier(s) en cours
+      </button>
+      {synthese && (
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SyntheseBadge titre="En cours par avancement" lignes={parAvancement} total={enCours.length} />
+          <SyntheseBadge titre="En cours par financeur" lignes={parFinanceur} total={enCours.length} />
+          <SyntheseBadge titre="En cours par conseiller" lignes={parConseiller} total={enCours.length} />
+          <SyntheseBadge titre="Soldés par conseiller" lignes={soldesParConseiller} total={soldesParConseiller.reduce((s, [, n]) => s + n, 0)} />
+        </div>
+      )}
+
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {[...statutsPresents.map((s) => ({ cle: s as string, label: DOSSIER_STATUT_LABELS[s], n: horsStatut.filter((d) => d.statut === s).length })), { cle: '', label: 'Tous', n: horsStatut.length }].map((p) => (
+          <button key={p.cle || 'tous'} onClick={() => setStatutFilter(p.cle)} aria-pressed={statutFilter === p.cle}
+            className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition',
+              statutFilter === p.cle ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'border-line text-muted hover:bg-surface-2 hover:text-fg')}>
+            {p.label} <span className="text-xs tabular-nums opacity-70">{p.n}</span>
+          </button>
+        ))}
       </div>
 
       <div className="mb-4 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative min-w-[200px] flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
-          <input className="input pl-9" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input pl-9" placeholder="Intitulé, référence, contact…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <select className="input max-w-[220px]" value={statutFilter} onChange={(e) => setStatutFilter(e.target.value)}>
-          <option value="">Tous les statuts</option>
-          {STATUTS.map((s) => <option key={s} value={s}>{DOSSIER_STATUT_LABELS[s]}</option>)}
-        </select>
         <select className="input max-w-[220px]" value={financeurFilter} onChange={(e) => setFinanceurFilter(e.target.value)} title="Filtrer par financeur">
           <option value="">Tous les financeurs</option>
           {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
@@ -176,12 +203,14 @@ export default function Dossiers() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="h-7 w-7" /></div>
       ) : filtered.length === 0 ? (
-        <EmptyState title="Aucun dossier" message="Créez un dossier pour démarrer le suivi de financement." />
+        <EmptyState
+          title={data.length === 0 ? 'Aucun dossier' : 'Aucun dossier ne correspond'}
+          message={data.length === 0 ? 'Créez un dossier pour démarrer le suivi de financement.' : 'Changez de statut ou effacez les filtres.'}
+        />
       ) : (
         <Table head={
           <tr>
-            <th className="px-4 py-3">Référence</th>
-            <th className="px-4 py-3">Intitulé</th>
+            <th className="px-4 py-3">Dossier</th>
             <th className="px-4 py-3">Contact</th>
             <th className="px-4 py-3">Financeur</th>
             <th className="px-4 py-3">Conseiller</th>
@@ -194,8 +223,10 @@ export default function Dossiers() {
             const ct = d.contact_id ? contacts.data.find((c) => c.id === d.contact_id) : null;
             return (
               <tr key={d.id} className="cursor-pointer hover:bg-surface-2" onClick={() => navigate(`/dossiers/${d.id}`)}>
-                <td className="px-4 py-3 font-mono text-xs text-muted">{d.reference}</td>
-                <td className="px-4 py-3 font-medium text-fg">{d.intitule}</td>
+                <td className="px-4 py-3">
+                  <span className="font-medium text-fg">{d.intitule}</span>
+                  <span className="block font-mono text-xs text-muted">{d.reference}</span>
+                </td>
                 {/* Raccourci vers la fiche du contact, sans passer par le dossier. */}
                 <td className="px-4 py-3">
                   {ct ? (
@@ -231,7 +262,7 @@ export default function Dossiers() {
       >
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2"><Field label="Intitulé" required><input className="input" value={form.intitule ?? ''} onChange={(e) => set('intitule', e.target.value)} /></Field></div>
-          <Field label="Financeur" hint="Sélectionne automatiquement le workflow"><select className="input" value={form.financeur_id ?? ''} onChange={(e) => onFinanceur(e.target.value)}>
+          <Field label="Financeur" hint="Les étapes propres au financeur sont reprises d'office"><select className="input" value={form.financeur_id ?? ''} onChange={(e) => onFinanceur(e.target.value)}>
             <option value="">—</option>
             {financeurs.data.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
           </select></Field>
@@ -239,14 +270,20 @@ export default function Dossiers() {
             <option value="">—</option>
             {formations.data.map((f) => <option key={f.id} value={f.id}>{f.intitule}</option>)}
           </select></Field>
-          <Field label="Bénéficiaire (contact)"><select className="input" value={form.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
-            <option value="">—</option>
-            {contacts.data.map((c) => <option key={c.id} value={c.id}>{c.prenom} {c.nom}</option>)}
-          </select></Field>
-          <Field label="Entreprise"><select className="input" value={form.entreprise_id ?? ''} onChange={(e) => set('entreprise_id', e.target.value || null)}>
-            <option value="">—</option>
-            {entreprises.data.map((e) => <option key={e.id} value={e.id}>{e.raison_sociale}</option>)}
-          </select></Field>
+          <Field label="Bénéficiaire (contact)">
+            <SearchSelect
+              value={form.contact_id ?? ''} onChange={(v) => set('contact_id', v || null)}
+              options={contacts.data.map((c) => ({ value: c.id, label: fullName(c.prenom, c.nom), sub: c.email ?? undefined }))}
+              placeholder="Rechercher un contact (nom, e-mail)…" emptyLabel="— Aucun —"
+            />
+          </Field>
+          <Field label="Entreprise">
+            <SearchSelect
+              value={form.entreprise_id ?? ''} onChange={(v) => set('entreprise_id', v || null)}
+              options={entreprises.data.map((e) => ({ value: e.id, label: e.raison_sociale }))}
+              placeholder="Rechercher une entreprise…" emptyLabel="— Aucune —"
+            />
+          </Field>
           <Field label="Montant demandé (€)"><input className="input" type="number" value={form.montant_demande ?? 0} onChange={(e) => set('montant_demande', e.target.value)} /></Field>
           <Field label="Date de début"><input className="input" type="date" value={form.date_debut ?? ''} onChange={(e) => set('date_debut', e.target.value || null)} /></Field>
           <Field label="Date de fin"><input className="input" type="date" value={form.date_fin ?? ''} onChange={(e) => set('date_fin', e.target.value || null)} /></Field>

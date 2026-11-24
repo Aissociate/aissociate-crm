@@ -38,7 +38,7 @@ export default function RentabilitePanel() {
   const [recharges, setRecharges] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    supabase.functions.invoke('studio', { body: { action: 'admin_facturation_connecteurs' } }).then(async ({ data, error }) => {
+    void supabase.functions.invoke('studio', { body: { action: 'admin_facturation_connecteurs' } }).then(async ({ data, error }) => {
       if (error) { setErreurConnecteurs(await functionErrorMessage(error)); return; }
       const d = data as { tarif: { prix: number }; espaces: Connecteurs[] };
       setConnecteurs({ prix: d.tarif.prix, espaces: d.espaces });
@@ -73,7 +73,7 @@ export default function RentabilitePanel() {
     // La démo Sam est un coût d'acquisition (pas d'espace client) : affichée à part.
     setDemo({ appels: (d.data ?? []).length, cout: (d.data ?? []).reduce((s, x) => s + (Number(x.cout) || 0), 0) });
   }, [choix]);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { void charger(); }, [charger]);
 
   const enregistrerTaux = async (v: number) => {
     setTaux(v);

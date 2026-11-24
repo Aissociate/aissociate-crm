@@ -78,7 +78,7 @@ export default function HistoriqueContact({ contactId, contactCreatedAt, onNavig
 
   useEffect(() => {
     let vivant = true;
-    (async () => {
+    void (async () => {
       const [actions, emails, convs, opps, devis, signatures, dossiers, plans, parts, quests, docs, leads] = await Promise.all([
         supabase.from('contact_actions').select('type, description, date_action, heure_action, faite').eq('contact_id', contactId).limit(300),
         supabase.from('emails').select('direction, canal, sujet, statut, expediteur, created_at').eq('contact_id', contactId).order('created_at', { ascending: false }).limit(150),

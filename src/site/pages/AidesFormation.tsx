@@ -55,7 +55,7 @@ export default function AidesFormation() {
   ];
 
   return (
-    <div className="min-h-screen bg-white font-sans text-[#161616]">
+    <div className="min-h-screen bg-white font-sans text-[#17120E]">
       <SEO
         title="Financer sa formation IA : CPF, OPCO, France Travail | Aissociate"
         description="Toutes les aides pour financer votre formation en intelligence artificielle : CPF, OPCO, France Travail, plan de développement des compétences. Accompagnement par un organisme Qualiopi à La Réunion."
@@ -73,18 +73,18 @@ export default function AidesFormation() {
         <div className="flex-1" style={{ backgroundColor: ROUGE_MARIANNE }}></div>
       </div>
 
-      <section className="bg-white border-b border-[#DDDDDD]">
+      <section className="bg-white border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
           <div className="lg:col-span-7">
             <div className="flex items-center gap-4 mb-8">
-              <div className="flex flex-col items-center border-2 border-[#161616] px-3 py-2 leading-none">
-                <span className="text-[11px] font-semibold tracking-tighter text-[#161616]">RÉPUBLIQUE</span>
-                <span className="text-[11px] font-semibold tracking-tighter text-[#161616]">FRANÇAISE</span>
-                <span className="text-[10px] italic text-[#3A3A3A] mt-1">Liberté</span>
-                <span className="text-[10px] italic text-[#3A3A3A]">Égalité</span>
-                <span className="text-[10px] italic text-[#3A3A3A]">Fraternité</span>
+              <div className="flex flex-col items-center border-2 border-[#17120E] px-3 py-2 leading-none">
+                <span className="text-[11px] font-semibold tracking-tighter text-[#17120E]">RÉPUBLIQUE</span>
+                <span className="text-[11px] font-semibold tracking-tighter text-[#17120E]">FRANÇAISE</span>
+                <span className="text-[10px] italic text-[#483C32] mt-1">Liberté</span>
+                <span className="text-[10px] italic text-[#483C32]">Égalité</span>
+                <span className="text-[10px] italic text-[#483C32]">Fraternité</span>
               </div>
-              <span className="inline-flex h-8 w-12 overflow-hidden border border-[#DDDDDD]" aria-label="Drapeau français">
+              <span className="inline-flex h-8 w-12 overflow-hidden border border-[#D9CEC3]" aria-label="Drapeau français">
                 <span className="flex-1" style={{ backgroundColor: BLEU_FRANCE }}></span>
                 <span className="flex-1 bg-white"></span>
                 <span className="flex-1" style={{ backgroundColor: ROUGE_MARIANNE }}></span>
@@ -95,15 +95,15 @@ export default function AidesFormation() {
               Dispositif public — Transformation IA des PME
             </p>
 
-            <h1 className="tracking-tight text-3xl sm:text-4xl lg:text-5xl font-semibold mb-6 leading-tight text-[#161616]">
+            <h1 className="tracking-tight text-3xl sm:text-4xl lg:text-5xl font-semibold mb-6 leading-tight text-[#17120E]">
               L'État finance jusqu'à <span style={{ color: BLEU_FRANCE }}>90 000 €</span> pour intégrer l'intelligence artificielle dans votre entreprise à La Réunion.
             </h1>
 
-            <p className="text-lg text-[#3A3A3A] mb-4 leading-relaxed">
+            <p className="text-lg text-[#483C32] mb-4 leading-relaxed">
               Dans le cadre du <strong>Plan France 2030</strong> et des fonds européens <strong>FEDER Réunion</strong>, les PME réunionnaises peuvent cumuler plusieurs dispositifs publics pour financer leur transformation par l'intelligence artificielle.
             </p>
 
-            <p className="text-base text-[#666666] mb-8 leading-relaxed">
+            <p className="text-base text-[#615850] mb-8 leading-relaxed">
               Ce programme est opéré par un organisme de formation certifié Qualiopi, référencé auprès des OPCO et agréé pour le FNE-Formation.
             </p>
 
@@ -136,17 +136,17 @@ export default function AidesFormation() {
                 alt="Palais de l'Élysée — République française"
                 className="w-full h-[340px] object-cover"
               />
-              <div className="absolute bottom-0 left-0 right-0 bg-[#161616]/85 text-white px-4 py-3 text-xs">
+              <div className="absolute bottom-0 left-0 right-0 bg-[#17120E]/85 text-white px-4 py-3 text-xs">
                 <span className="font-semibold">Palais de l'Élysée</span>
-                <span className="text-[#CCCCCC]"> — Siège de la Présidence de la République</span>
+                <span className="text-[#D9CEC3]"> — Siège de la Présidence de la République</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="bg-[#F6F6F6] border-b border-[#DDDDDD]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#DDDDDD]">
+      <section className="bg-[#F2ECE4] border-b border-[#D9CEC3]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#D9CEC3]">
           {[
             { value: '3 000 €', label: 'Montant minimum garanti' },
             { value: '5 693 €', label: 'Aide moyenne constatée' },
@@ -155,26 +155,26 @@ export default function AidesFormation() {
           ].map((s, i) => (
             <div key={i} className="bg-white p-6">
               <div className="text-3xl sm:text-4xl font-semibold mb-1" style={{ color: BLEU_FRANCE }}>{s.value}</div>
-              <div className="text-sm text-[#3A3A3A]">{s.label}</div>
+              <div className="text-sm text-[#483C32]">{s.label}</div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="bg-white border-b border-[#DDDDDD]">
+      <section className="bg-white border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
             <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Contexte économique</p>
-            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-5 leading-tight">
               Un plan national, une urgence locale.
             </h2>
-            <p className="text-lg text-[#3A3A3A] leading-relaxed">
+            <p className="text-lg text-[#483C32] leading-relaxed">
               Le retard numérique coûte chaque année 1,8 point de PIB aux PME ultra-marines. Le Gouvernement a débloqué 2,5 milliards d'euros au titre du Plan France 2030 pour accélérer l'adoption de l'IA par les entreprises françaises, dont une enveloppe spécifique pour les territoires d'Outre-mer.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
+          <div className="grid md:grid-cols-2 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
             {[
               { title: 'Concurrence sectorielle', description: "68 % des PME du top 100 réunionnais ont lancé un projet IA en 2025. Les entreprises qui n'ont pas encore commencé accumulent en moyenne 12 mois de retard opérationnel." },
               { title: 'Transmission des savoirs', description: "L'écart générationnel entre séniors et juniors paralyse les équipes. L'IA constitue un langage commun permettant de préserver le savoir-faire tout en adoptant les nouveaux outils." },
@@ -182,28 +182,28 @@ export default function AidesFormation() {
               { title: 'Calendrier des aides', description: "Les enveloppes 2026 sont plafonnées. Les dossiers sont instruits selon un principe de premier arrivé, premier servi, jusqu'à épuisement des crédits ouverts." },
             ].map((f, i) => (
               <div key={i} className="bg-white p-8">
-                <h3 className="text-xl font-semibold text-[#161616] mb-3">{f.title}</h3>
-                <p className="text-[#3A3A3A] leading-relaxed">{f.description}</p>
+                <h3 className="text-xl font-semibold text-[#17120E] mb-3">{f.title}</h3>
+                <p className="text-[#483C32] leading-relaxed">{f.description}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="dispositifs" className="bg-[#F6F6F6] border-b border-[#DDDDDD]">
+      <section id="dispositifs" className="bg-[#F2ECE4] border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
             <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Dispositifs publics mobilisables</p>
-            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-5 leading-tight">
               Six dispositifs cumulables pour financer votre transformation IA.
             </h2>
-            <p className="text-lg text-[#3A3A3A] leading-relaxed">
+            <p className="text-lg text-[#483C32] leading-relaxed">
               Tous les dispositifs ci-dessous sont établis par décret ou convention. Leur combinaison est rendue possible par l'article L.6313-1 du Code du travail et les règlements du FEDER 2021-2027.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
             {initiatives.map((init, i) => {
               const Icon = init.icon;
               return (
@@ -214,8 +214,8 @@ export default function AidesFormation() {
                     </div>
                     <div className="text-lg font-semibold" style={{ color: BLEU_FRANCE }}>{init.amount}</div>
                   </div>
-                  <h3 className="text-lg font-semibold text-[#161616] mb-2 leading-snug">{init.title}</h3>
-                  <p className="text-sm text-[#3A3A3A] leading-relaxed">{init.description}</p>
+                  <h3 className="text-lg font-semibold text-[#17120E] mb-2 leading-snug">{init.title}</h3>
+                  <p className="text-sm text-[#483C32] leading-relaxed">{init.description}</p>
                 </article>
               );
             })}
@@ -225,15 +225,15 @@ export default function AidesFormation() {
             <div className="max-w-3xl mb-10">
               <div className="w-12 h-1 mb-5" style={{ backgroundColor: ROUGE_MARIANNE }}></div>
               <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: ROUGE_MARIANNE }}>En complément de France 2030</p>
-              <h3 className="text-2xl sm:text-3xl font-semibold text-[#161616] mb-4 leading-tight">
+              <h3 className="text-2xl sm:text-3xl font-semibold text-[#17120E] mb-4 leading-tight">
                 Quatre dispositifs supplémentaires cumulables selon votre statut.
               </h3>
-              <p className="text-base text-[#3A3A3A] leading-relaxed">
+              <p className="text-base text-[#483C32] leading-relaxed">
                 Former votre entreprise à l'intelligence artificielle n'est pas un coût, c'est un investissement souvent pris en charge. Selon votre statut, plusieurs dispositifs peuvent financer tout ou partie de votre formation.
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
+            <div className="grid md:grid-cols-2 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
               {[
                 {
                   icon: Wallet,
@@ -274,11 +274,11 @@ export default function AidesFormation() {
                       <div className="flex-1">
                         <div className="flex items-baseline gap-2 mb-2">
                           <span className="text-sm font-semibold" style={{ color: ROUGE_MARIANNE }}>{item.name}</span>
-                          <span className="text-xs text-[#666666]">·</span>
-                          <span className="text-sm font-semibold text-[#161616]">{item.title}</span>
+                          <span className="text-xs text-[#615850]">·</span>
+                          <span className="text-sm font-semibold text-[#17120E]">{item.title}</span>
                         </div>
-                        <p className="text-sm text-[#3A3A3A] leading-relaxed mb-3">{item.description}</p>
-                        <div className="inline-flex items-center gap-1.5 text-xs text-[#666666]">
+                        <p className="text-sm text-[#483C32] leading-relaxed mb-3">{item.description}</p>
+                        <div className="inline-flex items-center gap-1.5 text-xs text-[#615850]">
                           <Users className="w-3.5 h-3.5" />
                           <span>{item.target}</span>
                         </div>
@@ -292,8 +292,8 @@ export default function AidesFormation() {
 
           <div className="mt-10 bg-white border-l-4 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-6" style={{ borderColor: BLEU_FRANCE }}>
             <div className="flex-1">
-              <h3 className="text-xl font-semibold text-[#161616] mb-2">Simulation gratuite de vos droits</h3>
-              <p className="text-[#3A3A3A]">En moyenne, les dirigeants accompagnés activent 2,4 dispositifs simultanément et obtiennent 5 693 € de financement public.</p>
+              <h3 className="text-xl font-semibold text-[#17120E] mb-2">Simulation gratuite de vos droits</h3>
+              <p className="text-[#483C32]">En moyenne, les dirigeants accompagnés activent 2,4 dispositifs simultanément et obtiennent 5 693 € de financement public.</p>
             </div>
             <Link
               to="/formulaire"
@@ -307,66 +307,66 @@ export default function AidesFormation() {
         </div>
       </section>
 
-      <section className="bg-white border-b border-[#DDDDDD]">
+      <section className="bg-white border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
             <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Acteurs économiques engagés</p>
-            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-5 leading-tight">
               Les entreprises de référence du territoire ont intégré l'IA.
             </h2>
-            <p className="text-lg text-[#3A3A3A] leading-relaxed">
+            <p className="text-lg text-[#483C32] leading-relaxed">
               Les principaux groupes de l'économie réunionnaise ont initié leur transformation IA en 2024-2025. Cette dynamique s'étend désormais aux PME à travers les dispositifs publics de cofinancement.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-[#DDDDDD] border border-[#DDDDDD] mb-10">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-[#D9CEC3] border border-[#D9CEC3] mb-10">
             {reunionCompanies.map((company, i) => (
               <div key={i} className="bg-white p-5 flex items-center gap-3">
                 <Building2 className="w-5 h-5 flex-shrink-0" style={{ color: BLEU_FRANCE }} />
                 <div>
-                  <div className="font-semibold text-[#161616] text-sm leading-tight">{company}</div>
-                  <div className="text-xs text-[#666666] mt-1">IA intégrée</div>
+                  <div className="font-semibold text-[#17120E] text-sm leading-tight">{company}</div>
+                  <div className="text-xs text-[#615850] mt-1">IA intégrée</div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="grid md:grid-cols-3 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
-            <div className="bg-[#F6F6F6] p-8">
+          <div className="grid md:grid-cols-3 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
+            <div className="bg-[#F2ECE4] p-8">
               <div className="text-4xl font-semibold mb-2" style={{ color: BLEU_FRANCE }}>68 %</div>
-              <div className="text-sm text-[#3A3A3A]">des PME du top 100 réunionnais ont lancé un projet IA en 2025.</div>
+              <div className="text-sm text-[#483C32]">des PME du top 100 réunionnais ont lancé un projet IA en 2025.</div>
             </div>
-            <div className="bg-[#F6F6F6] p-8">
+            <div className="bg-[#F2ECE4] p-8">
               <div className="text-4xl font-semibold mb-2" style={{ color: BLEU_FRANCE }}>+ 34 %</div>
-              <div className="text-sm text-[#3A3A3A]">de productivité moyenne constatée après 6 mois d'accompagnement.</div>
+              <div className="text-sm text-[#483C32]">de productivité moyenne constatée après 6 mois d'accompagnement.</div>
             </div>
-            <div className="bg-[#F6F6F6] p-8">
+            <div className="bg-[#F2ECE4] p-8">
               <div className="text-4xl font-semibold mb-2" style={{ color: BLEU_FRANCE }}>12 mois</div>
-              <div className="text-sm text-[#3A3A3A]">de retard cumulé pour les entreprises qui n'ont pas encore initié leur projet.</div>
+              <div className="text-sm text-[#483C32]">de retard cumulé pour les entreprises qui n'ont pas encore initié leur projet.</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="bg-[#F6F6F6] border-b border-[#DDDDDD]">
+      <section className="bg-[#F2ECE4] border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-10">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
             <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Organisme de formation de référence</p>
-            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-5 leading-tight">
               Plus qu'une formation, un accompagnement dans la durée.
             </h2>
-            <p className="text-lg text-[#3A3A3A] leading-relaxed">
+            <p className="text-lg text-[#483C32] leading-relaxed">
               Notre programme est certifié Qualiopi et suivi au-delà de la session initiale. Les stagiaires conservent un accès permanent à nos ressources et à la communauté professionnelle.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
             <div className="bg-white p-6">
               <GraduationCap className="w-8 h-8 mb-3" style={{ color: BLEU_FRANCE }} />
-              <div className="text-3xl font-semibold text-[#161616] mb-1">+ 300</div>
-              <div className="text-sm text-[#3A3A3A]">stagiaires formés à La Réunion</div>
+              <div className="text-3xl font-semibold text-[#17120E] mb-1">+ 300</div>
+              <div className="text-sm text-[#483C32]">stagiaires formés à La Réunion</div>
             </div>
             <div className="bg-white p-6">
               <div className="flex gap-0.5 mb-3">
@@ -374,37 +374,37 @@ export default function AidesFormation() {
                   <Star key={i} className={`w-4 h-4 ${i < 4 ? 'fill-[#FFC107] text-[#FFC107]' : 'fill-[#FFC107]/40 text-[#FFC107]/40'}`} />
                 ))}
               </div>
-              <div className="text-3xl font-semibold text-[#161616] mb-1">4,5 / 5</div>
-              <div className="text-sm text-[#3A3A3A]">note moyenne des stagiaires</div>
+              <div className="text-3xl font-semibold text-[#17120E] mb-1">4,5 / 5</div>
+              <div className="text-sm text-[#483C32]">note moyenne des stagiaires</div>
             </div>
             <div className="bg-white p-6">
               <MessageCircle className="w-8 h-8 mb-3" style={{ color: BLEU_FRANCE }} />
-              <div className="text-xl font-semibold text-[#161616] mb-1">Groupe WhatsApp</div>
-              <div className="text-sm text-[#3A3A3A]">entraide entre stagiaires, 7 j/7</div>
+              <div className="text-xl font-semibold text-[#17120E] mb-1">Groupe WhatsApp</div>
+              <div className="text-sm text-[#483C32]">entraide entre stagiaires, 7 j/7</div>
             </div>
             <div className="bg-white p-6">
               <LifeBuoy className="w-8 h-8 mb-3" style={{ color: BLEU_FRANCE }} />
-              <div className="text-xl font-semibold text-[#161616] mb-1">Suivi à vie</div>
-              <div className="text-sm text-[#3A3A3A]">accompagnement au-delà de la formation</div>
+              <div className="text-xl font-semibold text-[#17120E] mb-1">Suivi à vie</div>
+              <div className="text-sm text-[#483C32]">accompagnement au-delà de la formation</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="bg-white border-b border-[#DDDDDD]">
+      <section className="bg-white border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-12">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
             <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Retours d'expérience</p>
-            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-5 leading-tight">
               Dix dirigeants réunionnais témoignent.
             </h2>
-            <p className="text-lg text-[#3A3A3A] leading-relaxed">
+            <p className="text-lg text-[#483C32] leading-relaxed">
               Les témoignages ci-dessous sont publiés avec l'accord des intéressés. Les montants et indicateurs mentionnés correspondent aux résultats effectivement constatés.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
+          <div className="grid md:grid-cols-2 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
             {testimonials.map((t, i) => (
               <article key={i} className="bg-white p-7">
                 <div className="flex gap-1 mb-4">
@@ -413,19 +413,19 @@ export default function AidesFormation() {
                   ))}
                 </div>
 
-                <p className="text-[#161616] leading-relaxed mb-5">« {t.quote} »</p>
+                <p className="text-[#17120E] leading-relaxed mb-5">« {t.quote} »</p>
 
                 <div className="inline-flex items-center gap-2 border px-3 py-1 text-xs font-semibold mb-5" style={{ borderColor: BLEU_FRANCE, color: BLEU_FRANCE }}>
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {t.highlight}
                 </div>
 
-                <div className="flex items-center gap-3 pt-4 border-t border-[#DDDDDD]">
+                <div className="flex items-center gap-3 pt-4 border-t border-[#D9CEC3]">
                   <img src={t.avatar} alt={t.name} className="w-11 h-11 rounded-full object-cover" />
                   <div>
-                    <div className="font-semibold text-[#161616] text-sm">{t.name}</div>
-                    <div className="text-xs text-[#3A3A3A]">{t.role}</div>
-                    <div className="text-xs text-[#666666]">{t.company}</div>
+                    <div className="font-semibold text-[#17120E] text-sm">{t.name}</div>
+                    <div className="text-xs text-[#483C32]">{t.role}</div>
+                    <div className="text-xs text-[#615850]">{t.company}</div>
                   </div>
                 </div>
               </article>
@@ -434,21 +434,21 @@ export default function AidesFormation() {
         </div>
       </section>
 
-      <section className="bg-[#F6F6F6] border-b border-[#DDDDDD]">
+      <section className="bg-[#F2ECE4] border-b border-[#D9CEC3]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-3xl mb-10">
             <div className="w-12 h-1 mb-5" style={{ backgroundColor: BLEU_FRANCE }}></div>
             <p className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: BLEU_FRANCE }}>Résultats attendus</p>
-            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-5 leading-tight">
+            <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-5 leading-tight">
               Ce que nos clients constatent à 90 jours.
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-px bg-[#DDDDDD] border border-[#DDDDDD]">
+          <div className="grid md:grid-cols-2 gap-px bg-[#D9CEC3] border border-[#D9CEC3]">
             {benefits.map((benefit, i) => (
               <div key={i} className="bg-white p-6 flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: BLEU_FRANCE }} />
-                <span className="text-[#161616]">{benefit}</span>
+                <span className="text-[#17120E]">{benefit}</span>
               </div>
             ))}
           </div>
@@ -457,7 +457,7 @@ export default function AidesFormation() {
 
       <section className="bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="border-2 border-[#161616]">
+          <div className="border-2 border-[#17120E]">
             <div className="p-8 sm:p-10 text-white" style={{ backgroundColor: BLEU_FRANCE }}>
               <p className="text-sm font-semibold uppercase tracking-wider mb-3 text-white/80">Prise de rendez-vous</p>
               <h2 className="tracking-tight text-2xl sm:text-3xl font-semibold mb-4 leading-tight">
@@ -469,7 +469,7 @@ export default function AidesFormation() {
             </div>
 
             <div className="p-8 sm:p-10 bg-white">
-              <p className="text-[#161616] font-semibold mb-5">À l'issue de l'entretien, vous disposez des documents suivants :</p>
+              <p className="text-[#17120E] font-semibold mb-5">À l'issue de l'entretien, vous disposez des documents suivants :</p>
 
               <ul className="space-y-3 mb-8">
                 {[
@@ -481,7 +481,7 @@ export default function AidesFormation() {
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: BLEU_FRANCE }} />
-                    <span className="text-[#3A3A3A]">{item}</span>
+                    <span className="text-[#483C32]">{item}</span>
                   </li>
                 ))}
               </ul>
@@ -495,7 +495,7 @@ export default function AidesFormation() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
 
-              <div className="flex flex-wrap items-center gap-6 mt-8 pt-6 border-t border-[#DDDDDD] text-sm text-[#3A3A3A]">
+              <div className="flex flex-wrap items-center gap-6 mt-8 pt-6 border-t border-[#D9CEC3] text-sm text-[#483C32]">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4" style={{ color: BLEU_FRANCE }} />
                   <span>Certifié Qualiopi</span>
@@ -515,17 +515,17 @@ export default function AidesFormation() {
       </section>
 
       {/* FAQ financement — FAQPage JSON-LD */}
-      <section className="bg-white border-t border-[#DDDDDD]">
+      <section className="bg-white border-t border-[#D9CEC3]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#161616] mb-8">Financement de votre formation IA : questions fréquentes</h2>
+          <h2 className="tracking-tight text-3xl sm:text-4xl font-semibold text-[#17120E] mb-8">Financement de votre formation IA : questions fréquentes</h2>
           <div className="space-y-4">
             {FAQ_AIDES.map((item, i) => (
-              <details key={i} className="group border border-[#DDDDDD] p-6">
-                <summary className="flex cursor-pointer items-center justify-between gap-4 font-semibold text-[#161616] list-none">
+              <details key={i} className="group border border-[#D9CEC3] p-6">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 font-semibold text-[#17120E] list-none">
                   {item.question}
                   <span className="shrink-0 text-2xl leading-none transition-transform group-open:rotate-45" style={{ color: BLEU_FRANCE }}>+</span>
                 </summary>
-                <p className="mt-3 text-[#3A3A3A] leading-relaxed">{item.answer}</p>
+                <p className="mt-3 text-[#483C32] leading-relaxed">{item.answer}</p>
               </details>
             ))}
           </div>

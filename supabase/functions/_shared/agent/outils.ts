@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.47.10";
 import { decrireMetier, definitionsMetier, lireMetier } from "./outils_metier.ts";
 import { decrirePiecesJointes, listerPiecesJointes } from "./pieces_jointes.ts";
+import { connaissanceSite, SITE, type SujetSite } from "../site_aissociate.ts";
 
 export type Droits = {
   documents?: boolean; contacts?: boolean; dossiers?: boolean; formations?: boolean;
@@ -94,6 +95,9 @@ export function buildTools(ctx: Ctx) {
   if (ctx.isDirection && on("recrutement")) {
     tool("lister_candidats", "Candidats du module recrutement (statut, score).", {});
   }
+  tool("site_web",
+    "Ce que dit le site public aissociate.re : présentation et offre du Studio IA (agents, contrats et prix), autres services, et liens à donner aux prospects (inscription au Studio IA, formulaire de rappel, catalogue, financements…). À utiliser pour répondre sur nos offres ou rédiger un e-mail commercial avec le bon lien.",
+    { sujet: { type: "string", enum: ["studio", "services", "liens", "tout"], description: "studio = Studio IA (offre + liens) ; services = formations, assistance, développement ; liens = pages du site ; tout (défaut)" } });
   tool("statistiques",
     "Agrégats chiffrés calculés en base (fiables). Toujours préférer cet outil à un comptage manuel de listes.",
     { domaine: { type: "string", enum: ["pipeline", "contacts", "devis", "dossiers", "activite", "sessions"] } }, ["domaine"]);
@@ -413,6 +417,12 @@ export async function runReadTool(ctx: Ctx, name: string, a: Record<string, unkn
         }
         default: return { erreur: "Domaine de statistiques inconnu." };
       }
+    }
+
+    case "site_web": {
+      const sujet = (["studio", "services", "liens", "tout"] as SujetSite[]).includes(a.sujet as SujetSite) ? a.sujet as SujetSite : "tout";
+      ctx.sources.push({ label: "Site aissociate.re", url: SITE });
+      return { source: SITE, contenu: connaissanceSite(sujet) };
     }
 
     default:
