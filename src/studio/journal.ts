@@ -32,6 +32,8 @@ const LIBELLES: Record<string, string> = {
   contact_desinscrit: 'Contact désinscrit',
   competence_enregistree: 'Compétence enregistrée',
   note_enregistree: 'Note enregistrée',
+  rappel_programme: 'Rappel posé dans le calendrier',
+  rappel_supprime: 'Rappel supprimé du calendrier',
   element_range: 'Élément rangé dans un dossier',
   dossier_cree: 'Dossier créé',
   dossier_supprime: 'Dossier supprimé',

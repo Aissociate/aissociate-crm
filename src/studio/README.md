@@ -287,6 +287,16 @@ entreprise et les ressources plutôt que des champs « à compléter ».
 **Configuration :** secret Supabase `ZERNIO_API_KEY`. Les secrets `NANGO_*`, la fonction `nango-webhook`
 et la table `studio_nango_connexions` ne servent plus.
 
+## Calendrier par défaut (`calendrier.ts`, `src/studio/pages/Calendrier.tsx`)
+
+Onglet « Aujourd'hui › Calendrier » : ce que le Studio prévoit lui-même, sur 30 jours (navigation par période, heures de La Réunion).
+
+- **Rappels** (table `studio_rappels`, migration `20261128100000_studio_rappels.sql`) : posés par un agent (outil `rappel_programmer`) ou par l'utilisateur (bouton « Ajouter un rappel ») ; cochés « fait » ou supprimés depuis l'écran. Pas de validation : rien n'est envoyé à personne. 300 rappels à venir au plus par espace.
+- **Routines** : prochains passages des routines actives, calculés depuis `heures` / `jours` de `studio_taches` (rien n'est stocké).
+- **Publications programmées** : livrables `reseaux_publier` avec une date (`programme`), validés ou à valider.
+- Outils des agents : `calendrier_lister` et `rappel_programmer` remplacent les outils `agenda_*` quand **aucun agenda n'est connecté** pour l'agent (accès réservés compris). Agenda connecté : les rendez-vous passent par `agenda_proposer_rdv` (validation), et l'écran le signale.
+- Actions : `calendrier {du?, au?}`, `rappel_creer`, `rappel_fait`, `rappel_supprimer`. Table absente : calendrier sans rappels, création refusée proprement.
+
 ## Serveurs MCP des clients (`mcp_client.ts`)
 - **Plusieurs serveurs par espace** (8 au plus) : un connecteur `mcp:<nom>` chacun (`connecteur_enregistrer` avec
   `nouveau: true` le nomme d'après l'outil) ; l'ancien type `mcp` reste lu. Adresse https vers un hôte public

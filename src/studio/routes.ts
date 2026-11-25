@@ -23,6 +23,7 @@ export const SECTIONS: Section[] = [
     onglets: [
       { chemin: BASE, label: 'Vos décisions' },
       { chemin: `${BASE}/aujourdhui/livrables`, label: 'Tous les livrables' },
+      { chemin: `${BASE}/aujourdhui/calendrier`, label: 'Calendrier' },
       { chemin: `${BASE}/aujourdhui/journal`, label: 'Journal' },
     ],
   },

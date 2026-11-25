@@ -21,6 +21,7 @@
 //   drive_choisir {compte_id} | connexion_invitation {cible?, email?}   (messagerie, agenda, fichiers via Zernio)
 // Public : invitation_ouvrir {jeton}                → lien Zernio pour l'espace de l'invitation
 //   connecteurs | connecteur_enregistrer {type, infos, secret?, accord} | connecteur_supprimer {type}
+//   calendrier {du?, au?} | rappel_creer {titre, quand, note?} | rappel_fait {id, fait} | rappel_supprimer {id}  (calendrier par défaut, calendrier.ts)
 //   acces_connecteurs | acces_connecteur_regler {cle, agents: string[] | null, nom?}  (connecteur réservé à certains agents)
 //   ressources | ressource_add {titre, contenu, type, format?, taille?}
 //   fichier_deposer {jeton, index, total, morceau(base64), nom, type?} → fichier gardé tel quel dans « Mes ressources » (fichiers.ts)
@@ -110,6 +111,7 @@ import * as lots from "./lots.ts";
 import * as mcpClient from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
 import * as accesAgents from "./acces.ts";
+import * as calendrier from "./calendrier.ts";
 import * as fichiers from "./fichiers.ts";
 import { origineSure, etatConnexions, rapportEspace, corsHeaders, json, SESSION_JOURS, ECHECS_MAX, ECHECS_FENETRE_MIN, MODELES_STUDIO, MODELE_DEFAUT, autorise, DOC_MAX, type Piece, type Session, SELECT_WS, versSession, acteurDe, chargerSession } from "./socle.ts";
 import { desinscrire, relancerEnvois, etatVeille, etatContacts, etatLiaison, refusConnecteurEssai, etatAbonnement, agentsDuWorkspace, debutMois, compterDemandesMois, construireMe } from "./etats.ts";
@@ -1424,6 +1426,40 @@ Deno.serve(async (req: Request) => {
 
       case "journal":
         return json({ lignes: await lireJournal(sb, s.ws.id) });
+
+      // ── Calendrier par défaut (calendrier.ts) : rappels, passages des routines, publications programmées ──
+      case "calendrier": {
+        const { debut, fin } = calendrier.bornes(body.du, body.au);
+        const [evenements, boites] = await Promise.all([
+          calendrier.lireCalendrier(sb, s.ws.id, debut, fin),
+          zernio.zernioConfigure() ? bureau.boitesEspace(s.ws.id).catch(() => [] as bureau.Boite[]) : Promise.resolve([] as bureau.Boite[]),
+        ]);
+        const agenda = bureau.boitePour(boites, "calendar");
+        return json({
+          du: debut.toISOString(), au: fin.toISOString(), evenements,
+          agenda: agenda ? { nom: agenda.adresse || bureau.NOMS_FOURNISSEURS[agenda.fournisseur], a_reconnecter: agenda.a_reconnecter } : null,
+        });
+      }
+
+      case "rappel_creer": {
+        const r = await calendrier.creerRappel(sb, { wsId: s.ws.id, titre: body.titre, quand: body.quand, note: body.note, creePar: acteurDe(s) });
+        if ("erreur" in r) return json({ error: r.erreur }, 400);
+        await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), action: "rappel_programme", detail: { titre: r.titre, quand: r.quand.toISOString() } });
+        return json({ ok: true, id: r.id });
+      }
+
+      case "rappel_fait": {
+        const { error } = await sb.from("studio_rappels").update({ fait_le: body.fait ? new Date().toISOString() : null })
+          .eq("workspace_id", s.ws.id).eq("id", String(body.id ?? ""));
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case "rappel_supprimer": {
+        const { data: r } = await sb.from("studio_rappels").delete().eq("workspace_id", s.ws.id).eq("id", String(body.id ?? "")).select("titre").maybeSingle();
+        if (r) await journaliser(sb, { wsId: s.ws.id, acteur: acteurDe(s), action: "rappel_supprime", detail: { titre: r.titre } });
+        return json({ ok: true });
+      }
 
       // ── « Mon équipe » : état de chaque agent et comptes branchés de l'espace ──
       case "equipe": {

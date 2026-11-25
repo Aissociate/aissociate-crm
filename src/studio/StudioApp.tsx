@@ -28,6 +28,7 @@ const Questionnaire = lazy(() => import('./pages/Questionnaire'));
 const Perimetre = lazy(() => import('./pages/Perimetre'));
 const Contrat = lazy(() => import('./pages/Contrat'));
 const Journal = lazy(() => import('./pages/Journal'));
+const Calendrier = lazy(() => import('./pages/Calendrier'));
 const Livrables = lazy(() => import('./pages/Livrables'));
 const ParEmail = lazy(() => import('./pages/ParEmail'));
 const Routines = lazy(() => import('./pages/Routines'));
@@ -273,6 +274,7 @@ export default function StudioApp() {
             <Route index element={<Aujourdhui />} />
             <Route path="aujourdhui" element={<Navigate to={BASE} replace />} />
             <Route path="aujourdhui/livrables" element={<Livrables />} />
+            <Route path="aujourdhui/calendrier" element={<Calendrier />} />
             <Route path="aujourdhui/journal" element={<Journal />} />
             <Route path="equipe" element={<Equipe />} />
             <Route path="equipe/:agentId" element={<Specialiste />} />
