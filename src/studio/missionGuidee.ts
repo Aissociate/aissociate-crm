@@ -31,6 +31,7 @@ const CONNUS: Record<string, { recoit: string; question?: string }> = {
   sequence: { recoit: 'trois messages de prospection, prêts à envoyer', question: 'Par quel canal ?' },
   script: { recoit: "ce qu'il faut dire, objection par objection", question: 'Dans quel contexte appelez-vous ?' },
   objection: { recoit: 'trois façons de répondre à cette objection' },
+  prospects_locaux: { recoit: "une liste d'entreprises à contacter, et comment les aborder", question: "Combien d'entreprises voulez-vous ?" },
   article: { recoit: 'un article prêt à mettre en ligne', question: 'De quelle longueur ?' },
   mots_cles: { recoit: 'les recherches que font vos clients, classées' },
   audit_page: { recoit: 'les corrections à apporter à votre page, dans l\'ordre' },

@@ -109,8 +109,8 @@ describe('pouvoirs livrés avec le Studio (migrations)', () => {
   }
 
   it('sont tous retrouvés', () => {
-    expect(pouvoirs.length).toBe(26);
-    expect(new Set(pouvoirs.map((p) => p.id)).size).toBe(26);
+    expect(pouvoirs.length).toBe(27);
+    expect(new Set(pouvoirs.map((p) => p.id)).size).toBe(27);
   });
 
   it('ont chacun un résultat annoncé et une question formulée, sans champ perdu', () => {
