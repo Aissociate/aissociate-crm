@@ -220,6 +220,12 @@ function Coquille() {
               <span>Essai gratuit : {me.essai.jours_restants > 1 ? `${me.essai.jours_restants} jours restants` : 'dernier jour'} (jusqu'au {new Date(me.essai.fin).toLocaleDateString('fr-FR')}) · un outil connectable. <span className="underline">Choisir mon abonnement</span></span>
             </NavLink>
           ))}
+          {me.badge_decouverte && !me.badge_decouverte.termine && (
+            <NavLink to="/studio/reglages/perimetre" className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+              <AlarmClock className="h-5 w-5 shrink-0" />
+              <span>Stage : un outil peut être relié gratuitement {me.badge_decouverte.jours_restants > 1 ? `pendant encore ${me.badge_decouverte.jours_restants} jours` : "jusqu'à ce soir"} (jusqu'au {new Date(me.badge_decouverte.fin).toLocaleDateString('fr-FR')}). Ensuite, il faut un contrat pour le garder. <span className="underline">Voir les contrats</span></span>
+            </NavLink>
+          )}
           {me.workspace.suspendu && (
             <NavLink to="/studio/reglages/perimetre" className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <PauseCircle className="h-5 w-5 shrink-0" />

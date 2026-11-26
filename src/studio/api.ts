@@ -51,6 +51,8 @@ export type Me = {
   user: { id: string; email: string; prenom: string | null; nom: string | null; role: 'proprietaire' | 'membre'; doit_changer: boolean; cgv_a_accepter?: boolean; tutoriel_vu?: boolean | null };
   /** Essai gratuit en cours ou terminé (null : espace hors essai ou abonnement payé). */
   essai?: { fin: string; jours_restants: number; termine: boolean } | null;
+  /** Stage : badge d'accès offert la première semaine (null hors Stage). */
+  badge_decouverte?: { fin: string; jours_restants: number; termine: boolean } | null;
   workspace: { id: string; nom: string; offre: string; quota_messages_mois: number | null; contexte_entreprise: string; expire_le: string | null; suspendu?: boolean };
   agents: Agent[];
   stats: {

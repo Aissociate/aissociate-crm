@@ -20,6 +20,7 @@ import ParametresPanel from './ParametresPanel';
 import GouvernanceEspace from './GouvernanceEspace';
 import LiaisonEspace from './LiaisonEspace';
 import RechargesEspace from './RechargesEspace';
+import ProspectionEspace from './ProspectionEspace';
 
 // Tables studio_* absentes des types générés du CRM (module isolé) : client non typé.
 const db = supabase as unknown as SupabaseClient;
@@ -472,6 +473,8 @@ function EspaceModal({
             )}
 
             <RechargesEspace workspaceId={espace.id} />
+
+            <ProspectionEspace workspaceId={espace.id} />
 
             <LiaisonEspace workspaceId={espace.id} nomEspace={espace.nom} agents={agents.filter((a) => a.actif)} />
 

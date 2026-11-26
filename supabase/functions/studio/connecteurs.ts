@@ -15,6 +15,17 @@ import { APPS_OUTILLEES } from "./applications_outils.ts";
 import { estTypeMcp, SERVEURS_MAX, slug, urlAutorisee } from "./mcp_client.ts";
 import { API_MAX, AUTHS, DOC_MAX, estTypeApi } from "./api_client.ts";
 import { chargerAcces, cleZernio, filtrer, type Acces } from "./acces.ts";
+import * as contrats from "./contrats.ts";
+
+/**
+ * Stage sans badge d'accès utilisable (première semaine passée, aucun contrat) : les connexions
+ * restent en place, mais les agents ne les voient plus et n'ont plus leurs outils (contrats.ts).
+ * En cas de doute (lecture impossible), on ne suspend pas.
+ */
+export async function connexionsSuspendues(sb: SupabaseClient, wsId: string): Promise<boolean> {
+  const { data } = await sb.from("studio_workspaces").select("contrat, connecteurs_max, created_at").eq("id", wsId).maybeSingle();
+  return data ? contrats.connexionsSuspendues(data) : false;
+}
 
 type Def = {
   libelle: string;
@@ -82,6 +93,7 @@ export function defDe(type: string): Def | undefined {
  * que cet agent peut utiliser (connecteurs réservés, acces.ts) ; sans : tous (« Mon équipe »).
  */
 export async function connecteursActifs(sb: SupabaseClient, wsId: string, agentId?: string): Promise<ConnecteurActif[]> {
+  if (await connexionsSuspendues(sb, wsId)) return [];
   const [{ data: lignes }, tousComptes, reglesAcces] = await Promise.all([
     sb.from("studio_connecteurs").select("type, infos").eq("workspace_id", wsId).eq("statut", "connecte"),
     // Connexions en un clic (Zernio) de CET espace : messageries et réseaux sociaux.

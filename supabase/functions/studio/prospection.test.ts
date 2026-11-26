@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  debutMois, entreeActeur, etatRun, fichesComptees, nombreFiches, normaliser, plafondMois, prefixeReference,
+  debutMois, entreeActeur, etatRun, nombreFiches, normaliser, prefixeReference,
   prospectionActive, refRecherche, tableau, texteRecherche,
 } from "./prospection.ts";
 
@@ -47,20 +47,6 @@ describe("prospection Google Maps", () => {
     expect(t).toContain("| 1 | A | — | 97430 Le Tampon | — | — | 4 (2 avis) |");
     expect(t).toContain("| 2 | B | — | — | — | — | — |");
     expect(tableau([])).toBe("(aucune fiche)");
-  });
-
-  it("plafondMois : défaut si absent ou illisible, 0 accepté", () => {
-    expect(plafondMois(undefined)).toBe(200);
-    expect(plafondMois("")).toBe(200);
-    expect(plafondMois("abc")).toBe(200);
-    expect(plafondMois("0")).toBe(0);
-    expect(plafondMois("500")).toBe(500);
-  });
-
-  it("fichesComptees : résultat si terminée, demande si en cours, rien si échec", () => {
-    expect(fichesComptees([
-      { statut: "terminee", nombre: 20, nb: 14 }, { statut: "en_cours", nombre: 30, nb: null }, { statut: "echec", nombre: 50, nb: null },
-    ])).toBe(44);
   });
 
   it("debutMois : minuit du 1er à La Réunion (UTC+4)", () => {

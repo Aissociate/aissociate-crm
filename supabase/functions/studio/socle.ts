@@ -194,6 +194,8 @@ export type Session = {
     contrat: string | null;
     /** Badges d'accès (connecteurs) et casier (Go) du contrat ; null = sans limite. */
     connecteurs_max: number | null; stockage_go: number | null;
+    /** Création de l'espace : départ du badge de découverte du Stage (contrats.ts). */
+    created_at?: string | null;
   };
 };
 
@@ -201,7 +203,7 @@ export type Session = {
 // Session
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele, essai_fin, abonnement_statut, contrat, connecteurs_max, stockage_go";
+export const SELECT_WS = "id, nom, offre, quota_messages_mois, contexte_entreprise, expire_le, actif, modele, essai_fin, abonnement_statut, contrat, connecteurs_max, stockage_go, created_at";
 
 export function versSession(sessionId: string, u: Record<string, unknown>, w: Record<string, unknown>): Session {
   return {
@@ -215,6 +217,7 @@ export function versSession(sessionId: string, u: Record<string, unknown>, w: Re
       essai_fin: (w.essai_fin as string | null) ?? null, abonnement_statut: (w.abonnement_statut as string | null) ?? null,
       contrat: (w.contrat as string | null) ?? null,
       connecteurs_max: (w.connecteurs_max as number | null) ?? null, stockage_go: (w.stockage_go as number | null) ?? null,
+      created_at: (w.created_at as string | null) ?? null,
     },
   };
 }

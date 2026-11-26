@@ -3,7 +3,7 @@
 // Chaque jour (pg_cron, action controle_cron) ou à la demande (CRM, admin_controle), un client
 // fictif parcourt le Studio de bout en bout, par les mêmes portes qu'un vrai client :
 // questionnaire → espace en Stage gratuit et e-mail d'identifiants → connexion → nouveau mot de passe →
-// CGV → Stage en cours → ajout d'un agent → aucun badge d'accès en Stage → contrat et
+// CGV → Stage en cours → ajout d'un agent → un badge d'accès la première semaine du Stage, aucun ensuite → contrat et
 // recharge (Stripe) → confirmation de paiement (webhook signé) → déblocage → mot de passe oublié. S'ajoutent la configuration, les pages
 // publiques, les services externes (Stripe, SMTP, OpenRouter, Zernio) et l'activité réelle
 // des dernières 24 h (identifiants non envoyés, webhooks non livrés, tâches en erreur).
@@ -227,14 +227,34 @@ async function parcours(sb: SupabaseClient, res: Resultat[]) {
       return `Agent ajouté, ${agents.length} agents dans l'équipe.`;
     });
 
-    await controler(res, E, "parcours.connecteur", "Aucun badge d'accès en Stage", async () => {
+    await controler(res, E, "parcours.connecteur", "Stage : un badge d'accès la première semaine, aucun ensuite", async () => {
       const pre = prerequis(p.token, "la connexion"); if (pre) return pre;
-      const r = await studio("connecteur_enregistrer", { token: p.token, type: "outlook", adresse: `premier@${DOMAINE_TEST}`, accord: true });
-      await sb.from("studio_connecteurs").delete().eq("workspace_id", p.wsId);
-      if (r.statut === 200) echec("Un connecteur a été accepté en Stage.", "La limite des badges d'accès du contrat n'est plus appliquée.", "Vérifier refusConnecteurEssai (index.ts), connecteurs_max et facturationEspace (facturation.ts).");
-      if (r.statut === 503) echec(`Contrôle impossible (HTTP 503) : ${erreurDe(r.data)}`, "Les connecteurs de l'espace n'ont pas pu être comptés (Zernio indisponible ?).", "Voir le contrôle Zernio ci-dessous.", "alerte");
-      if (r.statut !== 402) echec(`Connecteur en Stage : HTTP ${r.statut} au lieu de 402 (${erreurDe(r.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
-      return "Connecteur refusé en Stage (402).";
+      const connecter = (type: string, adresse: string) => studio("connecteur_enregistrer", { token: p.token, type, infos: { adresse: `${adresse}@${DOMAINE_TEST}` }, accord: true });
+      const nettoyer = () => sb.from("studio_connecteurs").delete().eq("workspace_id", p.wsId);
+      const zernioKo = (r: { statut: number; data: Record<string, unknown> }) => { if (r.statut === 503) echec(`Contrôle impossible (HTTP 503) : ${erreurDe(r.data)}`, "Les connecteurs de l'espace n'ont pas pu être comptés (Zernio indisponible ?).", "Voir le contrôle Zernio ci-dessous.", "alerte"); };
+      const verifier = "Vérifier refusConnecteurEssai (etats.ts), contrats.badgesEffectifs et facturationEspace (facturation.ts).";
+
+      // Première semaine : un outil accepté, le deuxième refusé.
+      const un = await connecter("outlook", "premier");
+      zernioKo(un);
+      if (un.statut !== 200) { await nettoyer(); echec(`Premier connecteur en Stage : HTTP ${un.statut} (${erreurDe(un.data)}).`, "Le badge d'accès offert la première semaine du Stage n'est pas accordé.", verifier); }
+      await sb.from("studio_connecteurs").update({ statut: "connecte" }).eq("workspace_id", p.wsId);
+      const deux = await connecter("google", "second");
+      await nettoyer();
+      zernioKo(deux);
+      if (deux.statut === 200) echec("Un deuxième connecteur a été accepté en Stage.", "La limite d'un seul badge offert n'est plus appliquée.", verifier);
+      if (deux.statut !== 402) echec(`Deuxième connecteur en Stage : HTTP ${deux.statut} au lieu de 402 (${erreurDe(deux.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
+
+      // Semaine passée (espace vieilli de 8 jours, puis remis à sa date) : plus aucun badge.
+      const { data: w } = await sb.from("studio_workspaces").select("created_at").eq("id", p.wsId).single();
+      await sb.from("studio_workspaces").update({ created_at: new Date(Date.now() - (contrats.BADGE_DECOUVERTE_JOURS + 1) * 86_400_000).toISOString() }).eq("id", p.wsId);
+      const apres = await connecter("outlook", "apres");
+      await nettoyer();
+      await sb.from("studio_workspaces").update({ created_at: w?.created_at }).eq("id", p.wsId);
+      zernioKo(apres);
+      if (apres.statut === 200) echec("Un connecteur a été accepté en Stage après la première semaine.", "Le badge offert ne prend pas fin au bout de 7 jours.", verifier);
+      if (apres.statut !== 402) echec(`Connecteur après la première semaine : HTTP ${apres.statut} au lieu de 402 (${erreurDe(apres.data)}).`, "Réponse inattendue du Studio.", `Vérifier connecteur_enregistrer (index.ts) et ${LOGS}.`, "alerte");
+      return "Stage : un connecteur accepté la première semaine, le deuxième refusé (402), aucun après 7 jours (402).";
     });
 
     await controler(res, E, "parcours.recharge", "Page de paiement d'une recharge (Stripe)", async () => {

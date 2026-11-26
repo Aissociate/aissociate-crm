@@ -105,6 +105,8 @@ import { colonneSensibleAbsente, detecterSensible, DOSSIER_SENSIBLE, messageSens
 import { aVenir, faitsSemaine, type LigneFait } from "./faits.ts";
 import { etatsAgents } from "./livrables.ts";
 import * as recharges from "./recharges.ts";
+import * as prospectionOption from "./prospection_option.ts";
+import { apifyConfigure } from "./prospection.ts";
 import * as equipe from "./equipe.ts";
 import * as consignes from "./consignes.ts";
 import * as lots from "./lots.ts";
@@ -1115,13 +1117,15 @@ Deno.serve(async (req: Request) => {
 
       // ── Gouvernance : périmètre, suspension, journal, livrables ──
       case "perimetre": {
-        const [etat, depense, agents, { data: catalogue }, { data: w }, demandes, { data: medias }, credits] = await Promise.all([
+        const [etat, depense, agents, { data: catalogue }, { data: w }, demandes, { data: medias }, credits, prospects] = await Promise.all([
           etatEspace(sb, s.ws.id), depenseJour(sb, s.ws.id), agentsDuWorkspace(sb, s.ws),
           sb.from("studio_agents").select("id, prenom, metier, photo, couleur").eq("actif", true).order("ordre"),
           sb.from("studio_workspaces").select("quota_images_mois, quota_videos_mois, max_utilisateurs").eq("id", s.ws.id).maybeSingle(),
           compterDemandesMois(sb, s.ws.id),
           sb.from("studio_medias").select("type").eq("workspace_id", s.ws.id).neq("statut", "echec").gte("created_at", debutMois()),
           recharges.etat(sb, s.ws.id),
+          // Option Prospection de Sam : affichée seulement si la prospection est en service.
+          apifyConfigure() ? prospectionOption.etat(sb, s.ws.id).catch(() => null) : Promise.resolve(null),
         ]);
         const ouverts = new Set(agents.map((a) => a.id));
         return json({
@@ -1135,6 +1139,7 @@ Deno.serve(async (req: Request) => {
             utilisateurs: { max: w?.max_utilisateurs ?? null },
           },
           recharges: { ...credits, paiement_en_ligne: stripe.stripeConfigure() },
+          prospection: prospects ? { ...prospects, paiement_en_ligne: stripe.stripeConfigure() } : null,
           abonnement: stripe.stripeConfigure() ? await etatAbonnement(sb, s.ws.id, equipe.nbFactures(agents)) : null,
         });
       }
@@ -1178,6 +1183,14 @@ Deno.serve(async (req: Request) => {
           detail: { credits: r.pack.credits, prix_ht: r.pack.prix },
         });
         return json({ ok: true, solde: await recharges.solde(sb, s.ws.id) });
+      }
+
+      // Option Prospection de Sam : pack de contacts payé en ligne, crédité par le webhook Stripe.
+      case "prospection_acheter": {
+        if (s.user.role !== "proprietaire") return json({ error: "Réservé au propriétaire de l'espace" }, 403);
+        if (!apifyConfigure()) return json({ error: "La prospection n'est pas en service." }, 503);
+        if (!stripe.stripeConfigure()) return json({ error: "Le paiement en ligne n'est pas disponible. Écrivez à contact@aissociate.re pour activer l'option." }, 503);
+        return json({ url: await stripe.sessionProspection(sb, { wsId: s.ws.id, email: s.user.email, origine: origineSure(req), pack: await prospectionOption.pack(sb) }) });
       }
 
       case "abonnement_souscrire":

@@ -1,4 +1,5 @@
-// Paiement en ligne Stripe du Studio : recharges de crédits (paiement unique) et
+// Paiement en ligne Stripe du Studio : recharges de crédits et contacts de l'option Prospection
+// (paiements uniques), et
 // abonnement : contrats de la grille (contrats.ts, CDD mensuel ou CDI annuel) et, pour les
 // abonnés d'avant le 23/11/2026, ancienne grille (agents au tarif dégressif + connecteurs en sus).
 //
@@ -199,6 +200,27 @@ export async function sessionRecharge(sb: SupabaseClient, p: { wsId: string; ema
   return s.url;
 }
 
+/** Page de paiement Stripe d'un pack de contacts de l'option Prospection (prospection_option.ts). */
+export async function sessionProspection(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; pack: { prix: number; contacts: number } }) {
+  const client = await clientStripe(sb, p.wsId, p.email);
+  const fixe = !TAXE_AUTOMATIQUE || client.reunion;
+  const taxe = parametresTaxe(fixe, fixe ? await tauxTva() : null);
+  const meta = { app: "studio", workspace_id: p.wsId };
+  const s = await appel<{ url: string }>("POST", "/checkout/sessions", {
+    mode: "payment", customer: client.id, locale: "fr", ...taxe.session,
+    line_items: [{
+      quantity: 1, ...taxe.lignes,
+      price_data: { currency: "eur", unit_amount: Math.round(p.pack.prix * 100), tax_behavior: "exclusive", product_data: { name: `Studio IA — option Prospection, ${p.pack.contacts} contacts` } },
+    }],
+    metadata: { ...meta, nature: "prospection", contacts: p.pack.contacts, prix_ht: p.pack.prix, acteur: `client:${p.email}` },
+    payment_intent_data: { metadata: meta, statement_descriptor_suffix: "STUDIO IA" },
+    invoice_creation: { enabled: true, invoice_data: { metadata: meta } },
+    success_url: `${p.origine}/studio/perimetre?paiement=prospection`,
+    cancel_url: `${p.origine}/studio/perimetre?paiement=annule`,
+  });
+  return s.url;
+}
+
 /** Page de souscription de l'abonnement mensuel (agents + connecteurs supplémentaires). */
 export async function sessionAbonnement(sb: SupabaseClient, p: { wsId: string; email: string; origine: string; agents: number; connecteurs: number; prixConnecteur: number }) {
   const centimes = Math.round(p.prixConnecteur * 100);
@@ -364,6 +386,18 @@ export async function traiterEvenement(sb: SupabaseClient, evt: { type: string; 
       if (error) return error.code === "23505" ? "recharge déjà créditée" : `recharge : ${error.message}`;
       await journaliser(sb, { wsId: m.workspace_id, acteur: m.acteur || "stripe", action: "recharge_achetee", detail: { credits, prix_ht: prixHt, stripe: s.id } });
       return `recharge de ${credits} crédits créditée`;
+    }
+    if (s.mode === "payment" && m.nature === "prospection") {
+      if (s.payment_status !== "paid") return "option Prospection en attente de paiement";
+      const contacts = Math.floor(Number(m.contacts)), prixHt = Number(m.prix_ht);
+      if (!m.workspace_id || !(contacts > 0)) return "option Prospection illisible";
+      const { error } = await sb.from("studio_prospection_contacts").insert({
+        workspace_id: m.workspace_id, nature: "achat", contacts, prix_ht: Number.isFinite(prixHt) ? prixHt : null,
+        acteur: m.acteur || "stripe", note: `${contacts} contacts de prospection (payés en ligne)`, stripe_ref: s.id,
+      });
+      if (error) return error.code === "23505" ? "option Prospection déjà créditée" : `option Prospection : ${error.message}`;
+      await journaliser(sb, { wsId: m.workspace_id, acteur: m.acteur || "stripe", action: "prospection_achetee", detail: { contacts, prix_ht: prixHt, stripe: s.id } });
+      return `option Prospection : ${contacts} contacts crédités`;
     }
     if (s.mode === "subscription" && s.subscription) {
       await enregistrerAbonnement(sb, await appel<Abonnement>("GET", `/subscriptions/${s.subscription}`));

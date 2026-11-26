@@ -4,9 +4,9 @@
 // - Un seul compte Apify, celui d'Aissociate (secret APIFY_TOKEN) : le client ne connecte rien.
 // - Une recherche = un « run » Apify. L'API attend 60 s au plus par appel : prospects_chercher
 //   lance le run et rend les fiches s'il finit à temps ; sinon l'agent rappelle prospects_resultats.
-// - Coût : facturé à la fiche. Entrée minimale (ni avis, ni photos, ni enrichissement), plafond
-//   par recherche (maxItems) et plafond de fiches par espace et par mois (studio_config
-//   `prospection_fiches_mois`).
+// - Coût : facturé à la fiche. Entrée minimale (ni avis, ni photos, ni enrichissement) et plafond
+//   par recherche (maxItems). Côté client, les fiches puisent dans les contacts prépayés de
+//   l'option Prospection (prospection_option.ts).
 // - Les fiches décrivent des ENTREPRISES (nom, téléphone, site) : aucune adresse e-mail n'est
 //   collectée ici, et rien n'est ajouté aux contacts des mailings (réservés aux abonnés consentants).
 // Les fonctions sans réseau sont pures (testées).
@@ -15,7 +15,6 @@ const BASE = "https://api.apify.com/v2";
 export const ACTEUR = "compass~crawler-google-places";
 export const FICHES_MAX = 50;
 export const FICHES_DEFAUT = 20;
-export const PLAFOND_MOIS_DEFAUT = 200;
 /** Garde-fou de dépense par recherche, en dollars, quel que soit le tarif de l'acteur. */
 const DEPENSE_MAX_USD = 1;
 /** Agents qui disposent des outils de prospection. */
@@ -89,17 +88,6 @@ export function tableau(prospects: Prospect[]): string {
     `| ${n} | ${p.nom} | ${p.categorie || "—"} | ${[p.code_postal, p.ville].filter(Boolean).join(" ") || p.adresse || "—"} | ${p.telephone || "—"} | ${p.site || "—"} | ${p.note === null ? "—" : `${p.note}${p.avis === null ? "" : ` (${p.avis} avis)`}`} |`;
   return ["| N° | Entreprise | Activité | Commune | Téléphone | Site | Note Google |", "|---|---|---|---|---|---|---|",
     ...prospects.map((p, k) => ligne(p, k + 1))].join("\n");
-}
-
-/** Plafond mensuel lu dans studio_config ; valeur absente ou illisible = défaut ; 0 = prospection fermée. */
-export function plafondMois(valeur: unknown): number {
-  const n = Math.round(Number(valeur));
-  return valeur !== null && valeur !== undefined && String(valeur).trim() !== "" && Number.isFinite(n) && n >= 0 ? n : PLAFOND_MOIS_DEFAUT;
-}
-
-/** Fiches comptées sur le mois : le résultat d'une recherche terminée, la demande d'une recherche en cours, rien pour un échec. */
-export function fichesComptees(recherches: { statut: string; nombre: number; nb: number | null }[]): number {
-  return recherches.reduce((s, r) => s + (r.statut === "echec" ? 0 : r.statut === "terminee" ? (r.nb ?? 0) : r.nombre), 0);
 }
 
 /** Début du mois en cours à La Réunion (UTC+4), en ISO. */
