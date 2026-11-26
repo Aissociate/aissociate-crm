@@ -1,3 +1,5 @@
+import { promisify } from 'node:util';
+import zlib from 'node:zlib';
 import Fastify from 'fastify';
 import { config } from './config.js';
 import { pool } from './db.js';
@@ -24,6 +26,35 @@ const CORS = {
 app.addHook('onRequest', async (req, reply) => {
   reply.headers(CORS);
   if (req.method === 'OPTIONS' && !req.url.startsWith('/functions/v1/')) return reply.code(204).send();
+});
+
+// Compression des réponses JSON/texte, faite ici et non dans Traefik : son
+// middleware « compress » laisse passer tel quel toute réponse portant un
+// en-tête Content-Range, or /rest/v1 en renvoie un sur chaque lecture (comme
+// PostgREST). Sans compression, la page Contacts transfère ~4 Mo de JSON.
+// Les flux (fichiers du stockage, réponses relayées des fonctions) ne sont pas
+// des chaînes/Buffer et passent donc sans être touchés.
+const brotli = promisify(zlib.brotliCompress);
+const gzip = promisify(zlib.gzip);
+const COMPRESSIBLE =/^(application\/([\w.+-]*\+)?json|text\/)/i;
+app.addHook('onSend', async (req, reply, payload) => {
+  if (typeof payload !== 'string' && !Buffer.isBuffer(payload)) return payload;
+  if (reply.getHeader('content-encoding') || req.method === 'HEAD') return payload;
+  if (!COMPRESSIBLE.test(String(reply.getHeader('content-type') ?? ''))) return payload;
+  reply.header('vary', 'Accept-Encoding');
+  if (Buffer.byteLength(payload) < 1024) return payload;
+  const accept = String(req.headers['accept-encoding'] ?? '').toLowerCase();
+  let encoding, out;
+  if (/\bbr\b/.test(accept)) {
+    encoding = 'br';
+    out = await brotli(payload, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } });
+  } else if (/\bgzip\b/.test(accept)) {
+    encoding = 'gzip';
+    out = await gzip(payload, { level: 6 });
+  } else return payload;
+  reply.header('content-encoding', encoding);
+  reply.removeHeader('content-length');
+  return out;
 });
 
 // DELETE et POST sans corps arrivent parfois avec content-type JSON et un corps vide.
