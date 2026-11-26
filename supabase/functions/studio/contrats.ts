@@ -25,8 +25,8 @@ export type Contrat = {
 export const CONTRATS: Contrat[] = [
   {
     id: "stage", nom: "Stage", rythme: "Gratuit, sans limite de durée", prix: 0, heures: 10, badges: 0, responsables: 1, go: 1,
-    expert: false, astreinte: false, sav: false, accroche: "Pour découvrir, sans accès à vos outils",
-    points: ["Agents illimités, modèle standard", "10 h de travail par mois", "Aucun badge d'accès à vos outils", "1 responsable, casier de 1 Go"],
+    expert: false, astreinte: false, sav: false, accroche: "Pour découvrir, avec un outil relié la première semaine",
+    points: ["Agents illimités, modèle standard", "10 h de travail par mois", "1 badge d'accès offert la première semaine, aucun ensuite", "1 responsable, casier de 1 Go"],
   },
   {
     id: "partiel", nom: "Temps partiel", rythme: "Mi-temps", prix: 59, heures: 75, badges: 3, responsables: 1, go: 25,
@@ -125,6 +125,48 @@ export function droits(ch: Choix) {
     astreinte: c.astreinte || ch.astreinte,
     sav: c.sav,
   };
+}
+
+// ─── Badge de découverte du Stage ────────────────────────────────────────────
+// Le Stage n'a aucun badge d'accès, sauf un, offert pendant les 7 jours qui suivent la création
+// de l'espace. Ensuite, sans contrat ni avenant « badge », la connexion reste en place mais les
+// agents ne l'utilisent plus (rien n'est supprimé : un contrat la rend aussitôt).
+
+export const BADGE_DECOUVERTE_JOURS = 7;
+export const BADGES_DECOUVERTE = 1;
+
+/** Ce qu'il faut de l'espace pour compter ses badges (studio_workspaces). */
+export type EspaceBadges = { contrat?: string | null; connecteurs_max?: number | null; created_at?: string | null };
+
+/** Fin du badge de découverte ; null hors Stage ou sans date de création lisible. */
+export function finDecouverte(ws: EspaceBadges): Date | null {
+  if (ws.contrat !== "stage" || !ws.created_at) return null;
+  const debut = new Date(ws.created_at).getTime();
+  return Number.isFinite(debut) ? new Date(debut + BADGE_DECOUVERTE_JOURS * 86_400_000) : null;
+}
+
+export function decouverteEnCours(ws: EspaceBadges, maintenant = new Date()): boolean {
+  const fin = finDecouverte(ws);
+  return fin !== null && maintenant < fin;
+}
+
+/** Badges utilisables aujourd'hui : ceux du contrat, plus celui de découverte ; null = sans limite. */
+export function badgesEffectifs(ws: EspaceBadges, maintenant = new Date()): number | null {
+  if (ws.connecteurs_max == null) return null;
+  return ws.connecteurs_max + (decouverteEnCours(ws, maintenant) ? BADGES_DECOUVERTE : 0);
+}
+
+/** Stage sans aucun badge utilisable : les connexions de l'espace sont suspendues pour les agents. */
+export function connexionsSuspendues(ws: EspaceBadges, maintenant = new Date()): boolean {
+  return ws.contrat === "stage" && badgesEffectifs(ws, maintenant) === 0;
+}
+
+/** État du badge de découverte pour l'écran ; null hors Stage. */
+export function etatDecouverte(ws: EspaceBadges, maintenant = new Date()) {
+  const fin = finDecouverte(ws);
+  if (!fin) return null;
+  const reste = fin.getTime() - maintenant.getTime();
+  return { fin: fin.toISOString(), jours_restants: Math.max(0, Math.ceil(reste / 86_400_000)), termine: reste <= 0 };
 }
 
 // ─── Stripe ──────────────────────────────────────────────────────────────────

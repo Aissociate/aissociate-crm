@@ -93,7 +93,7 @@ export function mailIdentifiants(p: { prenom: string | null; entreprise: string;
   const bonjour = `Bonjour${p.prenom ? ` ${p.prenom}` : ""},`;
   const lignes = !p.finEssai ? [
     `Votre Studio IA${p.entreprise ? ` « ${p.entreprise} »` : ""} est prêt : vos agents commencent en stage, gratuitement et sans limite de durée.`,
-    `En stage, ils disposent de 10 heures de travail par mois, sans accès à vos outils. Pour leur ouvrir votre messagerie, votre agenda ou vos réseaux sociaux et leur donner plus d'heures, choisissez un contrat dans « Mon abonnement », quand vous voulez.`,
+    `En stage, ils disposent de 10 heures de travail par mois. Pendant la première semaine, vous pouvez leur ouvrir un de vos outils (messagerie, agenda ou réseau social), gratuitement. Pour garder cet accès ensuite, en ouvrir d'autres et leur donner plus d'heures, choisissez un contrat dans « Mon abonnement », quand vous voulez.`,
   ] : [
     `Votre Studio IA${p.entreprise ? ` « ${p.entreprise} »` : ""} est prêt : vous pouvez l'essayer gratuitement pendant ${p.jours} jours, jusqu'au ${fin}.`,
     `Pendant l'essai, vos agents travaillent avec les quotas habituels et vous pouvez connecter un outil (messagerie, agenda ou réseau social). À la fin de l'essai, choisissez votre abonnement dans « Mon périmètre » pour continuer : sans abonnement, l'accès aux agents est suspendu.`,

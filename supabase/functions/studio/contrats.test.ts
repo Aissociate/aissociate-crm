@@ -1,5 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { articles, bulletin, CHOIX_STAGE, choixDepuisArticles, clePrix, droits, enTrop, normaliser, type Responsable } from './contrats';
+import { articles, badgesEffectifs, bulletin, CHOIX_STAGE, choixDepuisArticles, clePrix, connexionsSuspendues, droits, enTrop, etatDecouverte, normaliser, type Responsable } from './contrats';
+
+describe('badge de découverte du Stage', () => {
+  const cree = '2026-11-20T08:00:00Z';
+  const j = (n: number) => new Date(Date.parse(cree) + n * 86_400_000);
+  const stage = { contrat: 'stage', connecteurs_max: 0, created_at: cree };
+
+  it('un badge pendant 7 jours, aucun ensuite', () => {
+    expect(badgesEffectifs(stage, j(0))).toBe(1);
+    expect(badgesEffectifs(stage, j(6.9))).toBe(1);
+    expect(badgesEffectifs(stage, j(7))).toBe(0);
+    expect(connexionsSuspendues(stage, j(3))).toBe(false);
+    expect(connexionsSuspendues(stage, j(8))).toBe(true);
+  });
+
+  it("s'ajoute à un badge acheté en avenant, qui reste après la semaine", () => {
+    const avecAvenant = { ...stage, connecteurs_max: 1 };
+    expect(badgesEffectifs(avecAvenant, j(1))).toBe(2);
+    expect(badgesEffectifs(avecAvenant, j(30))).toBe(1);
+    expect(connexionsSuspendues(avecAvenant, j(30))).toBe(false);
+  });
+
+  it('ne concerne que le Stage', () => {
+    const plein = { contrat: 'plein', connecteurs_max: 6, created_at: cree };
+    expect(badgesEffectifs(plein, j(1))).toBe(6);
+    expect(connexionsSuspendues({ contrat: 'plein', connecteurs_max: 0, created_at: cree }, j(30))).toBe(false);
+    expect(badgesEffectifs({ contrat: null, connecteurs_max: null, created_at: cree }, j(1))).toBeNull();
+    expect(etatDecouverte(plein, j(1))).toBeNull();
+  });
+
+  it("état pour l'écran : jours restants puis terminé", () => {
+    expect(etatDecouverte(stage, j(0.5))).toMatchObject({ jours_restants: 7, termine: false });
+    expect(etatDecouverte(stage, j(6.5))).toMatchObject({ jours_restants: 1, termine: false });
+    expect(etatDecouverte(stage, j(7))).toMatchObject({ jours_restants: 0, termine: true });
+    expect(etatDecouverte({ ...stage, created_at: null }, j(1))).toBeNull();
+  });
+});
 
 describe('grille des contrats', () => {
   it('Temps plein CDD sans avenant : 149 € HT, expert et astreinte inclus', () => {

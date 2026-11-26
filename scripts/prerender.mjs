@@ -102,7 +102,7 @@ const routes = [
         url: `${SITE}/`, inLanguage: 'fr-FR',
         offers: [
           // Mêmes montants que supabase/functions/studio/contrats.ts.
-          { '@type': 'Offer', name: 'Stage gratuit', price: '0', priceCurrency: 'EUR', description: '10 h de travail par mois, sans limite de durée ni carte bancaire' },
+          { '@type': 'Offer', name: 'Stage gratuit', price: '0', priceCurrency: 'EUR', description: '10 h de travail par mois, un badge d\'accès offert la première semaine, sans limite de durée ni carte bancaire' },
           { '@type': 'Offer', name: 'Contrat temps partiel', price: '59', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 75 h de travail, 3 badges d\'accès ; sans engagement en CDD, 2 mois offerts en CDI annuel' },
           { '@type': 'Offer', name: 'Contrat temps plein', price: '149', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 151,67 h de travail, 6 badges, 2 responsables, mode expert et astreinte' },
           { '@type': 'Offer', name: 'Contrat équipe complète', price: '287', priceCurrency: 'EUR', description: 'Par mois, HT, agents illimités, 201,67 h de travail, 12 badges, 3 responsables, mode expert, astreinte et SAV prioritaire' },

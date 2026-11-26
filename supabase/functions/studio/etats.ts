@@ -85,14 +85,23 @@ export async function etatLiaison(sb: SupabaseClient, wsId: string, avecExpedite
 /** Refus d'un nouveau connecteur pendant l'essai gratuit (un seul permis) ; null sinon. */
 // Aussi : limite des badges d'accès du contrat (contrats.ts, colonne connecteurs_max).
 export async function refusConnecteurEssai(sb: SupabaseClient, s: Session): Promise<string | null> {
-  const max = s.ws.connecteurs_max;
+  // Badges du contrat, plus celui offert la première semaine du Stage (contrats.badgesEffectifs).
+  const max = contrats.badgesEffectifs(s.ws);
   if (!essai.enEssai(s.ws) && max == null) return null;
   const f = await facturationEspace(sb, s.ws.id);
   if (essai.enEssai(s.ws)) return f.lignes.length >= essai.CONNECTEURS_ESSAI ? essai.MESSAGE_CONNECTEUR : null;
   if (max == null || f.lignes.length < max) return null;
-  return max === 0
-    ? "Votre contrat Stage ne donne aucun badge d'accès à vos outils. Choisissez un contrat ou ajoutez un badge dans « Mon abonnement »."
-    : `Vos ${max} badge${max > 1 ? "s" : ""} d'accès sont utilisés. Retirez une connexion ou ajoutez un badge (avenant) dans « Mon abonnement ».`;
+  if (max === 0) {
+    return s.ws.contrat === "stage" && contrats.finDecouverte(s.ws)
+      ? "Le badge d'accès offert la première semaine de votre Stage a pris fin. Choisissez un contrat ou ajoutez un badge dans « Mon abonnement » pour relier vos outils."
+      : "Votre contrat Stage ne donne aucun badge d'accès à vos outils. Choisissez un contrat ou ajoutez un badge dans « Mon abonnement ».";
+  }
+  if (contrats.decouverteEnCours(s.ws) && s.ws.connecteurs_max === 0) {
+    return "Votre Stage offre un seul badge d'accès, pendant la première semaine. Retirez la connexion actuelle, ou choisissez un contrat dans « Mon abonnement ».";
+  }
+  return max === 1
+    ? "Votre badge d'accès est utilisé. Retirez la connexion ou ajoutez un badge (avenant) dans « Mon abonnement »."
+    : `Vos ${max} badges d'accès sont utilisés. Retirez une connexion ou ajoutez un badge (avenant) dans « Mon abonnement ».`;
 }
 
 /** Abonnement en ligne de l'espace (Mon périmètre) : ce qui est facturé et ce que l'équipe compte aujourd'hui. */
@@ -185,6 +194,8 @@ export async function construireMe(sb: SupabaseClient, s: Session) {
       tutoriel_vu: eTuto ? null : Boolean((tuto as { tutoriel_vu_le?: string | null } | null)?.tutoriel_vu_le),
     },
     essai: essai.enEssai(s.ws) ? { fin: s.ws.essai_fin, jours_restants: essai.joursRestants(s.ws), termine: essai.essaiTermine(s.ws) } : null,
+    // Stage : badge d'accès offert la première semaine (null hors Stage).
+    badge_decouverte: contrats.etatDecouverte(s.ws),
     workspace: { ...s.ws, suspendu: etat.suspendu },
     // Le gabarit (consigne détaillée) des super-pouvoirs reste côté serveur.
     agents: agents.map(({ prompt_systeme: _p, offres: _o, consignes: _c, modele: _m, modele_effectif: _me, super_pouvoirs, ...a }) => ({

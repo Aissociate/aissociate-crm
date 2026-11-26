@@ -8,7 +8,7 @@ import Footer from '../components/Footer';
 import SEO, { SITE_URL } from '../components/SEO';
 import { supabase } from '@/lib/supabase';
 import { APPLICATIONS_UN_CLIC, logoConnecteur } from '@/lib/tarifConnecteurs';
-import { bulletin, COMPTEURS, CONTRATS, INTEGRATION_HT, INTERRUPTEURS, normaliser, type ContratId } from '../../../supabase/functions/studio/contrats';
+import { BADGE_DECOUVERTE_JOURS, BADGES_DECOUVERTE, bulletin, COMPTEURS, CONTRATS, INTEGRATION_HT, INTERRUPTEURS, normaliser, type ContratId } from '../../../supabase/functions/studio/contrats';
 import SamDemo from '../components/SamDemo';
 
 /**
@@ -117,9 +117,9 @@ const AGENTS: Agent[] = [
 
 const faqAgents = () => [
   { question: 'Est-ce un chatbot de plus ?', answer: "Non. Chaque agent est un spécialiste avec des missions cadrées (ses « super-pouvoirs »). Il connaît votre entreprise : votre fiche, vos tarifs, votre charte, les contenus que vous avez déjà validés. Si une demande sort de son métier, il ne bricole pas : il la confie au bon collègue." },
-  { question: 'Combien ça coûte vraiment ?', answer: `Vos agents commencent en stage, gratuitement et sans limite de durée (10 h de travail par mois, sans accès à vos outils). Ensuite, vous choisissez un contrat : ${PAYANTS.map((c) => `${c.nom} à ${eur(c.prix)}`).join(', ')} HT par mois, agents illimités. Vous ne payez que les heures de travail et les accès à vos outils dont ils ont besoin. En CDD, sans engagement ; en CDI annuel, deux mois offerts.` },
+  { question: 'Combien ça coûte vraiment ?', answer: `Vos agents commencent en stage, gratuitement et sans limite de durée (10 h de travail par mois, un outil relié la première semaine). Ensuite, vous choisissez un contrat : ${PAYANTS.map((c) => `${c.nom} à ${eur(c.prix)}`).join(', ')} HT par mois, agents illimités. Vous ne payez que les heures de travail et les accès à vos outils dont ils ont besoin. En CDD, sans engagement ; en CDI annuel, deux mois offerts.` },
   { question: 'Puis-je essayer avant de payer ?', answer: "Oui : tout commence par un stage gratuit, sans carte bancaire et sans limite de durée. Vous décrivez votre entreprise en 10 minutes, votre espace s'ouvre aussitôt et vos identifiants arrivent par e-mail. Vous signez un contrat seulement quand vous voulez plus d'heures ou brancher vos outils : rien n'est facturé automatiquement." },
-  { question: 'Les connecteurs sont-ils compris ?', answer: `Chaque outil relié (messagerie, agenda, réseau social, logiciel…) utilise un badge d'accès. Les contrats en comprennent : ${PAYANTS.map((c) => `${c.badges} en ${c.nom.toLowerCase()}`).join(', ')}. Un badge de plus coûte ${eur(prixAvenant('badges'))} HT par mois. Le stage n'en comprend pas.` },
+  { question: 'Les connecteurs sont-ils compris ?', answer: `Chaque outil relié (messagerie, agenda, réseau social, logiciel…) utilise un badge d'accès. Les contrats en comprennent : ${PAYANTS.map((c) => `${c.badges} en ${c.nom.toLowerCase()}`).join(', ')}. Un badge de plus coûte ${eur(prixAvenant('badges'))} HT par mois. Le stage en offre ${BADGES_DECOUVERTE === 1 ? 'un' : BADGES_DECOUVERTE} pendant les ${BADGE_DECOUVERTE_JOURS} premiers jours, puis aucun.` },
   { question: 'En combien de temps est-ce opérationnel ?', answer: `Vos agents répondent dès l'ouverture de votre espace, avec ce que vous avez décrit dans le questionnaire. Si vous voulez aller plus vite, un formateur installe vos agents et forme votre équipe en une demi-journée (parcours d'intégration à ${eur(INTEGRATION_HT)} HT, finançable par votre OPCO).` },
   { question: 'Les agents envoient-ils des messages à ma place ?', answer: "Ils préparent, vous validez. Rien ne part vers vos clients sans votre accord. Les connecteurs (Google Workspace, Outlook, Facebook, Instagram, LinkedIn, TikTok…) permettent de préparer du contenu directement adapté à vos outils." },
   { question: 'Et mes données ?', answer: "Votre espace est cloisonné : vos données ne sont visibles que de vous et de votre équipe. Hébergement en Union européenne, mots de passe et secrets chiffrés, conformité RGPD." },
@@ -513,7 +513,7 @@ export default function AgentsIA() {
                 <p className="mt-1 text-sm text-neutral-600">Un badge = un outil ouvert à vos agents (une messagerie, un agenda, une page…).</p>
                 <ul className="mt-4 space-y-2">
                   {CONTRATS.map((c) => (
-                    <li key={c.id} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 shrink-0 text-emerald-600" />{c.nom} : {c.badges ? `${c.badges} badges` : 'aucun badge'}</li>
+                    <li key={c.id} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 shrink-0 text-emerald-600" />{c.nom} : {c.badges ? `${c.badges} badges` : `1 badge offert les ${BADGE_DECOUVERTE_JOURS} premiers jours, aucun ensuite`}</li>
                   ))}
                 </ul>
               </div>

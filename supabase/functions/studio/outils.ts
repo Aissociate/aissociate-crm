@@ -35,6 +35,7 @@ import type { ActionRoutine } from "./routine_outil.ts";
 import * as mcpClient from "./mcp_client.ts";
 import type { ActionMcp } from "./mcp_client.ts";
 import * as apiClient from "./api_client.ts";
+import { connexionsSuspendues } from "./connecteurs.ts";
 import * as acces from "./acces.ts";
 import * as calendrier from "./calendrier.ts";
 import type { ActionApi } from "./api_client.ts";
@@ -855,7 +856,9 @@ async function executerProspection(ctx: Ctx, nom: string, a: Record<string, stri
 }
 
 export async function outilsEspace(ctx: Ctx): Promise<Outils> {
-  const zernioOk = zernio.zernioConfigure();
+  // Stage sans badge d'accès (première semaine passée) : aucun outil relié n'est donné aux agents.
+  const suspendu = await connexionsSuspendues(ctx.sb, ctx.wsId).catch(() => false);
+  const zernioOk = zernio.zernioConfigure() && !suspendu;
   const [tousBoites, { data: docs }, tousReseaux, { count: nbFlux }, tousApps, tousMcp, toutesApis, reglesAcces] = await Promise.all([
     zernioOk ? bureau.boitesEspace(ctx.wsId).catch(() => [] as bureau.Boite[]) : Promise.resolve([] as bureau.Boite[]),
     ctx.sb.from("studio_documents").select("titre, dossier_id").eq("workspace_id", ctx.wsId).eq("actif", true)
@@ -864,9 +867,9 @@ export async function outilsEspace(ctx: Ctx): Promise<Outils> {
     ctx.sb.from("studio_flux").select("id", { count: "exact", head: true }).eq("workspace_id", ctx.wsId).eq("actif", true),
     zernioOk ? comptesApplications(ctx.wsId).catch(() => [] as CompteApplication[]) : Promise.resolve([] as CompteApplication[]),
     // Serveurs MCP « connecté » de l'espace (mcp_client.ts) : un serveur injoignable n'empêche pas les autres.
-    mcpClient.chargerServeurs(ctx.sb, ctx.wsId).catch(() => [] as mcpClient.ServeurCharge[]),
+    suspendu ? Promise.resolve([] as mcpClient.ServeurCharge[]) : mcpClient.chargerServeurs(ctx.sb, ctx.wsId).catch(() => [] as mcpClient.ServeurCharge[]),
     // API « connecté » de l'espace (api_client.ts), avec leur description OpenAPI quand elle se lit.
-    apiClient.chargerApis(ctx.sb, ctx.wsId).catch(() => [] as apiClient.ApiChargee[]),
+    suspendu ? Promise.resolve([] as apiClient.ApiChargee[]) : apiClient.chargerApis(ctx.sb, ctx.wsId).catch(() => [] as apiClient.ApiChargee[]),
     // Connecteurs réservés à certains agents (acces.ts) : l'agent ne reçoit que les siens.
     acces.chargerAcces(ctx.sb, ctx.wsId).catch(() => new Map() as acces.Acces),
   ]);
