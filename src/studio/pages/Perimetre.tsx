@@ -2,7 +2,7 @@
 // IA du jour et interrupteur d'urgence (suspendre / relancer les agents).
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BatteryCharging, CreditCard, Lock, PauseCircle, PlayCircle, Plus } from 'lucide-react';
+import { BatteryCharging, CreditCard, Lock, MapPin, PauseCircle, PlayCircle, Plus } from 'lucide-react';
 import { appel } from '../api';
 import { Avatar, Bouton, Carte, Chargement, Titre, cx } from '../composants';
 import Confirmation from '../composants/Confirmation';
@@ -19,6 +19,7 @@ type Perimetre = {
   agents: { id: string; prenom: string; metier: string; photo: string | null; couleur: string; ouvert: boolean; incluse?: boolean }[];
   quotas: { demandes: Quota; images: Quota; videos: Quota; utilisateurs: Quota };
   recharges?: Recharges;
+  prospection?: Prospection | null;
   abonnement?: Abonnement | null;
 };
 type Abonnement = {
@@ -43,6 +44,13 @@ type Recharges = {
   couts: { demande: number; image: number; video: number };
   historique: { nature: string; credits: number; prix_ht: number | null; note: string | null; created_at: string }[];
 };
+/** Option Prospection de Sam : contacts prépayés, distincts des crédits de recharge. */
+type Prospection = {
+  solde: number; utilises_mois: number; paiement_en_ligne?: boolean;
+  pack: { prix: number; contacts: number };
+  historique: { nature: string; contacts: number; prix_ht: number | null; note: string | null; created_at: string }[];
+};
+const nb = (n: number) => n.toLocaleString('fr-FR');
 const eur = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
 
 function Jauge({ label, q }: { label: string; q: Quota }) {
@@ -69,6 +77,7 @@ export default function PagePerimetre() {
   const [envoi, setEnvoi] = useState(false);
   const [demandeSuspension, setDemandeSuspension] = useState(false);
   const [achat, setAchat] = useState<number | null>(null);
+  const [achatProspection, setAchatProspection] = useState(false);
   const [merci, setMerci] = useState('');
   const [majAbo, setMajAbo] = useState(false);
   const proprietaire = me.user.role === 'proprietaire';
@@ -79,6 +88,7 @@ export default function PagePerimetre() {
     const r = u.searchParams.get('paiement');
     if (!r) return;
     setMerci(r === 'recharge' ? 'Paiement reçu : vos crédits apparaissent dans quelques secondes (actualisez la page si besoin).'
+      : r === 'prospection' ? 'Paiement reçu : vos contacts de prospection apparaissent dans quelques secondes (actualisez la page si besoin). Demandez ensuite à Sam de « Trouver des prospects locaux ».'
       : r === 'abonnement' ? 'Contrat signé : merci ! Vos agents ont leurs nouvelles heures et leurs badges dans quelques secondes (actualisez la page si besoin). Votre facture est dans « Gérer mon abonnement ».'
       : r === 'contrat' ? 'Avenant signé : la différence est calculée au prorata sur votre prochaine facture.'
       : r === 'stage' ? 'Vous êtes en Stage gratuit.'
@@ -121,6 +131,15 @@ export default function PagePerimetre() {
       setMerci(`${pack.credits} crédits ajoutés. ${eur(pack.prix)} HT figureront sur votre prochaine facture.`);
       await charger();
     } catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); setAchat(null); }
+  };
+
+  const acheterProspection = async () => {
+    setEnvoi(true); setErreur('');
+    try {
+      const r = await appel<{ url?: string }>('prospection_acheter');
+      if (r.url) { window.location.href = r.url; return; }
+      await charger();
+    } catch (e) { setErreur(gerer(e)); } finally { setEnvoi(false); setAchatProspection(false); }
   };
 
   const ajouterAgent = async () => {
@@ -357,7 +376,54 @@ export default function PagePerimetre() {
           </Carte>
         );
       })()}
+      {!essaiFini && p.prospection && (() => {
+        const o = p.prospection;
+        const active = o.solde > 0;
+        return (
+          <Carte>
+            <div className="flex flex-wrap items-start gap-6">
+              <div className="min-w-[12rem]">
+                <p className="flex items-center gap-2 font-semibold"><MapPin className="h-5 w-5 text-orange-600" />Option Prospection
+                  <span className={cx('rounded-full px-2 py-0.5 text-xs font-normal', active ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-500')}>{active ? 'Activée' : 'Non activée'}</span></p>
+                <p className="mt-2 text-3xl font-semibold">{nb(o.solde)}<span className="text-base font-normal text-neutral-400"> contact{o.solde > 1 ? 's' : ''}</span></p>
+                <p className="mt-1 text-xs text-neutral-500">Reportés de mois en mois, sans date limite.{o.utilises_mois ? ` ${nb(o.utilises_mois)} utilisés ce mois-ci.` : ''}</p>
+              </div>
+              <div className="min-w-0 flex-1 text-sm text-neutral-600">
+                <p>Sam trouve pour vous des entreprises à contacter sur Google Maps : nom, activité, commune, téléphone, site et note, avec l'approche pour chacune.</p>
+                <p className="mt-1 text-neutral-500">1 entreprise trouvée = 1 contact. Une recherche sans résultat ne coûte rien, et relire une recherche déjà faite non plus. Option facturée à part de votre contrat.</p>
+                {proprietaire ? (
+                  o.paiement_en_ligne ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Bouton variante="noir" disabled={envoi} onClick={() => { setMerci(''); setAchatProspection(true); }}>
+                        {active ? '+' : 'Activer : '}{nb(o.pack.contacts)} contacts · {eur(o.pack.prix)} HT
+                      </Bouton>
+                    </div>
+                  ) : <p className="mt-3 text-xs text-neutral-500">Pour activer l'option, écrivez à <a className="underline" href="mailto:contact@aissociate.re">contact@aissociate.re</a>.</p>
+                ) : <p className="mt-3 text-xs text-neutral-500">Le propriétaire de l'espace peut activer l'option.</p>}
+              </div>
+            </div>
+            {o.historique.length > 0 && (
+              <ul className="mt-4 divide-y divide-neutral-100 border-t border-neutral-100 text-sm">
+                {o.historique.map((h, i) => (
+                  <li key={i} className="flex justify-between gap-3 py-2">
+                    <span className="text-neutral-600">{new Date(h.created_at).toLocaleDateString('fr-FR')} · {h.note || (h.nature === 'offert' ? 'Contacts offerts' : 'Ajustement')}</span>
+                    <span className="whitespace-nowrap font-medium">{h.contacts > 0 ? '+' : ''}{nb(h.contacts)}{h.prix_ht ? ` · ${eur(Number(h.prix_ht))} HT` : h.nature === 'offert' || h.nature === 'decouverte' ? ' · offerts' : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Carte>
+        );
+      })()}
       {erreur && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>}
+      <Confirmation
+        ouvert={achatProspection}
+        titre={p.prospection ? `Ajouter ${nb(p.prospection.pack.contacts)} contacts de prospection ?` : ''}
+        message={p.prospection ? `${eur(p.prospection.pack.prix)} HT (${tvaTexte(p.abonnement?.tva_pourcent ?? null)}), réglés sur la page de paiement sécurisée de Stripe. Les contacts sont ajoutés dès le paiement confirmé et se reportent de mois en mois.` : ''}
+        confirmer={{ label: 'Payer', onClick: acheterProspection }}
+        annuler={{ onClick: () => setAchatProspection(false) }}
+        enCours={envoi}
+      />
       <Confirmation
         ouvert={achat !== null}
         titre={achat !== null && p.recharges ? `Ajouter ${p.recharges.packs[achat].credits} crédits ?` : ''}

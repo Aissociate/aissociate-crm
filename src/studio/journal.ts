@@ -38,6 +38,7 @@ const LIBELLES: Record<string, string> = {
   dossier_cree: 'Dossier créé',
   dossier_supprime: 'Dossier supprimé',
   recharge_achetee: 'Recharge de crédits achetée',
+  prospection_achetee: 'Contacts de prospection achetés',
   abonnement_mis_a_jour: 'Abonnement mis à jour',
   cgv_acceptees: 'Conditions générales acceptées',
   agent_ajoute: "Agent ajouté à l'équipe",
